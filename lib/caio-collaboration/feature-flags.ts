@@ -7,6 +7,8 @@ export type WorkBuddyFeatureFlags = Readonly<{
   promptResponsesEnabled: boolean;
   questionSelectionsEnabled: boolean;
   adviceDecisionsEnabled: boolean;
+  /** Pull inference job routes on the access gateway; off means the routes refuse every caller. */
+  inferenceJobsEnabled: boolean;
 }>;
 
 export const DEFAULT_WORKBUDDY_FEATURE_FLAGS: WorkBuddyFeatureFlags =
@@ -19,6 +21,7 @@ export const DEFAULT_WORKBUDDY_FEATURE_FLAGS: WorkBuddyFeatureFlags =
     promptResponsesEnabled: false,
     questionSelectionsEnabled: false,
     adviceDecisionsEnabled: false,
+    inferenceJobsEnabled: false,
   });
 
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -54,6 +57,9 @@ export function loadWorkBuddyFeatureFlags(
     ),
     adviceDecisionsEnabled: isExplicitlyEnabled(
       env.CAIO_WORKBUDDY_ADVICE_DECISIONS_ENABLED,
+    ),
+    inferenceJobsEnabled: isExplicitlyEnabled(
+      env.CAIO_INFERENCE_JOBS_ENABLED,
     ),
   });
 }

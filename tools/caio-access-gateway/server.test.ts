@@ -147,6 +147,8 @@ describe("route table: which surfaces this listener owns", () => {
       "/readyz",
       "/v1/chat/completions",
       "/v1/execution-results",
+      "/v1/inference-jobs/claim",
+      "/v1/inference-jobs/submit",
       "/v1/models",
       "/v1/operating-questions/generate",
       "/v1/responses",
@@ -198,6 +200,7 @@ describe("route table: which surfaces this listener owns", () => {
       expect(mount.apiPaths).not.toContain("/mcp");
       // CONTROL: everything else is still owned, so this is a subset and not a
       // mount that quietly stopped serving.
+      // The pull inference paths are absent for the same reason: this mount supplies no worker port.
       expect([...mount.apiPaths].sort()).toEqual([
         "/livez",
         "/readyz",

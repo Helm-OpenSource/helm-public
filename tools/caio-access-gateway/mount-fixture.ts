@@ -58,6 +58,7 @@ export const CAIO_MOUNT_FIXTURE_CONFIG: CaioAccessGatewayServerConfig =
       mutationsEnabled: false,
       promptResponsesEnabled: false,
       questionSelectionsEnabled: false,
+      inferenceJobsEnabled: false,
       adviceDecisionsEnabled: false,
     }),
   });

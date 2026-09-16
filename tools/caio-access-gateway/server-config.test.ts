@@ -248,6 +248,7 @@ describe("CAIO access gateway server config", () => {
       promptResponsesEnabled: false,
       questionSelectionsEnabled: false,
       adviceDecisionsEnabled: false,
+      inferenceJobsEnabled: false,
     });
     expect(
       loadCaioAccessGatewayServerConfig(
