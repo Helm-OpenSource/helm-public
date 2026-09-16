@@ -55,9 +55,31 @@ public_safety: Public-safe implementation plan for closing the CAIO pull
 
 | 步 | 内容 | 判据 |
 | --- | --- | --- |
-| P2-2a | 在 helm-self 内把 WorkBuddy 端点降为可选（给了路径时行为逐字不变；不给时只服务 surfaces，WorkBuddy 路径 404） | 现有回归全绿 + 新增两类用例 |
+| P2-2a | **把宿主记账从 WorkBuddy 协议里拆出来**（见下） | 现有回归全绿 + 新增两类用例 |
 | P2-2b | 把宿主上提到 Core，helm-self 改为引用；纯搬移，不改行为 | 搬移前后 helm-self 回归结果一致 |
 | P2-2c | 安小信用 Core 宿主起推理网关 | 端到端演练 |
+
+### P2-2a 的真实形状（实施核查后更正）
+
+耦合不只在路由器。宿主处理**每个** composed surface 请求时都走 `input.transport.runComposedOperation`
+——排空、并发上限、截止期、`waitForIdle` 全挂在这个 transport 上；而 `createWorkBuddyGatewayTransport`
+要 `identityResolver` 与 `handleMessage`（MCP 协议处理器），两者都是 WorkBuddy 特有的。
+
+结果是：只服务 surface 的宿主，今天仍得造一个它永远不用的 WorkBuddy 协议处理器。所以这一步不是
+「把路径改成可选」，而是按归属切开：
+
+| 归属 | 内容 |
+| --- | --- |
+| **宿主**（通用） | `beginShutdown` / `waitForIdle` / `runComposedOperation` / 并发上限 / 截止期 |
+| **WorkBuddy**（协议） | `handle` / `handleUnexpectedFailure` / 身份解析 / MCP |
+
+WorkBuddy transport 建在通用记账之上；宿主接受「记账 + 可选的 WorkBuddy 端点」。
+
+**这是对一个 1800 行安全敏感模块的结构性重构，触到 helm-self 在役路径**，所以：
+- 拆分必须行为保持：给了 WorkBuddy 端点时，现有回归逐条不变；
+- 新增用例只证明两件事——不给端点时 WorkBuddy 路径 404，且 surface 请求仍被记账（`waitForIdle`
+  不会在它执行中报 idle）；
+- 这一条是排空与并发的安全属性，不是便利性，所以不许用「反正不会走到」略过。
 
 ## 切片与顺序
 
