@@ -948,14 +948,14 @@ export class RequestDeadlineExceededError extends Error {
   }
 }
 
-class ClientConnectionClosedError extends Error {
+export class ClientConnectionClosedError extends Error {
   constructor() {
     super("client_connection_closed");
     this.name = "ClientConnectionClosedError";
   }
 }
 
-class GatewayShuttingDownError extends Error {
+export class GatewayShuttingDownError extends Error {
   constructor() {
     super("gateway_shutting_down");
     this.name = "GatewayShuttingDownError";
