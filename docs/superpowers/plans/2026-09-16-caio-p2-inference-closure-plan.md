@@ -35,19 +35,29 @@ public_safety: Public-safe implementation plan for closing the CAIO pull
 - 判断是 advice 类、`humanReviewerRequired=true`，先只给创始人看（owner 2026-09-16）。
 - 数据不出域：模型在本地设备，网关只听回环，隧道是自有堡垒机，不新增任何公网可达的面。
 
-## 已定：宿主复制进安小信 overlay（owner 2026-09-16 裁定 B）
+## 已定：宿主上提到 Core，WorkBuddy 降为可选（owner 2026-09-16 裁定 A，改自先前的 B）
 
-唯一拥有套接字并终止 mTLS 的实现是 `overlays/helm-self/lib/workbuddy-lan/https-gateway.ts`，1800 行，
-含排空与停机控制。owner 选择**复制进安小信 overlay**，不动 helm-self 在役路径。
+先前裁定过 B（复制进安小信）。**读完那 1800 行之后，B 的代价变了，所以裁定也改了**：
 
-这个选择的已知代价是：安全敏感代码有了第二份，两份会各自漂移。**所以复制必须带一道来源钉扎闸**，
-把「日后有人改了原件而副本没跟」从靠人记得变成机械可判定：
+- 宿主不是「通用宿主 + WorkBuddy 用法」，而是 **WorkBuddy 优先**的：全文 80 处 WorkBuddy 引用，
+  配置类型是 `HelmSelfWorkBuddyGatewayConfig`，路由器**强制**认领一条 WorkBuddy 路径
+  （`claim(input.workBuddyPath, "workbuddy", ...)`）。所以「复制」实际是**分叉加手术**，
+  而手术落在 mTLS 终止、排空、截止期这些路径上。
+- 副本经手术后不可能与原件逐字相同，来源钉扎闸随之退化成「原件变了，去看一眼」。
+- 反过来说，这个宿主**本来就是为挂访问网关设计的**：它已支持同一套接字上挂额外 surface
+  （`surfaces`、`ComposedGatewaySurface`、`resolveComposedGatewaySurfaces`），
+  而且要求调用者显式声明「挂」或「不挂并给理由」。
 
-- 台账记录来源路径与其 sha256、副本路径与其 sha256（复制当时的值）；
-- 任一侧变了而台账没更新，检查必红，并指出是哪一侧变的；
-- 更新台账是**显式动作**：要么同步副本，要么写明为什么这次不同步。红灯不许靠重算摘要糊过去。
+所以要改的不是结构，而是**把 WorkBuddy 从必需降为可选**，然后上提到 Core 共用一份。
+只有一份安全敏感代码，钉扎闸就不需要了——没有第二份可漂移。
 
-没有这道闸就不要复制——那样等于把一个已知会漂移的东西放进仓库，只在文档里提醒。
+**分三步，把「改行为」与「搬位置」分开**，各自可评审、可回滚：
+
+| 步 | 内容 | 判据 |
+| --- | --- | --- |
+| P2-2a | 在 helm-self 内把 WorkBuddy 端点降为可选（给了路径时行为逐字不变；不给时只服务 surfaces，WorkBuddy 路径 404） | 现有回归全绿 + 新增两类用例 |
+| P2-2b | 把宿主上提到 Core，helm-self 改为引用；纯搬移，不改行为 | 搬移前后 helm-self 回归结果一致 |
+| P2-2c | 安小信用 Core 宿主起推理网关 | 端到端演练 |
 
 ## 切片与顺序
 
@@ -55,7 +65,7 @@ public_safety: Public-safe implementation plan for closing the CAIO pull
 | --- | --- | --- | --- |
 | P2-0 | **推理队列的网关端口适配器**（实施时发现的漏项：端口收裸载荷、返回值即响应体，写它的人拥有线上契约，必须由 Core 一处 own） | — | Core `lib/caio-inference/gateway-port.ts` |
 | P2-1 | 安小信推理挂载装配：拒绝式 resolver、推理作业端口、只开 `inferenceJobsEnabled`、材料缺任一项即不挂载 | ← P2-0 | overlay |
-| P2-2 | 宿主复制进安小信 + 来源钉扎闸（裁定 B） | — | overlay |
+| P2-2 | 宿主上提到 Core（a 降为可选 / b 搬移 / c 安小信接入，裁定 A） | — | overlay → Core |
 | P2-3 | worker 的网关 HTTP 客户端（带客户端证书）与本地模型适配器（OpenAI 兼容，指向 oMLX） | — | Core `tools/caio-inference-worker` |
 | P2-4 | PKI：客户端 CA、服务端证书、worker 客户端证书的签发与轮换口径 | ← P2-2 | CP 文档 + 运维 |
 | P2-5 | CP：网关进程的 env 契约键与进程托管；令牌经 OWNER CLI 在生产签发 | ← P2-1、P2-2 | CP |
