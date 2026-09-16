@@ -178,6 +178,29 @@ Codex 默认不负责：
 - 实现后补文档、守卫、测试、自检
 - 最后给出冻结或 sprint 报告
 
+## 9.2 审计自闭环五段式（owner 2026-09-16 定为团队统一工作方式）
+
+四仓统一采用「审计自闭环五段式」：**前一段不绿，不进下一段；收尾是作者的事，不是 owner 的事。**
+完整规范见 `helm-overlays/docs/HELM_PR_FIVE_STAGE_WORKFLOW_V1.md`。
+
+**本仓是 Core，不照搬六段，按实际映射执行：**
+
+| 段 | 在本仓的对应 | 说明 |
+|---|---|---|
+| ① 契约层先行 | **不适用** | 「共性下沉 helm-packs」对 Core 是反向依赖，违反 §6 长期硬边界 |
+| ② 业务实现 | §9 标准执行循环的 `implementation` | — |
+| ③ 测试补齐并接入 CI | **已由更强机制满足** | `npm run test` 是 `vitest run --config vitest.public.config.ts` 全量 runner，不是手工清单；`.husky/pre-commit` / `pre-push` 强制 `check:boundaries` |
+| ④ 迁移账本登记 | Prisma migration + `docs/` 同步（§12） | overlay 侧的迁移账本概念不适用 |
+| ⑤ audit 逐行复核 | `check:boundaries` + public-release 守卫 | 新增命中**逐条**给判定，不接受批量豁免；**基线只能降不能升** |
+| ⑥ 门禁回归全绿 | §10 统一验证命令全清单 | 不得 `--no-verify` 绕过 |
+
+**规模要求同样适用**：单 PR ≤800 行 / ≤15 文件，超出按语义单元拆。
+**按「可独立回滚的语义单元」打包，不按「一天的工作」打包。**
+
+**Why**：抽样 owner 在四仓 main 上的 30 条 fix 提交，**37% 本可由提交者在同一条 PR 链内自查掉**。
+
+**AI 代理同样遵守** —— owner 明确要求这不是只写给人看的文档。
+
 ## 9.1 多代理并行工作治理
 
 后续所有 Codex / Claude / 其他 agent 并行任务，必须先把“工作区归属”查清楚，再动手改文件。
