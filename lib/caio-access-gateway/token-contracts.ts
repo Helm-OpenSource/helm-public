@@ -13,10 +13,17 @@ import { z } from "zod";
 
 import { caioModelAliasSchema } from "@/lib/caio-model-proxy/alias-contracts";
 
-export const CAIO_TOKEN_AUDIENCES = ["mcp", "model"] as const;
+export const CAIO_TOKEN_AUDIENCES = ["mcp", "model", "inference"] as const;
 export type CaioTokenAudience = (typeof CAIO_TOKEN_AUDIENCES)[number];
 
-export const CAIO_CLIENT_TYPES = ["codex", "workbuddy"] as const;
+/**
+ * The pair a Codex or WorkBuddy binding receives at issuance. The inference audience is deliberately
+ * absent: a pull worker holds one single-audience token and never the MCP or model surfaces.
+ */
+export const CAIO_TOKEN_PAIR_AUDIENCES = ["mcp", "model"] as const;
+export type CaioTokenPairAudience = (typeof CAIO_TOKEN_PAIR_AUDIENCES)[number];
+
+export const CAIO_CLIENT_TYPES = ["codex", "workbuddy", "inference_worker"] as const;
 export type CaioClientType = (typeof CAIO_CLIENT_TYPES)[number];
 
 export const CAIO_TOKEN_STATUSES = [
@@ -32,6 +39,7 @@ export const CAIO_TOKEN_PREFIX_BY_AUDIENCE: Readonly<
 > = Object.freeze({
   mcp: "hcaio_mcp_",
   model: "hcaio_mdl_",
+  inference: "hcaio_inf_",
 });
 
 export const CAIO_TOKEN_RANDOM_BYTES = 32;

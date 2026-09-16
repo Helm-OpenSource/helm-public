@@ -361,6 +361,12 @@ export type CaioGatewayHandlerDependencies = Readonly<{
   auditGate: CaioCanonicalAuditGatePort;
   readinessProbe: CaioReadinessProbePort;
   /**
+   * Pull inference surface. The port owns the queue and the governed deferred dispatch; this layer only
+   * authenticates the worker, bounds the request and forwards it. It claims no audit slot: the terminal
+   * receipt for the egress is written by the governed dispatch the port calls.
+   */
+  inferenceJobs: CaioInferenceJobPort;
+  /**
    * Feature-flag state governing which tools may be USED — and therefore which
    * may be ENUMERATED — through this gateway. The ONE flag vocabulary
    * (WorkBuddyFeatureFlags) is reused, so the gateway's enumeration gate and the
@@ -376,6 +382,21 @@ export type CaioGatewayHandlerDependencies = Readonly<{
   mcpAuditPolicyVersion?: string;
 }>;
 
+export type CaioInferenceJobPort = Readonly<{
+  claim: (input: {
+    principal: CaioAccessPrincipal;
+    requestId: string;
+    payload: unknown;
+    signal?: AbortSignal;
+  }) => Promise<unknown>;
+  submit: (input: {
+    principal: CaioAccessPrincipal;
+    requestId: string;
+    payload: unknown;
+    signal?: AbortSignal;
+  }) => Promise<unknown>;
+}>;
+
 export type CaioGatewayHandler = (
   request: CaioGatewayRequest,
 ) => Promise<CaioGatewayResponse>;
@@ -387,7 +408,9 @@ type AuthedRoute = Readonly<{
     | "private_execution_result"
     | "model_responses"
     | "model_chat_completions"
-    | "model_list";
+    | "model_list"
+    | "inference_job_claim"
+    | "inference_job_submit";
   audience: CaioTokenAudience;
   expectsJsonBody: boolean;
 }>;
@@ -437,7 +460,32 @@ const AUTHED_ROUTES: Readonly<
       expectsJsonBody: false,
     }),
   }),
+  "/v1/inference-jobs/claim": Object.freeze({
+    POST: Object.freeze({
+      kind: "inference_job_claim" as const,
+      audience: "inference" as const,
+      expectsJsonBody: true,
+    }),
+  }),
+  "/v1/inference-jobs/submit": Object.freeze({
+    POST: Object.freeze({
+      kind: "inference_job_submit" as const,
+      audience: "inference" as const,
+      expectsJsonBody: true,
+    }),
+  }),
 });
+
+/**
+ * The pull inference surface is deliberately tighter than the rest of the gateway: a worker only ever sends a
+ * small claim request or one judgement, and it is not an interactive client.
+ */
+const CAIO_GATEWAY_INFERENCE_MAX_BODY_BYTES = 256 * 1024;
+const CAIO_GATEWAY_INFERENCE_RATE_LIMIT_PER_MINUTE = 30;
+
+function isInferenceRoute(kind: AuthedRoute["kind"]): boolean {
+  return kind === "inference_job_claim" || kind === "inference_job_submit";
+}
 
 const PROBE_METHODS: Readonly<Record<string, readonly string[]>> =
   Object.freeze({
@@ -943,7 +991,9 @@ export function createCaioGatewayHandler(
         expectedAudience: route.audience,
         sourceIp: request.clientIp,
         now: now(),
-        rateLimitPerMinute: dependencies.rateLimitPerMinute,
+        rateLimitPerMinute: isInferenceRoute(route.kind)
+          ? CAIO_GATEWAY_INFERENCE_RATE_LIMIT_PER_MINUTE
+          : dependencies.rateLimitPerMinute,
         ...(request.signal ? { signal: request.signal } : {}),
       }),
       request.signal,
@@ -953,8 +1003,12 @@ export function createCaioGatewayHandler(
     //    can neither choose it nor collide with another workspace's ids.
     const requestId = `${principal.workspaceId}:${requestIdFactory()}`;
 
-    // 6. Body size cap (after authentication, before any parsing).
-    if (bodyByteLength(request.body) > maxBodyBytes) {
+    // 6. Body size cap (after authentication, before any parsing). The inference surface keeps its own,
+    //    smaller cap: a worker never has a reason to send more than one judgement.
+    const routeMaxBodyBytes = isInferenceRoute(route.kind)
+      ? Math.min(maxBodyBytes, CAIO_GATEWAY_INFERENCE_MAX_BODY_BYTES)
+      : maxBodyBytes;
+    if (bodyByteLength(request.body) > routeMaxBodyBytes) {
       return wireResponse(toGatewayError({ status: 413 }));
     }
 
@@ -1098,6 +1152,18 @@ export function createCaioGatewayHandler(
       await boundAssertProjectAccess(privateExecutionResult.portfolioRef);
     }
 
+    if (isInferenceRoute(route.kind)) {
+      // Fail closed on the flag, the audience and the client type. A worker token drives the pull surface and
+      // nothing else, and no other client type may reach it.
+      if (
+        featureFlags.inferenceJobsEnabled !== true ||
+        principal.audience !== "inference" ||
+        principal.clientType !== "inference_worker"
+      ) {
+        throw new CaioAccessGatewayError("scope_violation");
+      }
+    }
+
     // 9a. The independent question-generation route claims its own bounded
     //     audit slot before the production caller resolves the mounted Pack.
     if (route.kind === "operating_question_generation") {
@@ -1226,6 +1292,23 @@ export function createCaioGatewayHandler(
         );
         if (!dispatched.claimed) return wireResponse(dispatched.wire);
         return okResponse(dispatched.body, clientCorrelationId);
+      }
+      case "inference_job_claim":
+      case "inference_job_submit": {
+        const port = route.kind === "inference_job_claim"
+          ? dependencies.inferenceJobs.claim
+          : dependencies.inferenceJobs.submit;
+        const result = await runMutationToSettlement(
+          () =>
+            port({
+              principal,
+              requestId,
+              payload,
+              ...(request.signal ? { signal: request.signal } : {}),
+            }),
+          request.signal,
+        );
+        return okResponse(result, clientCorrelationId);
       }
       case "model_list": {
         const result = await runWithRequestCancellation(
