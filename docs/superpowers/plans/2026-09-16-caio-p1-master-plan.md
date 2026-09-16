@@ -65,6 +65,8 @@ public_safety: Public-safe master implementation plan for CAIO live operating
 | P1-A13 | 小时和日终入队由 Core 的通用作业工厂 `createCaioInferenceEnqueueJob` 提供，开关 `HELM_CAIO_HOURLY_REVIEW_ENABLED` 和 `HELM_CAIO_DAILY_REVIEW_ENABLED`。汇总补充项由 overlay 注入一个只返回计数的端口 |
 | P1-A14 | `/caio` 读出增加复盘区块：显示最近的判断（分层内容）、拒收原因和推理离线状态。没有判断时直说“无判断”，不用空白代替 |
 | P1-A15 | **出域权威只有一个组合者（2026-09-16 实现核查后补充）。** `check:model-egress-governance` 规定，`GOVERNED_GATEWAY_AUTHORITY`、`prepareModelRouteDecision`、`claimModelRouteDispatch`、`recordModelEgressTerminalReceipt` 只允许出域存储和 `governed-model-gateway.service.ts` 引用；投影权威只允许投影服务引用。现有网关是同步的“准备 → 领取 → 调用 → 终态”，放不下拉取式推理。**默认做法（owner 可以否决）：** 在 `lib/llm/governed-model-gateway.service.ts` 内新增延迟派发三步：`prepareDeferredGovernedModelRequest`（投影回执加调用前决策）、`claimDeferredGovernedModelDispatch`（由设备 worker 已登记的适配器运行描述符和 readiness 回执完成 dispatch claim）、`completeDeferredGovernedModelDispatch`（终态回执，可以是 success、failure 或 unknown 对账）。守卫的允许文件清单不变，出域权威仍然只有网关一个组合者。这一项是对 P1D 出域治理的扩展，列为 P1-3a。**owner 2026-09-16 同意。** 实现细节：设计与投影回执的 TTL 都只有 5 分钟，所以投影与决策放在 worker 领取时才做，不在入队时做；lease 到期后以 reconcile 追加 failure 终态，释放路由并发 |
+| P1-A16 | **网关宿主在安小信部署内不存在（2026-09-16 装配后核查补充）。** 四个仓库里宿主 CAIO 访问网关的只有 `overlays/helm-self/lib/workbuddy-lan/access-gateway-deployment.ts`，而它本就因为没有任何 `project_resolver` 实现而拒绝挂载；控制面里 `caio-access-gateway` 只出现在 **caio-pro 交付包**，`anson-cn-enterprise` 的 BOM 与 env 契约都没有它。所以 A7 的两条推理路由在安小信这边无处可挂（Core 已把推理端口设为可选，没有端口时路由无人认领），`CAIO_INFERENCE_JOBS_ENABLED` 也不登记进安小信 env 契约。**由此留下的阻塞**：复盘开关打开后作业能入队，但没有 worker 能认领——闭环要先定网关与推理工作机在安小信怎么落位（独立进程？随 caio-pro 包发？）。**需要 owner 决定**，在此之前不要打开 `HELM_CAIO_HOURLY_REVIEW_ENABLED` |
+
 
 ## 切片与顺序
 
