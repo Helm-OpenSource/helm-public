@@ -21,23 +21,26 @@
 - 判断是 advice 类、`humanReviewerRequired=true`，先只给创始人看（owner 2026-09-16）。
 - 数据不出域：模型在本地设备，网关只听回环，隧道是自有堡垒机，不新增任何公网可达的面。
 
-## 未决：宿主从哪来（先定再动手）
+## 已定：宿主复制进安小信 overlay（owner 2026-09-16 裁定 B）
 
-唯一拥有套接字并终止 mTLS 的实现是 `overlays/helm-self/lib/workbuddy-lan/https-gateway.ts`，**1800 行**，含排空与停机控制。安小信要用，只有两条路：
+唯一拥有套接字并终止 mTLS 的实现是 `overlays/helm-self/lib/workbuddy-lan/https-gateway.ts`，1800 行，
+含排空与停机控制。owner 选择**复制进安小信 overlay**，不动 helm-self 在役路径。
 
-| 方案 | 代价 | 风险 |
-| --- | --- | --- |
-| **A（推荐）上提到 Core** `tools/caio-access-gateway/host.ts` | 一次 Core 改动 + helm-self 改为引用；两边共用一份 | 触到 helm-self 在役路径，要完整回归 |
-| B 复制进安小信 overlay | 不碰 helm-self | 安全敏感代码出现第二份，日后各自漂移——正是钉扎类事故的来源 |
+这个选择的已知代价是：安全敏感代码有了第二份，两份会各自漂移。**所以复制必须带一道来源钉扎闸**，
+把「日后有人改了原件而副本没跟」从靠人记得变成机械可判定：
 
-推荐 A：绑定监听与 mTLS 终止是通用能力，不是租户特性。**需要 owner 拍板**，因为它改的是在役 helm-self 的构成方式。
+- 台账记录来源路径与其 sha256、副本路径与其 sha256（复制当时的值）；
+- 任一侧变了而台账没更新，检查必红，并指出是哪一侧变的；
+- 更新台账是**显式动作**：要么同步副本，要么写明为什么这次不同步。红灯不许靠重算摘要糊过去。
+
+没有这道闸就不要复制——那样等于把一个已知会漂移的东西放进仓库，只在文档里提醒。
 
 ## 切片与顺序
 
 | 切片 | 内容 | 依赖 | 落在哪 |
 | --- | --- | --- | --- |
 | P2-1 | 安小信推理挂载装配：拒绝式 resolver、推理作业端口、只开 `inferenceJobsEnabled`、材料缺任一项即不挂载 | — | overlay |
-| P2-2 | 宿主（按上面的裁定：上提或复制） | ← 裁定 | Core 或 overlay |
+| P2-2 | 宿主复制进安小信 + 来源钉扎闸（裁定 B） | — | overlay |
 | P2-3 | worker 的网关 HTTP 客户端（带客户端证书）与本地模型适配器（OpenAI 兼容，指向 oMLX） | — | Core `tools/caio-inference-worker` |
 | P2-4 | PKI：客户端 CA、服务端证书、worker 客户端证书的签发与轮换口径 | ← P2-2 | CP 文档 + 运维 |
 | P2-5 | CP：网关进程的 env 契约键与进程托管；令牌经 OWNER CLI 在生产签发 | ← P2-1、P2-2 | CP |
