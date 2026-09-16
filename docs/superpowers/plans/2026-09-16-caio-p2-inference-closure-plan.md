@@ -1,3 +1,17 @@
+---
+status: planning / closure-plan-pending-slices
+owner: helm-core
+created: 2026-09-16
+review_after: 2026-10-16
+public_safety: Public-safe implementation plan for closing the CAIO pull
+  inference loop (tenant gateway mount serving only the two inference routes,
+  socket-owning host, device-side worker client and local model adapter,
+  client-certificate material discipline, process supervision). Records
+  mount-time constraints read from in-tree code. No customer data, private
+  endpoint, credential, certificate material, production receipt, activation,
+  or production-readiness claim.
+---
+
 # CAIO 推理闭环落位实施计划（P2）
 
 > **给执行者：** 必需子技能：用 superpowers:subagent-driven-development 或 superpowers:executing-plans 按任务逐条实施。步骤用复选框（`- [ ]`）跟踪。
