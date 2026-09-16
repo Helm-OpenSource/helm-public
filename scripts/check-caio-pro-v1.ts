@@ -106,6 +106,17 @@ const CI_WORKFLOW = ".github/workflows/ci.yml";
 const WORKFLOW_DIRECTORY = ".github/workflows";
 const CAIO_ACCESS_GATEWAY_DIRECTORY = "tools/caio-access-gateway";
 const ALLOWED_CAIO_ACCESS_GATEWAY_FILES = new Set([
+  // 组合网关宿主：绑定套接字、终止 mTLS、按路径分派给这台宿主上的各 surface。
+  //
+  // 它原先长在 helm-self 的 overlay 里，而这些都是**宿主**的属性，与哪个端点讲什么协议无关。
+  // 留在某个租户的 overlay 里，第二个租户要用只能复制——各租户的包按子路径钉扎，彼此的文件
+  // 不在对方包里，复制是唯一出路，而复制一份安全敏感代码，两份就会各自漂移。
+  //
+  // 加进这份白名单是**显式动作**：这个目录本来就是逐个文件登记的，正因为它是公开侧
+  // 唯一被授权承载访问网关的地方。宿主不做跨仓组合——它只认一个能 handle 的端点，
+  // 协议实现仍在下游。
+  "composed-host.test.ts",
+  "composed-host.ts",
   "mount-fixture.ts",
   "production-caller.test.ts",
   "server-config.test.ts",
