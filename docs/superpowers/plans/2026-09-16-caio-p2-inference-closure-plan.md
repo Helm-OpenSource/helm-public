@@ -39,7 +39,8 @@
 
 | 切片 | 内容 | 依赖 | 落在哪 |
 | --- | --- | --- | --- |
-| P2-1 | 安小信推理挂载装配：拒绝式 resolver、推理作业端口、只开 `inferenceJobsEnabled`、材料缺任一项即不挂载 | — | overlay |
+| P2-0 | **推理队列的网关端口适配器**（实施时发现的漏项：端口收裸载荷、返回值即响应体，写它的人拥有线上契约，必须由 Core 一处 own） | — | Core `lib/caio-inference/gateway-port.ts` |
+| P2-1 | 安小信推理挂载装配：拒绝式 resolver、推理作业端口、只开 `inferenceJobsEnabled`、材料缺任一项即不挂载 | ← P2-0 | overlay |
 | P2-2 | 宿主复制进安小信 + 来源钉扎闸（裁定 B） | — | overlay |
 | P2-3 | worker 的网关 HTTP 客户端（带客户端证书）与本地模型适配器（OpenAI 兼容，指向 oMLX） | — | Core `tools/caio-inference-worker` |
 | P2-4 | PKI：客户端 CA、服务端证书、worker 客户端证书的签发与轮换口径 | ← P2-2 | CP 文档 + 运维 |
@@ -53,7 +54,7 @@
 - Test: `overlays/anson/lib/caio/inference-gateway-deployment.test.ts`
 
 **Interfaces:**
-- Consumes：Core 的 `createCaioAccessGatewayMount`、`createCaioAccessTokenService` / `createPrismaCaioAccessTokenPersistence`、`createCaioAuditGate` / `createPrismaCaioAuditReceiptStore`、`caioGatewayReadinessFromAuditGate`、`createInMemoryCaioSourceIpRateLimiter`，以及 `claimCaioInferenceJob` / `submitCaioInferenceJudgement`。
+- Consumes：Core 的 `createCaioInferenceGatewayPort`（P2-0）、`createCaioAccessGatewayMount`、`createCaioAccessTokenService` / `createPrismaCaioAccessTokenPersistence`、`createCaioAuditGate` / `createPrismaCaioAuditReceiptStore`、`caioGatewayReadinessFromAuditGate`、`createInMemoryCaioSourceIpRateLimiter`，以及 `claimCaioInferenceJob` / `submitCaioInferenceJudgement`。
 - Produces：`readAnsonCaioInferenceGatewayMount(env)` → `CaioAccessGatewayMount | null`。
 
 - [ ] **Step 1: 先写失败的测试**——拒绝式 resolver 下两条推理路由仍然可用
