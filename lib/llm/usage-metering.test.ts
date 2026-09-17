@@ -64,11 +64,16 @@ import { attachUsageObservation } from "@/lib/llm/usage-observation";
 
 const WORKSPACE = "workspace_metering";
 
+// A distinct user per call: the per-user rate limiter is 10/min and is real (not
+// mocked), so reusing one id makes the 11th test in this file fail as
+// `policy_rate_limited` — a harness artefact that would look like a defect.
+let userSeq = 0;
+
 function runTask() {
   return executeLLMTask({
     taskType: "RECOMMENDATION_EXPLANATION",
     workspaceId: WORKSPACE,
-    userId: "user_metering",
+    userId: `user_metering_${(userSeq += 1)}`,
     promptKey: "recommendation.explanation",
     promptVersion: "v1",
     systemPrompt: "system prompt text",
@@ -257,5 +262,99 @@ describe("LLM usage metering", () => {
     expect(getMonthToDateSpendUSD(WORKSPACE)).toBe(measuredAfterFirst);
     expect(getMonthToDateUnknownCallCount(WORKSPACE)).toBe(1);
     expect(getMonthToDateUnknownUpperBoundUSD(WORKSPACE)).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("prompt version override binding", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    __resetAccumulatorForTests();
+    mocks.adapterIsConfigured.mockReturnValue(true);
+    mocks.recordLLMCall.mockResolvedValue(undefined);
+    mocks.detectPIIInOutput.mockReturnValue({ detected: false, hits: [] });
+    mocks.resolveModelForTask.mockReturnValue({
+      provider: "openai",
+      model: "gpt-4.1-mini",
+      modelRole: "REASONING",
+      budgetTier: "pilot",
+    });
+  });
+
+  function configWithOverride(overrides: Record<string, string> | null) {
+    mocks.getWorkspaceLLMConfig.mockResolvedValue({
+      provider: "openai",
+      defaultModel: "gpt-4.1-mini",
+      extractionModel: "gpt-4.1-mini",
+      briefingModel: "gpt-4.1-mini",
+      reasoningModel: "gpt-4.1-mini",
+      llmEnabled: true,
+      llmBudgetTier: "pilot",
+      promptVersionOverrides: overrides,
+    });
+  }
+
+  it("A07: an override that cannot change the prompt is refused before the provider is called", async () => {
+    // The resolver is consulted after the caller already built the prompts, so
+    // its answer cannot select a template. Recording it as effective is what put
+    // one version in the ledger and another behind the adapter's bytes.
+    configWithOverride({ "recommendation.explanation": "recommendation.explanation-v-rollback" });
+    mocks.adapterRun.mockResolvedValue({
+      output: { summary: "ok" },
+      rawOutput: '{"summary":"ok"}',
+      modelVersion: "gpt-4.1-mini",
+      usage: { promptTokens: 10, completionTokens: 10 },
+    });
+
+    const result = await runTask();
+
+    expect(result.success).toBe(false);
+    expect(result.fallbackReason).toBe("policy_prompt_version_unbindable");
+    // Zero charged calls: the provider was never contacted.
+    expect(mocks.adapterRun).not.toHaveBeenCalled();
+    expect(getMonthToDateSpendUSD(WORKSPACE)).toBe(0);
+    expect(getMonthToDateUnknownCallCount(WORKSPACE)).toBe(0);
+  });
+
+  it("A07: the ledger records the EFFECTIVE version, with the requested one named in the error", async () => {
+    configWithOverride({ "recommendation.explanation": "v-rollback" });
+
+    const result = await runTask();
+
+    const row = loggedRow();
+    // Never the requested one: that is the mismatch this refuses to create.
+    expect(row.promptVersion).toBe("v1");
+    expect(result.promptVersion).toBe("v1");
+    expect(String(row.errorMessage)).toContain("requested=v-rollback");
+    expect(String(row.errorMessage)).toContain("effective=v1");
+  });
+
+  it("an override equal to the registry default is not a mismatch and proceeds", async () => {
+    configWithOverride({ "recommendation.explanation": "v1" });
+    mocks.adapterRun.mockResolvedValue({
+      output: { summary: "ok" },
+      rawOutput: '{"summary":"ok"}',
+      modelVersion: "gpt-4.1-mini",
+      usage: { promptTokens: 10, completionTokens: 10 },
+    });
+
+    const result = await runTask();
+
+    expect(result.success).toBe(true);
+    expect(mocks.adapterRun).toHaveBeenCalledTimes(1);
+  });
+
+  it("no override configured keeps the default path untouched", async () => {
+    configWithOverride(null);
+    mocks.adapterRun.mockResolvedValue({
+      output: { summary: "ok" },
+      rawOutput: '{"summary":"ok"}',
+      modelVersion: "gpt-4.1-mini",
+      usage: { promptTokens: 10, completionTokens: 10 },
+    });
+
+    const result = await runTask();
+
+    expect(result.success).toBe(true);
+    expect(result.promptVersion).toBe("v1");
   });
 });

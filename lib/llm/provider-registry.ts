@@ -39,6 +39,14 @@ const registry = new Map<string, LLMProviderAdapter>([
   ["qwen", qwenAdapter],
 ]);
 
+/**
+ * Stable code for an override that cannot be bound to the prompt being sent.
+ *
+ * Registered in the DB-derivation pre-call refusal set: the provider was never
+ * contacted, so this row consumed nothing.
+ */
+export const PROMPT_VERSION_UNBINDABLE = "policy_prompt_version_unbindable";
+
 const METADATA_ONLY_SUCCESS_SUMMARY =
   "LLM call succeeded; content omitted by metadata-only policy.";
 const METADATA_ONLY_ERROR_MESSAGE =
@@ -76,7 +84,21 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
     registryDefaultVersion: input.promptVersion,
     workspaceConfig,
   });
-  const promptVersion = resolvedPromptVersion.version;
+  // The resolver's own contract says it decides "which VERSION STRING to pass
+  // through the pipeline + which builder variant the CALLER should route to".
+  // But it is consulted here, AFTER the caller already built systemPrompt and
+  // userPrompt — so its answer arrives too late to select anything. Recording
+  // the override as the effective version therefore used to put one version in
+  // the ledger while the adapter received the bytes of another.
+  //
+  // Silently ignoring the override is not the fix: that is exactly the state
+  // that produced the mismatch. An override that cannot be bound to the prompt
+  // actually being sent is refused BEFORE the provider is contacted, so it costs
+  // zero charged calls, and the deterministic fallback is returned.
+  //
+  // Past this guard the invariant holds by construction: the version in the
+  // ledger and the version behind the adapter's bytes are the same one.
+  const promptVersion = input.promptVersion;
   const hintedAdapter = input.providerHint ? getProviderAdapter(input.providerHint) : null;
   const adapter = hintedAdapter ?? getProviderAdapter(routed.provider);
   const start = Date.now();
@@ -91,6 +113,51 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
     inputSummary: metadataOnly ? null : input.inputSummary,
     audit: contextAudit,
   });
+
+  if (
+    resolvedPromptVersion.source === "workspace_override" &&
+    resolvedPromptVersion.version !== input.promptVersion
+  ) {
+    const latencyMs = Date.now() - start;
+    await recordLLMCallSafely({
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      provider: adapter?.provider ?? routed.provider,
+      model: routed.model,
+      modelVersion: routed.model,
+      modelRole: routed.modelRole,
+      taskType: input.taskType,
+      promptKey: input.promptKey,
+      // The EFFECTIVE version — nothing was sent, so this is the version the
+      // pipeline would have used. The requested one goes in errorMessage
+      // rather than silently replacing this field.
+      promptVersion,
+      budgetTier: routed.budgetTier ?? workspaceConfig.llmBudgetTier,
+      outputMode: input.outputMode ?? "text",
+      inputSummary,
+      outputSummary: "工作区指定的提示词版本无法绑定到实际发送的提示词，已回退到规则逻辑。",
+      latencyMs,
+      success: false,
+      fallbackReason: PROMPT_VERSION_UNBINDABLE,
+      errorMessage: `prompt version override cannot be bound: requested=${resolvedPromptVersion.version} effective=${promptVersion} promptKey=${input.promptKey}`,
+    });
+    return {
+      output: input.fallbackOutput,
+      provider: adapter?.provider ?? routed.provider,
+      model: routed.model,
+      modelVersion: routed.model,
+      modelRole: routed.modelRole,
+      promptKey: input.promptKey,
+      promptVersion,
+      success: false,
+      fallbackUsed: true,
+      fallbackReason: PROMPT_VERSION_UNBINDABLE,
+      errorMessage: `prompt version override cannot be bound for promptKey=${input.promptKey}`,
+      latencyMs,
+      rawOutput: null,
+      budgetTier: routed.budgetTier ?? workspaceConfig.llmBudgetTier,
+    };
+  }
 
   // Guard 1 · Max-tokens cap (T019 P0 #1). Apply per-task default if
   // caller did not set, reject if caller exceeded the sanity ceiling.

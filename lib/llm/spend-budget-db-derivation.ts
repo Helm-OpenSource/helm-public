@@ -67,6 +67,9 @@ const PRE_CALL_REFUSAL_REASONS: ReadonlySet<string> = new Set([
   "policy_max_tokens_exceeded",
   "policy_rate_limited",
   "policy_spend_budget_exceeded",
+  // An override that cannot be bound to the prompt being sent is refused before
+  // the provider is contacted, so the row consumed nothing.
+  "policy_prompt_version_unbindable",
 ]);
 
 export type MonthToDateConsumption = {
