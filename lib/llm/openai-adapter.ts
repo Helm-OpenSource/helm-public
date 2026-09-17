@@ -320,6 +320,7 @@ export function createOpenAICompatibleAdapter(input: {
         requestInit.dispatcher = dispatcher;
         response = await fetch(endpoint, requestInit);
       } catch (error) {
+        clearTimeout(timeout);
         const err = error as Error & { cause?: unknown };
         const causeText =
           err?.cause instanceof Error
@@ -338,10 +339,9 @@ export function createOpenAICompatibleAdapter(input: {
         throw new Error(
           `OpenAI-compatible fetch failed for ${sanitizeUrlForError(baseUrl)}/chat/completions: ${err?.name || "Error"}: ${err?.message || "unknown"}; cause: ${causeText}`,
         );
-      } finally {
-        clearTimeout(timeout);
       }
 
+      // fetch resolves after headers; retain the deadline until the body is read.
       let payload: OpenAIChatCompletionResponse;
       try {
         payload = (await response.json()) as OpenAIChatCompletionResponse;
@@ -358,6 +358,8 @@ export function createOpenAICompatibleAdapter(input: {
         throw new Error(
           `OpenAI-compatible response parse failed for ${sanitizeUrlForError(baseUrl)}/chat/completions: ${err?.message || "unknown"}`,
         );
+      } finally {
+        clearTimeout(timeout);
       }
 
       logLlmTrace("chat_response", {
