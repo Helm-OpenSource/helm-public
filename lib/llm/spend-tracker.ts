@@ -58,6 +58,24 @@ type AccumulatorKey = string; // `${workspaceId}:${YYYY-MM}`
 const accumulator = new Map<AccumulatorKey, number>();
 
 /**
+ * Calls whose real consumption is UNKNOWN, accumulated separately.
+ *
+ * A provider that reports no usage still charged for the call. Folding those
+ * into `accumulator` as zero hides them; folding them in as the pre-call
+ * estimate makes an estimate indistinguishable from a measurement the next time
+ * anyone reads the ledger. So they go in their own bucket, carrying the
+ * conservative upper bound we do have (the pre-call estimate), and the caller
+ * decides what to do with them.
+ *
+ * This bucket is deliberately NOT consulted by the budget decision in this
+ * change: the enforcement question ("does an unknown hold额度?") belongs to the
+ * atomic-reservation work, and today no budget is configured anywhere, so
+ * wiring it into the decision here would be an unverifiable behaviour change.
+ * What this change does guarantee is that the amount stops being invisible.
+ */
+const unknownUpperBound = new Map<AccumulatorKey, { upperBoundUSD: number; calls: number }>();
+
+/**
  * Optional DB-derived spend provider. When registered (typically at app
  * startup via setDBDerivedSpendProvider), the spend-tracker queries this
  * function to get the persisted spend, then uses max(inMemory, dbDerived)
@@ -167,6 +185,62 @@ export function recordActualSpend(input: {
 }
 
 /**
+ * Record a call whose real consumption could not be measured.
+ *
+ * `upperBoundUSD` is the best bound available at the call site — normally the
+ * pre-call estimate. It is NOT added to the measured total: a caller reading
+ * month-to-date spend must be able to tell "measured" from "at most".
+ *
+ * A non-finite or negative bound is refused rather than accumulated: a NaN here
+ * would silently poison every later comparison.
+ */
+export function recordUnknownSpend(input: {
+  workspaceId: string;
+  monthKey: string;
+  upperBoundUSD: number;
+}): void {
+  const k = keyFor(input.workspaceId, input.monthKey);
+  const prev = unknownUpperBound.get(k) ?? { upperBoundUSD: 0, calls: 0 };
+  // A non-finite or negative bound is refused as an AMOUNT (a NaN here would
+  // poison every later comparison) but the call is still counted: "we could not
+  // measure this one" is the fact that must not get lost, and it is independent
+  // of whether we had a usable bound for it.
+  const usable = Number.isFinite(input.upperBoundUSD) && input.upperBoundUSD >= 0;
+  unknownUpperBound.set(k, {
+    upperBoundUSD: prev.upperBoundUSD + (usable ? input.upperBoundUSD : 0),
+    calls: prev.calls + 1,
+  });
+}
+
+/**
+ * Month-to-date upper bound of the calls whose consumption is unknown.
+ *
+ * Reported separately from {@link getMonthToDateSpendUSD} on purpose: summing
+ * them would produce a single number that is neither a measurement nor a bound.
+ */
+export function getMonthToDateUnknownUpperBoundUSD(
+  workspaceId: string,
+  monthKey: string = monthKeyFromDate(),
+): number {
+  return unknownUpperBound.get(keyFor(workspaceId, monthKey))?.upperBoundUSD ?? 0;
+}
+
+/**
+ * How many calls this month could not be measured.
+ *
+ * Reported alongside the bound because the bound alone cannot answer "is this
+ * one big unmeasured call or a thousand small ones?" — and a price table that
+ * returns 0 for an unknown model would make the bound indistinguishable from
+ * "nothing happened".
+ */
+export function getMonthToDateUnknownCallCount(
+  workspaceId: string,
+  monthKey: string = monthKeyFromDate(),
+): number {
+  return unknownUpperBound.get(keyFor(workspaceId, monthKey))?.calls ?? 0;
+}
+
+/**
  * Async variant of applySpendBudgetPolicy that additionally consults the
  * registered DB-derived spend provider (if any) and uses
  * max(inMemoryAccumulator, dbDerivedSpend) as the source of truth.
@@ -225,6 +299,7 @@ export async function applySpendBudgetPolicyAsync(input: {
  */
 export function __resetAccumulatorForTests(): void {
   accumulator.clear();
+  unknownUpperBound.clear();
   dbCache.clear();
   dbDerivedSpendProvider = null;
 }

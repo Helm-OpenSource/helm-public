@@ -22,15 +22,30 @@ import {
   SpendBudgetExceededError,
   applySpendBudgetPolicyAsync,
   recordActualSpend,
+  recordUnknownSpend,
 } from "@/lib/llm/spend-tracker";
 import { estimateSpendUSD } from "@/lib/llm/token-cost-table";
-import type { LLMProviderAdapter, LLMTaskExecutionResult, LLMTaskInput } from "@/lib/llm/types";
+import {
+  observeUsage,
+  readUsageObservation,
+  usageForLedger,
+  type LLMUsageObservation,
+} from "@/lib/llm/usage-observation";
+import type { LLMProvider, LLMProviderAdapter, LLMTaskExecutionResult, LLMTaskInput } from "@/lib/llm/types";
 import { trimText } from "@/lib/utils";
 
 const registry = new Map<string, LLMProviderAdapter>([
   ["openai", openAIAdapter],
   ["qwen", qwenAdapter],
 ]);
+
+/**
+ * Stable code for an override that cannot be bound to the prompt being sent.
+ *
+ * Registered in the DB-derivation pre-call refusal set: the provider was never
+ * contacted, so this row consumed nothing.
+ */
+export const PROMPT_VERSION_UNBINDABLE = "policy_prompt_version_unbindable";
 
 const METADATA_ONLY_SUCCESS_SUMMARY =
   "LLM call succeeded; content omitted by metadata-only policy.";
@@ -69,7 +84,21 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
     registryDefaultVersion: input.promptVersion,
     workspaceConfig,
   });
-  const promptVersion = resolvedPromptVersion.version;
+  // The resolver's own contract says it decides "which VERSION STRING to pass
+  // through the pipeline + which builder variant the CALLER should route to".
+  // But it is consulted here, AFTER the caller already built systemPrompt and
+  // userPrompt — so its answer arrives too late to select anything. Recording
+  // the override as the effective version therefore used to put one version in
+  // the ledger while the adapter received the bytes of another.
+  //
+  // Silently ignoring the override is not the fix: that is exactly the state
+  // that produced the mismatch. An override that cannot be bound to the prompt
+  // actually being sent is refused BEFORE the provider is contacted, so it costs
+  // zero charged calls, and the deterministic fallback is returned.
+  //
+  // Past this guard the invariant holds by construction: the version in the
+  // ledger and the version behind the adapter's bytes are the same one.
+  const promptVersion = input.promptVersion;
   const hintedAdapter = input.providerHint ? getProviderAdapter(input.providerHint) : null;
   const adapter = hintedAdapter ?? getProviderAdapter(routed.provider);
   const start = Date.now();
@@ -84,6 +113,51 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
     inputSummary: metadataOnly ? null : input.inputSummary,
     audit: contextAudit,
   });
+
+  if (
+    resolvedPromptVersion.source === "workspace_override" &&
+    resolvedPromptVersion.version !== input.promptVersion
+  ) {
+    const latencyMs = Date.now() - start;
+    await recordLLMCallSafely({
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      provider: adapter?.provider ?? routed.provider,
+      model: routed.model,
+      modelVersion: routed.model,
+      modelRole: routed.modelRole,
+      taskType: input.taskType,
+      promptKey: input.promptKey,
+      // The EFFECTIVE version — nothing was sent, so this is the version the
+      // pipeline would have used. The requested one goes in errorMessage
+      // rather than silently replacing this field.
+      promptVersion,
+      budgetTier: routed.budgetTier ?? workspaceConfig.llmBudgetTier,
+      outputMode: input.outputMode ?? "text",
+      inputSummary,
+      outputSummary: "工作区指定的提示词版本无法绑定到实际发送的提示词，已回退到规则逻辑。",
+      latencyMs,
+      success: false,
+      fallbackReason: PROMPT_VERSION_UNBINDABLE,
+      errorMessage: `prompt version override cannot be bound: requested=${resolvedPromptVersion.version} effective=${promptVersion} promptKey=${input.promptKey}`,
+    });
+    return {
+      output: input.fallbackOutput,
+      provider: adapter?.provider ?? routed.provider,
+      model: routed.model,
+      modelVersion: routed.model,
+      modelRole: routed.modelRole,
+      promptKey: input.promptKey,
+      promptVersion,
+      success: false,
+      fallbackUsed: true,
+      fallbackReason: PROMPT_VERSION_UNBINDABLE,
+      errorMessage: `prompt version override cannot be bound for promptKey=${input.promptKey}`,
+      latencyMs,
+      rawOutput: null,
+      budgetTier: routed.budgetTier ?? workspaceConfig.llmBudgetTier,
+    };
+  }
 
   // Guard 1 · Max-tokens cap (T019 P0 #1). Apply per-task default if
   // caller did not set, reject if caller exceeded the sanity ceiling.
@@ -320,12 +394,22 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
         outputMode: input.outputMode ?? "text",
         inputSummary,
         outputSummary: `LLM 输出含 PII 模式 (${piiResult.hits.map((h) => h.type).join(", ")})，已回退到规则逻辑。`,
-        tokenUsagePrompt: result.usage?.promptTokens,
-        tokenUsageCompletion: result.usage?.completionTokens,
+        ...usageForLedger(observeUsage(result.usage)),
         latencyMs,
         success: false,
         fallbackReason: "policy_pii_in_output",
         errorMessage: `PII detected: ${piiResult.hits.length} hits across ${[...new Set(piiResult.hits.map((h) => h.type))].join(", ")}`,
+      });
+      // The provider ran and charged for this call; the rejection is ours. This
+      // path used to `return` before `recordActualSpend`, so a PII-rejected call
+      // consumed tokens that appeared in no total — and the log row even carries
+      // the counts, which is how we know they were known all along.
+      recordObservedConsumption({
+        workspaceId: input.workspaceId,
+        spendPolicyResult,
+        observation: observeUsage(result.usage),
+        provider: adapter.provider,
+        model: routed.model,
       });
       return {
         output: input.fallbackOutput,
@@ -346,23 +430,18 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
       };
     }
 
-    // Record actual spend post-call using real usage if available;
-    // otherwise fall back to the pre-call estimate.
-    if (spendPolicyResult) {
-      const actualUSD = result.usage
-        ? estimateSpendUSD({
-            provider: adapter.provider,
-            model: routed.model,
-            inputTokens: result.usage.promptTokens ?? 0,
-            outputTokens: result.usage.completionTokens ?? 0,
-          })
-        : spendPolicyResult.estimatedCallUSD;
-      recordActualSpend({
-        workspaceId: input.workspaceId,
-        monthKey: spendPolicyResult.monthKey,
-        spendUSD: actualUSD,
-      });
-    }
+    // Record post-call consumption. The adapter ALWAYS returns a `usage` object,
+    // so the old `result.usage ? … : estimate` check never selected the estimate
+    // branch — a provider that reported no usage was billed as
+    // `?? 0` + `?? 0` = ZERO. Branch on the observation instead, which
+    // distinguishes a measured zero from a missing count.
+    recordObservedConsumption({
+      workspaceId: input.workspaceId,
+      spendPolicyResult,
+      observation: observeUsage(result.usage),
+      provider: adapter.provider,
+      model: routed.model,
+    });
     await recordLLMCallSafely({
       workspaceId: input.workspaceId,
       userId: input.userId,
@@ -379,8 +458,7 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
       outputSummary: metadataOnly
         ? METADATA_ONLY_SUCCESS_SUMMARY
         : trimText(result.rawOutput, 220),
-      tokenUsagePrompt: result.usage?.promptTokens,
-      tokenUsageCompletion: result.usage?.completionTokens,
+      ...usageForLedger(observeUsage(result.usage)),
       latencyMs,
       success: true,
     });
@@ -412,6 +490,20 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
         : "provider_error";
 
     const errorMessage = metadataOnly ? METADATA_ONLY_ERROR_MESSAGE : message;
+    // A parse or schema failure happens AFTER the provider answered and charged.
+    // `parseOutput` runs while the adapter builds its return object, so the usage
+    // never reached this catch: the adapter now attaches the observation to the
+    // escaping error (keeping the error's own type, which the branches above
+    // depend on). A transport failure legitimately carries no observation and
+    // reads back as `no_usage_observed` — unknown, not zero.
+    const failureObservation = readUsageObservation(error);
+    recordObservedConsumption({
+      workspaceId: input.workspaceId,
+      spendPolicyResult,
+      observation: failureObservation,
+      provider: adapter.provider,
+      model: routed.model,
+    });
     await recordLLMCallSafely({
       workspaceId: input.workspaceId,
       userId: input.userId,
@@ -426,6 +518,7 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
       outputMode: input.outputMode ?? "text",
       inputSummary,
       outputSummary: "本次调用失败，已回退到规则逻辑。",
+      ...usageForLedger(failureObservation),
       latencyMs,
       success: false,
       fallbackReason,
@@ -464,4 +557,48 @@ async function recordLLMCallSafely(input: Parameters<typeof recordLLMCall>[0]) {
     }
     console.warn(`[LLM observability] Failed to record LLM call log: ${trimText(message, 180)}`, error);
   }
+}
+
+
+/**
+ * Record what this call consumed, whether or not it could be measured.
+ *
+ * Three call paths converge here — success, PII rejection and the catch — and
+ * they used to disagree: only the success path recorded anything at all, and it
+ * recorded ZERO when the provider omitted usage. A rejected or failed call still
+ * consumed provider tokens; dropping it makes the ledger under-report by exactly
+ * the amount nobody is watching.
+ *
+ * A known observation becomes measured spend. An unknown one goes to the
+ * unknown bucket carrying the pre-call estimate as a conservative upper bound —
+ * it is never written as measured spend, because an estimate that lands in the
+ * measured total can never be told apart from a measurement afterwards.
+ */
+function recordObservedConsumption(input: {
+  workspaceId: string;
+  spendPolicyResult: { monthKey: string; estimatedCallUSD: number } | null;
+  observation: LLMUsageObservation;
+  provider: LLMProvider;
+  model: string;
+}): void {
+  const policy = input.spendPolicyResult;
+  if (!policy) return;
+  if (input.observation.kind === "known") {
+    recordActualSpend({
+      workspaceId: input.workspaceId,
+      monthKey: policy.monthKey,
+      spendUSD: estimateSpendUSD({
+        provider: input.provider,
+        model: input.model,
+        inputTokens: input.observation.promptTokens,
+        outputTokens: input.observation.completionTokens,
+      }),
+    });
+    return;
+  }
+  recordUnknownSpend({
+    workspaceId: input.workspaceId,
+    monthKey: policy.monthKey,
+    upperBoundUSD: policy.estimatedCallUSD,
+  });
 }
