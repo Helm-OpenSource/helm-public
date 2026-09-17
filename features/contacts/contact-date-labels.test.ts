@@ -11,6 +11,11 @@ describe("contact date labels", () => {
   });
 
   it("keeps the existing Chinese contact date format", () => {
+    // formatDateLabel 对今天/明天/昨天返回相对文案，夹具是写死的绝对日期，
+    // 所以时钟也要一起冻住：否则真实日期落到 08-13/14/15 这三天，断言必红。
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 0, 15, 9, 0));
+
     const date = new Date(2026, 7, 14, 11, 45);
 
     expect(formatContactDateLabel(date, false, formatDateLabel)).toBe(
