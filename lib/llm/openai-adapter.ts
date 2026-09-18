@@ -9,6 +9,7 @@ import {
   isDeploymentCapabilityEnabled,
 } from "@/lib/runtime/deployment-capabilities";
 import { sanitizeLlmTracePayload } from "@/lib/llm/trace-sanitizer";
+import { attachUsageObservation, observeUsage } from "@/lib/llm/usage-observation";
 import type { LLMProvider, LLMProviderAdapter, LLMResolvedTask, LLMTaskType } from "@/lib/llm/types";
 import { Agent, ProxyAgent, Socks5ProxyAgent, type Dispatcher } from "undici";
 
@@ -320,6 +321,7 @@ export function createOpenAICompatibleAdapter(input: {
         requestInit.dispatcher = dispatcher;
         response = await fetch(endpoint, requestInit);
       } catch (error) {
+        clearTimeout(timeout);
         const err = error as Error & { cause?: unknown };
         const causeText =
           err?.cause instanceof Error
@@ -338,10 +340,9 @@ export function createOpenAICompatibleAdapter(input: {
         throw new Error(
           `OpenAI-compatible fetch failed for ${sanitizeUrlForError(baseUrl)}/chat/completions: ${err?.name || "Error"}: ${err?.message || "unknown"}; cause: ${causeText}`,
         );
-      } finally {
-        clearTimeout(timeout);
       }
 
+      // fetch resolves after headers; retain the deadline until the body is read.
       let payload: OpenAIChatCompletionResponse;
       try {
         payload = (await response.json()) as OpenAIChatCompletionResponse;
@@ -358,6 +359,8 @@ export function createOpenAICompatibleAdapter(input: {
         throw new Error(
           `OpenAI-compatible response parse failed for ${sanitizeUrlForError(baseUrl)}/chat/completions: ${err?.message || "unknown"}`,
         );
+      } finally {
+        clearTimeout(timeout);
       }
 
       logLlmTrace("chat_response", {
@@ -378,15 +381,26 @@ export function createOpenAICompatibleAdapter(input: {
         throw new Error("OpenAI 未返回可解析内容");
       }
 
-      return {
-        rawOutput,
-        output: taskInput.parseOutput(rawOutput),
-        modelVersion: taskInput.model,
-        usage: {
-          promptTokens: payload.usage?.prompt_tokens,
-          completionTokens: payload.usage?.completion_tokens,
-        },
+      const usage = {
+        promptTokens: payload.usage?.prompt_tokens,
+        completionTokens: payload.usage?.completion_tokens,
       };
+
+      // The provider already charged for this call. `parseOutput` used to be
+      // evaluated inside the returned object literal, so a parse failure threw
+      // away the whole object — including the usage — and the executor's catch
+      // path recorded the call with no tokens at all. The consumption happened;
+      // only the parse failed. Observe the usage first, then let it ride on the
+      // escaping error (the error keeps its own identity, so the executor can
+      // still tell parse / schema / transport failures apart).
+      let output: TOutput;
+      try {
+        output = taskInput.parseOutput(rawOutput);
+      } catch (error) {
+        throw attachUsageObservation(error, observeUsage(usage));
+      }
+
+      return { rawOutput, output, modelVersion: taskInput.model, usage };
     },
   };
 }

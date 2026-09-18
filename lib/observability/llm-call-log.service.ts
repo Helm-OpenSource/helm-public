@@ -16,8 +16,13 @@ type RecordLLMCallInput = {
   outputMode?: string | null;
   inputSummary?: string | null;
   outputSummary?: string | null;
-  tokenUsagePrompt?: number;
-  tokenUsageCompletion?: number;
+  // Nullable on purpose, and `null` is not the same statement as omitting the
+  // field: `null` records "the provider did not report a usable count for this
+  // call", which a consumer of the ledger must be able to tell apart from a
+  // measured 0. Writing 0 for a missing count is exactly the defect this
+  // distinction exists to prevent.
+  tokenUsagePrompt?: number | null;
+  tokenUsageCompletion?: number | null;
   latencyMs?: number;
   success: boolean;
   fallbackReason?: string | null;
