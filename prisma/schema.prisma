@@ -1313,225 +1313,240 @@ model AuthSession {
 }
 
 model Workspace {
-  id                                   String                                @id @default(cuid())
-  name                                 String
-  slug                                 String                                @unique
-  status                               WorkspaceStatus                       @default(ACTIVE)
-  workspaceClass                       WorkspaceClass                        @default(CUSTOMER)
-  systemKey                            String?                               @unique
-  description                          String?
-  profileType                          String?
-  connectedSources                     String?                               @db.LongText
-  focusAreas                           String?                               @db.LongText
-  defaultStrategies                    String?                               @db.LongText
-  configuration                        String?                               @db.LongText
-  defaultLocale                        String                                @default("zh-CN")
-  pilotMode                            Boolean                               @default(true)
-  featureFlagsJson                     String?                               @db.LongText
-  dataRetentionDays                    Int                                   @default(90)
-  captureConsentRequired               Boolean                               @default(true)
-  defaultLLMProvider                   String?
-  defaultLLMModel                      String?
-  extractionModel                      String?
-  briefingModel                        String?
-  reasoningModel                       String?
-  llmBudgetTier                        String?
-  llmEnabled                           Boolean                               @default(true)
-  createdAt                            DateTime                              @default(now())
-  updatedAt                            DateTime                              @updatedAt
-  solutionExtensions                   WorkspaceSolutionExtension[]
-  surfaceBindings                      WorkspaceSurfaceBinding[]
-  memberships                          Membership[]
-  contacts                             Contact[]
-  companies                            Company[]
-  opportunities                        Opportunity[]
-  meetings                             Meeting[]
-  meetingNotes                         MeetingNote[]
-  actionItems                          ActionItem[]
-  approvalTasks                        ApprovalTask[]
-  executionReceipts                    ExecutionReceipt[]
-  diagnosticSessionWorkPackets         DiagnosticSessionWorkPacket[]
-  dataAssetCatalogEntries              DataAssetCatalogEntry[]
-  dataAssetStageReceipts               DataAssetStageReceipt[]
-  observationCompatReceipts            ObservationCompatReceipt[]
-  enterpriseObservationPrograms        EnterpriseObservationProgram[]
-  observationSources                   ObservationSource[]
-  observationSourceRuns                ObservationSourceRun[]
-  caioQuickCheckTicks                  CaioQuickCheckTick[]
-  caioInferenceJobs                    CaioInferenceJob[]
-  caioMetricObservations               CaioMetricObservation[]
-  caioAnomalyCandidates                CaioAnomalyCandidate[]
-  caioOperatingContextSnapshots        CaioOperatingContextSnapshot[]
-  decisionRecords                      DecisionRecord[]
-  supervisionSignalRecords             SupervisionSignalRecord[]
-  decisionWorkPacketClaims             DecisionWorkPacketClaim[]
-  caioMandateRecords                   CaioMandateRecord[]
-  caioPrincipalBindings                CaioPrincipalBinding[]
-  caioActiveMandateClaims              CaioActiveMandateClaim[]
-  caioGuardianStopRecords              CaioGuardianStopRecord[]
-  caioAdviceRecords                    CaioAdviceRecord[]
-  caioInitializationAssessments        CaioInitializationAssessment[]
-  caioInitializationGateReceipts       CaioInitializationGateReceipt[]
-  caioInitializationGateHead           CaioInitializationGateHead?
-  caioOperatingQuestionPortfolios      CaioOperatingQuestionPortfolio[]
-  caioOperatingQuestionReceipts        CaioOperatingQuestionGenerationReceipt[]
-  caioOperatingQuestionPortfolioHead   CaioOperatingQuestionPortfolioHead?
-  caioQuestionSelectionReceipts         CaioQuestionSelectionReceipt[]
-  caioQuestionSelectionHead             CaioQuestionSelectionHead?
-  caioOperatingQuestionDecisionBindings CaioOperatingQuestionDecisionBinding[]
+  id                                       String                                    @id @default(cuid())
+  name                                     String
+  slug                                     String                                    @unique
+  status                                   WorkspaceStatus                           @default(ACTIVE)
+  workspaceClass                           WorkspaceClass                            @default(CUSTOMER)
+  systemKey                                String?                                   @unique
+  description                              String?
+  profileType                              String?
+  connectedSources                         String?                                   @db.LongText
+  focusAreas                               String?                                   @db.LongText
+  defaultStrategies                        String?                                   @db.LongText
+  configuration                            String?                                   @db.LongText
+  defaultLocale                            String                                    @default("zh-CN")
+  pilotMode                                Boolean                                   @default(true)
+  featureFlagsJson                         String?                                   @db.LongText
+  dataRetentionDays                        Int                                       @default(90)
+  captureConsentRequired                   Boolean                                   @default(true)
+  defaultLLMProvider                       String?
+  defaultLLMModel                          String?
+  extractionModel                          String?
+  briefingModel                            String?
+  reasoningModel                           String?
+  llmBudgetTier                            String?
+  llmEnabled                               Boolean                                   @default(true)
+  // LLM spend budget policy (candidate; see docs ANSON_LLM_SPEND_BUDGET_DECISIONS_20260917).
+  // `unconfigured` is an explicit state, not null: null used to be the only way to say
+  // "no budget", which made "nobody configured this" indistinguishable from "deliberately
+  // unlimited". Amounts are integer micros — RF-01.3 forbids letting float error admit a
+  // call at the threshold. enforcementMode is separate from budgetMode on purpose:
+  // configuring a budget must not by itself start refusing calls.
+  llmBudgetMode                            String?
+  llmMonthlyBudgetMicros                   BigInt?
+  llmBudgetEnforcementMode                 String?
+  llmBudgetPeriodPolicyVersion             String?
+  llmBudgetConfigVersion                   Int                                       @default(0)
+  llmBudgetApprovalRef                     String?
+  llmBudgetUpdatedBy                       String?
+  llmBudgetUpdatedAt                       DateTime?
+  llmPromptVersionOverrides                String?                                   @db.LongText
+  createdAt                                DateTime                                  @default(now())
+  updatedAt                                DateTime                                  @updatedAt
+  solutionExtensions                       WorkspaceSolutionExtension[]
+  surfaceBindings                          WorkspaceSurfaceBinding[]
+  memberships                              Membership[]
+  contacts                                 Contact[]
+  companies                                Company[]
+  opportunities                            Opportunity[]
+  meetings                                 Meeting[]
+  meetingNotes                             MeetingNote[]
+  actionItems                              ActionItem[]
+  approvalTasks                            ApprovalTask[]
+  executionReceipts                        ExecutionReceipt[]
+  diagnosticSessionWorkPackets             DiagnosticSessionWorkPacket[]
+  dataAssetCatalogEntries                  DataAssetCatalogEntry[]
+  dataAssetStageReceipts                   DataAssetStageReceipt[]
+  observationCompatReceipts                ObservationCompatReceipt[]
+  enterpriseObservationPrograms            EnterpriseObservationProgram[]
+  observationSources                       ObservationSource[]
+  observationSourceRuns                    ObservationSourceRun[]
+  caioQuickCheckTicks                      CaioQuickCheckTick[]
+  caioInferenceJobs                        CaioInferenceJob[]
+  caioMetricObservations                   CaioMetricObservation[]
+  caioAnomalyCandidates                    CaioAnomalyCandidate[]
+  caioOperatingContextSnapshots            CaioOperatingContextSnapshot[]
+  decisionRecords                          DecisionRecord[]
+  supervisionSignalRecords                 SupervisionSignalRecord[]
+  decisionWorkPacketClaims                 DecisionWorkPacketClaim[]
+  caioMandateRecords                       CaioMandateRecord[]
+  caioPrincipalBindings                    CaioPrincipalBinding[]
+  caioActiveMandateClaims                  CaioActiveMandateClaim[]
+  caioGuardianStopRecords                  CaioGuardianStopRecord[]
+  caioAdviceRecords                        CaioAdviceRecord[]
+  caioInitializationAssessments            CaioInitializationAssessment[]
+  caioInitializationGateReceipts           CaioInitializationGateReceipt[]
+  caioInitializationGateHead               CaioInitializationGateHead?
+  caioOperatingQuestionPortfolios          CaioOperatingQuestionPortfolio[]
+  caioOperatingQuestionReceipts            CaioOperatingQuestionGenerationReceipt[]
+  caioOperatingQuestionPortfolioHead       CaioOperatingQuestionPortfolioHead?
+  caioQuestionSelectionReceipts            CaioQuestionSelectionReceipt[]
+  caioQuestionSelectionHead                CaioQuestionSelectionHead?
+  caioOperatingQuestionDecisionBindings    CaioOperatingQuestionDecisionBinding[]
   caioOperatingQuestionImplementationPlans CaioOperatingQuestionImplementationPlan[]
-  caioQuestionValueReceipts            CaioQuestionValueReceipt[]
-  caioProV1RetrospectiveReceipts       CaioProV1RetrospectiveReceipt[]
-  caioProV1EvidenceAttestations        CaioProV1EvidenceAttestation[]
-  caioProV1CompletionAssessments       CaioProV1CompletionAssessment[]
-  caioProV1CompletionGateReceipts      CaioProV1CompletionGateReceipt[]
-  caioProV1CompletionGateHead          CaioProV1CompletionGateHead?
-  workBuddyDeliveryEnvelopes           WorkBuddyDeliveryEnvelope[]
-  workBuddyDeliveryClientBindings      WorkBuddyDeliveryClientBinding[]
-  workBuddyDeliveryLanes               WorkBuddyDeliveryLane[]
-  workBuddyDeliveryClaims              WorkBuddyDeliveryClaim[]
-  workBuddyDeliveryPresentations       WorkBuddyDeliveryPresentation[]
-  workBuddyDeliverySuppressions        WorkBuddyDeliverySuppression[]
-  workBuddyMutationChallenges          WorkBuddyMutationChallenge[]
-  workBuddyMutationReceipts            WorkBuddyMutationReceipt[]
-  workBuddyPresenceChallenges          WorkBuddyPresenceChallenge[]
-  workBuddyPromptResponseReceipts      WorkBuddyPromptResponseReceipt[]
-  memberWorkSignalChallenges           MemberWorkSignalChallenge[]
-  memberWorkSignalReceipts             MemberWorkSignalReceipt[]
-  memberPrompts                        MemberPrompt[]
-  memberPromptTransitionReceipts       MemberPromptTransitionReceipt[]
-  memberPromptResponseReceipts         MemberPromptResponseReceipt[]
-  memberGatewaySessions                MemberGatewaySession[]
-  caioAccessTokens                     CaioAccessToken[]
-  caioPairingRequests                  CaioPairingRequest[]
-  caioContextNegativeRules             CaioContextNegativeRule[]
-  caioContextReceipts                  CaioContextReceipt[]
-  caioMemoryCandidates                 CaioMemoryCandidate[]
-  caioAuditDispatchReceipts            CaioAuditDispatchReceipt[]
-  caioCredentialRefStates              CaioCredentialRefState[]
-  contextAgentInvitations              ContextAgentInvitation[]
-  contextAgentConsentReceipts          ContextAgentConsentReceipt[]
-  contextAgentScopeRevisions           ContextAgentScopeRevision[]
-  contextAgentCollectionReceipts       ContextAgentCollectionReceipt[]
-  contextAgentPauseReceipts            ContextAgentPauseReceipt[]
-  contextAgentRevocationReceipts       ContextAgentRevocationReceipt[]
-  contextAgentDeletionReceipts         ContextAgentDeletionReceipt[]
-  providerAdapterReadinessReceipts     ProviderAdapterReadinessReceipt[]
-  modelRoutePolicyApprovalReceipts     ModelRoutePolicyApprovalReceipt[]
-  governedModelProjectionReceipts      GovernedModelProjectionReceipt[]
-  tenantModelRoutePolicies             TenantModelRoutePolicy[]
-  tenantModelRoutePolicyHeads          TenantModelRoutePolicyHead[]
-  modelRouteDecisions                  ModelRouteDecision[]
-  modelEgressReceipts                  ModelEgressReceipt[]
-  auditLogs                            AuditLog[]
-  emailThreads                         EmailThread[]
-  memoryEntries                        MemoryEntry[]
-  externalMemorySyncStates             ExternalMemorySyncState[]
-  externalMemoryRecords                ExternalMemoryRecord[]
-  externalAgentConnections             ExternalAgentConnection[]
-  policyRules                          PolicyRule[]
-  budgetRules                          BudgetRule[]
-  notifications                        Notification[]
-  eventLogs                            EventLog[]
-  deltaEvents                          DeltaEvent[]
-  usageSnapshots                       DailyUsageSnapshot[]
-  connectors                           Connector[]
-  weeklyReports                        WeeklyReport[]
-  engineeringDeliveryReviewSnapshots   EngineeringDeliveryReviewSnapshot[]
-  engineeringDeliveryReviewRefreshRuns EngineeringDeliveryReviewRefreshRun[]
-  seatProfileResults                   SeatProfileResult[]
-  seatProfileJobRuns                   SeatProfileJobRun[]
-  patternFacts                         PatternFact[]
-  strategySuggestions                  StrategySuggestion[]
-  skillSuggestions                     SkillSuggestion[]
-  memoryFacts                          MemoryFact[]
-  memoryWriteRetryLocks                MemoryWriteRetryLock[]
-  memoryLinks                          MemoryLink[]
-  memoryCorrections                    MemoryCorrection[]
-  memoryDistillationCandidates         MemoryDistillationCandidate[]
-  commitments                          Commitment[]
-  blockers                             Blocker[]
-  briefingSnapshots                    BriefingSnapshot[]
-  recommendationLogs                   RecommendationLog[]
-  recommendationFeedbacks              RecommendationFeedback[]
-  preferenceSignals                    PreferenceSignal[]
-  llmCallLogs                          LLMCallLog[]
-  captureSessions                      CaptureSession[]
-  captureConsentRecords                CaptureConsentRecord[]
-  conversationTranscripts              ConversationTranscript[]
-  conversationInsights                 ConversationInsight[]
-  importSources                        ImportSource[]
-  importJobs                           ImportJob[]
-  importItems                          ImportItem[]
-  identityMatches                      IdentityMatch[]
-  billingAccount                       BillingAccount?
-  trialState                           TrialState?
-  activeAuthSessions                   AuthSession[]                         @relation("AuthSessionActiveWorkspace")
-  workerEntitlements                   WorkerEntitlement[]
-  usageLedgerEntries                   UsageLedger[]
-  workerPublisherProfiles              WorkerPublisherProfile[]
-  salesReferrals                       SalesReferral[]
-  gtmLeads                             GtmLead[]
-  customerDemandBriefs                 CustomerDemandBrief[]
-  operatingControlLineCandidates       OperatingControlLineCandidate[]
-  customerContextUpdateRequests        CustomerContextUpdateRequest[]
-  diagnosticSessions                   DiagnosticSession[]
-  customEngagements                    CustomEngagement[]
-  biReportSubscriptions                BiReportSubscription[]
-  biReportRuns                         BiReportRun[]
-  biReportDeliveries                   BiReportDelivery[]
-  biReportRunMemories                  BiReportRunMemory[]
-  biReportFeedbackMemories             BiReportFeedbackMemory[]
-  biReportBusinessSignals              BiReportBusinessSignal[]
-  biReportSignalNotifications          BiReportSignalNotification[]
-  biReportBusinessHandoffDecisions     BiReportBusinessHandoffDecision[]
-  biReportHandoffExecutionLogs         BiReportHandoffExecutionLog[]
-  revenueRules                         RevenueRule[]
-  revenueAttributionLedgerEntries      RevenueAttributionLedger[]
-  payoutLedgerEntries                  PayoutLedger[]
-  beneficiaryPayoutProfiles            BeneficiaryPayoutProfile[]
-  settlementBatches                    SettlementBatch[]
-  settlementBatchLines                 SettlementBatchLine[]
-  participantPortalAccesses            ParticipantPortalAccess[]
-  partnerPrograms                      PartnerProgram[]
-  programTermsVersions                 ProgramTermsVersion[]
-  programApplications                  ProgramApplication[]
-  internalCommercializationRuns        InternalCommercializationRun[]
-  runtimeEvents                        RuntimeEvent[]
-  workerRuns                           WorkerRun[]
-  artifactBundles                      ArtifactBundle[]
-  runtimeMemoryItems                   MemoryItem[]
-  approvalRequests                     ApprovalRequest[]
-  artifactReviews                      ArtifactReview[]
-  connectorIngestionRecords            ConnectorIngestionRecord[]
-  retrievalTraces                      RetrievalTrace[]
-  humanActionExecutions                HumanActionExecution[]
-  officialWriteIntents                 OfficialWriteIntent[]
-  limitedAutoIntents                   LimitedAutoIntent[]
-  officialFollowThroughItems           OfficialFollowThrough[]
-  runtimeSessions                      RuntimeSession[]
-  persistedPayloads                    PersistedPayload[]
-  contextEditEvents                    ContextEditEvent[]
-  sessionNotebooks                     SessionNotebook[]
-  sessionCheckpoints                   SessionCheckpoint[]
-  memoryCandidates                     MemoryCandidate[]
-  memoryPromotions                     MemoryPromotion[]
-  verificationReports                  VerificationReport[]
-  signalEvents                         SignalEvent[]
-  truthConflicts                       TruthConflict[]
-  worldModelSnapshots                  WorldModelSnapshot[]
-  problemSpaces                        ProblemSpace[]
-  driAssignments                       DriAssignment[]
-  edgeBriefs                           EdgeBrief[]
-  compositionFailures                  CompositionFailure[]
-  capabilityCatalogEntries             CapabilityCatalogEntry[]
-  promptCacheTelemetryItems            PromptCacheTelemetry[]
-  artifactVersions                     ArtifactVersion[]
-  consolidationJobs                    ConsolidationJob[]
-  handoffPackets                       HandoffPacket[]
-  initiativeRuns                       InitiativeRun[]
-  coordinationMetricsDaily             CoordinationMetricsDaily[]
-  paymentWebhookCallbackEvents         PaymentWebhookCallbackEvent[]
+  caioQuestionValueReceipts                CaioQuestionValueReceipt[]
+  caioProV1RetrospectiveReceipts           CaioProV1RetrospectiveReceipt[]
+  caioProV1EvidenceAttestations            CaioProV1EvidenceAttestation[]
+  caioProV1CompletionAssessments           CaioProV1CompletionAssessment[]
+  caioProV1CompletionGateReceipts          CaioProV1CompletionGateReceipt[]
+  caioProV1CompletionGateHead              CaioProV1CompletionGateHead?
+  workBuddyDeliveryEnvelopes               WorkBuddyDeliveryEnvelope[]
+  workBuddyDeliveryClientBindings          WorkBuddyDeliveryClientBinding[]
+  workBuddyDeliveryLanes                   WorkBuddyDeliveryLane[]
+  workBuddyDeliveryClaims                  WorkBuddyDeliveryClaim[]
+  workBuddyDeliveryPresentations           WorkBuddyDeliveryPresentation[]
+  workBuddyDeliverySuppressions            WorkBuddyDeliverySuppression[]
+  workBuddyMutationChallenges              WorkBuddyMutationChallenge[]
+  workBuddyMutationReceipts                WorkBuddyMutationReceipt[]
+  workBuddyPresenceChallenges              WorkBuddyPresenceChallenge[]
+  workBuddyPromptResponseReceipts          WorkBuddyPromptResponseReceipt[]
+  memberWorkSignalChallenges               MemberWorkSignalChallenge[]
+  memberWorkSignalReceipts                 MemberWorkSignalReceipt[]
+  memberPrompts                            MemberPrompt[]
+  memberPromptTransitionReceipts           MemberPromptTransitionReceipt[]
+  memberPromptResponseReceipts             MemberPromptResponseReceipt[]
+  memberGatewaySessions                    MemberGatewaySession[]
+  caioAccessTokens                         CaioAccessToken[]
+  caioPairingRequests                      CaioPairingRequest[]
+  caioContextNegativeRules                 CaioContextNegativeRule[]
+  caioContextReceipts                      CaioContextReceipt[]
+  caioMemoryCandidates                     CaioMemoryCandidate[]
+  caioAuditDispatchReceipts                CaioAuditDispatchReceipt[]
+  caioCredentialRefStates                  CaioCredentialRefState[]
+  contextAgentInvitations                  ContextAgentInvitation[]
+  contextAgentConsentReceipts              ContextAgentConsentReceipt[]
+  contextAgentScopeRevisions               ContextAgentScopeRevision[]
+  contextAgentCollectionReceipts           ContextAgentCollectionReceipt[]
+  contextAgentPauseReceipts                ContextAgentPauseReceipt[]
+  contextAgentRevocationReceipts           ContextAgentRevocationReceipt[]
+  contextAgentDeletionReceipts             ContextAgentDeletionReceipt[]
+  providerAdapterReadinessReceipts         ProviderAdapterReadinessReceipt[]
+  modelRoutePolicyApprovalReceipts         ModelRoutePolicyApprovalReceipt[]
+  governedModelProjectionReceipts          GovernedModelProjectionReceipt[]
+  tenantModelRoutePolicies                 TenantModelRoutePolicy[]
+  tenantModelRoutePolicyHeads              TenantModelRoutePolicyHead[]
+  modelRouteDecisions                      ModelRouteDecision[]
+  modelEgressReceipts                      ModelEgressReceipt[]
+  auditLogs                                AuditLog[]
+  emailThreads                             EmailThread[]
+  memoryEntries                            MemoryEntry[]
+  externalMemorySyncStates                 ExternalMemorySyncState[]
+  externalMemoryRecords                    ExternalMemoryRecord[]
+  externalAgentConnections                 ExternalAgentConnection[]
+  policyRules                              PolicyRule[]
+  budgetRules                              BudgetRule[]
+  notifications                            Notification[]
+  eventLogs                                EventLog[]
+  deltaEvents                              DeltaEvent[]
+  usageSnapshots                           DailyUsageSnapshot[]
+  connectors                               Connector[]
+  weeklyReports                            WeeklyReport[]
+  engineeringDeliveryReviewSnapshots       EngineeringDeliveryReviewSnapshot[]
+  engineeringDeliveryReviewRefreshRuns     EngineeringDeliveryReviewRefreshRun[]
+  seatProfileResults                       SeatProfileResult[]
+  seatProfileJobRuns                       SeatProfileJobRun[]
+  patternFacts                             PatternFact[]
+  strategySuggestions                      StrategySuggestion[]
+  skillSuggestions                         SkillSuggestion[]
+  memoryFacts                              MemoryFact[]
+  memoryWriteRetryLocks                    MemoryWriteRetryLock[]
+  memoryLinks                              MemoryLink[]
+  memoryCorrections                        MemoryCorrection[]
+  memoryDistillationCandidates             MemoryDistillationCandidate[]
+  commitments                              Commitment[]
+  blockers                                 Blocker[]
+  briefingSnapshots                        BriefingSnapshot[]
+  recommendationLogs                       RecommendationLog[]
+  recommendationFeedbacks                  RecommendationFeedback[]
+  preferenceSignals                        PreferenceSignal[]
+  llmCallLogs                              LLMCallLog[]
+  captureSessions                          CaptureSession[]
+  captureConsentRecords                    CaptureConsentRecord[]
+  conversationTranscripts                  ConversationTranscript[]
+  conversationInsights                     ConversationInsight[]
+  importSources                            ImportSource[]
+  importJobs                               ImportJob[]
+  importItems                              ImportItem[]
+  identityMatches                          IdentityMatch[]
+  billingAccount                           BillingAccount?
+  trialState                               TrialState?
+  activeAuthSessions                       AuthSession[]                             @relation("AuthSessionActiveWorkspace")
+  workerEntitlements                       WorkerEntitlement[]
+  usageLedgerEntries                       UsageLedger[]
+  workerPublisherProfiles                  WorkerPublisherProfile[]
+  salesReferrals                           SalesReferral[]
+  gtmLeads                                 GtmLead[]
+  customerDemandBriefs                     CustomerDemandBrief[]
+  operatingControlLineCandidates           OperatingControlLineCandidate[]
+  customerContextUpdateRequests            CustomerContextUpdateRequest[]
+  diagnosticSessions                       DiagnosticSession[]
+  customEngagements                        CustomEngagement[]
+  biReportSubscriptions                    BiReportSubscription[]
+  biReportRuns                             BiReportRun[]
+  biReportDeliveries                       BiReportDelivery[]
+  biReportRunMemories                      BiReportRunMemory[]
+  biReportFeedbackMemories                 BiReportFeedbackMemory[]
+  biReportBusinessSignals                  BiReportBusinessSignal[]
+  biReportSignalNotifications              BiReportSignalNotification[]
+  biReportBusinessHandoffDecisions         BiReportBusinessHandoffDecision[]
+  biReportHandoffExecutionLogs             BiReportHandoffExecutionLog[]
+  revenueRules                             RevenueRule[]
+  revenueAttributionLedgerEntries          RevenueAttributionLedger[]
+  payoutLedgerEntries                      PayoutLedger[]
+  beneficiaryPayoutProfiles                BeneficiaryPayoutProfile[]
+  settlementBatches                        SettlementBatch[]
+  settlementBatchLines                     SettlementBatchLine[]
+  participantPortalAccesses                ParticipantPortalAccess[]
+  partnerPrograms                          PartnerProgram[]
+  programTermsVersions                     ProgramTermsVersion[]
+  programApplications                      ProgramApplication[]
+  internalCommercializationRuns            InternalCommercializationRun[]
+  runtimeEvents                            RuntimeEvent[]
+  workerRuns                               WorkerRun[]
+  artifactBundles                          ArtifactBundle[]
+  runtimeMemoryItems                       MemoryItem[]
+  approvalRequests                         ApprovalRequest[]
+  artifactReviews                          ArtifactReview[]
+  connectorIngestionRecords                ConnectorIngestionRecord[]
+  retrievalTraces                          RetrievalTrace[]
+  humanActionExecutions                    HumanActionExecution[]
+  officialWriteIntents                     OfficialWriteIntent[]
+  limitedAutoIntents                       LimitedAutoIntent[]
+  officialFollowThroughItems               OfficialFollowThrough[]
+  runtimeSessions                          RuntimeSession[]
+  persistedPayloads                        PersistedPayload[]
+  contextEditEvents                        ContextEditEvent[]
+  sessionNotebooks                         SessionNotebook[]
+  sessionCheckpoints                       SessionCheckpoint[]
+  memoryCandidates                         MemoryCandidate[]
+  memoryPromotions                         MemoryPromotion[]
+  verificationReports                      VerificationReport[]
+  signalEvents                             SignalEvent[]
+  truthConflicts                           TruthConflict[]
+  worldModelSnapshots                      WorldModelSnapshot[]
+  problemSpaces                            ProblemSpace[]
+  driAssignments                           DriAssignment[]
+  edgeBriefs                               EdgeBrief[]
+  compositionFailures                      CompositionFailure[]
+  capabilityCatalogEntries                 CapabilityCatalogEntry[]
+  promptCacheTelemetryItems                PromptCacheTelemetry[]
+  artifactVersions                         ArtifactVersion[]
+  consolidationJobs                        ConsolidationJob[]
+  handoffPackets                           HandoffPacket[]
+  initiativeRuns                           InitiativeRun[]
+  coordinationMetricsDaily                 CoordinationMetricsDaily[]
+  paymentWebhookCallbackEvents             PaymentWebhookCallbackEvent[]
 }
 
 model WorkspaceSolutionExtension {
@@ -3464,78 +3479,78 @@ model MeetingNote {
 }
 
 model ActionItem {
-  id                   String              @id @default(cuid())
-  workspaceId          String
-  meetingId            String?
-  opportunityId        String?
-  contactId            String?
-  ownerId              String?
-  actionType           ActionType
-  title                String
-  description          String?
-  aiReason             String?
-  draftContent         String?
-  metadata             String?             @db.LongText
-  sourceType           SourceType?
-  sourceId             String?
-  riskLevel            RiskLevel           @default(MEDIUM)
-  suggestedAt          DateTime            @default(now())
-  suggestedExecutionAt DateTime?
-  dueDate              DateTime?
-  executionMode        ActionExecutionMode @default(REQUIRES_APPROVAL)
-  requiresApproval     Boolean             @default(true)
-  status               ActionStatus        @default(PENDING_APPROVAL)
-  executionStatus      String              @default("pending")
-  statusReason         String?
-  policyName           String?
-  policySnapshot       String?             @db.LongText
-  recommendationLogId  String?
+  id                      String                   @id @default(cuid())
+  workspaceId             String
+  meetingId               String?
+  opportunityId           String?
+  contactId               String?
+  ownerId                 String?
+  actionType              ActionType
+  title                   String
+  description             String?
+  aiReason                String?
+  draftContent            String?
+  metadata                String?                  @db.LongText
+  sourceType              SourceType?
+  sourceId                String?
+  riskLevel               RiskLevel                @default(MEDIUM)
+  suggestedAt             DateTime                 @default(now())
+  suggestedExecutionAt    DateTime?
+  dueDate                 DateTime?
+  executionMode           ActionExecutionMode      @default(REQUIRES_APPROVAL)
+  requiresApproval        Boolean                  @default(true)
+  status                  ActionStatus             @default(PENDING_APPROVAL)
+  executionStatus         String                   @default("pending")
+  statusReason            String?
+  policyName              String?
+  policySnapshot          String?                  @db.LongText
+  recommendationLogId     String?
   // Creator attribution for the separation-of-duties review gate.
   // createdByUserId = the user on whose behalf the action was created (the
   // trigger). contentAuthorship = who actually authored the proposed content:
   // defaults to AI because today every built-in flow composes the draft for
   // the user; flows where a human writes the content must declare USER
   // explicitly. Nullable so legacy rows stay valid.
-  createdByUserId      String?
-  contentAuthorship    ActorType?
-  executedAt           DateTime?
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @updatedAt
-  workspace            Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  meeting              Meeting?            @relation(fields: [meetingId], references: [id], onDelete: SetNull)
-  opportunity          Opportunity?        @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
-  contact              Contact?            @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  owner                User?               @relation("ActionOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  createdBy            User?               @relation("ActionCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  recommendationLog    RecommendationLog?  @relation(fields: [recommendationLogId], references: [id], onDelete: SetNull)
-  approvalTask         ApprovalTask?
-  executionReceipt     ExecutionReceipt?
+  createdByUserId         String?
+  contentAuthorship       ActorType?
+  executedAt              DateTime?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  workspace               Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  meeting                 Meeting?                 @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+  opportunity             Opportunity?             @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  contact                 Contact?                 @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  owner                   User?                    @relation("ActionOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  createdBy               User?                    @relation("ActionCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  recommendationLog       RecommendationLog?       @relation(fields: [recommendationLogId], references: [id], onDelete: SetNull)
+  approvalTask            ApprovalTask?
+  executionReceipt        ExecutionReceipt?
   decisionWorkPacketClaim DecisionWorkPacketClaim?
 }
 
 model ApprovalTask {
-  id              String         @id @default(cuid())
-  workspaceId     String
-  actionItemId    String         @unique
-  approverId      String?
-  reviewedById    String?
-  status          ApprovalStatus @default(PENDING)
-  channel         String?
-  isHighRisk      Boolean        @default(false)
-  autoExecute     Boolean        @default(false)
-  contextSnapshot String?
-  reasoning       String?
-  editableContent String?
-  resultPreview   String?
-  decisionReason  String?
+  id                  String               @id @default(cuid())
+  workspaceId         String
+  actionItemId        String               @unique
+  approverId          String?
+  reviewedById        String?
+  status              ApprovalStatus       @default(PENDING)
+  channel             String?
+  isHighRisk          Boolean              @default(false)
+  autoExecute         Boolean              @default(false)
+  contextSnapshot     String?
+  reasoning           String?
+  editableContent     String?
+  resultPreview       String?
+  decisionReason      String?
   rejectionReasonCode RejectionReasonCode?
-  reviewedAt      DateTime?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  workspace       Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  actionItem      ActionItem     @relation(fields: [actionItemId], references: [id], onDelete: Cascade)
-  approver        User?          @relation("ApprovalApprover", fields: [approverId], references: [id], onDelete: SetNull)
-  reviewedBy      User?          @relation("ApprovalReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt          DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  workspace           Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actionItem          ActionItem           @relation(fields: [actionItemId], references: [id], onDelete: Cascade)
+  approver            User?                @relation("ApprovalApprover", fields: [approverId], references: [id], onDelete: SetNull)
+  reviewedBy          User?                @relation("ApprovalReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
 }
 
 // Structured execution receipt for the light task chain (AgentOS v1.1 receipt
@@ -3695,27 +3710,27 @@ model ObservationCompatReceipt {
 // while the program is ACTIVE and inside its authorization window. Revocation
 // races therefore have one database winner instead of a check-then-act gap.
 model EnterpriseObservationProgram {
-  id                   String                 @id @default(cuid())
-  workspaceId          String
-  purpose              String                 @db.LongText
-  scopeRefs            String                 @db.LongText
-  dataCategories       String                 @db.LongText
-  startsAt             DateTime
-  expiresAt            DateTime
-  retentionDays        Int
-  authorizationRef     String
-  status               String                 @default("DRAFT")
-  authorizationVersion Int                    @default(1)
-  runSequence          Int                    @default(0)
-  revokedAt            DateTime?
-  revokedByRef         String?
-  revocationReason     String?                @db.LongText
-  auditRefs            String?                @db.LongText
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
-  workspace            Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  sources              ObservationSource[]
-  runs                 ObservationSourceRun[]
+  id                       String                    @id @default(cuid())
+  workspaceId              String
+  purpose                  String                    @db.LongText
+  scopeRefs                String                    @db.LongText
+  dataCategories           String                    @db.LongText
+  startsAt                 DateTime
+  expiresAt                DateTime
+  retentionDays            Int
+  authorizationRef         String
+  status                   String                    @default("DRAFT")
+  authorizationVersion     Int                       @default(1)
+  runSequence              Int                       @default(0)
+  revokedAt                DateTime?
+  revokedByRef             String?
+  revocationReason         String?                   @db.LongText
+  auditRefs                String?                   @db.LongText
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  workspace                Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sources                  ObservationSource[]
+  runs                     ObservationSourceRun[]
   externalAgentConnections ExternalAgentConnection[]
 
   @@index([workspaceId, status, expiresAt])
@@ -3725,28 +3740,28 @@ model EnterpriseObservationProgram {
 // Source registration stores only a secret manager reference. Public Core
 // deliberately has no column for raw connector credentials.
 model ObservationSource {
-  id                  String                       @id @default(cuid())
-  workspaceId         String
-  programId           String
-  catalogEntryId      String?
-  sourceKey           String
-  sourceKind          String
-  accessMode          String
-  ownerRef            String
-  freshnessSlaMinutes Int
-  sensitivity         String
-  authorizationRef    String
-  secretRef           String
-  retentionDays       Int
-  status              String                       @default("DRAFT")
-  lastObservedAt      DateTime?
-  createdAt           DateTime                     @default(now())
-  updatedAt           DateTime                     @updatedAt
-  workspace           Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  program             EnterpriseObservationProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
-  catalogEntry        DataAssetCatalogEntry?       @relation(fields: [catalogEntryId], references: [id], onDelete: Restrict)
+  id                   String                       @id @default(cuid())
+  workspaceId          String
+  programId            String
+  catalogEntryId       String?
+  sourceKey            String
+  sourceKind           String
+  accessMode           String
+  ownerRef             String
+  freshnessSlaMinutes  Int
+  sensitivity          String
+  authorizationRef     String
+  secretRef            String
+  retentionDays        Int
+  status               String                       @default("DRAFT")
+  lastObservedAt       DateTime?
+  createdAt            DateTime                     @default(now())
+  updatedAt            DateTime                     @updatedAt
+  workspace            Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  program              EnterpriseObservationProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  catalogEntry         DataAssetCatalogEntry?       @relation(fields: [catalogEntryId], references: [id], onDelete: Restrict)
   compatibilityReceipt ObservationCompatReceipt?
-  runs                ObservationSourceRun[]
+  runs                 ObservationSourceRun[]
 
   @@unique([workspaceId, sourceKey])
   @@index([programId, status])
@@ -3787,15 +3802,15 @@ model ObservationSourceRun {
 // CAIO quick-check tick. One row per workspace per 10-minute bucket: the unique key is the
 // cross-instance claim, because the signal-collection scheduler has no database lock.
 model CaioQuickCheckTick {
-  id           String    @id @default(cuid())
-  workspaceId  String
-  bucketStart  DateTime
-  status       String    @default("RUNNING") // RUNNING | COMPLETED | FAILED
-  startedAt    DateTime  @default(now())
-  completedAt  DateTime?
-  summaryJson  String?   @db.LongText
-  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  observations CaioMetricObservation[]
+  id              String                        @id @default(cuid())
+  workspaceId     String
+  bucketStart     DateTime
+  status          String                        @default("RUNNING") // RUNNING | COMPLETED | FAILED
+  startedAt       DateTime                      @default(now())
+  completedAt     DateTime?
+  summaryJson     String?                       @db.LongText
+  workspace       Workspace                     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  observations    CaioMetricObservation[]
   contextSnapshot CaioOperatingContextSnapshot?
 
   @@unique([workspaceId, bucketStart])
@@ -3805,24 +3820,24 @@ model CaioQuickCheckTick {
 // Tenant-private aggregate metric body. valuesJson holds finite numbers or null only; a failed
 // read is stored as status=unknown with valuesJson=null and never as zero.
 model CaioMetricObservation {
-  id                 String             @id @default(cuid())
-  workspaceId        String
-  tickId             String
-  observationRunId   String?
-  sourceKey          String
-  templateId         String
-  domain             String
-  windowStart        DateTime
-  windowEnd          DateTime
-  observedAt         DateTime
-  status             String             // ok | unknown
-  valuesJson         String?            @db.LongText
-  denominator        Float?
-  errorCode          String?
-  contentHash        String?
-  evidenceRef        String?
-  workspace          Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  tick               CaioQuickCheckTick @relation(fields: [tickId], references: [id], onDelete: Cascade)
+  id               String             @id @default(cuid())
+  workspaceId      String
+  tickId           String
+  observationRunId String?
+  sourceKey        String
+  templateId       String
+  domain           String
+  windowStart      DateTime
+  windowEnd        DateTime
+  observedAt       DateTime
+  status           String // ok | unknown
+  valuesJson       String?            @db.LongText
+  denominator      Float?
+  errorCode        String?
+  contentHash      String?
+  evidenceRef      String?
+  workspace        Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  tick             CaioQuickCheckTick @relation(fields: [tickId], references: [id], onDelete: Cascade)
 
   @@unique([tickId, templateId])
   @@index([workspaceId, templateId, observedAt])
@@ -3860,7 +3875,7 @@ model CaioOperatingContextSnapshot {
   id                  String             @id @default(cuid())
   workspaceId         String
   tickId              String             @unique
-  status              String             // PROJECTED | REJECTED | NO_SIGNALS
+  status              String // PROJECTED | REJECTED | NO_SIGNALS
   reasonCode          String?
   errorCodesJson      String?            @db.LongText
   snapshotId          String?
@@ -3881,29 +3896,29 @@ model CaioOperatingContextSnapshot {
 // holds snapshot references and aggregate counts only; the layered judgement body stays private here and the
 // public JudgementPacket is stored beside it. Every egress step goes through the governed deferred dispatch.
 model CaioInferenceJob {
-  id                    String    @id @default(cuid())
-  workspaceId           String
-  taskClass             String    @db.VarChar(32) // hourly_diagnosis | daily_review
-  windowStart           DateTime
-  windowEnd             DateTime
-  status                String    @db.VarChar(16) // queued | claimed | completed | rejected | expired | dead_letter
-  attempt               Int       @default(0)
-  inputJson             String    @db.LongText
-  inputHash             String    @db.VarChar(80)
-  claimToken            String?   @db.VarChar(64)
-  claimedAt             DateTime?
-  leaseExpiresAt        DateTime?
-  decisionRef           String?
-  gatewayRef            String?
-  dispatchClaimHash     String?   @db.VarChar(80)
-  judgementPacketJson   String?   @db.LongText
-  layeredJudgementJson  String?   @db.LongText
-  layeredJudgementHash  String?   @db.VarChar(80)
-  rejectionCode         String?   @db.VarChar(64)
-  completedAt           DateTime?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id                   String    @id @default(cuid())
+  workspaceId          String
+  taskClass            String    @db.VarChar(32) // hourly_diagnosis | daily_review
+  windowStart          DateTime
+  windowEnd            DateTime
+  status               String    @db.VarChar(16) // queued | claimed | completed | rejected | expired | dead_letter
+  attempt              Int       @default(0)
+  inputJson            String    @db.LongText
+  inputHash            String    @db.VarChar(80)
+  claimToken           String?   @db.VarChar(64)
+  claimedAt            DateTime?
+  leaseExpiresAt       DateTime?
+  decisionRef          String?
+  gatewayRef           String?
+  dispatchClaimHash    String?   @db.VarChar(80)
+  judgementPacketJson  String?   @db.LongText
+  layeredJudgementJson String?   @db.LongText
+  layeredJudgementHash String?   @db.VarChar(80)
+  rejectionCode        String?   @db.VarChar(64)
+  completedAt          DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  workspace            Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, taskClass, windowStart])
   @@index([status, leaseExpiresAt])
@@ -3937,41 +3952,41 @@ model SignalCollectionJobRun {
 // columns retain the public-safe structured arrays without creating a second
 // business-object schema; ActionItem remains the execution state machine.
 model DecisionRecord {
-  id                 String                    @id @default(cuid())
-  workspaceId        String
-  decisionKey        String
-  decisionType       String
-  businessQuestion   String                    @db.LongText
-  problemCategoryRef String?
-  contextRefs        String                    @db.LongText
-  knowledgeRefs      String                    @db.LongText
-  evidenceRefs       String                    @db.LongText
-  policyRefs         String                    @db.LongText
-  receiptRefs        String                    @db.LongText
-  alternatives       String                    @db.LongText
-  recommendedOption  String?                   @db.LongText
-  confidence         String
-  riskLevel          String
-  allowedActionLevel String
-  ownerGate          String
-  rollbackPath       String?                   @db.LongText
-  factsJson          String                    @db.LongText
-  inferencesJson     String                    @db.LongText
-  unknownsJson       String                    @db.LongText
-  risksJson          String                    @db.LongText
-  ownerRef           String?
-  ownerConclusion    String?                   @db.LongText
-  ownerConfirmedAt   DateTime?
-  status             String                    @default("DRAFT")
-  validUntil         DateTime?
-  evaluationJson     String?                   @db.LongText
-  evaluatedAt        DateTime?
-  createdAt          DateTime                  @default(now())
-  updatedAt          DateTime                  @updatedAt
-  workspace          Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  supervisionSignals SupervisionSignalRecord[]
-  workPacketClaim    DecisionWorkPacketClaim?
-  caioQuestionBindings CaioOperatingQuestionDecisionBinding[]
+  id                              String                                    @id @default(cuid())
+  workspaceId                     String
+  decisionKey                     String
+  decisionType                    String
+  businessQuestion                String                                    @db.LongText
+  problemCategoryRef              String?
+  contextRefs                     String                                    @db.LongText
+  knowledgeRefs                   String                                    @db.LongText
+  evidenceRefs                    String                                    @db.LongText
+  policyRefs                      String                                    @db.LongText
+  receiptRefs                     String                                    @db.LongText
+  alternatives                    String                                    @db.LongText
+  recommendedOption               String?                                   @db.LongText
+  confidence                      String
+  riskLevel                       String
+  allowedActionLevel              String
+  ownerGate                       String
+  rollbackPath                    String?                                   @db.LongText
+  factsJson                       String                                    @db.LongText
+  inferencesJson                  String                                    @db.LongText
+  unknownsJson                    String                                    @db.LongText
+  risksJson                       String                                    @db.LongText
+  ownerRef                        String?
+  ownerConclusion                 String?                                   @db.LongText
+  ownerConfirmedAt                DateTime?
+  status                          String                                    @default("DRAFT")
+  validUntil                      DateTime?
+  evaluationJson                  String?                                   @db.LongText
+  evaluatedAt                     DateTime?
+  createdAt                       DateTime                                  @default(now())
+  updatedAt                       DateTime                                  @updatedAt
+  workspace                       Workspace                                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  supervisionSignals              SupervisionSignalRecord[]
+  workPacketClaim                 DecisionWorkPacketClaim?
+  caioQuestionBindings            CaioOperatingQuestionDecisionBinding[]
   caioQuestionImplementationPlans CaioOperatingQuestionImplementationPlan[]
 
   @@unique([id, workspaceId])
@@ -4511,33 +4526,33 @@ model ExternalMemoryRecord {
 // authentication material stored by Helm. Runtime identity is derived from
 // this row and never accepted from MCP request arguments.
 model ExternalAgentConnection {
-  id                       String    @id @default(cuid())
-  workspaceId              String
-  userId                   String
-  observationProgramId     String
-  providerId               String
-  deviceRef                String
-  displayName              String
-  tokenHash                String    @unique
-  tokenPrefix              String
-  scopesJson               String    @db.LongText
-  allowedSourceIdsJson     String    @db.LongText
-  allowedObjectTypesJson   String    @db.LongText
-  maxDataClassification    String
-  expiresAt                DateTime
-  revokedAt                DateTime?
-  revokedByUserId          String?
-  lastConnectedAt          DateTime?
-  lastClientName           String?
-  lastClientVersion        String?
-  lastFailureCode          String?
-  rateWindowStartedAt      DateTime  @default(now())
-  rateWindowRequestCount   Int       @default(0)
-  createdAt                DateTime  @default(now())
-  updatedAt                DateTime  @updatedAt
-  workspace                Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user                     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  observationProgram       EnterpriseObservationProgram @relation(fields: [observationProgramId], references: [id], onDelete: Restrict)
+  id                     String                       @id @default(cuid())
+  workspaceId            String
+  userId                 String
+  observationProgramId   String
+  providerId             String
+  deviceRef              String
+  displayName            String
+  tokenHash              String                       @unique
+  tokenPrefix            String
+  scopesJson             String                       @db.LongText
+  allowedSourceIdsJson   String                       @db.LongText
+  allowedObjectTypesJson String                       @db.LongText
+  maxDataClassification  String
+  expiresAt              DateTime
+  revokedAt              DateTime?
+  revokedByUserId        String?
+  lastConnectedAt        DateTime?
+  lastClientName         String?
+  lastClientVersion      String?
+  lastFailureCode        String?
+  rateWindowStartedAt    DateTime                     @default(now())
+  rateWindowRequestCount Int                          @default(0)
+  createdAt              DateTime                     @default(now())
+  updatedAt              DateTime                     @updatedAt
+  workspace              Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user                   User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  observationProgram     EnterpriseObservationProgram @relation(fields: [observationProgramId], references: [id], onDelete: Restrict)
 
   @@unique([workspaceId, providerId, deviceRef])
   @@index([workspaceId, providerId, revokedAt, expiresAt])
@@ -5728,34 +5743,34 @@ model TrialApplication {
 // ---------------------------------------------------------------------------
 
 model CaioMandateRecord {
-  id                       String                   @id @default(cuid())
-  workspaceId              String
-  caioRef                  String
-  ceoRef                   String
-  stage                    String
-  status                   String
-  objectiveRefs            String                   @db.LongText
-  scopeRefs                String                   @db.LongText
-  grantBasisRefs           String                   @db.LongText
-  reservedMatterRefs       String                   @db.LongText
-  stageDecisionRef         String
-  policyEnvelopeRefs       String                   @db.LongText
-  humanResponsePolicyRef   String
-  accountabilityAnchorRefs String                   @db.LongText
-  guardianStopRefs         String                   @db.LongText
-  emergencyStopRef         String?
-  validFrom                DateTime
-  validUntil               DateTime
-  supersedesRef            String?
-  inFlightDisposition      String
-  auditRefs                String                   @db.LongText
-  createdAt                DateTime                 @default(now())
-  updatedAt                DateTime                 @updatedAt
-  workspace                Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  activeClaim              CaioActiveMandateClaim?
-  guardianStops            CaioGuardianStopRecord[]
-  adviceRecords            CaioAdviceRecord[]
-  initializationAssessments CaioInitializationAssessment[]
+  id                         String                          @id @default(cuid())
+  workspaceId                String
+  caioRef                    String
+  ceoRef                     String
+  stage                      String
+  status                     String
+  objectiveRefs              String                          @db.LongText
+  scopeRefs                  String                          @db.LongText
+  grantBasisRefs             String                          @db.LongText
+  reservedMatterRefs         String                          @db.LongText
+  stageDecisionRef           String
+  policyEnvelopeRefs         String                          @db.LongText
+  humanResponsePolicyRef     String
+  accountabilityAnchorRefs   String                          @db.LongText
+  guardianStopRefs           String                          @db.LongText
+  emergencyStopRef           String?
+  validFrom                  DateTime
+  validUntil                 DateTime
+  supersedesRef              String?
+  inFlightDisposition        String
+  auditRefs                  String                          @db.LongText
+  createdAt                  DateTime                        @default(now())
+  updatedAt                  DateTime                        @updatedAt
+  workspace                  Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  activeClaim                CaioActiveMandateClaim?
+  guardianStops              CaioGuardianStopRecord[]
+  adviceRecords              CaioAdviceRecord[]
+  initializationAssessments  CaioInitializationAssessment[]
   initializationGateReceipts CaioInitializationGateReceipt[]
 
   @@unique([id, workspaceId])
@@ -5841,18 +5856,18 @@ model CaioAdviceRecord {
 // the private overlay slice; a binding row is never a credential and grants
 // no permission.
 model CaioPrincipalBinding {
-  id           String    @id @default(cuid())
-  workspaceId  String
-  userId       String
-  principalRef String
-  principalKind String
-  evidenceRef  String
-  revokedAt    DateTime?
-  createdAt    DateTime  @default(now())
-  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  initializationGateReceipts CaioInitializationGateReceipt[]
-  questionSelectionReceipts CaioQuestionSelectionReceipt[]
-  proV1EvidenceAttestations CaioProV1EvidenceAttestation[]
+  id                          String                           @id @default(cuid())
+  workspaceId                 String
+  userId                      String
+  principalRef                String
+  principalKind               String
+  evidenceRef                 String
+  revokedAt                   DateTime?
+  createdAt                   DateTime                         @default(now())
+  workspace                   Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  initializationGateReceipts  CaioInitializationGateReceipt[]
+  questionSelectionReceipts   CaioQuestionSelectionReceipt[]
+  proV1EvidenceAttestations   CaioProV1EvidenceAttestation[]
   proV1CompletionGateReceipts CaioProV1CompletionGateReceipt[]
 
   @@unique([workspaceId, userId, principalRef])
@@ -5864,26 +5879,26 @@ model CaioPrincipalBinding {
 // machine-derived review state only: it is not CEO acceptance, a permission
 // grant, or proof that the enterprise inventory is universally complete.
 model CaioInitializationAssessment {
-  id                String                          @id
-  workspaceId       String
-  mandateRecordId   String
-  evaluationKey     String
-  schemaVersion     String
-  evaluatorRevision String
-  policyRef         String
-  policyHash        String
-  basisHash         String
-  decision          String
-  inputJson         String                          @db.LongText
-  assessmentJson    String                          @db.LongText
-  contentHash       String
-  authorityEffect   String
-  evaluatedAt       DateTime
-  createdAt         DateTime                        @default(now())
-  workspace         Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  mandateRecord     CaioMandateRecord               @relation(fields: [mandateRecordId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
-  gateReceipts      CaioInitializationGateReceipt[]
-  gateHeads         CaioInitializationGateHead[]
+  id                          String                                   @id
+  workspaceId                 String
+  mandateRecordId             String
+  evaluationKey               String
+  schemaVersion               String
+  evaluatorRevision           String
+  policyRef                   String
+  policyHash                  String
+  basisHash                   String
+  decision                    String
+  inputJson                   String                                   @db.LongText
+  assessmentJson              String                                   @db.LongText
+  contentHash                 String
+  authorityEffect             String
+  evaluatedAt                 DateTime
+  createdAt                   DateTime                                 @default(now())
+  workspace                   Workspace                                @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  mandateRecord               CaioMandateRecord                        @relation(fields: [mandateRecordId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  gateReceipts                CaioInitializationGateReceipt[]
+  gateHeads                   CaioInitializationGateHead[]
   operatingQuestionPortfolios CaioOperatingQuestionPortfolio[]
   operatingQuestionReceipts   CaioOperatingQuestionGenerationReceipt[]
   operatingQuestionHeads      CaioOperatingQuestionPortfolioHead[]
@@ -5901,38 +5916,38 @@ model CaioInitializationAssessment {
 // closes the accepted gate. previousReceiptId is unique per workspace so the
 // chain cannot fork.
 model CaioInitializationGateReceipt {
-  id                       String                         @id
-  workspaceId              String
-  assessmentId             String
-  mandateRecordId          String
-  ceoPrincipalBindingId    String
-  previousReceiptId        String?
-  previousReceiptHash      String?
-  sequence                 Int
-  idempotencyKey           String
-  action                   String
-  resultingStatus          String
-  actorType                ActorType
-  actorUserId              String
-  ceoPrincipalRef          String
-  inventoryConfirmationRef String?
-  customerAcceptanceRef    String?
-  acceptedExceptionRefs    String                         @db.LongText
-  reasonCodes              String                         @db.LongText
-  evidenceRefs             String                         @db.LongText
-  basisHash                String
-  receiptJson              String                         @db.LongText
-  contentHash              String
-  authorityEffect          String
-  recordedAt               DateTime
-  createdAt                DateTime                       @default(now())
-  workspace                Workspace                      @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  assessment               CaioInitializationAssessment   @relation(fields: [assessmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
-  mandateRecord            CaioMandateRecord              @relation(fields: [mandateRecordId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
-  ceoPrincipalBinding      CaioPrincipalBinding           @relation(fields: [ceoPrincipalBindingId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
-  previousReceipt          CaioInitializationGateReceipt? @relation("CaioInitializationReceiptChain", fields: [previousReceiptId, workspaceId], references: [id, workspaceId], onDelete: NoAction, onUpdate: NoAction)
-  nextReceipt              CaioInitializationGateReceipt? @relation("CaioInitializationReceiptChain")
-  currentForHead           CaioInitializationGateHead?
+  id                          String                                   @id
+  workspaceId                 String
+  assessmentId                String
+  mandateRecordId             String
+  ceoPrincipalBindingId       String
+  previousReceiptId           String?
+  previousReceiptHash         String?
+  sequence                    Int
+  idempotencyKey              String
+  action                      String
+  resultingStatus             String
+  actorType                   ActorType
+  actorUserId                 String
+  ceoPrincipalRef             String
+  inventoryConfirmationRef    String?
+  customerAcceptanceRef       String?
+  acceptedExceptionRefs       String                                   @db.LongText
+  reasonCodes                 String                                   @db.LongText
+  evidenceRefs                String                                   @db.LongText
+  basisHash                   String
+  receiptJson                 String                                   @db.LongText
+  contentHash                 String
+  authorityEffect             String
+  recordedAt                  DateTime
+  createdAt                   DateTime                                 @default(now())
+  workspace                   Workspace                                @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  assessment                  CaioInitializationAssessment             @relation(fields: [assessmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  mandateRecord               CaioMandateRecord                        @relation(fields: [mandateRecordId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  ceoPrincipalBinding         CaioPrincipalBinding                     @relation(fields: [ceoPrincipalBindingId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  previousReceipt             CaioInitializationGateReceipt?           @relation("CaioInitializationReceiptChain", fields: [previousReceiptId, workspaceId], references: [id, workspaceId], onDelete: NoAction, onUpdate: NoAction)
+  nextReceipt                 CaioInitializationGateReceipt?           @relation("CaioInitializationReceiptChain")
+  currentForHead              CaioInitializationGateHead?
   operatingQuestionPortfolios CaioOperatingQuestionPortfolio[]
   operatingQuestionReceipts   CaioOperatingQuestionGenerationReceipt[]
   operatingQuestionHeads      CaioOperatingQuestionPortfolioHead[]
@@ -5970,7 +5985,7 @@ model CaioInitializationGateHead {
 // Immutable portfolio of exactly ten evidence-bound operating questions.
 // It is a review artifact only and never grants authority or creates work.
 model CaioOperatingQuestionPortfolio {
-  id                          String                                   @id
+  id                          String                                    @id
   workspaceId                 String
   initializationGateReceiptId String
   initializationAssessmentId  String
@@ -5985,18 +6000,18 @@ model CaioOperatingQuestionPortfolio {
   policyHash                  String
   g0ContextHash               String
   evidenceUniverseHash        String
-  evidenceRefs                String                                   @db.LongText
-  auditRefs                   String                                   @db.LongText
-  portfolioJson               String                                   @db.LongText
+  evidenceRefs                String                                    @db.LongText
+  auditRefs                   String                                    @db.LongText
+  portfolioJson               String                                    @db.LongText
   contentHash                 String
   authorityEffect             String
   generatedAt                 DateTime
-  createdAt                   DateTime                                 @default(now())
-  workspace                   Workspace                                @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "COQPortfolio_workspace_fkey")
-  initializationGateReceipt   CaioInitializationGateReceipt            @relation(fields: [initializationGateReceiptId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "COQPortfolio_gate_workspace_fkey")
-  initializationAssessment    CaioInitializationAssessment             @relation(fields: [initializationAssessmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "COQPortfolio_assessment_workspace_fkey")
-  previousPortfolio           CaioOperatingQuestionPortfolio?          @relation("CaioOperatingQuestionPortfolioChain", fields: [previousPortfolioId, workspaceId], references: [id, workspaceId], onDelete: NoAction, onUpdate: NoAction, map: "COQPortfolio_previous_workspace_fkey")
-  nextPortfolio               CaioOperatingQuestionPortfolio?          @relation("CaioOperatingQuestionPortfolioChain")
+  createdAt                   DateTime                                  @default(now())
+  workspace                   Workspace                                 @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "COQPortfolio_workspace_fkey")
+  initializationGateReceipt   CaioInitializationGateReceipt             @relation(fields: [initializationGateReceiptId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "COQPortfolio_gate_workspace_fkey")
+  initializationAssessment    CaioInitializationAssessment              @relation(fields: [initializationAssessmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "COQPortfolio_assessment_workspace_fkey")
+  previousPortfolio           CaioOperatingQuestionPortfolio?           @relation("CaioOperatingQuestionPortfolioChain", fields: [previousPortfolioId, workspaceId], references: [id, workspaceId], onDelete: NoAction, onUpdate: NoAction, map: "COQPortfolio_previous_workspace_fkey")
+  nextPortfolio               CaioOperatingQuestionPortfolio?           @relation("CaioOperatingQuestionPortfolioChain")
   generationReceipts          CaioOperatingQuestionGenerationReceipt[]
   currentForHead              CaioOperatingQuestionPortfolioHead?
   selectionReceipts           CaioQuestionSelectionReceipt[]
@@ -6014,7 +6029,7 @@ model CaioOperatingQuestionPortfolio {
 // Append-only generation ledger. Failed evidence checks are retained as
 // insufficient_evidence receipts without replacing the last valid portfolio.
 model CaioOperatingQuestionGenerationReceipt {
-  id                          String                                         @id
+  id                          String                                  @id
   workspaceId                 String
   initializationGateReceiptId String
   initializationAssessmentId  String
@@ -6026,22 +6041,22 @@ model CaioOperatingQuestionGenerationReceipt {
   requestHash                 String
   generationInputHash         String
   status                      String
-  evidenceRefs                String                                         @db.LongText
-  gapCodes                    String                                         @db.LongText
+  evidenceRefs                String                                  @db.LongText
+  gapCodes                    String                                  @db.LongText
   generatorRevision           String
   policyRef                   String
   policyHash                  String
-  receiptJson                 String                                         @db.LongText
+  receiptJson                 String                                  @db.LongText
   contentHash                 String
   authorityEffect             String
   recordedAt                  DateTime
-  createdAt                   DateTime                                       @default(now())
-  workspace                   Workspace                                      @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "COQReceipt_workspace_fkey")
-  initializationGateReceipt   CaioInitializationGateReceipt                  @relation(fields: [initializationGateReceiptId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "COQReceipt_gate_workspace_fkey")
-  initializationAssessment    CaioInitializationAssessment                   @relation(fields: [initializationAssessmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "COQReceipt_assessment_workspace_fkey")
-  portfolio                   CaioOperatingQuestionPortfolio?                @relation(fields: [portfolioId, workspaceId, initializationGateReceiptId], references: [id, workspaceId, initializationGateReceiptId], onDelete: Restrict, map: "COQReceipt_portfolio_workspace_gate_fkey")
-  previousReceipt             CaioOperatingQuestionGenerationReceipt?       @relation("CaioOperatingQuestionGenerationReceiptChain", fields: [previousReceiptId, workspaceId, initializationGateReceiptId], references: [id, workspaceId, initializationGateReceiptId], onDelete: NoAction, onUpdate: NoAction, map: "COQReceipt_previous_workspace_gate_fkey")
-  nextReceipt                 CaioOperatingQuestionGenerationReceipt?       @relation("CaioOperatingQuestionGenerationReceiptChain")
+  createdAt                   DateTime                                @default(now())
+  workspace                   Workspace                               @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "COQReceipt_workspace_fkey")
+  initializationGateReceipt   CaioInitializationGateReceipt           @relation(fields: [initializationGateReceiptId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "COQReceipt_gate_workspace_fkey")
+  initializationAssessment    CaioInitializationAssessment            @relation(fields: [initializationAssessmentId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "COQReceipt_assessment_workspace_fkey")
+  portfolio                   CaioOperatingQuestionPortfolio?         @relation(fields: [portfolioId, workspaceId, initializationGateReceiptId], references: [id, workspaceId, initializationGateReceiptId], onDelete: Restrict, map: "COQReceipt_portfolio_workspace_gate_fkey")
+  previousReceipt             CaioOperatingQuestionGenerationReceipt? @relation("CaioOperatingQuestionGenerationReceiptChain", fields: [previousReceiptId, workspaceId, initializationGateReceiptId], references: [id, workspaceId, initializationGateReceiptId], onDelete: NoAction, onUpdate: NoAction, map: "COQReceipt_previous_workspace_gate_fkey")
+  nextReceipt                 CaioOperatingQuestionGenerationReceipt? @relation("CaioOperatingQuestionGenerationReceiptChain")
   currentForHead              CaioOperatingQuestionPortfolioHead?
 
   @@unique([id, workspaceId])
@@ -6078,7 +6093,7 @@ model CaioOperatingQuestionPortfolioHead {
 // Append-only CEO selection receipt. Selecting zero to three questions records
 // prioritization only; it neither creates a Work Packet nor grants authority.
 model CaioQuestionSelectionReceipt {
-  id                          String                            @id
+  id                          String                                    @id
   workspaceId                 String
   portfolioId                 String
   initializationGateReceiptId String
@@ -6091,22 +6106,22 @@ model CaioQuestionSelectionReceipt {
   actorType                   ActorType
   actorUserId                 String
   ceoPrincipalRef             String
-  selectionsJson              String                            @db.LongText
-  selectedQuestionIds         String                            @db.LongText
-  reasonCodes                 String                            @db.LongText
-  evidenceRefs                String                            @db.LongText
-  receiptJson                 String                            @db.LongText
+  selectionsJson              String                                    @db.LongText
+  selectedQuestionIds         String                                    @db.LongText
+  reasonCodes                 String                                    @db.LongText
+  evidenceRefs                String                                    @db.LongText
+  receiptJson                 String                                    @db.LongText
   contentHash                 String
   authorityEffect             String
   workPacketEffect            String
   selectedAt                  DateTime
-  createdAt                   DateTime                          @default(now())
-  workspace                   Workspace                         @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CQSelection_workspace_fkey")
-  portfolio                   CaioOperatingQuestionPortfolio   @relation(fields: [portfolioId, workspaceId, initializationGateReceiptId], references: [id, workspaceId, initializationGateReceiptId], onDelete: Restrict, map: "CQSelection_portfolio_workspace_gate_fkey")
-  initializationGateReceipt   CaioInitializationGateReceipt    @relation(fields: [initializationGateReceiptId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "CQSelection_gate_workspace_fkey")
-  ceoPrincipalBinding         CaioPrincipalBinding             @relation(fields: [ceoPrincipalBindingId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "CQSelection_binding_workspace_fkey")
-  previousReceipt             CaioQuestionSelectionReceipt?    @relation("CaioQuestionSelectionReceiptChain", fields: [previousReceiptId, workspaceId, portfolioId], references: [id, workspaceId, portfolioId], onDelete: NoAction, onUpdate: NoAction, map: "CQSelection_previous_workspace_portfolio_fkey")
-  nextReceipt                 CaioQuestionSelectionReceipt?    @relation("CaioQuestionSelectionReceiptChain")
+  createdAt                   DateTime                                  @default(now())
+  workspace                   Workspace                                 @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CQSelection_workspace_fkey")
+  portfolio                   CaioOperatingQuestionPortfolio            @relation(fields: [portfolioId, workspaceId, initializationGateReceiptId], references: [id, workspaceId, initializationGateReceiptId], onDelete: Restrict, map: "CQSelection_portfolio_workspace_gate_fkey")
+  initializationGateReceipt   CaioInitializationGateReceipt             @relation(fields: [initializationGateReceiptId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "CQSelection_gate_workspace_fkey")
+  ceoPrincipalBinding         CaioPrincipalBinding                      @relation(fields: [ceoPrincipalBindingId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "CQSelection_binding_workspace_fkey")
+  previousReceipt             CaioQuestionSelectionReceipt?             @relation("CaioQuestionSelectionReceiptChain", fields: [previousReceiptId, workspaceId, portfolioId], references: [id, workspaceId, portfolioId], onDelete: NoAction, onUpdate: NoAction, map: "CQSelection_previous_workspace_portfolio_fkey")
+  nextReceipt                 CaioQuestionSelectionReceipt?             @relation("CaioQuestionSelectionReceiptChain")
   currentForHead              CaioQuestionSelectionHead?
   decisionBindings            CaioOperatingQuestionDecisionBinding[]
   implementationPlans         CaioOperatingQuestionImplementationPlan[]
@@ -6140,19 +6155,19 @@ model CaioQuestionSelectionHead {
 // Provenance link into the existing DecisionRecord runtime. This table does
 // not define a second decision object and does not dispatch execution.
 model CaioOperatingQuestionDecisionBinding {
-  id                 String                       @id @default(cuid())
+  id                 String                                   @id @default(cuid())
   workspaceId        String
   selectionReceiptId String
   portfolioId        String
   questionId         String
   candidateHash      String
-  decisionRecordId   String                       @unique
+  decisionRecordId   String                                   @unique
   actorUserId        String
-  createdAt          DateTime                     @default(now())
-  workspace          Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "COQDecisionBinding_workspace_fkey")
-  selectionReceipt   CaioQuestionSelectionReceipt @relation(fields: [selectionReceiptId, workspaceId, portfolioId], references: [id, workspaceId, portfolioId], onDelete: Restrict, map: "COQDecisionBinding_selection_workspace_portfolio_fkey")
-  portfolio          CaioOperatingQuestionPortfolio @relation(fields: [portfolioId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "COQDecisionBinding_portfolio_workspace_fkey")
-  decisionRecord     DecisionRecord               @relation(fields: [decisionRecordId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "COQDecisionBinding_decision_workspace_fkey")
+  createdAt          DateTime                                 @default(now())
+  workspace          Workspace                                @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "COQDecisionBinding_workspace_fkey")
+  selectionReceipt   CaioQuestionSelectionReceipt             @relation(fields: [selectionReceiptId, workspaceId, portfolioId], references: [id, workspaceId, portfolioId], onDelete: Restrict, map: "COQDecisionBinding_selection_workspace_portfolio_fkey")
+  portfolio          CaioOperatingQuestionPortfolio           @relation(fields: [portfolioId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "COQDecisionBinding_portfolio_workspace_fkey")
+  decisionRecord     DecisionRecord                           @relation(fields: [decisionRecordId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "COQDecisionBinding_decision_workspace_fkey")
   implementationPlan CaioOperatingQuestionImplementationPlan?
 
   @@unique([id, workspaceId], map: "COQDecisionBinding_id_workspace_key")
@@ -6282,22 +6297,22 @@ model CaioProV1EvidenceAttestation {
 // is a machine-derived review state only — not CEO acceptance and not a
 // permission grant.
 model CaioProV1CompletionAssessment {
-  id              String                           @id
-  workspaceId     String
-  evaluationKey   String
-  schemaVersion   String
+  id                String                           @id
+  workspaceId       String
+  evaluationKey     String
+  schemaVersion     String
   evaluatorRevision String
-  basisHash       String
-  decision        String
-  inputJson       String                           @db.LongText
-  assessmentJson  String                           @db.LongText
-  contentHash     String
-  authorityEffect String
-  evaluatedAt     DateTime
-  createdAt       DateTime                         @default(now())
-  workspace       Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CPV1Assessment_workspace_fkey")
-  gateReceipts    CaioProV1CompletionGateReceipt[]
-  gateHeads       CaioProV1CompletionGateHead[]
+  basisHash         String
+  decision          String
+  inputJson         String                           @db.LongText
+  assessmentJson    String                           @db.LongText
+  contentHash       String
+  authorityEffect   String
+  evaluatedAt       DateTime
+  createdAt         DateTime                         @default(now())
+  workspace         Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CPV1Assessment_workspace_fkey")
+  gateReceipts      CaioProV1CompletionGateReceipt[]
+  gateHeads         CaioProV1CompletionGateHead[]
 
   @@unique([id, workspaceId])
   @@unique([workspaceId, evaluationKey], map: "CPV1Assessment_workspace_eval_key")
@@ -6375,21 +6390,21 @@ model CaioProV1CompletionGateHead {
 // directories, enterprise apps, purposes) the employee would consent to.
 // An invitation grants nothing and implies no participation.
 model ContextAgentInvitation {
-  id              String                       @id
+  id              String                      @id
   workspaceId     String
   memberUserId    String
   invitedByUserId String
-  scopeJson       String                       @db.LongText
+  scopeJson       String                      @db.LongText
   scopeHash       String
-  status          String                       @default("PENDING")
+  status          String                      @default("PENDING")
   idempotencyKey  String
-  evidenceRefs    String                       @db.LongText
-  invitationJson  String                       @db.LongText
+  evidenceRefs    String                      @db.LongText
+  invitationJson  String                      @db.LongText
   contentHash     String
   recordedAt      DateTime
-  createdAt       DateTime                     @default(now())
-  updatedAt       DateTime                     @updatedAt
-  workspace       Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CtxAgentInvitation_workspace_fkey")
+  createdAt       DateTime                    @default(now())
+  updatedAt       DateTime                    @updatedAt
+  workspace       Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CtxAgentInvitation_workspace_fkey")
   consentReceipt  ContextAgentConsentReceipt?
 
   @@unique([id, workspaceId])
@@ -6657,20 +6672,20 @@ model WorkBuddyDeliveryLane {
 }
 
 model WorkBuddyDeliveryClaim {
-  id               String                          @id
-  workspaceId      String
-  clientId         String
-  deliveryObjectId String
-  deliveryKey      String
-  deliveryVersion  Int
-  severity         String
-  claimJson        String                          @db.LongText
-  contentHash      String
-  claimedAt        DateTime
-  workspace        Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "WBDeliveryClaim_workspace_fkey")
-  client           WorkBuddyDeliveryClientBinding  @relation(fields: [workspaceId, clientId], references: [workspaceId, clientId], onDelete: Restrict, map: "WBDeliveryClaim_client_fkey")
-  envelope         WorkBuddyDeliveryEnvelope       @relation(fields: [deliveryObjectId, workspaceId, deliveryKey, deliveryVersion, severity], references: [id, workspaceId, deliveryKey, deliveryVersion, severity], onDelete: Restrict, onUpdate: Restrict, map: "WBDeliveryClaim_envelope_binding_fkey")
-  presentations    WorkBuddyDeliveryPresentation[]
+  id                     String                           @id
+  workspaceId            String
+  clientId               String
+  deliveryObjectId       String
+  deliveryKey            String
+  deliveryVersion        Int
+  severity               String
+  claimJson              String                           @db.LongText
+  contentHash            String
+  claimedAt              DateTime
+  workspace              Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "WBDeliveryClaim_workspace_fkey")
+  client                 WorkBuddyDeliveryClientBinding   @relation(fields: [workspaceId, clientId], references: [workspaceId, clientId], onDelete: Restrict, map: "WBDeliveryClaim_client_fkey")
+  envelope               WorkBuddyDeliveryEnvelope        @relation(fields: [deliveryObjectId, workspaceId, deliveryKey, deliveryVersion, severity], references: [id, workspaceId, deliveryKey, deliveryVersion, severity], onDelete: Restrict, onUpdate: Restrict, map: "WBDeliveryClaim_envelope_binding_fkey")
+  presentations          WorkBuddyDeliveryPresentation[]
   promptResponseReceipts WorkBuddyPromptResponseReceipt[]
 
   @@unique([id, workspaceId], map: "WBDeliveryClaim_id_workspace_key")
@@ -6809,33 +6824,33 @@ model WorkBuddyPresenceChallenge {
 }
 
 model WorkBuddyPromptResponseReceipt {
-  id               String                    @id
-  workspaceId      String
-  deliveryObjectId String
-  deliveryClaimId  String
+  id                String                    @id
+  workspaceId       String
+  deliveryObjectId  String
+  deliveryClaimId   String
   deliveryClaimHash String
-  clientId         String
-  actorUserId      String
-  ceoBindingRef    String
-  mandateRef       String
-  ceoRef           String
-  sourceObjectKind String
-  sourceObjectId   String
-  sourceObjectHash String
-  expectedVersion  Int
-  responseKind     String
-  resultingStatus  String
-  idempotencyKey   String
-  requestHash      String
-  responseJson     String                    @db.LongText
-  receiptJson      String                    @db.LongText
-  contentHash      String
-  authorityEffect  String
-  recordedAt       DateTime
-  createdAt        DateTime                  @default(now())
-  workspace        Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "WBPromptResponse_workspace_fkey")
-  envelope         WorkBuddyDeliveryEnvelope @relation(fields: [deliveryObjectId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "WBPromptResponse_envelope_workspace_fkey")
-  deliveryClaim    WorkBuddyDeliveryClaim    @relation(fields: [deliveryClaimId, workspaceId, deliveryClaimHash], references: [id, workspaceId, contentHash], onDelete: Restrict, onUpdate: Restrict, map: "WBPromptResponse_claim_binding_fkey")
+  clientId          String
+  actorUserId       String
+  ceoBindingRef     String
+  mandateRef        String
+  ceoRef            String
+  sourceObjectKind  String
+  sourceObjectId    String
+  sourceObjectHash  String
+  expectedVersion   Int
+  responseKind      String
+  resultingStatus   String
+  idempotencyKey    String
+  requestHash       String
+  responseJson      String                    @db.LongText
+  receiptJson       String                    @db.LongText
+  contentHash       String
+  authorityEffect   String
+  recordedAt        DateTime
+  createdAt         DateTime                  @default(now())
+  workspace         Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "WBPromptResponse_workspace_fkey")
+  envelope          WorkBuddyDeliveryEnvelope @relation(fields: [deliveryObjectId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "WBPromptResponse_envelope_workspace_fkey")
+  deliveryClaim     WorkBuddyDeliveryClaim    @relation(fields: [deliveryClaimId, workspaceId, deliveryClaimHash], references: [id, workspaceId, contentHash], onDelete: Restrict, onUpdate: Restrict, map: "WBPromptResponse_claim_binding_fkey")
 
   @@unique([id, workspaceId], map: "WBPromptResponse_id_workspace_key")
   @@unique([workspaceId, idempotencyKey], map: "WBPromptResponse_workspace_idem_key")
@@ -6859,7 +6874,7 @@ model MemberWorkSignalChallenge {
   consumptionReceiptRef String?
   gatewaySessionRef     String?
   createdAt             DateTime  @default(now())
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "MWSignalChallenge_workspace_fkey")
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "MWSignalChallenge_workspace_fkey")
 
   @@unique([id, workspaceId], map: "MWSignalChallenge_id_workspace_key")
   @@index([workspaceId, memberRef], map: "MWSignalChallenge_workspace_member_idx")
@@ -6869,7 +6884,7 @@ model MemberWorkSignalChallenge {
 /// UPDATE/DELETE are blocked by triggers; a receipt can be superseded at
 /// most once (unique on supersedesReceiptRef).
 model MemberWorkSignalReceipt {
-  id                    String   @id
+  id                    String    @id
   workspaceId           String
   memberRef             String
   deviceRegistrationRef String
@@ -6877,7 +6892,7 @@ model MemberWorkSignalReceipt {
   objectRef             String
   objectVersion         Int
   kind                  String
-  payloadJson           String   @db.LongText
+  payloadJson           String    @db.LongText
   payloadHash           String
   policyRef             String
   policyVersion         Int
@@ -6887,8 +6902,8 @@ model MemberWorkSignalReceipt {
   challengeRef          String
   supersedesReceiptRef  String?
   gatewaySessionRef     String?
-  createdAt             DateTime @default(now())
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "MWSignalReceipt_workspace_fkey")
+  createdAt             DateTime  @default(now())
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "MWSignalReceipt_workspace_fkey")
 
   @@unique([id, workspaceId], map: "MWSignalReceipt_id_workspace_key")
   @@unique([workspaceId, challengeRef], map: "MWSignalReceipt_workspace_challenge_key")
@@ -6900,22 +6915,22 @@ model MemberWorkSignalReceipt {
 /// only through CAS transitions that append a receipt; `version` is the
 /// optimistic-concurrency counter (expectedVersion seam).
 model MemberPrompt {
-  id              String   @id
-  workspaceId     String
-  memberRef       String
-  severity        String
-  severityRuleRef String?
+  id               String    @id
+  workspaceId      String
+  memberRef        String
+  severity         String
+  severityRuleRef  String?
   subjectObjectRef String
-  projectedSummary String  @db.LongText
-  evidenceRefsJson String  @db.LongText
-  state           String
-  version         Int
-  snoozeUntil     DateTime?
-  responseRef     String?
-  issuedAt        DateTime
-  expiresAt       DateTime
-  createdAt       DateTime @default(now())
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "MWPrompt_workspace_fkey")
+  projectedSummary String    @db.LongText
+  evidenceRefsJson String    @db.LongText
+  state            String
+  version          Int
+  snoozeUntil      DateTime?
+  responseRef      String?
+  issuedAt         DateTime
+  expiresAt        DateTime
+  createdAt        DateTime  @default(now())
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "MWPrompt_workspace_fkey")
 
   @@unique([id, workspaceId], map: "MWPrompt_id_workspace_key")
   @@index([workspaceId, memberRef, state], map: "MWPrompt_workspace_member_state_idx")
@@ -6926,21 +6941,21 @@ model MemberPrompt {
 /// frozen non-performance literal (spec §12): transition timing/content
 /// must never feed member evaluation.
 model MemberPromptTransitionReceipt {
-  id            String   @id
-  workspaceId   String
-  promptRef     String
-  fromState     String
-  toState       String
-  cause         String
-  version       Int
-  deliverDecision String?
-  heldReason    String?
-  responseRef   String?
-  occurredAt    DateTime
+  id                      String    @id
+  workspaceId             String
+  promptRef               String
+  fromState               String
+  toState                 String
+  cause                   String
+  version                 Int
+  deliverDecision         String?
+  heldReason              String?
+  responseRef             String?
+  occurredAt              DateTime
   evaluationUseProhibited Boolean
-  gatewaySessionRef String?
-  createdAt     DateTime @default(now())
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "MWPromptReceipt_workspace_fkey")
+  gatewaySessionRef       String?
+  createdAt               DateTime  @default(now())
+  workspace               Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "MWPromptReceipt_workspace_fkey")
 
   @@unique([id, workspaceId], map: "MWPromptReceipt_id_workspace_key")
   @@unique([workspaceId, promptRef, version], map: "MWPromptReceipt_prompt_version_key")
@@ -6988,7 +7003,7 @@ model MemberPromptResponseReceipt {
   authorizedActionRef      String?
   gatewaySessionRef        String?
   createdAt                DateTime  @default(now())
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "MWPromptRespReceipt_workspace_fkey")
+  workspace                Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "MWPromptRespReceipt_workspace_fkey")
 
   @@unique([id, workspaceId], map: "MWPromptRespReceipt_id_workspace_key")
   @@unique([workspaceId, challengeRef], map: "MWPromptRespReceipt_workspace_challenge_key")
@@ -7013,12 +7028,11 @@ model MemberGatewaySession {
   openedAt              DateTime
   closedAt              DateTime?
   createdAt             DateTime  @default(now())
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "MWGatewaySession_workspace_fkey")
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "MWGatewaySession_workspace_fkey")
 
   @@unique([id, workspaceId], map: "MWGatewaySession_id_workspace_key")
   @@index([workspaceId, memberRef, deviceRegistrationRef, clientId, openedAt], map: "MWGatewaySession_tuple_opened_idx")
 }
-
 
 // ===== CAIO Pro next-version access gateway records =====
 // Identity, pairing, context policy, enterprise memory, and audit dispatch
@@ -7059,24 +7073,24 @@ model CaioAccessToken {
 }
 
 model CaioPairingRequest {
-  id                String    @id
-  workspaceId       String
-  userRef           String
-  clientType        String
-  deviceRef         String
-  sourceIp          String
-  matchCodeHash     String
-  clientPublicKey   String
-  status            String
-  createdAt         DateTime
-  expiresAt         DateTime
-  approvedAt        DateTime?
-  approvedByRef     String?
-  completedAt       DateTime?
-  revokedAt         DateTime?
-  issuedMcpTokenId  String?
+  id                 String    @id
+  workspaceId        String
+  userRef            String
+  clientType         String
+  deviceRef          String
+  sourceIp           String
+  matchCodeHash      String
+  clientPublicKey    String
+  status             String
+  createdAt          DateTime
+  expiresAt          DateTime
+  approvedAt         DateTime?
+  approvedByRef      String?
+  completedAt        DateTime?
+  revokedAt          DateTime?
+  issuedMcpTokenId   String?
   issuedModelTokenId String?
-  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CaioPairingRequest_workspace_fkey")
+  workspace          Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CaioPairingRequest_workspace_fkey")
 
   @@unique([id, workspaceId], map: "CaioPairingRequest_id_workspace_key")
   @@index([workspaceId, status, expiresAt], map: "CaioPairingRequest_status_expiry_idx")
@@ -7104,14 +7118,14 @@ model CaioContextNegativeRule {
 }
 
 model CaioContextReceipt {
-  id                String   @id
+  id                String    @id
   workspaceId       String
   userRef           String
   requestId         String
   decision          String
   policyVersion     String
-  ruleHitsJson      String   @db.LongText
-  sourcesJson       String   @db.LongText
+  ruleHitsJson      String    @db.LongText
+  sourcesJson       String    @db.LongText
   redactionReliable Boolean
   contentHash       String
   createdAt         DateTime
@@ -7150,7 +7164,7 @@ model CaioMemoryCandidate {
 }
 
 model CaioAuditDispatchReceipt {
-  id            String   @id
+  id            String    @id
   workspaceId   String
   requestId     String
   clientType    String
@@ -7187,4 +7201,88 @@ model CaioCredentialRefState {
   workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, map: "CaioCredentialRefState_workspace_fkey")
 
   @@unique([workspaceId, credentialRef], map: "CaioCredentialRefState_workspace_ref_key")
+}
+
+/// LLM spend ledger — one row per call ATTEMPT, reserved before the provider is
+/// contacted and settled after it answers.
+///
+/// Why a table and not the call log: the call log is a log. Deriving spend from it
+/// cannot express a reservation (there is no row until after the call), cannot be
+/// made exactly-once (nothing is unique per attempt), and its `success` flag was
+/// already shown to be the wrong criterion for "did this consume anything".
+///
+/// Why reserve-then-settle: the budget check used to be a pure read, with the
+/// deduction happening only after the provider returned. N concurrent callers all
+/// saw the same month-to-date total and all passed. The reservation is the write
+/// that makes the check mean something, and it happens BEFORE the call.
+///
+/// `attemptRef` is the idempotency key: a retry of the same attempt must not
+/// reserve twice.
+model LLMSpendLedgerEntry {
+  id                  String    @id @default(cuid())
+  workspaceId         String
+  /// Period this row is charged to, computed AT WRITE TIME under
+  /// periodPolicyVersion and never recomputed on read — otherwise changing the
+  /// rule would silently move historical rows between periods.
+  periodKey           String
+  periodPolicyVersion String
+  /// One row per call attempt; a retry of the same attempt must not reserve twice.
+  attemptRef          String
+  /// reserved | settled | released | unknown
+  state               String
+  reservedMicros      BigInt
+  settledMicros       BigInt?
+  /// known | unknown | not_consumed — mirrors the in-process usage observation.
+  usageState          String?
+  provider            String
+  model               String
+  reservedAt          DateTime  @default(now())
+  settledAt           DateTime?
+  /// A reservation whose call never reported back becomes recoverable after this.
+  expiresAt           DateTime
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@unique([workspaceId, attemptRef])
+  @@index([workspaceId, periodKey, state])
+  @@index([state, expiresAt])
+}
+
+/// Per-(workspace, period) reserved+settled total, maintained so that ADMISSION can be a
+/// single conditional UPDATE.
+///
+/// Why this row exists rather than summing the ledger on every call. Admission has to check
+/// and reserve ATOMICALLY — the defect being fixed is exactly that the check was a pure read
+/// and the deduction happened after the provider returned, so N concurrent callers all saw
+/// the same total and all passed. Three ways to make it atomic:
+///
+///   (a) SELECT SUM(...) FOR UPDATE inside a transaction — needs REPEATABLE READ or
+///       SERIALISABLE. The MySQL this ships against defaults to READ COMMITTED and raising
+///       it is an RDS console parameter change: an infrastructure dependency outside the code.
+///   (b) insert first, then sum and roll back if over — admits transient overshoot.
+///   (c) one aggregate row updated with a single conditional UPDATE whose pre-state lives in
+///       its own WHERE, admitting exactly one winner per unit of budget.
+///
+/// (c) is chosen: atomic on any isolation level, and it is the same shape this repository's
+/// static CAS check already pins elsewhere. The ledger stays the per-attempt record of what
+/// happened; this row is the counter admission reads and writes in one statement.
+model LLMSpendPeriodCounter {
+  id                  String   @id @default(cuid())
+  workspaceId         String
+  periodKey           String
+  periodPolicyVersion String
+  /// Reserved but not yet settled, in micros.
+  reservedMicros      BigInt   @default(0)
+  /// Settled, in micros.
+  settledMicros       BigInt   @default(0)
+  /// Conservative upper bound of calls whose consumption could not be measured, and their
+  /// count. Kept apart from settled: summing a bound into a measurement produces a number
+  /// that is neither.
+  unknownBoundMicros  BigInt   @default(0)
+  unknownCalls        Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([workspaceId, periodKey])
+  @@index([periodKey])
 }
