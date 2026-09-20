@@ -20,6 +20,7 @@ import {
 
 const roots: string[] = [];
 const RAW_TOKEN = `hcaio_inf_${"a".repeat(43)}`;
+const MODEL_ACCESS = "omlx-test-access-token";
 
 afterEach(async () => {
   await Promise.all(
@@ -37,12 +38,14 @@ async function fixture() {
     root,
     config: join(root, "inference-worker.json"),
     access: join(root, "inference-access"),
+    modelAccess: join(root, "local-model-access"),
     cert: join(root, "worker.crt"),
     key: join(root, "worker.key"),
     ca: join(root, "gateway-ca.crt"),
   };
   for (const [path, body] of [
     [paths.access, RAW_TOKEN],
+    [paths.modelAccess, MODEL_ACCESS],
     [paths.cert, "synthetic-worker-certificate"],
     [paths.key, "synthetic-worker-private-key"],
     [paths.ca, "synthetic-gateway-ca"],
@@ -63,6 +66,7 @@ async function fixture() {
     model: {
       baseUrl: "http://127.0.0.1:8080/v1",
       model: "local-governed-model",
+      accessTokenPath: paths.modelAccess,
       probeTimeoutMs: 5_000,
       completeTimeoutMs: 300_000,
     },
@@ -91,6 +95,7 @@ describe("CAIO inference worker owner-private runtime", () => {
     expect(loaded.model).toEqual({
       baseUrl: "http://127.0.0.1:8080/v1",
       model: "local-governed-model",
+      accessToken: MODEL_ACCESS,
       probeTimeoutMs: 5_000,
       completeTimeoutMs: 300_000,
     });
@@ -119,7 +124,10 @@ describe("CAIO inference worker owner-private runtime", () => {
       expect.objectContaining({ accessToken: RAW_TOKEN }),
     );
     expect(modelFactory).toHaveBeenCalledWith(
-      expect.objectContaining({ baseUrl: "http://127.0.0.1:8080/v1" }),
+      expect.objectContaining({
+        baseUrl: "http://127.0.0.1:8080/v1",
+        accessToken: MODEL_ACCESS,
+      }),
     );
     expect(stdout).toHaveBeenCalledTimes(1);
     expect(stdout.mock.calls.flat().join("\n")).not.toContain(RAW_TOKEN);
@@ -140,6 +148,10 @@ describe("CAIO inference worker owner-private runtime", () => {
         value.model.baseUrl = "https://model.example.test/v1";
       },
       (value) => {
+        (value.model as typeof config.model & Record<string, unknown>)
+          .accessToken = MODEL_ACCESS;
+      },
+      (value) => {
         (value.gateway as typeof config.gateway & Record<string, unknown>)
           .extra = true;
       },
@@ -152,6 +164,24 @@ describe("CAIO inference worker owner-private runtime", () => {
         /caio_inference_worker_runtime_invalid/,
       );
     }
+  });
+
+  it("本地模型凭据必须来自同一 0700 根下的 0600 单链接文件", async () => {
+    const { paths, config } = await fixture();
+
+    chmodSync(paths.modelAccess, 0o644);
+    expect(() => loadCaioInferenceWorkerRuntimeConfig(paths.config)).toThrow(
+      /caio_inference_worker_private_file_invalid/,
+    );
+
+    chmodSync(paths.modelAccess, 0o600);
+    const linked = join(paths.root, "linked-model-access");
+    linkSync(paths.modelAccess, linked);
+    config.model.accessTokenPath = linked;
+    writeFileSync(paths.config, `${JSON.stringify(config)}\n`, { mode: 0o600 });
+    expect(() => loadCaioInferenceWorkerRuntimeConfig(paths.config)).toThrow(
+      /caio_inference_worker_private_file_invalid/,
+    );
   });
 
   it("rejects wrong-audience material and insecure, linked or escaped files", async () => {
