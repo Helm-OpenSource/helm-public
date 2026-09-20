@@ -67,6 +67,7 @@ const runtimeSchema = z
       .object({
         baseUrl: z.string().url().max(1_024),
         model: z.string().min(1).max(200),
+        accessTokenPath: privatePathSchema,
         probeTimeoutMs: timeoutSchema,
         completeTimeoutMs: timeoutSchema,
       })
@@ -152,7 +153,25 @@ export function loadCaioInferenceWorkerRuntimeConfig(
     ),
     requestTimeoutMs: parsed.data.gateway.requestTimeoutMs,
   });
-  const model = Object.freeze({ ...parsed.data.model });
+  const modelAccessToken = readPrivateFile(
+    parsed.data.model.accessTokenPath,
+    privateRoot,
+    MAX_PRIVATE_FILE_BYTES,
+  ).toString("utf8");
+  if (
+    modelAccessToken.length < 16 ||
+    modelAccessToken.length > 4_096 ||
+    /\s/u.test(modelAccessToken)
+  ) {
+    throw new Error("caio_inference_worker_local_model_access_invalid");
+  }
+  const model = Object.freeze({
+    baseUrl: parsed.data.model.baseUrl,
+    model: parsed.data.model.model,
+    accessToken: modelAccessToken,
+    probeTimeoutMs: parsed.data.model.probeTimeoutMs,
+    completeTimeoutMs: parsed.data.model.completeTimeoutMs,
+  });
   return Object.freeze({
     gateway,
     model,

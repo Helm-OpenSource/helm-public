@@ -26,6 +26,8 @@ export type CaioWorkerLocalModelConfig = Readonly<{
   baseUrl: string;
   /** 模型名。由设备侧决定，与路由策略里登记的适配器版本一并构成可追溯性。 */
   model: string;
+  /** 设备本地模型端点访问凭据；仅从 owner-private 0600 文件加载。 */
+  accessToken: string;
   /** 探测与补全各自的时限。补全默认给得宽，本地大模型首 token 可能较慢。 */
   probeTimeoutMs?: number;
   completeTimeoutMs?: number;
@@ -37,6 +39,7 @@ export function createCaioWorkerLocalModelPort(
   config: CaioWorkerLocalModelConfig,
 ): CaioWorkerLocalModelPort {
   const base = assertLoopbackBase(config.baseUrl);
+  const authorization = `Bearer ${assertLocalModelAccessToken(config.accessToken)}`;
   const doFetch = config.fetchImpl ?? fetch;
   const probeTimeoutMs = config.probeTimeoutMs ?? 5_000;
   const completeTimeoutMs = config.completeTimeoutMs ?? 300_000;
@@ -48,7 +51,11 @@ export function createCaioWorkerLocalModelPort(
     probe: async ({ signal }) => {
       try {
         const response = await withDeadline(
-          (deadlineSignal) => doFetch(`${base}/models`, { method: "GET", signal: deadlineSignal }),
+          (deadlineSignal) => doFetch(`${base}/models`, {
+            method: "GET",
+            headers: { authorization },
+            signal: deadlineSignal,
+          }),
           probeTimeoutMs,
           signal,
         );
@@ -74,7 +81,10 @@ export function createCaioWorkerLocalModelPort(
         (deadlineSignal) =>
           doFetch(`${base}/chat/completions`, {
             method: "POST",
-            headers: { "content-type": "application/json; charset=utf-8" },
+            headers: {
+              authorization,
+              "content-type": "application/json; charset=utf-8",
+            },
             body: JSON.stringify({
               model: config.model,
               max_tokens: maxOutputTokens,
@@ -95,6 +105,18 @@ export function createCaioWorkerLocalModelPort(
       return extractContent(text);
     },
   });
+}
+
+function assertLocalModelAccessToken(value: string): string {
+  if (
+    typeof value !== "string" ||
+    value.length < 16 ||
+    value.length > 4_096 ||
+    /\s/u.test(value)
+  ) {
+    throw new Error("invalid caio worker local model access");
+  }
+  return value;
 }
 
 function assertLoopbackBase(baseUrl: string): string {
