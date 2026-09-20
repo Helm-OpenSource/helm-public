@@ -1,41 +1,22 @@
 import "server-only";
 
 import {
-  WorkBuddyCollaborationError,
-} from "@/lib/caio-collaboration/contracts";
-import {
   createWorkBuddyMcpToolDispatcher,
   type WorkBuddyMcpToolDispatcher,
 } from "@/lib/caio-collaboration/mcp-tool-dispatcher";
 import {
-  createWorkBuddyReadOnlyHandlers,
-  type WorkBuddyOwnerPresenceWorkflow,
+  createWorkBuddyMemberReadToolDefinitions,
+  type WorkBuddyMemberReadQueries,
+} from "@/lib/caio-collaboration/member-readonly-tools";
+import type {
+  WorkBuddyP1cProjectionQueries,
 } from "@/lib/caio-collaboration/readonly-handlers";
 import {
-  createWorkBuddyReadOnlyToolDefinitions,
-} from "@/lib/caio-collaboration/readonly-tools";
-import {
-  createPrismaWorkBuddyAuthorizationQueries,
-} from "@/lib/caio-collaboration-runtime/workbuddy-authorization-queries.service";
+  createWorkBuddyMemberReadQueries,
+} from "@/lib/caio-collaboration-runtime/workbuddy-member-read-queries.service";
 import {
   createPrismaWorkBuddyP1cProjectionQueries,
 } from "@/lib/caio-collaboration-runtime/workbuddy-p1c-projection-queries.service";
-
-const disabledPresenceWorkflow: WorkBuddyOwnerPresenceWorkflow =
-  Object.freeze({
-    async begin(): Promise<never> {
-      throw new WorkBuddyCollaborationError(
-        "TOOL_DISABLED",
-        "Owner presence is unavailable on the read-only edge ingress.",
-      );
-    },
-    async complete(): Promise<never> {
-      throw new WorkBuddyCollaborationError(
-        "TOOL_DISABLED",
-        "Owner presence is unavailable on the read-only edge ingress.",
-      );
-    },
-  });
 
 /**
  * Database-backed cloud dispatcher for the authenticated Mac edge.
@@ -45,18 +26,18 @@ const disabledPresenceWorkflow: WorkBuddyOwnerPresenceWorkflow =
  */
 export function createPrismaWorkBuddyReadOnlyDispatcher(input?: {
   now?: () => string;
+  membershipQueries?: WorkBuddyMemberReadQueries;
+  projectionQueries?: WorkBuddyP1cProjectionQueries;
 }): WorkBuddyMcpToolDispatcher {
   const now = input?.now ?? (() => new Date().toISOString());
-  const definitions = createWorkBuddyReadOnlyToolDefinitions(
-    createWorkBuddyReadOnlyHandlers({
-      authorizationQueries:
-        createPrismaWorkBuddyAuthorizationQueries(),
-      presenceWorkflow: disabledPresenceWorkflow,
-      projectionQueries:
-        createPrismaWorkBuddyP1cProjectionQueries({ now }),
-      now,
-    }),
-  );
+  const definitions = createWorkBuddyMemberReadToolDefinitions({
+    membershipQueries:
+      input?.membershipQueries ?? createWorkBuddyMemberReadQueries(),
+    projectionQueries:
+      input?.projectionQueries ??
+      createPrismaWorkBuddyP1cProjectionQueries({ now }),
+    now,
+  });
   return createWorkBuddyMcpToolDispatcher({
     flags: Object.freeze({
       gatewayEnabled: true,

@@ -23,4 +23,38 @@ describe("Prisma WorkBuddy read-only dispatcher", () => {
       "get_p1c_read_projection",
     ]);
   });
+
+  it("authorizes an active enrolled member without CEO authority", async () => {
+    const dispatcher = createPrismaWorkBuddyReadOnlyDispatcher({
+      now: () => "2026-09-20T09:00:00.000Z",
+      membershipQueries: {
+        async loadMembership() {
+          return { status: "ACTIVE", role: "MEMBER" };
+        },
+      },
+      projectionQueries: {
+        async loadP1cProjectionSource() {
+          return {
+            workspaceId: identity.workspaceId,
+            portfolio: {
+              portfolioRef: "portfolio:1",
+              sequence: 1,
+              generatedAt: "2026-09-20T08:00:00.000Z",
+              questions: [],
+            },
+            selection: null,
+            followThrough: [],
+          };
+        },
+      },
+    });
+
+    await expect(
+      dispatcher.dispatch({
+        name: "get_p1c_read_projection",
+        input: { workspaceId: identity.workspaceId },
+        context: { requestId: "request:member", identity },
+      }),
+    ).resolves.toMatchObject({ ok: true });
+  });
 });
