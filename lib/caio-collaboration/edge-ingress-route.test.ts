@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   GET,
   POST,
-  readBoundedRequestBody,
 } from "@/app/api/runtime/caio/workbuddy/route";
+import { readBoundedRequestBody } from "@/lib/caio-collaboration/edge-ingress-route-body";
 
 const originalSecret = process.env.CAIO_WORKBUDDY_EDGE_SHARED_SECRET;
 const originalSystemKey =
