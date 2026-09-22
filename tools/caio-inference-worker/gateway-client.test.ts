@@ -5,7 +5,12 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { createCaioWorkerGatewayClient } from "./gateway-client";
+import { X509Certificate } from "node:crypto";
+
+import {
+  createCaioWorkerGatewayClient,
+  probeCaioWorkerGatewayReadiness,
+} from "./gateway-client";
 
 const TOKEN = "hcaio_inf_0123456789abcdef";
 
@@ -100,6 +105,41 @@ function client(port: number, p: Pki) {
 }
 
 describe("设备侧网关客户端", () => {
+  it("readiness probe uses the real mTLS link, fingerprints the peer and proves closed adjacent routes", async () => {
+    pki = makePki();
+    const seen: string[] = [];
+    const started = await startServer(pki, (_body, url) => {
+      seen.push(url);
+      if (url === "/livez" || url === "/readyz") return { status: 200, body: { state: "ready" } };
+      if (url === "/mcp/workbuddy" || url === "/v1/execution-results") return { status: 404, body: { error: "not_found" } };
+      return { status: 500, body: { error: "unexpected" } };
+    });
+    open = started.server;
+
+    const observation = await probeCaioWorkerGatewayReadiness({
+      host: "127.0.0.1",
+      port: started.port,
+      accessToken: TOKEN,
+      clientCertificate: pki.clientCert,
+      clientPrivateKey: pki.clientKey,
+      serverCa: pki.caCert,
+      requestTimeoutMs: 8_000,
+    });
+
+    expect(observation).toEqual({
+      livezStatus: 200,
+      readyzStatus: 200,
+      workBuddyStatus: 404,
+      privateExecutionStatus: 404,
+      missingClientCertificateRejected: true,
+      serverCertificateFingerprint: `sha256:${new X509Certificate(pki.serverCert).fingerprint256
+        .replaceAll(":", "")
+        .toLowerCase()}`,
+    });
+    expect(seen).toEqual(["/livez", "/readyz", "/mcp/workbuddy", "/v1/execution-results"]);
+    expect(JSON.stringify(observation)).not.toContain(TOKEN);
+  });
+
   it("令牌必须是推理受众的，客户端材料不能为空", () => {
     const base = {
       host: "127.0.0.1",

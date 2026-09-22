@@ -45,10 +45,17 @@ export function createCaioWorkerPkiFixture(): CaioWorkerPkiFixture {
     "-days", "1", "-subj", "/CN=caio-test-ca",
   ]);
   for (const [name, cn] of [["server", SERVER_CN], ["client", CLIENT_CN]] as const) {
-    openssl([
-      "req", "-newkey", "rsa:2048", "-nodes", "-keyout", `${name}.key`, "-out", `${name}.csr`,
-      "-subj", `/CN=${cn}`,
-    ]);
+    if (name === "client") {
+      // The readiness receipt is signed by the deployed client identity, so
+      // the fixture deliberately exercises an ECDSA P-256 worker key.
+      openssl(["ecparam", "-name", "prime256v1", "-genkey", "-noout", "-out", `${name}.key`]);
+      openssl(["req", "-new", "-key", `${name}.key`, "-out", `${name}.csr`, "-subj", `/CN=${cn}`]);
+    } else {
+      openssl([
+        "req", "-newkey", "rsa:2048", "-nodes", "-keyout", `${name}.key`, "-out", `${name}.csr`,
+        "-subj", `/CN=${cn}`,
+      ]);
+    }
     openssl([
       "x509", "-req", "-in", `${name}.csr`, "-CA", "ca.crt", "-CAkey", "ca.key",
       "-CAcreateserial", "-out", `${name}.crt`, "-days", "1",
