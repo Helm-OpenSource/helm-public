@@ -29,6 +29,7 @@ function createDispatcher(
         name: "get_p1c_read_projection",
         description: "Read a governed P1C projection.",
         risk: "read",
+        annotations: { readOnlyHint: true },
         inputSchema: {
           type: "object",
           additionalProperties: false,
@@ -181,6 +182,7 @@ describe("WorkBuddy MCP protocol", () => {
           name: "get_p1c_read_projection",
           description: "Read a governed P1C projection.",
           risk: "read",
+          annotations: { readOnlyHint: true },
           inputSchema: {
             type: "object",
             additionalProperties: false,
