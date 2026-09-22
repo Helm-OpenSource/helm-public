@@ -86,6 +86,12 @@ describe("WorkBuddy MCP tool dispatcher", () => {
     expect(dispatcher.listTools().map((tool) => tool.name)).toEqual([
       "get_p1c_read_projection",
     ]);
+    expect(dispatcher.listTools()).toEqual([
+      expect.objectContaining({
+        name: "get_p1c_read_projection",
+        annotations: { readOnlyHint: true },
+      }),
+    ]);
     expect(
       dispatcher.dispatch({
         name: "submit_caio_question_selection",

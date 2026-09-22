@@ -50,6 +50,9 @@ export type WorkBuddyMcpToolDescriptor = Readonly<{
   name: string;
   description: string;
   risk: WorkBuddyToolRisk;
+  annotations: Readonly<{
+    readOnlyHint: boolean;
+  }>;
   inputSchema: WorkBuddyJsonSchema;
 }>;
 
@@ -140,6 +143,9 @@ export function createWorkBuddyMcpToolDispatcher(input: {
               name: definition.name,
               description: definition.description,
               risk: definition.risk,
+              annotations: Object.freeze({
+                readOnlyHint: definition.risk === "read",
+              }),
               inputSchema: definition.inputJsonSchema,
             }),
           ),
