@@ -23,12 +23,19 @@ import type {
 } from "./contracts";
 import {
   createCaioWorkerGatewayClient,
+  probeCaioWorkerGatewayReadiness,
   type CaioWorkerGatewayClientConfig,
+  type CaioWorkerGatewayReadinessObservation,
 } from "./gateway-client";
 import {
   createCaioWorkerLocalModelPort,
   type CaioWorkerLocalModelConfig,
 } from "./local-model-port";
+import {
+  createCaioInferenceTransportReadinessReceipt,
+  parseCaioInferenceReadinessChallenge,
+  writeCaioInferenceTransportReadinessReceipt,
+} from "./readiness-attest";
 
 export const CAIO_INFERENCE_WORKER_RUNTIME_SCHEMA =
   "helm.caio.inference-worker-runtime.v1" as const;
@@ -37,6 +44,7 @@ export const CAIO_INFERENCE_WORKER_CONFIG_ENV =
 
 const MAX_CONFIG_BYTES = 64 * 1024;
 const MAX_PRIVATE_FILE_BYTES = 1024 * 1024;
+const MAX_CHALLENGE_BYTES = 16 * 1024;
 const LOOPBACK_HOSTS = new Set([
   "127.0.0.1",
   "localhost",
@@ -91,6 +99,10 @@ type RuntimeDependencies = Readonly<{
   modelFactory?: (
     config: CaioWorkerLocalModelConfig,
   ) => CaioWorkerLocalModelPort;
+  gatewayReadinessProbe?: (
+    config: CaioWorkerGatewayClientConfig,
+  ) => Promise<CaioWorkerGatewayReadinessObservation>;
+  now?: () => Date;
   stdout?: (text: string) => void;
   signal?: AbortSignal;
 }>;
@@ -199,6 +211,44 @@ export async function runCaioInferenceWorkerRuntime(
     dependencies.modelFactory ?? createCaioWorkerLocalModelPort;
   const stdout =
     dependencies.stdout ?? ((text: string) => process.stdout.write(`${text}\n`));
+  if (argv[0] === "readiness-attest") {
+    const args = parseReadinessAttestArgs(argv);
+    const privateRoot = dirname(requireAbsolutePath(configPath));
+    if (dirname(args.challengeFile) !== privateRoot || dirname(args.output) !== privateRoot) {
+      throw new Error("caio_inference_readiness_arguments_invalid");
+    }
+    const challengeBytes = readPrivateFile(args.challengeFile, privateRoot, MAX_CHALLENGE_BYTES);
+    let decoded: unknown;
+    try {
+      decoded = JSON.parse(challengeBytes.toString("utf8")) as unknown;
+    } catch {
+      throw new Error("caio_inference_readiness_challenge_invalid");
+    }
+    const now = dependencies.now ?? (() => new Date());
+    const challenge = parseCaioInferenceReadinessChallenge(decoded, now());
+    const model = modelFactory(runtime.model);
+    const readinessProbe = dependencies.gatewayReadinessProbe ?? probeCaioWorkerGatewayReadiness;
+    const receipt = await createCaioInferenceTransportReadinessReceipt({
+      challenge,
+      clientCertificate: runtime.gateway.clientCertificate,
+      clientPrivateKey: runtime.gateway.clientPrivateKey,
+      modelId: runtime.model.model,
+      modelProbe: async () => await model.probe({}),
+      gatewayProbe: async () => await readinessProbe(runtime.gateway),
+      now,
+    });
+    const result = writeCaioInferenceTransportReadinessReceipt({
+      privateRoot,
+      outputPath: args.output,
+      receipt,
+    });
+    stdout(JSON.stringify({
+      command: "readiness-attest",
+      ok: true,
+      receiptSha256: result.receiptSha256,
+    }));
+    return 0;
+  }
   const result = await runCaioInferenceWorkerCli(argv, {
     gateway: gatewayFactory(runtime.gateway),
     model: modelFactory(runtime.model),
@@ -207,6 +257,26 @@ export async function runCaioInferenceWorkerRuntime(
     ...(dependencies.signal ? { signal: dependencies.signal } : {}),
   });
   return result === null ? 2 : caioInferenceWorkerExitCode(result);
+}
+
+function parseReadinessAttestArgs(argv: readonly string[]): Readonly<{
+  challengeFile: string;
+  output: string;
+}> {
+  if (
+    argv.length !== 5 ||
+    argv[0] !== "readiness-attest" ||
+    argv[1] !== "--challenge-file" ||
+    argv[3] !== "--output" ||
+    !argv[2] ||
+    !argv[4]
+  ) {
+    throw new Error("caio_inference_readiness_arguments_invalid");
+  }
+  return Object.freeze({
+    challengeFile: requireAbsolutePath(argv[2]),
+    output: requireAbsolutePath(argv[4]),
+  });
 }
 
 function requirePrivateRoot(root: string): string {

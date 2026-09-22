@@ -1,7 +1,9 @@
 import {
   chmodSync,
   linkSync,
+  readFileSync,
   realpathSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -17,6 +19,11 @@ import {
   loadCaioInferenceWorkerRuntimeConfig,
   runCaioInferenceWorkerRuntime,
 } from "./runtime";
+import {
+  CAIO_INFERENCE_READINESS_CHALLENGE_SCHEMA,
+  CAIO_INFERENCE_TRANSPORT_READINESS_SCHEMA,
+} from "./readiness-attest";
+import { createCaioWorkerPkiFixture, removeCaioWorkerPkiFixture } from "./pki-fixture";
 
 const roots: string[] = [];
 const RAW_TOKEN = `hcaio_inf_${"a".repeat(43)}`;
@@ -131,6 +138,62 @@ describe("CAIO inference worker owner-private runtime", () => {
     );
     expect(stdout).toHaveBeenCalledTimes(1);
     expect(stdout.mock.calls.flat().join("\n")).not.toContain(RAW_TOKEN);
+  });
+
+  it("readiness-attest binds a private challenge to model and gateway probes, then writes one safe receipt", async () => {
+    const { paths } = await fixture();
+    const pki = createCaioWorkerPkiFixture();
+    try {
+      writeFileSync(paths.cert, pki.clientCert, { mode: 0o600 });
+      writeFileSync(paths.key, pki.clientKey, { mode: 0o600 });
+      writeFileSync(paths.ca, pki.caCert, { mode: 0o600 });
+      const now = new Date("2026-09-23T01:00:00.000Z");
+      const challengePath = join(paths.root, "readiness-challenge.json");
+      const outputPath = join(paths.root, "readiness-receipt.json");
+      writeFileSync(challengePath, JSON.stringify({
+        schemaVersion: CAIO_INFERENCE_READINESS_CHALLENGE_SCHEMA,
+        challengeId: "a".repeat(64),
+        issuedAt: new Date(now.getTime() - 1_000).toISOString(),
+        expiresAt: new Date(now.getTime() + 5 * 60_000).toISOString(),
+        candidate: {
+          runtimeDeploymentId: `anson-src-${"b".repeat(64)}`,
+          buildRef: "c".repeat(40),
+          gatewayEntrypointSha256: `sha256:${"d".repeat(64)}`,
+          runtimeEnvSha256: `sha256:${"e".repeat(64)}`,
+        },
+      }), { mode: 0o600 });
+      const modelProbe = vi.fn().mockResolvedValue({ ready: true });
+      const stdout = vi.fn();
+
+      await expect(runCaioInferenceWorkerRuntime([
+        "readiness-attest", "--challenge-file", challengePath, "--output", outputPath,
+      ], {
+        configPath: paths.config,
+        modelFactory: vi.fn(() => ({ probe: modelProbe, complete: vi.fn() })),
+        gatewayReadinessProbe: vi.fn().mockResolvedValue({
+          livezStatus: 200,
+          readyzStatus: 200,
+          workBuddyStatus: 404,
+          privateExecutionStatus: 404,
+          missingClientCertificateRejected: true,
+          serverCertificateFingerprint: `sha256:${"f".repeat(64)}`,
+        }),
+        now: () => now,
+        stdout,
+      })).resolves.toBe(0);
+
+      expect(modelProbe).toHaveBeenCalledTimes(1);
+      const receipt = JSON.parse(readFileSync(outputPath, "utf8")) as Record<string, unknown>;
+      expect(receipt.schemaVersion).toBe(CAIO_INFERENCE_TRANSPORT_READINESS_SCHEMA);
+      expect(statSync(outputPath).mode & 0o777).toBe(0o600);
+      const emitted = stdout.mock.calls.flat().join("\n");
+      expect(emitted).toMatch(/"ok":true/u);
+      expect(emitted).not.toContain(RAW_TOKEN);
+      expect(emitted).not.toContain(MODEL_ACCESS);
+      expect(emitted).not.toContain("PRIVATE KEY");
+    } finally {
+      removeCaioWorkerPkiFixture(pki);
+    }
   });
 
   it("rejects inline credentials, database fields, remote models and unknown keys", async () => {

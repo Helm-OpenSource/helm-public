@@ -1,4 +1,5 @@
 import { Agent, request as httpsRequest } from "node:https";
+import type { TLSSocket } from "node:tls";
 
 import type { CaioInferenceInput } from "@/lib/caio-inference/contracts";
 
@@ -43,22 +44,75 @@ export type CaioWorkerGatewayClientConfig = Readonly<{
   requestTimeoutMs?: number;
 }>;
 
+export type CaioWorkerGatewayReadinessObservation = Readonly<{
+  livezStatus: number;
+  readyzStatus: number;
+  workBuddyStatus: number;
+  privateExecutionStatus: number;
+  missingClientCertificateRejected: boolean;
+  serverCertificateFingerprint: `sha256:${string}`;
+}>;
+
+/**
+ * Exercise the deployed inference surface without claiming work.
+ *
+ * The four requests use exactly the same mTLS material and endpoint as the
+ * claim/submit client.  Response bodies are deliberately discarded: a
+ * readiness receipt needs status and peer identity, never application data.
+ */
+export async function probeCaioWorkerGatewayReadiness(
+  config: CaioWorkerGatewayClientConfig,
+): Promise<CaioWorkerGatewayReadinessObservation> {
+  assertConfig(config);
+  const timeoutMs = config.requestTimeoutMs ?? 20_000;
+  const authenticatedAgent = createAgent(config);
+  let observations: readonly ReadinessResponse[];
+  try {
+    observations = [
+      await readinessRequest(config, authenticatedAgent, timeoutMs, "GET", "/livez"),
+      await readinessRequest(config, authenticatedAgent, timeoutMs, "GET", "/readyz"),
+      await readinessRequest(config, authenticatedAgent, timeoutMs, "POST", "/mcp/workbuddy"),
+      await readinessRequest(config, authenticatedAgent, timeoutMs, "POST", "/v1/execution-results"),
+    ];
+  } finally {
+    authenticatedAgent.destroy();
+  }
+  const fingerprints = new Set(observations.map(({ fingerprint }) => fingerprint));
+  if (fingerprints.size !== 1) {
+    throw new Error("caio_worker_gateway_peer_identity_changed");
+  }
+  const unauthenticatedAgent = new Agent({
+    keepAlive: false,
+    maxSockets: 1,
+    ca: config.serverCa,
+    rejectUnauthorized: true,
+    minVersion: "TLSv1.3",
+  });
+  let missingClientCertificateRejected = false;
+  try {
+    await readinessRequest(config, unauthenticatedAgent, timeoutMs, "GET", "/livez", false);
+  } catch {
+    missingClientCertificateRejected = true;
+  } finally {
+    unauthenticatedAgent.destroy();
+  }
+  return Object.freeze({
+    livezStatus: observations[0]!.status,
+    readyzStatus: observations[1]!.status,
+    workBuddyStatus: observations[2]!.status,
+    privateExecutionStatus: observations[3]!.status,
+    missingClientCertificateRejected,
+    serverCertificateFingerprint: observations[0]!.fingerprint,
+  });
+}
+
 export function createCaioWorkerGatewayClient(
   config: CaioWorkerGatewayClientConfig,
 ): CaioWorkerGatewayPort {
   assertConfig(config);
   const timeoutMs = config.requestTimeoutMs ?? 20_000;
   // 一个 agent 复用连接：每次认领都重做 TLS 握手会让轮询的成本远高于它取到的东西。
-  const agent = new Agent({
-    keepAlive: true,
-    maxSockets: 1,
-    cert: config.clientCertificate,
-    key: config.clientPrivateKey,
-    ca: config.serverCa,
-    // 不放宽校验：服务端证书必须由我们给的 CA 签发。
-    rejectUnauthorized: true,
-    minVersion: "TLSv1.3",
-  });
+  const agent = createAgent(config);
 
   const call = async (
     path: string,
@@ -138,6 +192,81 @@ export function createCaioWorkerGatewayClient(
       }
       return parseSubmitOutcome(body);
     },
+  });
+}
+
+type ReadinessResponse = Readonly<{
+  status: number;
+  fingerprint: `sha256:${string}`;
+}>;
+
+function createAgent(config: CaioWorkerGatewayClientConfig): Agent {
+  return new Agent({
+    keepAlive: true,
+    maxSockets: 1,
+    cert: config.clientCertificate,
+    key: config.clientPrivateKey,
+    ca: config.serverCa,
+    rejectUnauthorized: true,
+    minVersion: "TLSv1.3",
+  });
+}
+
+async function readinessRequest(
+  config: CaioWorkerGatewayClientConfig,
+  agent: Agent,
+  timeoutMs: number,
+  method: "GET" | "POST",
+  path: string,
+  includeAuthorization = true,
+): Promise<ReadinessResponse> {
+  const body = method === "POST" ? Buffer.from("{}", "utf8") : null;
+  return await new Promise((resolve, reject) => {
+    const req = httpsRequest(
+      {
+        host: config.host,
+        port: config.port,
+        path,
+        method,
+        agent,
+        headers: {
+          ...(includeAuthorization ? { authorization: `Bearer ${config.accessToken}` } : {}),
+          ...(body
+            ? {
+                "content-type": "application/json; charset=utf-8",
+                "content-length": String(body.byteLength),
+              }
+            : {}),
+        },
+        timeout: timeoutMs,
+      },
+      (res) => {
+        const socket = res.socket as TLSSocket;
+        const peer = socket.getPeerCertificate();
+        const fingerprint = peer.fingerprint256?.replaceAll(":", "").toLowerCase();
+        if (!fingerprint || !/^[a-f0-9]{64}$/u.test(fingerprint)) {
+          req.destroy(new Error("caio_worker_gateway_peer_certificate_missing"));
+          return;
+        }
+        let received = 0;
+        res.on("data", (chunk: Buffer) => {
+          received += chunk.byteLength;
+          if (received > MAX_RESPONSE_BYTES) {
+            req.destroy(new Error("caio_worker_gateway_response_too_large"));
+          }
+        });
+        res.on("end", () => {
+          resolve({
+            status: res.statusCode ?? 0,
+            fingerprint: `sha256:${fingerprint}`,
+          });
+        });
+        res.on("error", reject);
+      },
+    );
+    req.on("timeout", () => req.destroy(new Error("caio_worker_gateway_timeout")));
+    req.on("error", reject);
+    req.end(body ?? undefined);
   });
 }
 
