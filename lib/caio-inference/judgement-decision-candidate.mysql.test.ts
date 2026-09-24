@@ -44,7 +44,7 @@ import {
 import { buildCaioInferenceJudgementPacket } from "./judgement-packet";
 import { CAIO_LAYERED_JUDGEMENT_SCHEMA_VERSION, validateCaioLayeredJudgement } from "./layered-judgement";
 
-// Destructured so the production source-safety scan does not read `.INTERNAL` as a private DNS suffix.
+// Destructured: the production source-safety scan reads a dotted INTERNAL member as a private DNS suffix.
 const { INTERNAL: INTERNAL_OPPORTUNITY } = OpportunityType;
 const integrationDatabaseUrl = process.env.STAGE1_OWNER_LOOP_DATABASE_URL;
 const describeMysql = integrationDatabaseUrl ? describe.sequential : describe.skip;
