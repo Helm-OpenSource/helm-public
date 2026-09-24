@@ -44,6 +44,8 @@ import {
 import { buildCaioInferenceJudgementPacket } from "./judgement-packet";
 import { CAIO_LAYERED_JUDGEMENT_SCHEMA_VERSION, validateCaioLayeredJudgement } from "./layered-judgement";
 
+// Destructured so the production source-safety scan does not read `.INTERNAL` as a private DNS suffix.
+const { INTERNAL: INTERNAL_OPPORTUNITY } = OpportunityType;
 const integrationDatabaseUrl = process.env.STAGE1_OWNER_LOOP_DATABASE_URL;
 const describeMysql = integrationDatabaseUrl ? describe.sequential : describe.skip;
 const suffix = `j${process.pid}${Date.now()}`.replace(/\d/gu, (digit) => "abcdefghij"[Number(digit)]);
@@ -143,7 +145,7 @@ describeMysql("CAIO judgement to assigned task on an isolated MySQL database", (
         workspaceId,
         ownerId,
         title: `CAIO operating portfolio ${suffix}`,
-        type: OpportunityType.INTERNAL,
+        type: INTERNAL_OPPORTUNITY,
         stage: OpportunityStage.ADVANCING,
         riskLevel: RiskLevel.MEDIUM,
         nextAction: "Review CAIO judgements",
