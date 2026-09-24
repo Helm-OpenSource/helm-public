@@ -18,6 +18,7 @@ const OUTPUT_CONTRACT = [
 
 const RULES = [
   "Every evidenceRefs entry must be copied verbatim from the evidence list below; never invent one.",
+  "Every fact, inference, risk and suggestion must cite at least one evidence ref; if none applies, leave that entry out.",
   "A layer with nothing to say is an empty array. Do not pad it.",
   "State a confidence score only if you can justify it; otherwise leave score null.",
   "A suggestion may only be a rule draft or a dry-run request. Never propose an action, a message or a dispatch.",

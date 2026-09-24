@@ -50,6 +50,7 @@ function dispatchPort(overrides: Partial<CaioInferenceDispatchPort> = {}): CaioI
     })),
     complete: vi.fn(async () => ({ status: "success" as const })),
     expire: vi.fn(async () => ({ status: "failure" as const })),
+    fail: vi.fn(async () => ({ status: "failure" as const })),
     ...overrides,
   };
 }
@@ -186,7 +187,10 @@ describeMysql("CAIO inference job queue with an isolated MySQL database", () => 
     expect(port.complete).toHaveBeenCalledTimes(1);
   });
 
-  it("rejects a submission with a closed code and never calls the dispatch", async () => {
+  // A rejected submission must still END its governed dispatch (terminal failure via expire). Leaving the
+  // claim open kept the route's concurrency slot forever: the egress gate counts claimed dispatches without
+  // a terminal receipt, so one malformed model output blocked every later claim on that route.
+  it("rejects a submission with a closed code, closes the dispatch with a terminal failure and never completes it as success", async () => {
     const port = dispatchPort();
     await newWorkspace();
     const cases = [
@@ -209,7 +213,10 @@ describeMysql("CAIO inference job queue with an isolated MySQL database", () => 
       expect(rejected).toEqual({ status: "rejected", code: testCase.code });
       const row = await db.caioInferenceJob.findUniqueOrThrow({ where: { id: claimed.jobId } });
       expect(row).toMatchObject({ status: "rejected", rejectionCode: testCase.code });
+      expect(port.fail).toHaveBeenLastCalledWith(expect.objectContaining({ workspaceId, errorCode: testCase.code }));
     }
+    expect(port.fail).toHaveBeenCalledTimes(cases.length);
+    expect(port.expire).not.toHaveBeenCalled();
     expect(port.complete).not.toHaveBeenCalled();
   });
 
