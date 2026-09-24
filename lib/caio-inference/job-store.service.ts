@@ -254,6 +254,7 @@ export async function submitCaioInferenceJudgement(input: {
   if (!frozenInput) return { status: "rejected", code: "malformed_output" };
   const validation = validateCaioLayeredJudgement(input.output, new Set(frozenInput.evidenceRefs));
   if (!validation.ok) {
+    await closeDispatchAsFailure(input.dispatch, job, now);
     await rejectJob({ jobId: job.id, code: validation.code, now });
     return { status: "rejected", code: validation.code };
   }
@@ -265,6 +266,7 @@ export async function submitCaioInferenceJudgement(input: {
     now,
   });
   if (!packet.ok) {
+    await closeDispatchAsFailure(input.dispatch, job, now);
     await rejectJob({ jobId: job.id, code: packet.code, now });
     return { status: "rejected", code: packet.code };
   }
@@ -375,6 +377,25 @@ export async function reclaimCaioInferenceJobs(input: {
     outcome.expired += expired.count;
   }
   return outcome;
+}
+
+/**
+ * A claimed dispatch must always reach a terminal receipt. Rejecting the judgement without closing the dispatch
+ * left it counted as active by the egress gate, which holds the route's concurrency slot forever.
+ */
+async function closeDispatchAsFailure(
+  dispatch: CaioInferenceDispatchPort,
+  job: { workspaceId: string; decisionRef: string | null; gatewayRef: string | null; dispatchClaimHash: string | null },
+  now: Date,
+): Promise<void> {
+  if (!job.decisionRef || !job.gatewayRef || !job.dispatchClaimHash) return;
+  await dispatch.expire({
+    workspaceId: job.workspaceId,
+    decisionRef: job.decisionRef,
+    gatewayRef: job.gatewayRef,
+    claimHash: job.dispatchClaimHash,
+    now,
+  });
 }
 
 async function rejectJob(input: { jobId: string; code: CaioInferenceRejectionCode; now: Date }): Promise<void> {
