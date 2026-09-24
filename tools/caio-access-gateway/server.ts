@@ -531,6 +531,13 @@ export type CaioAccessGatewayMountInput = Readonly<{
   ports: CaioAccessGatewayServerPorts;
   maxBodyBytes?: number;
   rateLimitPerMinute?: number;
+  /**
+   * Whether this surface owns `/v1/execution-results` (private execution result ingress).
+   * Defaults to true. A deployment that only serves inference jobs sets it to false, so the
+   * route is unmounted and answered 404 before authentication — which is what the inference
+   * worker's readiness attestation requires (`privateExecutionStatus === 404`).
+   */
+  servesPrivateExecutionResults?: boolean;
 }>;
 
 const JSON_CONTENT_TYPE = "application/json; charset=utf-8";
@@ -702,6 +709,7 @@ export function createCaioAccessGatewayMount(
     "/mcp": servesMcp,
     "/v1/inference-jobs/claim": servesInferenceJobs,
     "/v1/inference-jobs/submit": servesInferenceJobs,
+    "/v1/execution-results": input.servesPrivateExecutionResults !== false,
     [CAIO_OPERATING_QUESTION_GENERATION_PATH]:
       servesOperatingQuestionGeneration,
     "/v1/responses": servesModelDispatch,

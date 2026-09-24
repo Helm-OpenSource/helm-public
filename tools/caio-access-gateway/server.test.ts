@@ -435,6 +435,31 @@ describe("route table: which surfaces this listener owns", () => {
     expect(unowned.body).toEqual({ error: "caio_not_found" });
   });
 
+  it("unmounts /v1/execution-results when the deployment opts out, answering 404 before auth", async () => {
+    const spy = createPorts();
+    const optedOut = createCaioAccessGatewayMount({
+      config: CONFIG,
+      posture: "self_service",
+      ports: spy.ports,
+      servesPrivateExecutionResults: false,
+    });
+    expect(optedOut.apiPaths).not.toContain("/v1/execution-results");
+    const response = await optedOut.handle(
+      incoming({
+        method: "POST",
+        url: "/v1/execution-results",
+        headers: { authorization: "Bearer hcaio_inf_test" },
+        body: "{}",
+      }),
+    );
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ error: "caio_not_found" });
+    expect(spy.calls).toEqual([]);
+
+    // Default is unchanged: the route stays owned by the API surface.
+    expect(createServer().apiPaths).toContain("/v1/execution-results");
+  });
+
   it("ignores a query string when deciding the owner", async () => {
     const spy = createPorts();
     const server = createServer({ ports: spy.ports });
