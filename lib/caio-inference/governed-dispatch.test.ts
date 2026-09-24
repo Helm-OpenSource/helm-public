@@ -181,9 +181,9 @@ describe("CAIO inference governed dispatch", () => {
     expect(test.deferred.expire).not.toHaveBeenCalled();
     const call = vi.mocked(test.deferred.complete).mock.calls[0]![0];
     expect(call).toMatchObject({ decisionRef: "decision-1", claimHash: `sha256:${"c".repeat(64)}` });
+    expect(Object.hasOwn(call.result, "output")).toBe(false);
     expect(call.result).toMatchObject({
       outcome: "failure",
-      output: null,
       requestDisposition: "accepted",
       errorCode: "malformed_output",
       actualCostUsdMicros: 0,

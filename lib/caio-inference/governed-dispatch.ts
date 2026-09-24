@@ -288,9 +288,9 @@ export function createCaioInferenceGovernedDispatch(input: {
         decisionRef,
         gatewayRef,
         claimHash,
+        // No `output` property at all: the gateway's explicit-failure contract rejects even `output: null`.
         result: {
           outcome: "failure",
-          output: null,
           requestDisposition: "accepted",
           providerRequestRef: sha256(`${decisionRef}:${errorCode}`),
           promptTokens: null,
