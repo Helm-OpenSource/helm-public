@@ -6,13 +6,16 @@ import type {
   GovernedModelAdapterResult,
 } from "@/lib/llm/governed-model-adapter-registry.service";
 import type { ModelRouteTaskClass } from "@/lib/llm/model-route-contracts";
-import type {
-  GovernedProjectionEngine,
-  GovernedProjectionEngineRegistration,
-} from "@/lib/llm/governed-model-projection.service";
+import type { GovernedProjectionEngine } from "@/lib/llm/governed-model-projection.service";
+import {
+  computeGovernedProjectionRegistrationHash,
+  type GovernedProjectionEngineRegistration,
+} from "@/lib/llm/model-route-contracts";
 
 import {
+  CAIO_INFERENCE_INPUT_SCHEMA_VERSION,
   CAIO_INFERENCE_ROUTE_TASK_CLASS,
+  CAIO_INFERENCE_TASK_CLASSES,
   type CaioInferenceInput,
 } from "./contracts";
 import type { CaioInferenceDispatchPort } from "./job-store.service";
@@ -36,18 +39,96 @@ export type CaioInferenceProjectionRegistration = Omit<
   "engineKey" | "executionBoundary"
 >;
 
+function engineRegistration(
+  registration: CaioInferenceProjectionRegistration,
+): GovernedProjectionEngineRegistration {
+  return {
+    ...registration,
+    engineKey: CAIO_INFERENCE_PROJECTION_ENGINE_KEY,
+    // The projection runs in the tenant's own runtime; nothing about it is delegated to a provider.
+    executionBoundary: "local_only",
+  };
+}
+
+/**
+ * The projector/scanner identity a route must pin to accept this engine's receipts. Route builders use this
+ * rather than the raw implementation hashes: the receipt carries registration-envelope hashes.
+ */
+export function caioInferenceProjectionRouteIdentity(registration: CaioInferenceProjectionRegistration) {
+  const full = engineRegistration(registration);
+  return Object.freeze({
+    projectorRegistrationRef: full.projectorRegistrationRef,
+    projectorRegistrationHash: computeGovernedProjectionRegistrationHash(full, "projector"),
+    projectorVersion: full.projectorVersion,
+    scannerRegistrationRef: full.scannerRegistrationRef,
+    scannerRegistrationHash: computeGovernedProjectionRegistrationHash(full, "scanner"),
+    scannerVersion: full.scannerVersion,
+  });
+}
+
+// Closed-schema scan of the projected payload. The payload may only be the frozen inference input: known
+// keys, identifiers/refs/hashes/timestamps matching strict patterns, and numeric (or null) aggregate counts.
+// Anything that could carry free text fails the scan, and the egress gate then refuses the dispatch.
+const REF_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,190}$/u;
+const KEY_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/u;
+const HASH_RE = /^sha256:[a-f0-9]{64}$/u;
+const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u;
+const MAX_ITEMS = 2_000;
+
+function hasExactKeys(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const actual = Object.keys(value);
+  return actual.length === keys.length && actual.every((key) => keys.includes(key));
+}
+
+export function scanCaioInferenceProjectedPayload(payload: unknown): "passed" | "failed" {
+  if (
+    !hasExactKeys(payload, [
+      "schemaVersion", "workspaceId", "taskClass", "windowStart", "windowEnd", "snapshotRefs", "evidenceRefs", "supplements",
+    ]) ||
+    payload.schemaVersion !== CAIO_INFERENCE_INPUT_SCHEMA_VERSION ||
+    typeof payload.workspaceId !== "string" || !REF_RE.test(payload.workspaceId) ||
+    !(CAIO_INFERENCE_TASK_CLASSES as readonly unknown[]).includes(payload.taskClass) ||
+    typeof payload.windowStart !== "string" || !ISO_RE.test(payload.windowStart) ||
+    typeof payload.windowEnd !== "string" || !ISO_RE.test(payload.windowEnd) ||
+    !Array.isArray(payload.snapshotRefs) || payload.snapshotRefs.length > MAX_ITEMS ||
+    !Array.isArray(payload.evidenceRefs) || payload.evidenceRefs.length > MAX_ITEMS ||
+    !Array.isArray(payload.supplements) || payload.supplements.length > MAX_ITEMS
+  ) {
+    return "failed";
+  }
+  for (const snapshot of payload.snapshotRefs) {
+    if (
+      !hasExactKeys(snapshot, ["snapshotId", "snapshotHash"]) ||
+      typeof snapshot.snapshotId !== "string" || !REF_RE.test(snapshot.snapshotId) ||
+      typeof snapshot.snapshotHash !== "string" || !HASH_RE.test(snapshot.snapshotHash)
+    ) return "failed";
+  }
+  for (const ref of payload.evidenceRefs) {
+    if (typeof ref !== "string" || !REF_RE.test(ref)) return "failed";
+  }
+  for (const supplement of payload.supplements) {
+    if (
+      !hasExactKeys(supplement, ["key", "counts"]) ||
+      typeof supplement.key !== "string" || !KEY_RE.test(supplement.key) ||
+      !supplement.counts || typeof supplement.counts !== "object" || Array.isArray(supplement.counts)
+    ) return "failed";
+    for (const [key, count] of Object.entries(supplement.counts)) {
+      if (!KEY_RE.test(key) || !(count === null || (typeof count === "number" && Number.isFinite(count)))) {
+        return "failed";
+      }
+    }
+  }
+  return "passed";
+}
+
 export function createCaioInferenceProjectionEngine(input: {
   registration: CaioInferenceProjectionRegistration;
   maxInputTokens: number;
   maxOutputTokens: number;
 }): GovernedProjectionEngine<CaioInferenceInput, CaioInferenceInput> {
   return {
-    registration: {
-      ...input.registration,
-      engineKey: CAIO_INFERENCE_PROJECTION_ENGINE_KEY,
-      // The projection runs in the tenant's own runtime; nothing about it is delegated to a provider.
-      executionBoundary: "local_only",
-    },
+    registration: engineRegistration(input.registration),
     project: async ({ localContext }) => ({
       projectedPayload: localContext,
       candidateEvidenceRefs: localContext.evidenceRefs,
@@ -56,9 +137,10 @@ export function createCaioInferenceProjectionEngine(input: {
       maxInputTokens: input.maxInputTokens,
       maxOutputTokens: input.maxOutputTokens,
       remoteSafe: true,
-      // Aggregates and refs only: there is no record-level text to redact, and no free text to scan.
+      // Aggregates and refs only: nothing to redact. The scan is real: the payload must be the closed
+      // aggregate schema (no field that can carry free text) or it fails and egress refuses the dispatch.
       redactionStatus: "alias_only",
-      promptInjectionScanStatus: "not_run",
+      promptInjectionScanStatus: scanCaioInferenceProjectedPayload(localContext),
     }),
   };
 }
@@ -197,5 +279,28 @@ export function createCaioInferenceGovernedDispatch(input: {
 
     expire: async ({ workspaceId, decisionRef, gatewayRef, claimHash }) =>
       input.deferred.expire({ workspaceId, decisionRef, gatewayRef, claimHash }),
+
+    // The worker answered but the judgement was refused: a terminal failure receipt with the closed rejection
+    // code, so the route's concurrency slot is released. Nothing about the refused body is recorded.
+    fail: async ({ workspaceId, decisionRef, gatewayRef, claimHash, errorCode }) =>
+      input.deferred.complete({
+        workspaceId,
+        decisionRef,
+        gatewayRef,
+        claimHash,
+        // No `output` property at all: the gateway's explicit-failure contract rejects even `output: null`.
+        result: {
+          outcome: "failure",
+          requestDisposition: "accepted",
+          providerRequestRef: sha256(`${decisionRef}:${errorCode}`),
+          promptTokens: null,
+          completionTokens: null,
+          actualCostUsdMicros: 0,
+          costCurrency: "USD",
+          pricingVersion: input.pricingVersion,
+          costBand: "zero",
+          errorCode,
+        },
+      }),
   };
 }

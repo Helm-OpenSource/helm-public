@@ -73,6 +73,7 @@
     "test": "vitest run --config vitest.public.config.ts",
     "test:caio-stage1:mysql": "vitest run lib/stage1-owner-loop/stage1-owner-loop.mysql.test.ts lib/stage1-owner-loop/caio-initialization-gate-store.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
     "test:caio-pro-v1:mysql": "vitest run lib/stage1-owner-loop/caio-pro-v1-synthetic-loop.mysql.test.ts lib/stage1-owner-loop/caio-pro-completion-store.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
+    "test:caio-inference:mysql": "vitest run lib/caio-inference/job-store.service.mysql.test.ts lib/caio-inference/review-loop.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
     "test:caio-access-gateway:mysql": "vitest run lib/caio-access-gateway/token-store.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
     "test:auth-verification-code:mysql": "vitest run features/auth/auth-verification-code-cas.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
     "test:caio-context-memory:mysql": "vitest run lib/caio-context-broker/context-broker.mysql.test.ts lib/caio-enterprise-memory/enterprise-memory.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",

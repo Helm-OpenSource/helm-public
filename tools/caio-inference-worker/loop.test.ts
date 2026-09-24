@@ -137,5 +137,8 @@ describe("pull inference worker prompt", () => {
 
   it("states the unknown-versus-zero rule so a null count is not read as zero", () => {
     expect(buildCaioWorkerPrompt(INPUT)).toContain("a null count means the reading is unknown, not zero");
+    // The judgement contract requires at least one cited ref per fact/inference/risk/suggestion; a model left
+    // to guess emitted empty evidenceRefs arrays and every judgement was refused as malformed_output.
+    expect(buildCaioWorkerPrompt(INPUT)).toContain("must cite at least one evidence ref");
   });
 });
