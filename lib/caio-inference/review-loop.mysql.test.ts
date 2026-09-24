@@ -35,6 +35,7 @@ function dispatchPort(): CaioInferenceDispatchPort {
     })),
     complete: vi.fn(async () => ({ status: "success" as const })),
     expire: vi.fn(async () => ({ status: "failure" as const })),
+    fail: vi.fn(async () => ({ status: "failure" as const })),
   };
 }
 

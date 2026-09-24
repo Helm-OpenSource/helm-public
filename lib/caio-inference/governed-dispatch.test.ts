@@ -168,6 +168,29 @@ describe("CAIO inference governed dispatch", () => {
     expect(JSON.stringify(result)).not.toContain("statement");
   });
 
+  it("closes a refused judgement with a terminal zero-cost failure carrying only the rejection code", async () => {
+    const test = harness();
+    await test.port.fail({
+      workspaceId: "workspace-1",
+      decisionRef: "decision-1",
+      gatewayRef: "gateway:caio-inference",
+      claimHash: `sha256:${"c".repeat(64)}`,
+      errorCode: "malformed_output",
+      now: new Date("2026-09-16T10:05:00.000Z"),
+    });
+    expect(test.deferred.expire).not.toHaveBeenCalled();
+    const call = vi.mocked(test.deferred.complete).mock.calls[0]![0];
+    expect(call).toMatchObject({ decisionRef: "decision-1", claimHash: `sha256:${"c".repeat(64)}` });
+    expect(call.result).toMatchObject({
+      outcome: "failure",
+      output: null,
+      requestDisposition: "accepted",
+      errorCode: "malformed_output",
+      actualCostUsdMicros: 0,
+      costBand: "zero",
+    });
+  });
+
   it("forwards lease expiry to the governed reconciliation unchanged", async () => {
     const test = harness();
     await test.port.expire({

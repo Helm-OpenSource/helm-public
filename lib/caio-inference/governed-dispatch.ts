@@ -279,5 +279,28 @@ export function createCaioInferenceGovernedDispatch(input: {
 
     expire: async ({ workspaceId, decisionRef, gatewayRef, claimHash }) =>
       input.deferred.expire({ workspaceId, decisionRef, gatewayRef, claimHash }),
+
+    // The worker answered but the judgement was refused: a terminal failure receipt with the closed rejection
+    // code, so the route's concurrency slot is released. Nothing about the refused body is recorded.
+    fail: async ({ workspaceId, decisionRef, gatewayRef, claimHash, errorCode }) =>
+      input.deferred.complete({
+        workspaceId,
+        decisionRef,
+        gatewayRef,
+        claimHash,
+        result: {
+          outcome: "failure",
+          output: null,
+          requestDisposition: "accepted",
+          providerRequestRef: sha256(`${decisionRef}:${errorCode}`),
+          promptTokens: null,
+          completionTokens: null,
+          actualCostUsdMicros: 0,
+          costCurrency: "USD",
+          pricingVersion: input.pricingVersion,
+          costBand: "zero",
+          errorCode,
+        },
+      }),
   };
 }

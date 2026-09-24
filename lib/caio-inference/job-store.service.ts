@@ -62,6 +62,18 @@ export type CaioInferenceDispatchPort = {
     claimHash: string;
     now: Date;
   }) => Promise<{ status: string }>;
+  /**
+   * Terminal FAILURE for a dispatch whose lease is still active: the worker answered, the judgement was
+   * refused. `expire` only reconciles a lease that has already run out, so it cannot close this case.
+   */
+  fail: (input: {
+    workspaceId: string;
+    decisionRef: string;
+    gatewayRef: string;
+    claimHash: string;
+    errorCode: CaioInferenceRejectionCode;
+    now: Date;
+  }) => Promise<{ status: string }>;
 };
 
 const TRANSACTION_OPTIONS = {
@@ -254,7 +266,7 @@ export async function submitCaioInferenceJudgement(input: {
   if (!frozenInput) return { status: "rejected", code: "malformed_output" };
   const validation = validateCaioLayeredJudgement(input.output, new Set(frozenInput.evidenceRefs));
   if (!validation.ok) {
-    await closeDispatchAsFailure(input.dispatch, job, now);
+    await closeDispatchAsFailure(input.dispatch, job, validation.code, now);
     await rejectJob({ jobId: job.id, code: validation.code, now });
     return { status: "rejected", code: validation.code };
   }
@@ -266,7 +278,7 @@ export async function submitCaioInferenceJudgement(input: {
     now,
   });
   if (!packet.ok) {
-    await closeDispatchAsFailure(input.dispatch, job, now);
+    await closeDispatchAsFailure(input.dispatch, job, packet.code, now);
     await rejectJob({ jobId: job.id, code: packet.code, now });
     return { status: "rejected", code: packet.code };
   }
@@ -386,14 +398,16 @@ export async function reclaimCaioInferenceJobs(input: {
 async function closeDispatchAsFailure(
   dispatch: CaioInferenceDispatchPort,
   job: { workspaceId: string; decisionRef: string | null; gatewayRef: string | null; dispatchClaimHash: string | null },
+  errorCode: CaioInferenceRejectionCode,
   now: Date,
 ): Promise<void> {
   if (!job.decisionRef || !job.gatewayRef || !job.dispatchClaimHash) return;
-  await dispatch.expire({
+  await dispatch.fail({
     workspaceId: job.workspaceId,
     decisionRef: job.decisionRef,
     gatewayRef: job.gatewayRef,
     claimHash: job.dispatchClaimHash,
+    errorCode,
     now,
   });
 }
