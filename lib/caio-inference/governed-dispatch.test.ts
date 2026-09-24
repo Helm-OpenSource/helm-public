@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { sha256 } from "@/lib/expert-capability/hashing";
 
-import { computeGovernedProjectionRegistrationHash } from "@/lib/llm/governed-projection-registration";
+import { computeGovernedProjectionRegistrationHash } from "@/lib/llm/model-route-contracts";
 
 import { CAIO_INFERENCE_INPUT_SCHEMA_VERSION, type CaioInferenceInput } from "./contracts";
 import {

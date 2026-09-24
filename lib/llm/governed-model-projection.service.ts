@@ -3,7 +3,7 @@ import "server-only";
 import {
   computeGovernedProjectionRegistrationHash,
   type GovernedProjectionEngineRegistration,
-} from "@/lib/llm/governed-projection-registration";
+} from "@/lib/llm/model-route-contracts";
 
 import {
   canonicalJson,

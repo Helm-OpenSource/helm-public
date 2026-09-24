@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   computeGovernedProjectionRegistrationHash,
   type GovernedProjectionEngineRegistration,
-} from "./governed-projection-registration";
+} from "./model-route-contracts";
 
 const REGISTRATION: GovernedProjectionEngineRegistration = {
   engineKey: "engine-a",

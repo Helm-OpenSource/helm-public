@@ -10,7 +10,7 @@ import type { GovernedProjectionEngine } from "@/lib/llm/governed-model-projecti
 import {
   computeGovernedProjectionRegistrationHash,
   type GovernedProjectionEngineRegistration,
-} from "@/lib/llm/governed-projection-registration";
+} from "@/lib/llm/model-route-contracts";
 
 import {
   CAIO_INFERENCE_INPUT_SCHEMA_VERSION,
