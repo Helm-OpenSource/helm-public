@@ -1,6 +1,6 @@
 import "server-only";
 
-import { ActionType, ActorType, SourceType } from "@prisma/client";
+import { ActionType, ActorType, MembershipStatus, SourceType, WorkspaceRole } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import {
@@ -389,6 +389,35 @@ export async function createStage1DecisionRecord(
   }
 }
 
+/**
+ * A decision candidate projected from a CAIO inference judgement is the founder's call. Managing governed
+ * actions is shared with ADMIN and OPERATOR for every other Stage 1 decision, and stays that way; only these
+ * model-originated candidates additionally require the confirming member to be an active OWNER.
+ */
+export const CAIO_INFERENCE_DECISION_KEY_PREFIX = "caio-inference-decision:";
+
+async function assertCaioInferenceDecisionOwnerGate(input: {
+  workspaceId: string;
+  decisionRecordId: string;
+  actorUserId: string;
+}): Promise<void> {
+  const record = await db.decisionRecord.findFirst({
+    where: { id: input.decisionRecordId, workspaceId: input.workspaceId },
+    select: { decisionKey: true },
+  });
+  if (!record?.decisionKey.startsWith(CAIO_INFERENCE_DECISION_KEY_PREFIX)) return;
+  const membership = await db.membership.findFirst({
+    where: { workspaceId: input.workspaceId, userId: input.actorUserId },
+    select: { role: true, status: true },
+  });
+  if (
+    membership?.role !== WorkspaceRole.OWNER ||
+    membership.status !== MembershipStatus.ACTIVE
+  ) {
+    throw new Stage1DecisionGateError(["caio_inference_decision_owner_required"]);
+  }
+}
+
 export async function confirmStage1DecisionRecord(input: {
   workspaceId: string;
   decisionRecordId: string;
@@ -407,6 +436,7 @@ export async function confirmStage1DecisionRecord(input: {
     actorType: ActorType.USER,
     english: input.english ?? false,
   });
+  await assertCaioInferenceDecisionOwnerGate(input);
   const now = new Date();
   const outcome = await db.$transaction(async (tx) => {
     const claimed = await tx.decisionRecord.updateMany({
