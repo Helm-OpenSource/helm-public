@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  shanghaiMonthStartUtc,
   computeGovernedModelProjectionReceiptHash,
   computeModelEgressReceiptHash,
   computeModelRouteDecisionHash,
@@ -925,5 +926,18 @@ describe("model egress receipt contract", () => {
         "receipt_chain_decision_projection_mismatch",
       ]),
     );
+  });
+});
+
+describe("shanghaiMonthStartUtc", () => {
+  it("returns the UTC instant of the Asia/Shanghai month start", () => {
+    // 2026-09-27 13:00 Shanghai = 05:00Z → month starts 2026-09-01 00:00 Shanghai = 2026-08-31T16:00Z.
+    expect(shanghaiMonthStartUtc(new Date("2026-09-27T05:00:00.000Z")).toISOString()).toBe("2026-08-31T16:00:00.000Z");
+    // 2026-09-30 17:00Z is already 2026-10-01 01:00 in Shanghai → October's window.
+    expect(shanghaiMonthStartUtc(new Date("2026-09-30T17:00:00.000Z")).toISOString()).toBe("2026-09-30T16:00:00.000Z");
+    // 2026-09-30 15:59Z is still September in Shanghai.
+    expect(shanghaiMonthStartUtc(new Date("2026-09-30T15:59:00.000Z")).toISOString()).toBe("2026-08-31T16:00:00.000Z");
+    // Year boundary.
+    expect(shanghaiMonthStartUtc(new Date("2026-12-31T16:30:00.000Z")).toISOString()).toBe("2026-12-31T16:00:00.000Z");
   });
 });

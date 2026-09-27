@@ -117,6 +117,12 @@ export type TenantModelRoute = {
   maxInputTokens: number;
   maxOutputTokens: number;
   maxCostUsdMicros: number;
+  /**
+   * Optional calendar-month (Asia/Shanghai) spend ceiling in USD micros. The budget is shared by every route
+   * admitted under the same policy key, so switching models or revisions cannot multiply it. Omitted (not
+   * `undefined`-valued) routes keep their canonical form, so existing route hashes do not change.
+   */
+  maxMonthlyCostUsdMicros?: number;
   maxLatencyMs: number;
   maxConcurrency: number;
   fallbackRouteIds: readonly string[];
@@ -610,6 +616,13 @@ export function compareFallbackRouteSafety(
   if (candidate.maxCostUsdMicros > baseline.maxCostUsdMicros) {
     weakerDimensions.push("cost");
   }
+  if (
+    baseline.maxMonthlyCostUsdMicros !== undefined &&
+    (candidate.maxMonthlyCostUsdMicros === undefined ||
+      candidate.maxMonthlyCostUsdMicros > baseline.maxMonthlyCostUsdMicros)
+  ) {
+    weakerDimensions.push("monthly_cost");
+  }
   if (candidate.maxLatencyMs > baseline.maxLatencyMs) {
     weakerDimensions.push("latency");
   }
@@ -812,6 +825,13 @@ export function validateTenantModelRoute(
   }
   if (!validNonNegativeInt(route.maxCostUsdMicros)) {
     errors.push(`route:${route.routeId}:max_cost_invalid`);
+  }
+  if (
+    Object.hasOwn(route, "maxMonthlyCostUsdMicros") &&
+    (!validPositiveInt(route.maxMonthlyCostUsdMicros as number) ||
+      (route.maxMonthlyCostUsdMicros as number) < route.maxCostUsdMicros)
+  ) {
+    errors.push(`route:${route.routeId}:max_monthly_cost_invalid`);
   }
   if (!validPositiveInt(route.maxLatencyMs)) {
     errors.push(`route:${route.routeId}:max_latency_invalid`);

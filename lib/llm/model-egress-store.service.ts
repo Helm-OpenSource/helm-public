@@ -23,6 +23,7 @@ import {
   type ModelRouteDecision,
   type ModelSourceAssetBinding,
   type GovernedModelProjectionReceipt,
+  shanghaiMonthStartUtc,
 } from "@/lib/llm/model-egress-contracts";
 import {
   compareFallbackRouteSafety,
@@ -1673,6 +1674,30 @@ function buildStartedReceipt(input: {
   };
 }
 
+/**
+ * Month-to-date recorded spend for every decision under one policy key. Only terminal receipts carry a
+ * settled cost; a receipt without one (in doubt, still dispatching) contributes nothing, which is why the
+ * per-call ceiling is added to the check rather than trusted to the sum.
+ */
+async function monthToDateEgressCostUsdMicros(
+  tx: Tx,
+  input: { workspaceId: string; policyKey: string; now: Date },
+): Promise<number> {
+  const aggregate = await tx.modelEgressReceipt.aggregate({
+    _sum: { actualCostUsdMicros: true },
+    where: {
+      workspaceId: input.workspaceId,
+      phase: "TERMINAL",
+      actualCostUsdMicros: { not: null },
+      // No upper bound: a receipt stamped slightly after this check (clock skew between writers) still counts.
+      // Counting it is the conservative direction for a spend ceiling.
+      recordedAt: { gte: shanghaiMonthStartUtc(input.now) },
+      decision: { policyKey: input.policyKey },
+    },
+  });
+  return aggregate._sum.actualCostUsdMicros ?? 0;
+}
+
 export async function prepareModelRouteDecision(
   input: PrepareModelRouteDecisionInput,
 ) {
@@ -1945,6 +1970,18 @@ export async function prepareModelRouteDecision(
             reasonCodes.push(
               "requested_output_token_budget_exceeds_route",
             );
+          }
+          if (route.maxMonthlyCostUsdMicros !== undefined) {
+            const spent = await monthToDateEgressCostUsdMicros(tx, {
+              workspaceId: input.workspaceId,
+              policyKey,
+              now,
+            });
+            // Worst case for this call is the route's per-call ceiling; admitting it must not be able to
+            // carry the month past the cap.
+            if (spent + route.maxCostUsdMicros > route.maxMonthlyCostUsdMicros) {
+              reasonCodes.push("route_monthly_cost_budget_exceeded");
+            }
           }
           const readinessRow =
             await tx.providerAdapterReadinessReceipt.findFirst({

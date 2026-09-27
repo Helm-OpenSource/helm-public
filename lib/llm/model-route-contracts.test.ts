@@ -13,6 +13,7 @@ import {
   validateGovernedModelAdapterRegistration,
   validateModelRoutePolicyApprovalReceipt,
   validateProviderAdapterReadinessReceipt,
+  validateTenantModelRoute,
   validateTenantModelRoutePolicy,
   type GovernedModelAdapterRegistration,
   type ModelRoutePolicyApprovalReceipt,
@@ -675,5 +676,37 @@ describe("projected prompt binding", () => {
       userPrompt: "Summarize evidence ref e:2.",
     });
     expect(original).not.toBe(changed);
+  });
+});
+
+describe("route monthly cost ceiling (maxMonthlyCostUsdMicros)", () => {
+  it("leaves the policy hash of routes without it byte-identical (absent key, not undefined)", () => {
+    const before = computeTenantModelRoutePolicyHash(policy([route()]));
+    const withoutKey = policy([route()]);
+    expect(Object.hasOwn(withoutKey.routes[0]!, "maxMonthlyCostUsdMicros")).toBe(false);
+    expect(computeTenantModelRoutePolicyHash(withoutKey)).toBe(before);
+    const capped = policy([route({ maxCostUsdMicros: 1_000, maxMonthlyCostUsdMicros: 50_000_000 })]);
+    expect(computeTenantModelRoutePolicyHash(capped)).not.toBe(before);
+  });
+
+  it("must be a positive integer not below the per-call ceiling", () => {
+    expect(validateTenantModelRoute(route({ routeId: "primary", maxCostUsdMicros: 1_000, maxMonthlyCostUsdMicros: 50_000_000 })).errors).not.toContain(
+      "route:primary:max_monthly_cost_invalid",
+    );
+    for (const bad of [0, -1, 1.5, 999]) {
+      const result = validateTenantModelRoute(route({ routeId: "primary", maxCostUsdMicros: 1_000, maxMonthlyCostUsdMicros: bad }));
+      expect(result.errors).toContain("route:primary:max_monthly_cost_invalid");
+    }
+  });
+
+  it("counts dropping or raising the monthly ceiling as a weaker fallback", () => {
+    const primary = route({ maxCostUsdMicros: 1_000, maxMonthlyCostUsdMicros: 50_000_000 });
+    expect(compareFallbackRouteSafety(primary, route({ maxCostUsdMicros: 1_000 })).weakerDimensions).toContain("monthly_cost");
+    expect(
+      compareFallbackRouteSafety(primary, route({ maxCostUsdMicros: 1_000, maxMonthlyCostUsdMicros: 60_000_000 })).weakerDimensions,
+    ).toContain("monthly_cost");
+    expect(
+      compareFallbackRouteSafety(primary, route({ maxCostUsdMicros: 1_000, maxMonthlyCostUsdMicros: 50_000_000 })).weakerDimensions,
+    ).not.toContain("monthly_cost");
   });
 });
