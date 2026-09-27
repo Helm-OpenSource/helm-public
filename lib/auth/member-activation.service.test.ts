@@ -75,6 +75,19 @@ describe("first-password activation service", () => {
     expect(mocks.tx.memberActivationToken.create).not.toHaveBeenCalled();
     expect(mocks.tx.memberActivationToken.updateMany).not.toHaveBeenCalled();
   });
+  it.each(["", "reference with spaces", "https://example.com/credential", "x".repeat(129), null, 123])("rejects malformed issuance evidence %s before DB reads", async evidenceRef => {
+    await expect(issueMemberActivation({ issuerUserId: "admin", issuerSessionId: "s1", workspaceId: "w1", membershipId: "m1", password: "adminPassword9", evidenceRef: evidenceRef as never })).rejects.toThrow();
+    expect(mocks.db.user.findUnique).not.toHaveBeenCalled();
+    expect(mocks.db.$transaction).not.toHaveBeenCalled();
+  });
+  it("records a bounded evidence reference in the issuance transaction audit", async () => {
+    await issueMemberActivation({ issuerUserId: "admin", issuerSessionId: "s1", workspaceId: "w1", membershipId: "m1", password: "adminPassword9", evidenceRef: "review:approved-123" });
+    expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({ actionType: "MEMBER_ACTIVATION_ISSUED", payload: expect.objectContaining({ evidenceRef: "review:approved-123" }) }), { client: mocks.tx });
+  });
+  it("propagates issuance audit failure to roll back the enclosing transaction", async () => {
+    mocks.audit.mockRejectedValue(new Error("audit fault"));
+    await expect(issueMemberActivation({ issuerUserId: "admin", issuerSessionId: "s1", workspaceId: "w1", membershipId: "m1", password: "adminPassword9", evidenceRef: "review:approved-123" })).rejects.toThrow("audit fault");
+  });
   it("requires same-workspace approval in governed mode", async () => {
     vi.stubEnv("HELM_ORGANIZATION_CREATION_MODE", "governed");
     mocks.authority.mockResolvedValue({ bindingRef: "registration", bindingVersion: 2 });

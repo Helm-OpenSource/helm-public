@@ -28,8 +28,9 @@ async function target(tx: Prisma.TransactionClient, membershipId: string, worksp
   return membership;
 }
 /** Issuer inputs are derived from the authenticated server session, never from form fields. */
-export async function issueMemberActivation(input: { issuerUserId: string; issuerSessionId: string; workspaceId: string; issuerWorkspaceId?: string; expectedAuthorityBinding?: MemberActivationBinding; membershipId: string; password: string }) {
+export async function issueMemberActivation(input: { issuerUserId: string; issuerSessionId: string; workspaceId: string; issuerWorkspaceId?: string; expectedAuthorityBinding?: MemberActivationBinding; evidenceRef?: string; membershipId: string; password: string }) {
   requireMemberActivationEnabled();
+  if (input.evidenceRef !== undefined && (typeof input.evidenceRef !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(input.evidenceRef))) throw unavailable();
   if (input.password.length > 256 || input.password.length < 8) throw unavailable();
   const admin = await db.user.findUnique({ where: { id: input.issuerUserId } });
   if (!admin?.passwordHash || !verifyPassword(input.password, admin.passwordHash)) throw unavailable();
@@ -51,7 +52,7 @@ export async function issueMemberActivation(input: { issuerUserId: string; issue
     // Serializable target user/membership reads exclude competing identity changes.
     await tx.memberActivationToken.updateMany({ where: { userId: member.userId, consumedAt: null, revokedAt: null }, data: { revokedAt: now } });
     const row = await tx.memberActivationToken.create({ data: { tokenHash, userId: member.userId, membershipId: member.id, workspaceId: input.workspaceId, issuedByUserId: input.issuerUserId, issuedBySessionId: input.issuerSessionId, issuerWorkspaceId, authorityBindingRef: binding?.bindingRef ?? null, authorityBindingVersion: binding?.bindingVersion ?? null, membershipUpdatedAt: member.updatedAt, emailHash: emailDigest(member.user.email), expiresAt: new Date(now.getTime() + 30 * 60_000) } });
-    await writeAuditLog({ workspaceId: row.workspaceId, userId: input.issuerUserId, actor: "workspace administrator", actorType: "USER", actionType: "MEMBER_ACTIVATION_ISSUED", targetType: "Membership", targetId: row.membershipId, summary: "Issued a one-time first-password activation credential for controlled delivery", payload: { activationId: row.id, expiresAt: row.expiresAt.toISOString(), issuerSessionId: row.issuedBySessionId, issuerWorkspaceId, authorityBindingRef: row.authorityBindingRef, authorityBindingVersion: row.authorityBindingVersion === null ? null : Number(row.authorityBindingVersion), membershipUpdatedAt: row.membershipUpdatedAt.toISOString() } }, { client: tx });
+    await writeAuditLog({ workspaceId: row.workspaceId, userId: input.issuerUserId, actor: "workspace administrator", actorType: "USER", actionType: "MEMBER_ACTIVATION_ISSUED", targetType: "Membership", targetId: row.membershipId, summary: "Issued a one-time first-password activation credential for controlled delivery", payload: { ...(input.evidenceRef === undefined ? {} : { evidenceRef: input.evidenceRef }), activationId: row.id, expiresAt: row.expiresAt.toISOString(), issuerSessionId: row.issuedBySessionId, issuerWorkspaceId, authorityBindingRef: row.authorityBindingRef, authorityBindingVersion: row.authorityBindingVersion === null ? null : Number(row.authorityBindingVersion), membershipUpdatedAt: row.membershipUpdatedAt.toISOString() } }, { client: tx });
     return { activationId: row.id, expiresAt: row.expiresAt.toISOString() };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   return { ...receipt, token };
