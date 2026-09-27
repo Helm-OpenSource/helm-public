@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { CAIO_LAYERED_JUDGEMENT_JSON_SCHEMA } from "@/lib/caio-inference/layered-judgement";
+
 import { createCaioWorkerRemoteModelPort, isRemoteProviderBaseUrl } from "./remote-model-port";
 
 const KEY = "sk-test-0123456789abcdef";
@@ -157,6 +159,10 @@ describe("openai-chat-completions", () => {
       model: "sol6-placeholder-model-id",
       max_completion_tokens: 900,
       messages: [{ role: "user", content: "问题" }],
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "caio_layered_judgement", strict: true, schema: CAIO_LAYERED_JUDGEMENT_JSON_SCHEMA },
+      },
     });
   });
 

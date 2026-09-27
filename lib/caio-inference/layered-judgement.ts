@@ -39,6 +39,39 @@ const layeredJudgementSchema = z.object({
 
 export type CaioLayeredJudgement = z.infer<typeof layeredJudgementSchema>;
 
+/**
+ * The same closed shape as a JSON Schema for providers that constrain decoding (OpenAI strict structured
+ * outputs). It only narrows what the model can emit; validateCaioLayeredJudgement stays the authority, so
+ * limits a provider may not enforce (string length, cited-ref membership) are still checked afterwards.
+ * Strict mode requires every property to be listed in `required` and `additionalProperties: false`.
+ */
+function closedObject(properties: Record<string, unknown>): Record<string, unknown> {
+  return { type: "object", properties, required: Object.keys(properties), additionalProperties: false };
+}
+const JSON_STATEMENT = { type: "string" };
+const JSON_CITED_REFS = { type: "array", items: { type: "string" }, minItems: 1, maxItems: 20 };
+export const CAIO_LAYERED_JUDGEMENT_JSON_SCHEMA: Readonly<Record<string, unknown>> = Object.freeze(closedObject({
+  schemaVersion: { type: "string", enum: [CAIO_LAYERED_JUDGEMENT_SCHEMA_VERSION] },
+  facts: { type: "array", maxItems: 20, items: closedObject({ statement: JSON_STATEMENT, evidenceRefs: JSON_CITED_REFS }) },
+  inferences: { type: "array", maxItems: 20, items: closedObject({ statement: JSON_STATEMENT, evidenceRefs: JSON_CITED_REFS }) },
+  risks: {
+    type: "array",
+    maxItems: 20,
+    items: closedObject({ statement: JSON_STATEMENT, severity: { type: "string", enum: ["low", "medium", "high"] }, evidenceRefs: JSON_CITED_REFS }),
+  },
+  unknowns: { type: "array", maxItems: 20, items: closedObject({ statement: JSON_STATEMENT }) },
+  suggestions: {
+    type: "array",
+    maxItems: 10,
+    items: closedObject({ kind: { type: "string", enum: [...CAIO_SUGGESTION_KINDS] }, summary: JSON_STATEMENT, evidenceRefs: JSON_CITED_REFS }),
+  },
+  confidence: closedObject({
+    band: { type: "string", enum: ["high", "medium", "low", "mixed", "unknown"] },
+    score: { anyOf: [{ type: "number", minimum: 0, maximum: 1 }, { type: "null" }] },
+  }),
+}));
+
+
 export type CaioLayeredJudgementValidation =
   | { ok: true; value: CaioLayeredJudgement; contentHash: string }
   | { ok: false; code: Extract<CaioInferenceRejectionCode, "malformed_output" | "evidence_outside_input" | "suggestion_kind_not_allowed" | "action_disposition_present" | "payload_too_large"> };
