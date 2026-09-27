@@ -1290,6 +1290,26 @@ model FailedLoginAttempt {
   @@index([lockedUntil])
 }
 
+// First-password activation only. No raw token or delivery URL is persisted.
+model MemberActivationToken {
+  id                String   @id @default(cuid())
+  tokenHash         String   @unique @db.Char(64)
+  userId            String
+  membershipId      String
+  workspaceId       String
+  issuedByUserId    String
+  issuedBySessionId String
+  membershipUpdatedAt DateTime
+  emailHash         String @db.Char(64)
+  expiresAt         DateTime
+  consumedAt        DateTime?
+  revokedAt         DateTime?
+  createdAt         DateTime @default(now())
+
+  @@index([userId, consumedAt, revokedAt])
+  @@index([workspaceId, membershipId])
+}
+
 model AuthSession {
   id                    String     @id @default(cuid())
   userId                String

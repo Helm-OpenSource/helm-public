@@ -50,6 +50,8 @@ HELM_DEPLOYMENT_SELF_SERVE_SIGNUP="true"
 # Disable unverified legacy email entry and existing unverified sessions.
 # Absence preserves legacy compatibility; invalid explicit values fail closed.
 HELM_AUTH_EMAIL_ENTRY_ENABLED="false"
+# Enable only after controlled workspace approval and private delivery are ready.
+HELM_AUTH_MEMBER_ACTIVATION_ENABLED="false"
 
 # \`/api/health\` remains a reachability-only check by default. Source-built
 # deployments can opt into artifact binding; that mode fails closed with 503
