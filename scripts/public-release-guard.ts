@@ -1049,6 +1049,7 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "caio:g0-prepare",
   "caio:inference-token",
   "test:caio-inference:mysql",
+  "caio:inference-decision-candidates",
   "test:member-gateway:mysql",
   "test:public:guards",
   "quality:regression",
