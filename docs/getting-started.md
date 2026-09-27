@@ -181,6 +181,7 @@ DingTalk · WeCom · HubSpot · Salesforce · Stripe · 支付宝 · 微信支�
 | `HELM_DEPLOYMENT_ALLOWED_WORKSPACE_SLUGS` | `tenant` / `first-party` 必填的工作区白名单之一 |
 | `HELM_DEPLOYMENT_ALLOWED_WORKSPACE_SYSTEM_KEYS` | 可替代或补充 slug 的 system key 白名单 |
 | `HELM_DEPLOYMENT_SELF_SERVE_SIGNUP` | 仅 `public` / `cloud` 可开启；私有入口始终关闭 |
+| `HELM_AUTH_EMAIL_ENTRY_ENABLED` | `false` 在服务端关闭兼容邮箱登录，并拒绝已有 EMAIL_ENTRY、空或未知来源会话；未配置保留旧部署兼容。显式无效值按关闭处理。与自主注册开关独立。 |
 
 `first-party` 使用极简内部登录首页。显式填写的公司名称若包含控制字符或超过
 120 个字符，部署入口会 fail closed。该展示配置不替代下方工商登记证据与法律页面

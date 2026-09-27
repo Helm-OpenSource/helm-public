@@ -25,6 +25,7 @@ import {
   resolvePreferredMembership,
   setActiveWorkspace,
 } from "@/lib/auth/session";
+import { isEmailEntryEnabled } from "@/lib/auth/email-entry-policy";
 import { FIRST_LOGIN_IDENTITY_SETUP_COOKIE } from "@/lib/auth/session-cookies";
 import { AUTH_SESSION_PROVIDER_TYPES, type AuthSessionProviderType } from "@/lib/auth/provider-seam";
 import { createSelfServeTrialOrganization } from "@/lib/auth/trial-onboarding";
@@ -762,6 +763,9 @@ export async function loginAction(input: string | z.infer<typeof legacyEmailLogi
   const actionInput = typeof input === "string" ? { email: input } : input;
   const locale = resolveActionInputLocale(actionInput);
   const english = locale === "en-US";
+  if (!isEmailEntryEnabled()) {
+    return { ok: false, error: english ? "Use a verified sign-in method." : "请使用经过验证的登录方式。" };
+  }
   const parsed = legacyEmailLoginSchema.safeParse(actionInput);
 
   if (!parsed.success) {

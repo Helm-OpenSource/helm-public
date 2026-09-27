@@ -58,6 +58,7 @@ vi.mock("@/components/auth/login-returning-entry-card", () => ({
 vi.mock("@/features/auth/login-panel", () => ({
   LoginPanel: ({
     initialTab,
+    allowEmailEntry,
     prefillSignup,
     prefillCompatibilityEmail,
     autoContinueCompatibility,
@@ -65,6 +66,7 @@ vi.mock("@/features/auth/login-panel", () => ({
     entryIntent,
   }: {
     initialTab?: "signup" | "password" | "phone";
+    allowEmailEntry?: boolean;
     prefillSignup?: {
       name?: string;
       email?: string;
@@ -86,6 +88,7 @@ vi.mock("@/features/auth/login-panel", () => ({
       {
         "data-testid": "login-panel",
         "data-initial-tab": initialTab ?? "undefined",
+        "data-allow-email-entry": String(allowEmailEntry),
         "data-prefill-org-name": prefillSignup?.organizationName ?? "",
         "data-prefill-compatibility-email": prefillCompatibilityEmail ?? "",
         "data-entry-intent": entryIntent ?? "",
@@ -136,6 +139,15 @@ describe("login page salvage contract", () => {
     mocks.cookiesMock.mockResolvedValue(createCookieStore());
     mocks.getCurrentUserMock.mockResolvedValue(null);
     mocks.readPublicOauthSignupPrefillCookieMock.mockReturnValue(null);
+  });
+
+  it("disables compatibility UI even for a legacy auto-entry URL", async () => {
+    vi.stubEnv("HELM_AUTH_EMAIL_ENTRY_ENABLED", "false");
+    try {
+      const html = renderToStaticMarkup(await LoginPage({ searchParams: Promise.resolve({ compat_email: "invited@example.com", auto_compat: "1" }) }));
+      expect(html).toContain('data-allow-email-entry="false"');
+      expect(html).toContain('data-entry-intent="returning"');
+    } finally { vi.unstubAllEnvs(); }
   });
 
   it("routes signup and returning users into separate entry intents", async () => {

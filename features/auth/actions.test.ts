@@ -1761,3 +1761,15 @@ describe("first-login identity completion action", () => {
     expect(mocks.db.user.update).not.toHaveBeenCalled();
   });
 });
+
+describe("deployment email-entry policy", () => {
+  it("refuses compatibility email entry before account lookup when disabled", async () => {
+    vi.stubEnv("HELM_AUTH_EMAIL_ENTRY_ENABLED", "false");
+    try {
+      const result = await loginAction({ email: "invitee@example.com", locale: "en-US" });
+      expect(result.ok).toBe(false);
+      expect(mocks.db.user.findUnique).not.toHaveBeenCalled();
+      expect(mocks.session.createSession).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+});

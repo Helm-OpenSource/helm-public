@@ -1483,3 +1483,32 @@ describe("auth session substrate", () => {
     expect(writeAuditLogMock).not.toHaveBeenCalled();
   });
 });
+
+describe("deployment email-entry session policy", () => {
+  it.each([AUTH_SESSION_PROVIDER_TYPES.EMAIL_ENTRY, null, "UNKNOWN"]) ("rejects existing unverified provider %s before membership activation", async (providerType) => {
+    vi.clearAllMocks();
+    vi.stubEnv("HELM_AUTH_EMAIL_ENTRY_ENABLED", "false");
+    cookiesMock.mockResolvedValue(createCookieStore({ [SESSION_ID_COOKIE]: "existing-key" }));
+    dbMock.authSession.findUnique.mockResolvedValue(buildAuthSessionRecord({ providerType }));
+    try {
+      expect(await getCurrentUser()).toBeNull();
+      expect(dbMock.membership.updateMany).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+  it.each([AUTH_SESSION_PROVIDER_TYPES.PASSWORD, AUTH_SESSION_PROVIDER_TYPES.PHONE_CODE])("keeps verified %s sessions usable", async (providerType) => {
+    vi.clearAllMocks();
+    vi.stubEnv("HELM_AUTH_EMAIL_ENTRY_ENABLED", "false");
+    cookiesMock.mockResolvedValue(createCookieStore({ [SESSION_ID_COOKIE]: "verified-key" }));
+    dbMock.authSession.findUnique.mockResolvedValue(buildAuthSessionRecord({ providerType }));
+    try { expect(await getCurrentUser()).not.toBeNull(); }
+    finally { vi.unstubAllEnvs(); }
+  });
+  it("refuses minting an email-entry session when disabled", async () => {
+    vi.clearAllMocks();
+    vi.stubEnv("HELM_AUTH_EMAIL_ENTRY_ENABLED", "false");
+    try {
+      await expect(createSession({ userId: "user-1", email: "user@example.com", providerType: AUTH_SESSION_PROVIDER_TYPES.EMAIL_ENTRY })).rejects.toThrow("Session provider unavailable");
+      expect(dbMock.authSession.create).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+});
