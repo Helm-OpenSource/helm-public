@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   CAIO_PRICE_ANTHROPIC_OPUS_5_5,
-  CAIO_PRICE_OPENAI_SOL6_PLACEHOLDER,
   type CaioInferencePrice,
 } from "./pricing";
+
+// A zero-priced per-token entry must fail validation (a remote route can never silently cost 0).
+const ZERO_PRICE = Object.freeze({ kind: "per_token" as const, pricingVersion: "zero-price-test", inputUsdMicrosPerMillionTokens: 0, outputUsdMicrosPerMillionTokens: 0 });
 
 import { sha256 } from "@/lib/expert-capability/hashing";
 
@@ -277,7 +279,7 @@ describe("CAIO inference governed dispatch: per-token (remote) pricing", () => {
   });
 
   it("refuses construction with a placeholder price or a mismatched pricing version", () => {
-    expect(() => harness({ price: CAIO_PRICE_OPENAI_SOL6_PLACEHOLDER })).toThrow(/caio_inference_price_invalid/);
+    expect(() => harness({ price: ZERO_PRICE })).toThrow(/caio_inference_price_invalid/);
     const deferred = harness().deferred;
     expect(() =>
       createCaioInferenceGovernedDispatch({

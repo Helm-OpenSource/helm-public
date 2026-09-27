@@ -24,8 +24,8 @@ export type CaioInferencePrice =
     }>;
 
 /**
- * Claude Opus 5.5 (`claude-opus-5-5`), Anthropic first-party API: $4 / $20 per million input / output tokens.
- * OWNER MUST CONFIRM against Anthropic's published price before activating a route that uses this version.
+ * Claude Opus 5.5 (`claude-opus-5-5`), Anthropic first-party API, standard tier: $4 / $20 per million input /
+ * output tokens. Verified 2026-09-27 against https://platform.claude.com/docs/en/about-claude/pricing (owner accepted).
  */
 export const CAIO_PRICE_ANTHROPIC_OPUS_5_5: CaioInferencePrice = Object.freeze({
   kind: "per_token",
@@ -35,14 +35,15 @@ export const CAIO_PRICE_ANTHROPIC_OPUS_5_5: CaioInferencePrice = Object.freeze({
 });
 
 /**
- * OpenAI "Sol6". PLACEHOLDER: the owner-confirmed per-token prices are not known yet, so both are 0 and the
- * entry FAILS `validateCaioInferencePrice` — a route cannot be activated against it until real prices are set.
+ * OpenAI GPT-6 Sol (`gpt-6-sol`, "Sol6"), standard tier: $2 / $10 per million input / output tokens.
+ * Verified 2026-09-27 against https://developers.openai.com/api/docs/pricing (owner asked to use the public price).
+ * Long-context requests are priced higher ($4 / $15); CAIO prompts are far below that threshold.
  */
-export const CAIO_PRICE_OPENAI_SOL6_PLACEHOLDER: CaioInferencePrice = Object.freeze({
+export const CAIO_PRICE_OPENAI_GPT_6_SOL: CaioInferencePrice = Object.freeze({
   kind: "per_token",
-  pricingVersion: "openai-sol6-202609",
-  inputUsdMicrosPerMillionTokens: 0,
-  outputUsdMicrosPerMillionTokens: 0,
+  pricingVersion: "openai-gpt-6-sol-202609",
+  inputUsdMicrosPerMillionTokens: 2_000_000,
+  outputUsdMicrosPerMillionTokens: 10_000_000,
 });
 
 const MAX_PRICE_MICROS_PER_MILLION = 1_000_000_000; // $1,000 per million tokens: far above any real price.
