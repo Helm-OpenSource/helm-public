@@ -107,6 +107,7 @@ describe("CAIO inference worker owner-private runtime", () => {
       completeTimeoutMs: 300_000,
     });
     expect(loaded.loopPasses).toBe(32);
+    expect(loaded.outputLanguage).toBe("zh-CN");
     expect(JSON.stringify(loaded)).not.toContain("DATABASE_URL");
   });
 

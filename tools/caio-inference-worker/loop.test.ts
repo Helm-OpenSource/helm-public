@@ -140,5 +140,10 @@ describe("pull inference worker prompt", () => {
     // The judgement contract requires at least one cited ref per fact/inference/risk/suggestion; a model left
     // to guess emitted empty evidenceRefs arrays and every judgement was refused as malformed_output.
     expect(buildCaioWorkerPrompt(INPUT)).toContain("must cite at least one evidence ref");
+    // Default output language is Simplified Chinese; enums and refs stay untranslated.
+    expect(buildCaioWorkerPrompt(INPUT)).toContain("Simplified Chinese (简体中文)");
+    expect(buildCaioWorkerPrompt(INPUT)).toContain("do not translate them");
+    expect(buildCaioWorkerPrompt(INPUT, "en")).toContain("Write every statement and summary in English");
+    expect(buildCaioWorkerPrompt(INPUT, "en")).not.toContain("简体中文");
   });
 });

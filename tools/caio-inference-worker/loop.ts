@@ -7,7 +7,7 @@ import {
   type CaioWorkerLogPort,
   type CaioWorkerPassResult,
 } from "./contracts";
-import { buildCaioWorkerPrompt } from "./prompt";
+import { buildCaioWorkerPrompt, type CaioWorkerOutputLanguage } from "./prompt";
 
 /**
  * One pass of the pull loop: probe, claim, complete, submit.
@@ -22,6 +22,7 @@ export async function runCaioInferenceWorkerPass(input: {
   model: CaioWorkerLocalModelPort;
   log?: CaioWorkerLogPort;
   signal?: AbortSignal;
+  outputLanguage?: CaioWorkerOutputLanguage;
 }): Promise<CaioWorkerPassResult> {
   const log = input.log ?? (() => undefined);
   const signal = input.signal ? { signal: input.signal } : {};
@@ -50,7 +51,7 @@ export async function runCaioInferenceWorkerPass(input: {
   let raw: string;
   try {
     raw = await input.model.complete({
-      prompt: buildCaioWorkerPrompt(claim.input),
+      prompt: buildCaioWorkerPrompt(claim.input, input.outputLanguage),
       maxOutputTokens: CAIO_WORKER_MAX_OUTPUT_TOKENS,
       ...signal,
     });
