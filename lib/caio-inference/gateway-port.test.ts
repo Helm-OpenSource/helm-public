@@ -135,4 +135,37 @@ describe("CAIO inference gateway port", () => {
     ).rejects.toBeInstanceOf(CaioAccessGatewayError);
     expect(submitCaioInferenceJudgement).not.toHaveBeenCalled();
   });
+  it("用量与供应商请求号可选；带来就必须合形状，否则 bad_request，绝不当作「没有用量」", async () => {
+    submitCaioInferenceJudgement.mockResolvedValue({ status: "completed", judgementHash: "sha256:def" });
+    const ids = { jobId: "job_1", claimToken: "claim_1", inputHash: "sha256:abc", output: {} };
+    await port().submit({
+      principal,
+      requestId: "req_1",
+      payload: { ...ids, usage: { inputTokens: 812, outputTokens: 344 }, providerRequestRef: "msg_01ABC" },
+    });
+    expect(submitCaioInferenceJudgement).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        evidence: { usage: { inputTokens: 812, outputTokens: 344 }, providerRequestRef: "msg_01ABC" },
+      }),
+    );
+    await port().submit({ principal, requestId: "req_2", payload: ids });
+    expect(submitCaioInferenceJudgement).toHaveBeenLastCalledWith(
+      expect.objectContaining({ evidence: { usage: null, providerRequestRef: null } }),
+    );
+    submitCaioInferenceJudgement.mockClear();
+    for (const bad of [
+      { usage: { inputTokens: -1, outputTokens: 1 } },
+      { usage: { inputTokens: 1.5, outputTokens: 1 } },
+      { usage: { inputTokens: 1 } },
+      { usage: { inputTokens: 1, outputTokens: 1, costUsdMicros: 0 } },
+      { usage: "812" },
+      { providerRequestRef: "has spaces" },
+      { providerRequestRef: 12 },
+    ]) {
+      await expect(port().submit({ principal, requestId: "req_3", payload: { ...ids, ...bad } })).rejects.toBeInstanceOf(
+        CaioAccessGatewayError,
+      );
+    }
+    expect(submitCaioInferenceJudgement).not.toHaveBeenCalled();
+  });
 });

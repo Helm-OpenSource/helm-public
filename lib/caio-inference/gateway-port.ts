@@ -8,6 +8,7 @@ import {
   submitCaioInferenceJudgement,
   type CaioInferenceDispatchPort,
 } from "./job-store.service";
+import type { CaioInferenceProviderEvidence } from "./contracts";
 
 /**
  * The pull inference queue, expressed as the gateway's job port.
@@ -61,6 +62,7 @@ export function createCaioInferenceGatewayPort(input: {
         claimToken: request.claimToken,
         inputHash: request.inputHash,
         output: request.output,
+        evidence: request.evidence,
         dispatch: input.dispatch,
         now: now(),
       });
@@ -79,6 +81,7 @@ type SubmitRequest = {
   claimToken: string;
   inputHash: string;
   output: unknown;
+  evidence: CaioInferenceProviderEvidence;
 };
 
 /**
@@ -96,7 +99,45 @@ function parseSubmitPayload(payload: unknown): SubmitRequest {
     claimToken: requireIdentifier(body.claimToken),
     inputHash: requireIdentifier(body.inputHash),
     output: body.output,
+    evidence: {
+      usage: parseUsage(body.usage),
+      providerRequestRef: parseProviderRequestRef(body.providerRequestRef),
+    },
   };
+}
+
+/** Upper bound per call; far above any route's token ceiling, low enough to keep cost arithmetic exact. */
+const MAX_REPORTED_TOKENS = 10_000_000;
+const PROVIDER_REQUEST_REF_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/u;
+
+/**
+ * Token usage is optional on the wire (an on-premises model may not report it). When present it must be
+ * exactly `{inputTokens, outputTokens}` as bounded non-negative integers; anything else is a malformed request,
+ * never silently treated as "no usage" — that would let a remote call be recorded as free.
+ */
+function parseUsage(value: unknown): CaioInferenceProviderEvidence["usage"] {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "object" || Array.isArray(value)) throw new CaioAccessGatewayError("bad_request");
+  const usage = value as Record<string, unknown>;
+  const keys = Object.keys(usage);
+  if (keys.length !== 2 || !keys.includes("inputTokens") || !keys.includes("outputTokens")) {
+    throw new CaioAccessGatewayError("bad_request");
+  }
+  const tokens = (count: unknown) => {
+    if (typeof count !== "number" || !Number.isSafeInteger(count) || count < 0 || count > MAX_REPORTED_TOKENS) {
+      throw new CaioAccessGatewayError("bad_request");
+    }
+    return count;
+  };
+  return { inputTokens: tokens(usage.inputTokens), outputTokens: tokens(usage.outputTokens) };
+}
+
+function parseProviderRequestRef(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || !PROVIDER_REQUEST_REF_RE.test(value)) {
+    throw new CaioAccessGatewayError("bad_request");
+  }
+  return value;
 }
 
 const MAX_IDENTIFIER_LENGTH = 200;

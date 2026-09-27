@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
+import {
+  CAIO_PRICE_ANTHROPIC_OPUS_5_5,
+  CAIO_PRICE_OPENAI_SOL6_PLACEHOLDER,
+  type CaioInferencePrice,
+} from "./pricing";
+
 import { sha256 } from "@/lib/expert-capability/hashing";
 
 import { computeGovernedProjectionRegistrationHash } from "@/lib/llm/model-route-contracts";
@@ -24,7 +30,7 @@ const INPUT: CaioInferenceInput = {
   supplements: [{ key: "cases.lifecycle-summary", counts: { caseCount: 12, stale: null } }],
 };
 
-function harness(input?: { assets?: readonly string[]; claimStatus?: "claimed" | "blocked" }) {
+function harness(input?: { assets?: readonly string[]; claimStatus?: "claimed" | "blocked"; price?: CaioInferencePrice }) {
   const project = vi.fn(async () => ({ receipt: { receiptId: "projection-1" } }));
   const deferred: CaioInferenceDeferredDispatchPort = {
     claim: vi.fn(async () =>
@@ -45,7 +51,8 @@ function harness(input?: { assets?: readonly string[]; claimStatus?: "claimed" |
     gatewayRef: "gateway:caio-inference",
     policyKey: "caio-pro-default",
     requestedMaxOutputTokens: 1_200,
-    pricingVersion: "local-pricing-202609",
+    pricingVersion: input?.price?.pricingVersion ?? "local-pricing-202609",
+    ...(input?.price ? { price: input.price } : {}),
     project,
     deferred,
     sourceAssetRefs: async () => input?.assets ?? ["asset:operating-aggregates"],
@@ -206,6 +213,84 @@ describe("CAIO inference governed dispatch", () => {
       gatewayRef: "gateway:caio-inference",
       claimHash: `sha256:${"c".repeat(64)}`,
     });
+  });
+});
+
+describe("CAIO inference governed dispatch: per-token (remote) pricing", () => {
+  const judgementHash = `sha256:${"d".repeat(64)}`;
+  const base = {
+    workspaceId: "workspace-1",
+    decisionRef: "decision-1",
+    gatewayRef: "gateway:caio-inference",
+    claimHash: `sha256:${"c".repeat(64)}`,
+    now: new Date(),
+  };
+
+  it("keeps the local (zero-priced) receipt exactly as before even when the worker reports usage", async () => {
+    const test = harness();
+    expect(test.port.requiresProviderUsage).toBe(false);
+    await test.port.complete({
+      ...base,
+      layeredJudgementHash: judgementHash,
+      evidence: { usage: { inputTokens: 9_000, outputTokens: 500 }, providerRequestRef: "local-1" },
+    });
+    const result = vi.mocked(test.deferred.complete).mock.calls[0]![0].result as Record<string, unknown>;
+    expect(result).toMatchObject({
+      providerRequestRef: sha256(judgementHash),
+      promptTokens: null,
+      completionTokens: null,
+      actualCostUsdMicros: 0,
+      costBand: "zero",
+    });
+  });
+
+  it("prices a remote call on the server from reported tokens and hashes the provider request id", async () => {
+    const test = harness({ price: CAIO_PRICE_ANTHROPIC_OPUS_5_5 });
+    expect(test.port.requiresProviderUsage).toBe(true);
+    await test.port.complete({
+      ...base,
+      layeredJudgementHash: judgementHash,
+      evidence: { usage: { inputTokens: 1_000, outputTokens: 500 }, providerRequestRef: "msg_01ABC" },
+    });
+    const result = vi.mocked(test.deferred.complete).mock.calls[0]![0].result as Record<string, unknown>;
+    // $4/MTok × 1,000 + $20/MTok × 500 = 4,000 + 10,000 micros.
+    expect(result).toMatchObject({
+      providerRequestRef: sha256("provider:msg_01ABC"),
+      promptTokens: 1_000,
+      completionTokens: 500,
+      actualCostUsdMicros: 14_000,
+      costBand: "medium",
+      pricingVersion: "anthropic-opus-5-5-202609",
+    });
+  });
+
+  it("records the usage cost on a refused remote judgement too", async () => {
+    const test = harness({ price: CAIO_PRICE_ANTHROPIC_OPUS_5_5 });
+    await test.port.fail({
+      ...base,
+      errorCode: "malformed_output",
+      evidence: { usage: { inputTokens: 1_000, outputTokens: 1 }, providerRequestRef: null },
+    });
+    const call = vi.mocked(test.deferred.complete).mock.calls[0]![0];
+    expect(Object.hasOwn(call.result, "output")).toBe(false);
+    expect(call.result).toMatchObject({ outcome: "failure", actualCostUsdMicros: 4_020, costBand: "low" });
+  });
+
+  it("refuses construction with a placeholder price or a mismatched pricing version", () => {
+    expect(() => harness({ price: CAIO_PRICE_OPENAI_SOL6_PLACEHOLDER })).toThrow(/caio_inference_price_invalid/);
+    const deferred = harness().deferred;
+    expect(() =>
+      createCaioInferenceGovernedDispatch({
+        gatewayRef: "gateway:caio-inference",
+        policyKey: "caio-pro-default",
+        requestedMaxOutputTokens: 1_200,
+        pricingVersion: "local-pricing-202609",
+        price: CAIO_PRICE_ANTHROPIC_OPUS_5_5,
+        project: vi.fn(),
+        deferred,
+        sourceAssetRefs: async () => [],
+      }),
+    ).toThrow("caio_inference_price_version_mismatch");
   });
 });
 

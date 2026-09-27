@@ -13,6 +13,7 @@ import {
   CAIO_INFERENCE_ROUTE_TASK_CLASS,
   computeCaioInferenceInputHash,
   type CaioInferenceInput,
+  type CaioInferenceProviderEvidence,
   type CaioInferenceRejectionCode,
   type CaioInferenceTaskClass,
 } from "./contracts";
@@ -53,6 +54,7 @@ export type CaioInferenceDispatchPort = {
     gatewayRef: string;
     claimHash: string;
     layeredJudgementHash: string;
+    evidence: CaioInferenceProviderEvidence;
     now: Date;
   }) => Promise<{ status: string }>;
   expire: (input: {
@@ -72,8 +74,14 @@ export type CaioInferenceDispatchPort = {
     gatewayRef: string;
     claimHash: string;
     errorCode: CaioInferenceRejectionCode;
+    evidence?: CaioInferenceProviderEvidence;
     now: Date;
   }) => Promise<{ status: string }>;
+  /**
+   * `true` when the route is priced per token (a remote provider): a submission without usage is refused with
+   * `provider_usage_missing` instead of being recorded as free. Local zero-cost routes leave it unset.
+   */
+  requiresProviderUsage?: boolean;
 };
 
 const TRANSACTION_OPTIONS = {
@@ -230,6 +238,7 @@ export async function submitCaioInferenceJudgement(input: {
   claimToken: string;
   inputHash: string;
   output: unknown;
+  evidence?: CaioInferenceProviderEvidence;
   dispatch: CaioInferenceDispatchPort;
   now?: Date;
 }): Promise<
@@ -262,11 +271,18 @@ export async function submitCaioInferenceJudgement(input: {
     return { status: "rejected", code: "lease_expired" };
   }
 
+  const evidence: CaioInferenceProviderEvidence = input.evidence ?? { usage: null, providerRequestRef: null };
+  if (input.dispatch.requiresProviderUsage && evidence.usage === null) {
+    await closeDispatchAsFailure(input.dispatch, job, "provider_usage_missing", now, evidence);
+    await rejectJob({ jobId: job.id, code: "provider_usage_missing", now });
+    return { status: "rejected", code: "provider_usage_missing" };
+  }
+
   const frozenInput = safeParseJson<CaioInferenceInput | null>(job.inputJson, null);
   if (!frozenInput) return { status: "rejected", code: "malformed_output" };
   const validation = validateCaioLayeredJudgement(input.output, new Set(frozenInput.evidenceRefs));
   if (!validation.ok) {
-    await closeDispatchAsFailure(input.dispatch, job, validation.code, now);
+    await closeDispatchAsFailure(input.dispatch, job, validation.code, now, evidence);
     await rejectJob({ jobId: job.id, code: validation.code, now });
     return { status: "rejected", code: validation.code };
   }
@@ -278,7 +294,7 @@ export async function submitCaioInferenceJudgement(input: {
     now,
   });
   if (!packet.ok) {
-    await closeDispatchAsFailure(input.dispatch, job, packet.code, now);
+    await closeDispatchAsFailure(input.dispatch, job, packet.code, now, evidence);
     await rejectJob({ jobId: job.id, code: packet.code, now });
     return { status: "rejected", code: packet.code };
   }
@@ -290,6 +306,7 @@ export async function submitCaioInferenceJudgement(input: {
     gatewayRef: job.gatewayRef,
     claimHash: job.dispatchClaimHash,
     layeredJudgementHash: validation.contentHash,
+    evidence,
     now,
   });
   if (completed.status !== "success" && completed.status !== "partial") {
@@ -400,6 +417,7 @@ async function closeDispatchAsFailure(
   job: { workspaceId: string; decisionRef: string | null; gatewayRef: string | null; dispatchClaimHash: string | null },
   errorCode: CaioInferenceRejectionCode,
   now: Date,
+  evidence?: CaioInferenceProviderEvidence,
 ): Promise<void> {
   if (!job.decisionRef || !job.gatewayRef || !job.dispatchClaimHash) return;
   await dispatch.fail({
@@ -408,6 +426,8 @@ async function closeDispatchAsFailure(
     gatewayRef: job.gatewayRef,
     claimHash: job.dispatchClaimHash,
     errorCode,
+    // A refused judgement from a remote model still cost money: its usage is recorded on the failure receipt.
+    ...(evidence ? { evidence } : {}),
     now,
   });
 }
