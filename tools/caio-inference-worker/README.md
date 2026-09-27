@@ -37,3 +37,19 @@ not activation, cutover approval, rollback execution, production readiness, or
 proof of business results. A verifier must independently trust the issuer
 certificate, validate the signature and exact candidate fields, consume the
 challenge once before expiry, and retain a separately verified rollback target.
+
+## Model providers
+
+`model.provider` in the owner-private runtime JSON selects the model port:
+
+- omitted or `local-openai-compatible` (default): the on-premises OpenAI-compatible endpoint. `baseUrl`
+  must be a loopback address; this lock is unchanged.
+- `anthropic-messages`: `baseUrl` must be exactly `https://api.anthropic.com/v1`. Optional `effort`
+  (`low` | `medium` | `high`) bounds thinking spend. No sampling parameters are sent.
+- `openai-chat-completions`: `baseUrl` must be exactly `https://api.openai.com/v1`. Sends
+  `max_completion_tokens`, no `temperature`.
+
+`model.model` is the provider's model id (pure config). `model.accessTokenPath` points to the 0600 key
+file under the same private root. A remote port forwards token usage and the provider request id with the
+submission; the server prices the call from its own price registry and refuses a per-token route's
+submission without usage (`provider_usage_missing`). The worker never reports a cost.

@@ -31,6 +31,8 @@ function harness(input?: {
   ready?: boolean;
   probeThrows?: boolean;
   completeThrows?: boolean;
+  usage?: { inputTokens: number; outputTokens: number } | null;
+  providerRequestRef?: string | null;
   claim?: unknown;
   answer?: string;
 }) {
@@ -51,7 +53,11 @@ function harness(input?: {
     }),
     complete: vi.fn(async () => {
       if (input?.completeThrows) throw new Error("local model crashed at /Users/secret/path");
-      return input?.answer ?? JSON.stringify(JUDGEMENT);
+      return {
+        content: input?.answer ?? JSON.stringify(JUDGEMENT),
+        usage: input?.usage ?? null,
+        providerRequestRef: input?.providerRequestRef ?? null,
+      };
     }),
   };
   return { events, gateway, model, log };
@@ -145,5 +151,22 @@ describe("pull inference worker prompt", () => {
     expect(buildCaioWorkerPrompt(INPUT)).toContain("do not translate them");
     expect(buildCaioWorkerPrompt(INPUT, "en")).toContain("Write every statement and summary in English");
     expect(buildCaioWorkerPrompt(INPUT, "en")).not.toContain("简体中文");
+  });
+  it("forwards provider usage and request id with the submission, never a cost", async () => {
+    const test = harness({ usage: { inputTokens: 812, outputTokens: 344 }, providerRequestRef: "msg_01ABC" });
+    await runCaioInferenceWorkerPass({ gateway: test.gateway, model: test.model, log: test.log });
+    expect(test.gateway.submit).toHaveBeenCalledWith(
+      expect.objectContaining({ usage: { inputTokens: 812, outputTokens: 344 }, providerRequestRef: "msg_01ABC" }),
+    );
+    const sent = (test.gateway.submit as unknown as { mock: { calls: Array<[Record<string, unknown>]> } }).mock.calls[0][0];
+    expect(Object.keys(sent)).not.toContain("costUsdMicros");
+  });
+
+  it("omits usage from the submission when the model reported none", async () => {
+    const test = harness();
+    await runCaioInferenceWorkerPass({ gateway: test.gateway, model: test.model, log: test.log });
+    const sent = (test.gateway.submit as unknown as { mock: { calls: Array<[Record<string, unknown>]> } }).mock.calls[0][0];
+    expect(sent).not.toHaveProperty("usage");
+    expect(sent).not.toHaveProperty("providerRequestRef");
   });
 });
