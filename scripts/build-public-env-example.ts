@@ -52,6 +52,8 @@ HELM_DEPLOYMENT_SELF_SERVE_SIGNUP="true"
 HELM_AUTH_EMAIL_ENTRY_ENABLED="false"
 # Enable only after controlled workspace approval and private delivery are ready.
 HELM_AUTH_MEMBER_ACTIVATION_ENABLED="false"
+# Governed deployments disable direct organization creation via server action.
+HELM_ORGANIZATION_CREATION_MODE="self-service"
 
 # \`/api/health\` remains a reachability-only check by default. Source-built
 # deployments can opt into artifact binding; that mode fails closed with 503

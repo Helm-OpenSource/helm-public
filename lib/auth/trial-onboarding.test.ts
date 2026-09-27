@@ -89,6 +89,15 @@ describe("trial onboarding helpers", () => {
     ensureWorkspaceCommercialFoundationMock.mockResolvedValue(AccessState.TRIALING);
   });
 
+  it("rejects governed creation before any database lookup or write", async () => {
+    vi.stubEnv("HELM_ORGANIZATION_CREATION_MODE", "governed");
+    try {
+      await expect(createSelfServeTrialOrganization({ user: { id: "user-1", email: "user@example.com", name: "User", title: null }, organizationName: "Synthetic", locale: "zh-CN" })).rejects.toThrow("approval");
+      expect(dbMock.workspace.findUnique).not.toHaveBeenCalled();
+      expect(dbMock.workspace.create).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
   it("creates a self-serve trial organization with owner membership and billing foundation", async () => {
     const result = await createSelfServeTrialOrganization({
       user: {

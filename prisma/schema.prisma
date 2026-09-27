@@ -1299,6 +1299,9 @@ model MemberActivationToken {
   workspaceId       String
   issuedByUserId    String
   issuedBySessionId String
+  issuerWorkspaceId String
+  authorityBindingRef String?
+  authorityBindingVersion BigInt?
   membershipUpdatedAt DateTime
   emailHash         String @db.Char(64)
   expiresAt         DateTime

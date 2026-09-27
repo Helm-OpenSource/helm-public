@@ -66,6 +66,7 @@ vi.mock("@/lib/billing/foundation", () => ({
 }));
 
 import {
+  createOrganizationAction,
   switchOrganizationAction,
   updateOrganizationMemberGoalProfileAction,
 } from "@/features/settings/actions";
@@ -208,5 +209,16 @@ describe("updateOrganizationMemberGoalProfileAction", () => {
 
     expect(result).toEqual({ ok: false, error: "当前无法切换到该工作区" });
     expect(mocks.setActiveWorkspace).not.toHaveBeenCalled();
+  });
+});
+
+describe("governed organization creation", () => {
+  it("refuses direct server action before workspace or identity reads", async () => {
+    vi.clearAllMocks(); vi.stubEnv("HELM_ORGANIZATION_CREATION_MODE", "governed");
+    try {
+      expect((await createOrganizationAction({ name: "Synthetic organization" })).ok).toBe(false);
+      expect(mocks.requireCurrentUser).not.toHaveBeenCalled();
+      expect(mocks.getCurrentWorkspace).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
   });
 });

@@ -1159,7 +1159,13 @@ describe("auth verification code attempt cap", () => {
   // itself was an upsert whose `update` branch set status: ACTIVE
   // unconditionally, so a membership revoked in that window came back ACTIVE
   // and the user was seated in the workspace they had just been removed from.
-  it("refuses to join a workspace whose membership has been revoked", async () => {
+  it.each([
+    { mode: "self-service", signup: "true", allowed: true },
+    { mode: "governed", signup: "true", allowed: false },
+    { mode: "self-service", signup: "false", allowed: false },
+  ])("does not resurrect revoked membership or bypass $mode/$signup creation policy", async ({ mode, signup, allowed }) => {
+    vi.stubEnv("HELM_ORGANIZATION_CREATION_MODE", mode);
+    vi.stubEnv("HELM_DEPLOYMENT_SELF_SERVE_SIGNUP", signup);
     installAuthCodeStore([]);
     const prefillCookie = issuePrefillCookie({
       name: "Owner",
@@ -1225,12 +1231,12 @@ describe("auth verification code attempt cap", () => {
     expect(mocks.session.createSession).not.toHaveBeenCalledWith(
       expect.objectContaining({ workspaceId: "workspace-invite-1" }),
     );
-    // Signup itself still completes: a revoked invite is not a reason to refuse
-    // the account, only a reason not to join that workspace.
-    expect(result.ok).toBe(true);
-    expect(
-      mocks.trialOnboarding.createSelfServeTrialOrganization,
-    ).toHaveBeenCalled();
+    expect(result.ok).toBe(allowed);
+    if (allowed) expect(mocks.trialOnboarding.createSelfServeTrialOrganization).toHaveBeenCalled();
+    else {
+      expect(mocks.trialOnboarding.createSelfServeTrialOrganization).not.toHaveBeenCalled();
+      expect(mocks.session.createSession).not.toHaveBeenCalled();
+    }
   });
 
   it("fills membership title from invite prefill when signup form title is empty", async () => {
@@ -1771,5 +1777,16 @@ describe("deployment email-entry policy", () => {
       expect(mocks.db.user.findUnique).not.toHaveBeenCalled();
       expect(mocks.session.createSession).not.toHaveBeenCalled();
     } finally { vi.unstubAllEnvs(); }
+  });
+});
+
+describe("governed trial entry", () => {
+  it("refuses uninvited signup even when the signup flag is true", async () => {
+    vi.stubEnv("HELM_ORGANIZATION_CREATION_MODE", "governed");
+    vi.stubEnv("HELM_DEPLOYMENT_SELF_SERVE_SIGNUP", "true");
+    mocks.db.membership.findFirst.mockResolvedValue(null);
+    const result = await startTrialSignupAction(createSignupInput());
+    expect(result.ok).toBe(false);
+    expect(mocks.db.authEnrollment.create).not.toHaveBeenCalled();
   });
 });
