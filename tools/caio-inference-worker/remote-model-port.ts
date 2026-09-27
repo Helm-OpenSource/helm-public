@@ -1,3 +1,5 @@
+import { CAIO_LAYERED_JUDGEMENT_JSON_SCHEMA } from "@/lib/caio-inference/layered-judgement";
+
 import type { CaioWorkerModelCompletion, CaioWorkerModelPort } from "./contracts";
 import { isTokenCount, readOpenAiUsage } from "./local-model-port";
 
@@ -117,6 +119,12 @@ export function createCaioWorkerRemoteModelPort(config: CaioWorkerRemoteModelCon
             model: config.model,
             max_completion_tokens: maxOutputTokens,
             messages: [{ role: "user", content: prompt }],
+            // Strict structured output: the model cannot emit an extra key or a missing layer, which would
+            // otherwise cost a paid call that the server then refuses as malformed_output.
+            response_format: {
+              type: "json_schema",
+              json_schema: { name: "caio_layered_judgement", strict: true, schema: CAIO_LAYERED_JUDGEMENT_JSON_SCHEMA },
+            },
           };
       const response = await withDeadline(
         (deadlineSignal) =>
