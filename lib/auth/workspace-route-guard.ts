@@ -48,6 +48,7 @@ const WORKSPACE_PAGE_PREFIXES = [
 ] as const;
 
 const PUBLIC_PAGE_PREFIXES = [
+  "/activate-member",
   "/",
   "/contrast-test",
   "/dark-mode-test",

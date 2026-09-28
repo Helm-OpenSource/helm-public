@@ -1,3 +1,4 @@
+import { canSelfCreateOrganization } from "./organization-creation-policy";
 import {
   AccessState,
   ActionExecutionMode,
@@ -177,6 +178,7 @@ async function seedDefaultPoliciesAndBudgets(workspaceId: string, locale: UiLoca
 export async function createSelfServeTrialOrganization(
   input: CreateSelfServeTrialOrganizationInput,
 ) {
+  if (!canSelfCreateOrganization()) throw new Error("Organization creation requires platform approval");
   const english = input.locale === "en-US";
   const slug = await getUniqueWorkspaceSlug(input.organizationName);
 

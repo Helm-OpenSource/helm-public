@@ -17,6 +17,13 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: projectRoot,
   serverExternalPackages: ["ali-oss"],
   allowedDevOrigins: configuredAllowedDevOrigins,
+  async headers() {
+    return ["/activate-member", "/settings/member-activation"].map(source => ({ source, headers: [
+      { key: "Cache-Control", value: "no-store, private" },
+      { key: "Referrer-Policy", value: "no-referrer" },
+      { key: "X-Robots-Tag", value: "noindex, nofollow" },
+    ] }));
+  },
   generateBuildId: releaseBuildId ? async () => releaseBuildId : undefined,
 };
 
