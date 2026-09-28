@@ -220,6 +220,47 @@ describeMysql("CAIO inference job queue with an isolated MySQL database", () => 
     expect(port.complete).not.toHaveBeenCalled();
   });
 
+  // A per-token (remote) route cannot record a call it cannot price: missing usage is refused with a closed code
+  // and the dispatch is closed as a failure, instead of completing at cost 0.
+  it("refuses a remote-priced submission that carries no usage and forwards usage when it is present", async () => {
+    const port = dispatchPort({ requiresProviderUsage: true });
+    await newWorkspace();
+    await enqueue();
+    const claimed = await claimCaioInferenceJob({ workspaceId, dispatch: port, now: at(40_000) });
+    if (claimed.status !== "claimed") throw new Error("claim expected");
+    const refused = await submitCaioInferenceJudgement({
+      workspaceId,
+      jobId: claimed.jobId,
+      claimToken: claimed.claimToken,
+      inputHash: claimed.inputHash,
+      output: judgement("evidence:metric-a"),
+      dispatch: port,
+      now: at(41_000),
+    });
+    expect(refused).toEqual({ status: "rejected", code: "provider_usage_missing" });
+    expect(port.fail).toHaveBeenLastCalledWith(expect.objectContaining({ errorCode: "provider_usage_missing" }));
+    expect(port.complete).not.toHaveBeenCalled();
+    const row = await db.caioInferenceJob.findUniqueOrThrow({ where: { id: claimed.jobId } });
+    expect(row).toMatchObject({ status: "rejected", rejectionCode: "provider_usage_missing" });
+
+    await enqueue({ windowStart: at(-10_800_000).toISOString(), windowEnd: at(-7_200_000).toISOString() });
+    const second = await claimCaioInferenceJob({ workspaceId, dispatch: port, now: at(42_000) });
+    if (second.status !== "claimed") throw new Error("claim expected");
+    const evidence = { usage: { inputTokens: 812, outputTokens: 344 }, providerRequestRef: "msg_01ABC" };
+    const completed = await submitCaioInferenceJudgement({
+      workspaceId,
+      jobId: second.jobId,
+      claimToken: second.claimToken,
+      inputHash: second.inputHash,
+      output: judgement("evidence:metric-a"),
+      evidence,
+      dispatch: port,
+      now: at(43_000),
+    });
+    expect(completed).toMatchObject({ status: "completed" });
+    expect(port.complete).toHaveBeenCalledWith(expect.objectContaining({ evidence }));
+  });
+
   it("refuses a submission whose claim token or frozen input does not match", async () => {
     const port = dispatchPort();
     await newWorkspace();

@@ -20,8 +20,20 @@ export const CAIO_INFERENCE_REJECTION_CODES = [
   "suggestion_kind_not_allowed",
   "action_disposition_present",
   "payload_too_large",
+  // A priced (remote) route answered without token usage: the call cost money that cannot be accounted for,
+  // so the judgement is refused rather than recorded at cost 0.
+  "provider_usage_missing",
 ] as const;
 export type CaioInferenceRejectionCode = (typeof CAIO_INFERENCE_REJECTION_CODES)[number];
+
+/** Token usage the device worker reports for one model call. Cost is never taken from the worker. */
+export type CaioInferenceModelUsage = { inputTokens: number; outputTokens: number };
+
+/** Provider-side evidence the worker forwards with a submission; both parts are optional on the wire. */
+export type CaioInferenceProviderEvidence = {
+  usage: CaioInferenceModelUsage | null;
+  providerRequestRef: string | null;
+};
 
 export const CAIO_INFERENCE_INPUT_SCHEMA_VERSION = "helm.caio.inference-input.v1" as const;
 

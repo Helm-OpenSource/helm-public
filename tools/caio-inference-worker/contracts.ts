@@ -1,4 +1,4 @@
-import type { CaioInferenceInput } from "@/lib/caio-inference/contracts";
+import type { CaioInferenceInput, CaioInferenceModelUsage } from "@/lib/caio-inference/contracts";
 
 /**
  * Device-side pull inference worker contracts.
@@ -25,16 +25,32 @@ export type CaioWorkerGatewayPort = {
     claimToken: string;
     inputHash: string;
     output: unknown;
+    /** Provider token usage, forwarded so the server can price the call; the worker never reports a cost. */
+    usage?: CaioInferenceModelUsage | null;
+    /** Provider's own request id (remote providers), for the receipt's provider reference. */
+    providerRequestRef?: string | null;
     signal?: AbortSignal;
   }) => Promise<{ status: string; code?: string | null }>;
 };
 
+/** One model answer plus the provider evidence the server needs to account for it. */
+export type CaioWorkerModelCompletion = {
+  content: string;
+  usage: CaioInferenceModelUsage | null;
+  providerRequestRef: string | null;
+};
+
+/**
+ * The model the worker calls: the on-premises OpenAI-compatible endpoint (loopback only), or an explicitly
+ * configured remote provider port. The name is historical; both implement it.
+ */
 export type CaioWorkerLocalModelPort = {
-  /** Cheap readiness probe against the local OpenAI-compatible endpoint. */
+  /** Cheap readiness probe against the configured model endpoint. */
   probe: (input: { signal?: AbortSignal }) => Promise<{ ready: boolean; detail?: string }>;
   /** One completion for one prompt. The worker never retries a completion on its own. */
-  complete: (input: { prompt: string; maxOutputTokens: number; signal?: AbortSignal }) => Promise<string>;
+  complete: (input: { prompt: string; maxOutputTokens: number; signal?: AbortSignal }) => Promise<CaioWorkerModelCompletion>;
 };
+export type CaioWorkerModelPort = CaioWorkerLocalModelPort;
 
 export type CaioWorkerLogPort = (event: {
   event: "offline" | "idle" | "claimed" | "submitted" | "local_validation_failed" | "model_failed";

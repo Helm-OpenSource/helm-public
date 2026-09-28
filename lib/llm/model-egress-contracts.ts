@@ -1657,3 +1657,14 @@ export function validateModelEgressReceiptChain(input: {
   }
   return { valid: errors.length === 0, errors };
 }
+
+const SHANGHAI_OFFSET_MS = 8 * 3_600_000;
+
+/**
+ * Start of the current calendar month in Asia/Shanghai (fixed UTC+8, no DST), as a UTC instant. Receipt
+ * timestamps are stored as UTC, so a monthly spend window is compared in UTC.
+ */
+export function shanghaiMonthStartUtc(now: Date): Date {
+  const local = new Date(now.getTime() + SHANGHAI_OFFSET_MS);
+  return new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), 1) - SHANGHAI_OFFSET_MS);
+}

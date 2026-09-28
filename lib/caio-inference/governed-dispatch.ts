@@ -17,8 +17,15 @@ import {
   CAIO_INFERENCE_ROUTE_TASK_CLASS,
   CAIO_INFERENCE_TASK_CLASSES,
   type CaioInferenceInput,
+  type CaioInferenceProviderEvidence,
 } from "./contracts";
 import type { CaioInferenceDispatchPort } from "./job-store.service";
+import {
+  caioInferenceCostBand,
+  computeCaioInferenceCostUsdMicros,
+  validateCaioInferencePrice,
+  type CaioInferencePrice,
+} from "./pricing";
 
 /**
  * Binds the inference queue to the governed deferred dispatch.
@@ -211,11 +218,40 @@ export function createCaioInferenceGovernedDispatch(input: {
   policyKey: string;
   requestedMaxOutputTokens: number;
   pricingVersion: string;
+  /**
+   * Price for the route. Omitted means the on-premises zero price. A `per_token` price makes provider usage
+   * mandatory and is the only way a non-zero cost reaches the receipt; its version must equal `pricingVersion`.
+   */
+  price?: CaioInferencePrice;
   project: CaioInferenceProjectionPort;
   deferred: CaioInferenceDeferredDispatchPort;
   sourceAssetRefs: (workspaceId: string) => Promise<readonly string[]>;
 }): CaioInferenceDispatchPort {
+  const price: CaioInferencePrice = input.price ?? { kind: "zero", pricingVersion: input.pricingVersion };
+  if (price.pricingVersion !== input.pricingVersion) throw new Error("caio_inference_price_version_mismatch");
+  const priceCheck = validateCaioInferencePrice(price);
+  if (!priceCheck.valid) throw new Error(`caio_inference_price_invalid:${priceCheck.errors.join(",")}`);
+  const perToken = price.kind === "per_token";
+
+  // Usage and cost evidence for one terminal receipt. Zero-priced (local) routes keep recording no tokens and
+  // cost 0 exactly as before: forwarding token counts there would newly subject local calls to the route's
+  // input-token ceiling. Per-token routes record the reported tokens and the server-computed cost.
+  const costEvidence = (evidence: CaioInferenceProviderEvidence | undefined) => {
+    const usage = evidence?.usage ?? null;
+    if (!perToken || usage === null) {
+      return { promptTokens: null, completionTokens: null, actualCostUsdMicros: 0, costBand: "zero" as const };
+    }
+    const cost = computeCaioInferenceCostUsdMicros(price, usage);
+    return {
+      promptTokens: usage.inputTokens,
+      completionTokens: usage.outputTokens,
+      actualCostUsdMicros: cost,
+      costBand: caioInferenceCostBand(cost),
+    };
+  };
+
   return {
+    requiresProviderUsage: perToken,
     claim: async ({ workspaceId, jobId, taskClass, inferenceInput, attempt }) => {
       const sourceAssetRefs = await input.sourceAssetRefs(workspaceId);
       if (sourceAssetRefs.length === 0) {
@@ -254,25 +290,24 @@ export function createCaioInferenceGovernedDispatch(input: {
       };
     },
 
-    complete: async ({ workspaceId, decisionRef, gatewayRef, claimHash, layeredJudgementHash }) =>
+    complete: async ({ workspaceId, decisionRef, gatewayRef, claimHash, layeredJudgementHash, evidence }) =>
       input.deferred.complete({
         workspaceId,
         decisionRef,
         gatewayRef,
         claimHash,
-        // The worker is the provider here: it accepted the request and produced one judgement. The reference
-        // is the body's content hash, never the body itself, and a local model costs nothing to call.
+        // The worker relays the provider's answer. The reference is a hash — of the provider's own request id
+        // when a remote provider returned one, otherwise of the judgement body — never the body itself.
         result: {
           outcome: "success",
           output: { judgementHash: layeredJudgementHash },
           requestDisposition: "accepted",
-          providerRequestRef: sha256(layeredJudgementHash),
-          promptTokens: null,
-          completionTokens: null,
-          actualCostUsdMicros: 0,
+          providerRequestRef: sha256(
+            perToken && evidence?.providerRequestRef ? `provider:${evidence.providerRequestRef}` : layeredJudgementHash,
+          ),
+          ...costEvidence(evidence),
           costCurrency: "USD",
           pricingVersion: input.pricingVersion,
-          costBand: "zero",
           errorCode: null,
         },
       }),
@@ -282,7 +317,7 @@ export function createCaioInferenceGovernedDispatch(input: {
 
     // The worker answered but the judgement was refused: a terminal failure receipt with the closed rejection
     // code, so the route's concurrency slot is released. Nothing about the refused body is recorded.
-    fail: async ({ workspaceId, decisionRef, gatewayRef, claimHash, errorCode }) =>
+    fail: async ({ workspaceId, decisionRef, gatewayRef, claimHash, errorCode, evidence }) =>
       input.deferred.complete({
         workspaceId,
         decisionRef,
@@ -293,12 +328,10 @@ export function createCaioInferenceGovernedDispatch(input: {
           outcome: "failure",
           requestDisposition: "accepted",
           providerRequestRef: sha256(`${decisionRef}:${errorCode}`),
-          promptTokens: null,
-          completionTokens: null,
-          actualCostUsdMicros: 0,
+          // A refused remote answer was still billed: its usage and cost are recorded so the monthly cap sees it.
+          ...costEvidence(evidence),
           costCurrency: "USD",
           pricingVersion: input.pricingVersion,
-          costBand: "zero",
           errorCode,
         },
       }),
