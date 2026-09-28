@@ -1,3 +1,11 @@
+---
+status: draft
+owner: Product / CAIO / Delivery Engineering
+created: 2026-09-27
+review_after: 2026-10-27
+public_safety: Describes an opt-in composition seam only. No deployment identifiers, tenant data, credentials, device identities, or production receipts.
+---
+
 # CAIO governed read extension
 
 状态：已成形但仍需部署接线；不是已部署功能。This is an explicit composition seam, not an enabled route or a security sandbox.
