@@ -251,7 +251,7 @@ describeMysql("member MCP P0 with an isolated MySQL database", () => {
 
   it("records a work signal through prepare/submit as an untrusted candidate receipt", async () => {
     const writer = await activeToken("seatA", true);
-    expect(writer.scopes).toEqual(["member:brief:read", "member:prompt:read", "member:signal:write", "member:report:write"]);
+    expect(writer.scopes).toEqual(["member:brief:read", "member:prompt:read", "member:signal:write", "member:report:write", "member:prompt:respond"]);
     const auth = await authenticateMemberMcpToken(writer.token);
     const signal = { kind: "blocker" as const, summary: "下午外呼线路中断两小时", detail: "14:00–16:00 拨号全部失败" };
     const prepared = await executeMemberMcpTool({ auth, call: { toolName: "prepare_work_signal", arguments: signal } });

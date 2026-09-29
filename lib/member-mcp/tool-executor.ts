@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import type { MemberToolEnvelope } from "@/lib/member-gateway/types";
 import type { MemberMcpAuthContext } from "@/lib/member-mcp/connection-service";
 import { memberMcpProviderRef, memberRefForUser } from "@/lib/member-mcp/contract";
+import { executeMemberPromptResponse } from "@/lib/member-mcp/response-intake";
 import { executeMemberMcpWrite } from "@/lib/member-mcp/write-executor";
 import {
   buildMemberMcpEnvelope,
@@ -179,6 +180,14 @@ export async function executeMemberMcpTool(input: {
     call.toolName === "submit_field_report"
   ) {
     return executeMemberMcpWrite({ auth: input.auth, call, providerRef, requestId, now });
+  }
+
+  if (
+    call.toolName === "prepare_prompt_response" ||
+    call.toolName === "submit_prompt_response" ||
+    call.toolName === "get_prompt_response_status"
+  ) {
+    return executeMemberPromptResponse({ auth: input.auth, call, providerRef, requestId, now });
   }
 
   const row = await db.memberPrompt.findUnique({

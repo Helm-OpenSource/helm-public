@@ -27,6 +27,7 @@ import {
   issueMemberWorkSignalChallenge,
   submitMemberWorkSignal,
 } from "@/lib/member-gateway/signal-store.service";
+import { materializeMemberSignalCandidateSafely } from "@/lib/member-mcp/candidate";
 import type { MemberPrincipal, MemberToolEnvelope } from "@/lib/member-gateway/types";
 import type { MemberMcpAuthContext } from "@/lib/member-mcp/connection-service";
 import { memberRefForUser } from "@/lib/member-mcp/contract";
@@ -56,7 +57,7 @@ export function memberSignalReceiptId(challengeRef: string) {
   return `mmcp-signal:${challengeRef}`;
 }
 
-function principalFor(auth: MemberMcpAuthContext): MemberPrincipal {
+export function memberMcpPrincipal(auth: MemberMcpAuthContext): MemberPrincipal {
   return {
     workspaceRef: auth.workspaceId,
     memberRef: memberRefForUser(auth.userId),
@@ -101,7 +102,7 @@ export async function executeMemberMcpWrite(input: {
     };
   }
 
-  const principal = principalFor(auth);
+  const principal = memberMcpPrincipal(auth);
   const objectRef = memberSelfObjectRef(auth.userId);
   try {
     if (call.toolName === "prepare_work_signal" || call.toolName === "prepare_field_report") {
@@ -134,6 +135,10 @@ export async function executeMemberMcpWrite(input: {
       membership?.status === MembershipStatus.ACTIVE &&
       membership.workspaceId === auth.workspaceId &&
       membership.userId === auth.userId;
+    // decideMemberReadSurface's tool type only admits the L1 read tools (a
+    // frozen Member Gateway literal set, not edited here). get_my_brief is
+    // named because the target object is the member's own record; the write
+    // itself is authorized by the scope in toolScopeRef, not by this label.
     const surface = decideMemberReadSurface({
       workspaceRef: auth.workspaceId,
       memberRef: principal.memberRef,
@@ -158,11 +163,19 @@ export async function executeMemberMcpWrite(input: {
       policyVersion: MEMBER_MCP_SIGNAL_POLICY_VERSION,
       receiptId: memberSignalReceiptId(call.arguments.challengeRef),
     });
+    // The receipt stands on its own; the reviewable candidate in /approvals
+    // is materialized from it (idempotent, also on a replayed submit).
+    const candidate = await materializeMemberSignalCandidateSafely({
+      workspaceId: auth.workspaceId,
+      signalReceiptId: result.receipt.receiptId,
+      objectAnchor: { resolved: false, objectRef, objectVersion: 1 },
+    });
     return buildMemberMcpEnvelope({
       requestId,
       now,
       decision,
       data: {
+        ...candidate,
         receiptRef: result.receipt.receiptId,
         outcome: result.outcome,
         kind: result.receipt.kind,
