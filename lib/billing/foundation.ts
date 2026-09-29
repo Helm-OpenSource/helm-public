@@ -1,4 +1,5 @@
 import {
+  type Prisma,
   AccessState,
   MembershipStatus,
   UsageType,
@@ -128,21 +129,21 @@ function hasCompleteWorkerEntitlementFoundation(
   return true;
 }
 
-export async function ensureWorkspaceCommercialFoundation(workspaceId: string, now = new Date()) {
+export async function ensureWorkspaceCommercialFoundation(workspaceId: string, now = new Date(), client: Prisma.TransactionClient = db) {
   const [workspace, billingAccount, trialState, workerEntitlements] = await Promise.all([
-    db.workspace.findUnique({
+    client.workspace.findUnique({
       where: { id: workspaceId },
       select: { id: true, defaultLocale: true },
     }),
-    db.billingAccount.findUnique({
+    client.billingAccount.findUnique({
       where: { workspaceId },
       select: { id: true },
     }),
-    db.trialState.findUnique({
+    client.trialState.findUnique({
       where: { workspaceId },
       select: { workspaceId: true },
     }),
-    db.workerEntitlement.findMany({
+    client.workerEntitlement.findMany({
       where: {
         workspaceId,
         workerKey: {
@@ -166,12 +167,12 @@ export async function ensureWorkspaceCommercialFoundation(workspaceId: string, n
     trialState &&
     hasCompleteWorkerEntitlementFoundation(workerEntitlements)
   ) {
-    return syncWorkspaceAccessState(workspaceId, now);
+    return syncWorkspaceAccessState(workspaceId, now, client);
   }
 
   const window = buildTrialWindow(now);
 
-  await db.billingAccount.upsert({
+  await client.billingAccount.upsert({
     where: { workspaceId },
     update: {},
     create: {
@@ -186,7 +187,7 @@ export async function ensureWorkspaceCommercialFoundation(workspaceId: string, n
     },
   });
 
-  await db.trialState.upsert({
+  await client.trialState.upsert({
     where: { workspaceId },
     update: {},
     create: {
@@ -200,7 +201,7 @@ export async function ensureWorkspaceCommercialFoundation(workspaceId: string, n
 
   await Promise.all(
     FIRST_PARTY_CORE_WORKERS.map((worker) =>
-      db.workerEntitlement.upsert({
+      client.workerEntitlement.upsert({
         where: {
           workspaceId_workerKey: {
             workspaceId,
@@ -224,7 +225,7 @@ export async function ensureWorkspaceCommercialFoundation(workspaceId: string, n
 
   await Promise.all(
     FUTURE_ADD_ON_WORKERS.map((worker) =>
-      db.workerEntitlement.upsert({
+      client.workerEntitlement.upsert({
         where: {
           workspaceId_workerKey: {
             workspaceId,
@@ -243,15 +244,15 @@ export async function ensureWorkspaceCommercialFoundation(workspaceId: string, n
     ),
   );
 
-  return syncWorkspaceAccessState(workspaceId, now);
+  return syncWorkspaceAccessState(workspaceId, now, client);
 }
 
-export async function syncWorkspaceAccessState(workspaceId: string, now = new Date()) {
+export async function syncWorkspaceAccessState(workspaceId: string, now = new Date(), client: Prisma.TransactionClient = db) {
   const [trialState, billingAccount] = await Promise.all([
-    db.trialState.findUnique({
+    client.trialState.findUnique({
       where: { workspaceId },
     }),
-    db.billingAccount.findUnique({
+    client.billingAccount.findUnique({
       where: { workspaceId },
       select: {
         billingPeriodEndsAt: true,
@@ -272,13 +273,13 @@ export async function syncWorkspaceAccessState(workspaceId: string, now = new Da
   });
 
   if (nextStatus !== trialState.status) {
-    await db.trialState.update({
+    await client.trialState.update({
       where: { workspaceId },
       data: { status: nextStatus },
     });
   }
 
-  await db.billingAccount.updateMany({
+  await client.billingAccount.updateMany({
     where: {
       workspaceId,
       billingStatus: {

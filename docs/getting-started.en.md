@@ -185,6 +185,9 @@ Neither scheduler affects a first run; leave them blank / `false`.
 | `HELM_DEPLOYMENT_ALLOWED_WORKSPACE_SLUGS` | One required allowlist option for `tenant` / `first-party` |
 | `HELM_DEPLOYMENT_ALLOWED_WORKSPACE_SYSTEM_KEYS` | System-key allowlist that can replace or supplement slugs |
 | `HELM_DEPLOYMENT_SELF_SERVE_SIGNUP` | Available only to `public` / `cloud`; private entries always disable it |
+| `HELM_AUTH_EMAIL_ENTRY_ENABLED` | `false` disables legacy email entry on the server and rejects existing EMAIL_ENTRY, empty or unknown-provider sessions. Omission preserves compatibility; invalid explicit values fail closed. Independent of self-serve signup. |
+| `HELM_AUTH_MEMBER_ACTIVATION_ENABLED` | Disabled by default. Enable only after governed organization creation/approval and private administrator delivery are ready. `/settings/member-activation` issues first-password credentials; it does not reset existing passwords or attest email ownership. |
+| `HELM_ORGANIZATION_CREATION_MODE` | Omitted or `self-service` preserves direct creation. `governed` rejects ordinary organization creation on the server; a deployment-owned approval transaction must use controlled provisioning. Invalid values reject creation. |
 
 `first-party` uses a minimal internal sign-in home. An explicitly configured
 company name containing control characters or more than 120 characters fails

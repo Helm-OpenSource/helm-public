@@ -151,3 +151,5 @@ connector 授权、写回、外发或审批证明。
 
 Those materials belong in private repositories or private issue / PR records,
 not in `helm-public`.
+
+- [CAIO governed read extension](product/CAIO_GOVERNED_READ_EXTENSION.md) — explicit, default-off read composition; deployment identity and source ports required.

@@ -40,6 +40,7 @@ import {
   getMembershipManagementDeniedMessage,
   getWorkspaceGovernanceDeniedMessage,
 } from "@/lib/auth/settings-governance";
+import { canSelfCreateOrganization } from "@/lib/auth/organization-creation-policy";
 import { writeAuditLog } from "@/lib/audit";
 import { ensureWorkspaceCommercialFoundation } from "@/lib/billing/foundation";
 import { ensureWorkspaceRevenueAttributionFoundation } from "@/lib/billing/revenue-attribution";
@@ -978,6 +979,7 @@ function getRolePresetCatalogGuardMessage(english: boolean) {
 }
 
 export async function createOrganizationAction(input: z.infer<typeof organizationSchema>) {
+  if (!canSelfCreateOrganization()) return { ok: false, error: "Organization creation requires platform approval / 请通过平台审核创建组织" };
   const user = await requireCurrentUser();
   const workspace = await getCurrentWorkspace();
   const english = workspace.defaultLocale === "en-US";
@@ -989,43 +991,59 @@ export async function createOrganizationAction(input: z.infer<typeof organizatio
 
   const slug = await getUniqueWorkspaceSlug(parsed.data.name);
 
-  const nextWorkspace = await db.workspace.create({
-    data: {
-      name: parsed.data.name,
-      slug,
-      status: WorkspaceStatus.ACTIVE,
-      workspaceClass: WorkspaceClass.CUSTOMER,
-      systemKey: null,
-      description: english ? "New Helm organization workspace" : "新的 Helm 组织工作区",
-      profileType: workspace.profileType,
-      defaultLocale: workspace.defaultLocale,
-      pilotMode: true,
-      captureConsentRequired: true,
-      dataRetentionDays: workspace.dataRetentionDays ?? 90,
-      featureFlagsJson: workspace.featureFlagsJson ?? serializeWorkspaceFeatureFlags(defaultWorkspaceFeatureFlags),
-      llmBudgetTier: workspace.llmBudgetTier ?? "pilot",
-      llmEnabled: workspace.llmEnabled ?? true,
-      defaultLLMProvider: workspace.defaultLLMProvider,
-      defaultLLMModel: workspace.defaultLLMModel,
-      extractionModel: workspace.extractionModel,
-      briefingModel: workspace.briefingModel,
-      reasoningModel: workspace.reasoningModel,
-      configuration: workspace.configuration,
-    },
-  });
+  const nextWorkspace = await db.$transaction(async tx => {
+    const nextWorkspace = await tx.workspace.create({
+      data: {
+        name: parsed.data.name,
+        slug,
+        status: WorkspaceStatus.ACTIVE,
+        workspaceClass: WorkspaceClass.CUSTOMER,
+        systemKey: null,
+        description: english ? "New Helm organization workspace" : "新的 Helm 组织工作区",
+        profileType: workspace.profileType,
+        defaultLocale: workspace.defaultLocale,
+        pilotMode: true,
+        captureConsentRequired: true,
+        dataRetentionDays: workspace.dataRetentionDays ?? 90,
+        featureFlagsJson: workspace.featureFlagsJson ?? serializeWorkspaceFeatureFlags(defaultWorkspaceFeatureFlags),
+        llmBudgetTier: workspace.llmBudgetTier ?? "pilot",
+        llmEnabled: workspace.llmEnabled ?? true,
+        defaultLLMProvider: workspace.defaultLLMProvider,
+        defaultLLMModel: workspace.defaultLLMModel,
+        extractionModel: workspace.extractionModel,
+        briefingModel: workspace.briefingModel,
+        reasoningModel: workspace.reasoningModel,
+        configuration: workspace.configuration,
+      },
+    });
 
-  await db.membership.create({
-    data: {
+    await tx.membership.create({
+      data: {
+        workspaceId: nextWorkspace.id,
+        userId: user.id,
+        role: WorkspaceRole.OWNER,
+        status: MembershipStatus.ACTIVE,
+        title: user.title,
+        persona: user.title,
+      },
+    });
+
+    await ensureWorkspaceCommercialFoundation(nextWorkspace.id, new Date(), tx);
+    await writeAuditLog({
       workspaceId: nextWorkspace.id,
       userId: user.id,
-      role: WorkspaceRole.OWNER,
-      status: MembershipStatus.ACTIVE,
-      title: user.title,
-      persona: user.title,
-    },
-  });
+      actor: user.name,
+      actorType: ActorType.USER,
+      actionType: "ORGANIZATION_CREATED",
+      targetType: "Workspace",
+      targetId: nextWorkspace.id,
+      summary: english ? `Created organization ${nextWorkspace.name}` : `创建组织：${nextWorkspace.name}`,
+      sourcePage: "/settings",
+    }, { client: tx });
 
-  await ensureWorkspaceCommercialFoundation(nextWorkspace.id);
+    return nextWorkspace;
+  }, { isolationLevel: "Serializable" });
+
   await setActiveWorkspace(nextWorkspace.id);
 
   const cookieStore = await cookies();
@@ -1033,18 +1051,6 @@ export async function createOrganizationAction(input: z.infer<typeof organizatio
     httpOnly: false,
     sameSite: "lax",
     path: "/",
-  });
-
-  await writeAuditLog({
-    workspaceId: nextWorkspace.id,
-    userId: user.id,
-    actor: user.name,
-    actorType: ActorType.USER,
-    actionType: "ORGANIZATION_CREATED",
-    targetType: "Workspace",
-    targetId: nextWorkspace.id,
-    summary: english ? `Created organization ${nextWorkspace.name}` : `创建组织：${nextWorkspace.name}`,
-    sourcePage: "/settings",
   });
 
   await logEvent({

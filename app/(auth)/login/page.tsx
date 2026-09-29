@@ -1,3 +1,4 @@
+import { isEmailEntryEnabled } from "@/lib/auth/email-entry-policy";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -288,6 +289,7 @@ export default async function LoginPage({
     !compatibilityEmail &&
     !autoCompatibility;
   const isCompatibilityEntry =
+    isEmailEntryEnabled() &&
     !isDingTalkInvitePrefill &&
     !isSignupEntry &&
     !isPhoneCodeReturn &&
@@ -387,6 +389,7 @@ export default async function LoginPage({
             <LoginPanel
               locale={locale}
               allowSelfServeSignup={deploymentEntry.selfServeSignupEnabled}
+              allowEmailEntry={isEmailEntryEnabled()}
               deploymentDisplayName={deploymentEntry.displayName}
               initialTab={initialTab}
               prefillSignup={{

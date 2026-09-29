@@ -84,6 +84,7 @@ export async function probeCaioWorkerGatewayReadiness(
   const unauthenticatedAgent = new Agent({
     keepAlive: false,
     maxSockets: 1,
+    maxCachedSessions: 0,
     ca: config.serverCa,
     rejectUnauthorized: true,
     minVersion: "TLSv1.3",
@@ -201,9 +202,14 @@ type ReadinessResponse = Readonly<{
 }>;
 
 function createAgent(config: CaioWorkerGatewayClientConfig): Agent {
+  // maxCachedSessions: 0 — every request fingerprints the gateway certificate,
+  // and a resumed TLS 1.3 session presents none (getPeerCertificate() is {}).
+  // The gateway closes each connection, so without this every request after the
+  // first resumes and fails caio_worker_gateway_peer_certificate_missing.
   return new Agent({
     keepAlive: true,
     maxSockets: 1,
+    maxCachedSessions: 0,
     cert: config.clientCertificate,
     key: config.clientPrivateKey,
     ca: config.serverCa,

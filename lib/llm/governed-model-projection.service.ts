@@ -1,6 +1,11 @@
 import "server-only";
 
 import {
+  computeGovernedProjectionRegistrationHash,
+  type GovernedProjectionEngineRegistration,
+} from "@/lib/llm/model-route-contracts";
+
+import {
   canonicalJson,
   sha256,
 } from "@/lib/expert-capability/hashing";
@@ -19,18 +24,7 @@ export type GovernedProjectionJsonValue =
       readonly [key: string]: GovernedProjectionJsonValue;
     };
 
-export type GovernedProjectionEngineRegistration = {
-  engineKey: string;
-  projectorRegistrationRef: string;
-  projectorKey: string;
-  projectorVersion: string;
-  projectorImplementationHash: string;
-  scannerRegistrationRef: string;
-  scannerKey: string;
-  scannerVersion: string;
-  scannerImplementationHash: string;
-  executionBoundary: "local_only";
-};
+export type { GovernedProjectionEngineRegistration };
 
 export type GovernedProjectionResult<
   TPayload extends GovernedProjectionJsonValue,
@@ -141,43 +135,6 @@ function uniqueSorted(values: readonly string[]): string[] {
   return [...new Set(values)].sort();
 }
 
-function computeRegistrationHash(
-  registration: GovernedProjectionEngineRegistration,
-  kind: "projector" | "scanner",
-): string {
-  return sha256(
-    canonicalJson(
-      kind === "projector"
-        ? {
-            schemaVersion:
-              "helm.model-projector-registration/v1",
-            engineKey: registration.engineKey,
-            registrationRef:
-              registration.projectorRegistrationRef,
-            componentKey: registration.projectorKey,
-            componentVersion: registration.projectorVersion,
-            implementationHash:
-              registration.projectorImplementationHash,
-            executionBoundary:
-              registration.executionBoundary,
-          }
-        : {
-            schemaVersion:
-              "helm.model-scanner-registration/v1",
-            engineKey: registration.engineKey,
-            registrationRef:
-              registration.scannerRegistrationRef,
-            componentKey: registration.scannerKey,
-            componentVersion: registration.scannerVersion,
-            implementationHash:
-              registration.scannerImplementationHash,
-            executionBoundary:
-              registration.executionBoundary,
-          },
-    ),
-  );
-}
-
 function validateEvidencePartition(input: {
   candidate: readonly string[];
   selected: readonly string[];
@@ -279,14 +236,14 @@ export function createGovernedModelProjectionService<
         result.promptInjectionScanStatus,
       projectorRegistrationRef:
         registration.projectorRegistrationRef,
-      projectorRegistrationHash: computeRegistrationHash(
+      projectorRegistrationHash: computeGovernedProjectionRegistrationHash(
         registration,
         "projector",
       ),
       projectorVersion: registration.projectorVersion,
       scannerRegistrationRef:
         registration.scannerRegistrationRef,
-      scannerRegistrationHash: computeRegistrationHash(
+      scannerRegistrationHash: computeGovernedProjectionRegistrationHash(
         registration,
         "scanner",
       ),

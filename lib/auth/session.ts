@@ -1,3 +1,4 @@
+import { isSessionProviderAllowed } from "@/lib/auth/email-entry-policy";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createHash, randomUUID } from "node:crypto";
@@ -180,7 +181,7 @@ async function getAuthSessionRecordByKey(sessionKey: string) {
     include: authSessionUserInclude,
   });
 
-  if (!authSession || !isSessionUsable(authSession)) {
+  if (!authSession || !isSessionUsable(authSession) || !isSessionProviderAllowed(authSession.providerType)) {
     return null;
   }
 
@@ -905,6 +906,7 @@ export async function createSession(input: {
   sourcePage?: string | null;
   providerType?: AuthSessionProviderType | null;
 }) {
+  if (!isSessionProviderAllowed(input.providerType)) throw new Error("Session provider unavailable");
   if (input.workspaceId) {
     const deploymentConfig = resolveDeploymentEntryConfig();
     const hasWorkspaceRestriction =

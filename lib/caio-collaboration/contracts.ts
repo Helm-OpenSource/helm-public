@@ -4,6 +4,7 @@ export const WORKBUDDY_SCOPES = [
   "caio:delivery:read",
   "caio:presence:challenge",
   "caio:p1c:read",
+  "caio:operations:read",
   "caio:canonical:mutate",
 ] as const;
 

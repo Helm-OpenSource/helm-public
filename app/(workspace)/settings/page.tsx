@@ -41,7 +41,10 @@ export default async function SettingsPage({
     searchParams,
   });
 
-  return <SettingsClient {...props} />;
+  return <>
+    {process.env.HELM_AUTH_MEMBER_ACTIVATION_ENABLED === "true" && session.membership.status === "ACTIVE" && ["OWNER", "ADMIN"].includes(session.membership.role) ? <a className="block px-6 pt-4 underline" href="/settings/member-activation">成员首次激活</a> : null}
+    <SettingsClient {...props} />
+  </>;
 }
 
 async function loadSettingsClientProps(input: {

@@ -53,7 +53,11 @@ function writeExt(dir: string): string {
 
 type Handler = (body: unknown, url: string) => { status: number; body?: unknown };
 
-async function startServer(pki: Pki, handler: Handler): Promise<{ server: HttpsServer; port: number; peers: number }> {
+async function startServer(
+  pki: Pki,
+  handler: Handler,
+  options: { closeEachResponse?: boolean } = {},
+): Promise<{ server: HttpsServer; port: number; peers: number }> {
   const state = { peers: 0 };
   const server = createServer(
     {
@@ -71,7 +75,10 @@ async function startServer(pki: Pki, handler: Handler): Promise<{ server: HttpsS
       req.on("end", () => {
         const text = Buffer.concat(chunks).toString("utf8");
         const out = handler(text.length ? JSON.parse(text) : null, req.url ?? "");
-        res.writeHead(out.status, { "content-type": "application/json" });
+        res.writeHead(out.status, {
+          "content-type": "application/json",
+          ...(options.closeEachResponse ? { connection: "close" } : {}),
+        });
         res.end(out.body === undefined ? "" : JSON.stringify(out.body));
       });
     },
@@ -138,6 +145,37 @@ describe("设备侧网关客户端", () => {
     });
     expect(seen).toEqual(["/livez", "/readyz", "/mcp/workbuddy", "/v1/execution-results"]);
     expect(JSON.stringify(observation)).not.toContain(TOKEN);
+  });
+
+  it("readiness probe still fingerprints every response when the gateway closes each connection (no TLS session resumption)", async () => {
+    // The production gateway answers `Connection: close`, so every probe opens a
+    // new TLS connection. A resumed TLS 1.3 session carries no certificate, and
+    // getPeerCertificate() returns {} there (2026-09-24 readiness ceremony).
+    pki = makePki();
+    const started = await startServer(
+      pki,
+      (_body, url) => {
+        if (url === "/livez" || url === "/readyz") return { status: 200, body: { state: "ready" } };
+        return { status: 404, body: { error: "not_found" } };
+      },
+      { closeEachResponse: true },
+    );
+    open = started.server;
+
+    const observation = await probeCaioWorkerGatewayReadiness({
+      host: "127.0.0.1",
+      port: started.port,
+      accessToken: TOKEN,
+      clientCertificate: pki.clientCert,
+      clientPrivateKey: pki.clientKey,
+      serverCa: pki.caCert,
+      requestTimeoutMs: 8_000,
+    });
+
+    expect(observation.serverCertificateFingerprint).toBe(
+      `sha256:${new X509Certificate(pki.serverCert).fingerprint256.replaceAll(":", "").toLowerCase()}`,
+    );
+    expect(observation.readyzStatus).toBe(200);
   });
 
   it("令牌必须是推理受众的，客户端材料不能为空", () => {

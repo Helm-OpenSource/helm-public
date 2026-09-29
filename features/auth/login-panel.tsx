@@ -49,6 +49,7 @@ type LoginPanelProps = {
   locale: UiLocale;
   surface?: "landing" | "landing-compact" | "login";
   allowSelfServeSignup?: boolean;
+  allowEmailEntry?: boolean;
   deploymentDisplayName?: string;
   initialTab?: "signup" | "password" | "phone";
   prefillSignup?: {
@@ -125,6 +126,7 @@ export function LoginPanel({
   locale,
   surface,
   allowSelfServeSignup,
+  allowEmailEntry = true,
   deploymentDisplayName,
   initialTab,
   prefillSignup,
@@ -146,6 +148,7 @@ export function LoginPanel({
         locale={locale}
         surface={surface}
         allowSelfServeSignup={allowSelfServeSignup}
+        allowEmailEntry={allowEmailEntry}
         deploymentDisplayName={deploymentDisplayName}
         initialTab={initialTab}
         prefillSignup={prefillSignup}
@@ -162,6 +165,7 @@ function LoginPanelSurface({
   locale,
   surface,
   allowSelfServeSignup,
+  allowEmailEntry = true,
   deploymentDisplayName,
   initialTab,
   prefillSignup,
@@ -179,7 +183,7 @@ function LoginPanelSurface({
   const inviteEntryMode = presentation === "login" && entryIntent === "dingtalk-invite";
   const newTrialEntryMode = presentation === "login" && entryIntent === "new-trial";
   const returningEntryMode = presentation === "login" && entryIntent === "returning";
-  const compatibilityEntryMode = presentation === "login" && entryIntent === "compatibility";
+  const compatibilityEntryMode = allowEmailEntry && presentation === "login" && entryIntent === "compatibility";
   const signupEnabled = allowSelfServeSignup ?? true;
   const resolvedInitialTab = inviteEntryMode || newTrialEntryMode
     ? inviteEntryMode || signupEnabled
@@ -509,6 +513,7 @@ function LoginPanelSurface({
   };
 
   const continueWithWorkEmail = () => {
+    if (!allowEmailEntry) return;
     startCompatibilityTransition(async () => {
       const result = await loginAction({ email: compatibilityEmail, locale });
       handleLoginSuccess(result);
@@ -516,7 +521,7 @@ function LoginPanelSurface({
   };
 
   useEffect(() => {
-    if (!autoContinueCompatibility || compatibilityAutoTriggeredRef.current) {
+    if (!allowEmailEntry || !autoContinueCompatibility || compatibilityAutoTriggeredRef.current) {
       return;
     }
 
@@ -530,7 +535,7 @@ function LoginPanelSurface({
       const result = await loginAction({ email, locale });
       handleLoginSuccess(result);
     });
-  }, [autoContinueCompatibility, compatibilityEmail, handleLoginSuccess, locale]);
+  }, [allowEmailEntry, autoContinueCompatibility, compatibilityEmail, handleLoginSuccess, locale]);
 
   const continueLandingPhoneEntry = () => {
     if (phoneLoginError) {
@@ -1477,7 +1482,7 @@ function LoginPanelSurface({
                 </div>
               </div>
             </details>
-          ) : landingMode || compatibilityEntryMode ? (
+          ) : allowEmailEntry && (landingMode || compatibilityEntryMode) ? (
             <>
               <Separator />
 
