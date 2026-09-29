@@ -206,6 +206,18 @@ describeMysql("member MCP P1b prompt responses with an isolated MySQL database",
     expect(refused.error?.code).toBe("prompt_not_found");
   });
 
+  it("never redeems a prompt-response challenge through the work-signal tools", async () => {
+    const promptRef = await prompt(memberRefForUser(actors.seat.userId));
+    const prepared = await call("prepare_prompt_response", { promptRef, kind: "refuse", text: "这个案子不归我" });
+    const challengeRef = (prepared.data as { challengeRef: string }).challengeRef;
+    const misuse = await call("submit_work_signal", { kind: "progress", summary: "回应提问·拒绝", detail: "x", challengeRef });
+    expect(misuse.ok).toBe(false);
+    expect(misuse.error?.code).toBe("challenge_not_for_this_tool");
+    // The challenge is untouched and still answers the prompt.
+    const submitted = await call("submit_prompt_response", { promptRef, kind: "refuse", text: "这个案子不归我", challengeRef });
+    expect(submitted.ok).toBe(true);
+  });
+
   it("keeps a protected response without an active mandate, then registers it once one exists", async () => {
     const promptRef = await prompt(memberRefForUser(actors.seat.userId));
     const { submitted } = await respond(promptRef, "refuse", "这个客户已经在走法务流程，我不应再联系");
