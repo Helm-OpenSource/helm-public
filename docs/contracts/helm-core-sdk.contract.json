@@ -28,6 +28,7 @@
       "sourceRef": "lib/extensions/registry-contract.ts",
       "symbols": [
         "PackContributions",
+        "AuditDisplayLabelContribution",
         "registerPackContributions",
         "__resetPackRegistryForTest"
       ]

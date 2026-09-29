@@ -34,6 +34,7 @@ import { recordSignalCollectionJobRun } from "@/lib/signal-collection/run-ledger
 
 import {
   getRegisteredAccountBindings,
+  getRegisteredAuditDisplayLabels,
   getRegisteredBiBoards,
   getRegisteredBiReportP0ProcessService,
   getRegisteredCatalog,
@@ -58,6 +59,7 @@ import type {
   WorkspaceLike,
   ExtensionAccessContext,
   ExtensionAccessResult,
+  RegisteredAuditDisplayLabels,
   WorkspaceNavExtensionCluster,
 } from "./registry-types";
 import type { BiReportSignalRoutingConfig } from "@/lib/bi-report-skill/types";
@@ -90,6 +92,14 @@ export type ResolvedWorkspaceNavExtensions = ResolvedWorkspaceNavExtensionsType;
 
 export function listSolutionExtensionCatalog(): ReadonlyArray<SolutionExtensionCatalogEntry> {
   return getRegisteredCatalog();
+}
+
+// ---------------------------------------------------------------------------
+// Audit display labels (display-only; empty registry ⇒ raw codes)
+// ---------------------------------------------------------------------------
+
+export function resolveAuditDisplayLabels(): RegisteredAuditDisplayLabels {
+  return getRegisteredAuditDisplayLabels();
 }
 
 // ---------------------------------------------------------------------------
