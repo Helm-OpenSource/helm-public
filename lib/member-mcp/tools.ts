@@ -19,6 +19,21 @@ import type {
   MemberToolEnvelope,
 } from "@/lib/member-gateway/types";
 import type { MemberMcpScope } from "@/lib/member-mcp/contract";
+import {
+  MEMBER_MCP_RESPONSE_KINDS,
+  MEMBER_MCP_RESPONSE_TEXT_MAX_CHARS,
+  validateResponseText,
+  type MemberMcpResponseKind,
+} from "@/lib/member-mcp/response-contract";
+import {
+  MEMBER_TASK_ACTION_TAKEN_MAX,
+  MEMBER_TASK_MAX_EVIDENCE_REFS,
+  MEMBER_TASK_NOTE_MAX,
+  MEMBER_TASK_REPORT_OUTCOMES,
+  validateMemberTaskReport,
+  type MemberTaskReportInput,
+  type MemberTaskReportOutcome,
+} from "@/lib/member-mcp/task-contract";
 
 export const MEMBER_MCP_TOOL_NAMES = [
   "get_my_brief",
@@ -28,6 +43,13 @@ export const MEMBER_MCP_TOOL_NAMES = [
   "submit_work_signal",
   "prepare_field_report",
   "submit_field_report",
+  "prepare_prompt_response",
+  "submit_prompt_response",
+  "get_prompt_response_status",
+  "list_my_tasks",
+  "get_task",
+  "prepare_task_report",
+  "submit_task_report",
 ] as const;
 
 export const MEMBER_MCP_WRITE_TOOL_NAMES = [
@@ -35,6 +57,10 @@ export const MEMBER_MCP_WRITE_TOOL_NAMES = [
   "submit_work_signal",
   "prepare_field_report",
   "submit_field_report",
+  "prepare_prompt_response",
+  "submit_prompt_response",
+  "prepare_task_report",
+  "submit_task_report",
 ] as const;
 
 // Field-report kinds (staff-connect spec §3). A field report rides the
@@ -160,7 +186,95 @@ export const MEMBER_MCP_TOOLS: readonly MemberMcpToolDefinition[] = [
     requiredScope: "member:report:write",
     inputSchema: FIELD_REPORT_SCHEMA(true),
   },
+  {
+    name: "prepare_prompt_response",
+    description:
+      "回应 CAIO 提问第一步：选择回应方式（已知悉 / 拒绝 / 暂停 / 申诉 / 进展汇报 / 回答）并填写内容，拿到一次性确认码（5 分钟内有效）。拒绝、暂停、申诉始终是你的正当权利，需要写明理由。",
+    requiredScope: "member:prompt:respond",
+    inputSchema: RESPONSE_SCHEMA(false),
+  },
+  {
+    name: "submit_prompt_response",
+    description:
+      "回应 CAIO 提问第二步：带上确认码和与第一步完全相同的内容提交。系统先收下并返回收件编号，后台约 1 分钟内正式登记；用 get_prompt_response_status 查看登记结果。",
+    requiredScope: "member:prompt:respond",
+    inputSchema: RESPONSE_SCHEMA(true),
+  },
+  {
+    name: "get_prompt_response_status",
+    description: "查看一条回应的登记状态：已收到、已登记、未能登记（附原因）或待人工处理。只读。",
+    requiredScope: "member:prompt:respond",
+    inputSchema: {
+      type: "object",
+      properties: { inboxRef: { type: "string", minLength: 1, maxLength: 191 } },
+      required: ["inboxRef"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "list_my_tasks",
+    description:
+      "列出一把手确认并派给我的工作包（与工作台“我的 CAIO 任务”同一范围）：目标、动作、截止时间、验收标准与状态。只读。",
+    requiredScope: "member:task:read",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "get_task",
+    description: "读取一个派给我的工作包详情。只读。",
+    requiredScope: "member:task:read",
+    inputSchema: {
+      type: "object",
+      properties: { taskRef: { type: "string", minLength: 1, maxLength: 191 } },
+      required: ["taskRef"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "prepare_task_report",
+    description:
+      "回报工作包进展第一步：选择状态（已完成 / 部分完成 / 受阻 / 未开始），写明做了什么、证据引用（如 case:123，不能是网址）和备注，拿到一次性确认码。回报只作为待审阅的候选，不会关闭任务；任务由一把手侧的验收流程关闭。",
+    requiredScope: "member:task:receipt",
+    inputSchema: TASK_REPORT_SCHEMA(false),
+  },
+  {
+    name: "submit_task_report",
+    description: "回报工作包进展第二步：带上确认码和与第一步完全相同的内容提交。",
+    requiredScope: "member:task:receipt",
+    inputSchema: TASK_REPORT_SCHEMA(true),
+  },
 ];
+
+function TASK_REPORT_SCHEMA(withChallenge: boolean): Record<string, unknown> {
+  const properties: Record<string, unknown> = {
+    taskRef: { type: "string", minLength: 1, maxLength: 191 },
+    outcome: { type: "string", enum: [...MEMBER_TASK_REPORT_OUTCOMES] },
+    actionTaken: { type: "string", minLength: 1, maxLength: MEMBER_TASK_ACTION_TAKEN_MAX },
+    evidenceRefs: { type: "array", items: { type: "string", maxLength: 220 }, maxItems: MEMBER_TASK_MAX_EVIDENCE_REFS },
+    note: { type: "string", maxLength: MEMBER_TASK_NOTE_MAX },
+  };
+  if (withChallenge) properties.challengeRef = { type: "string", minLength: 1, maxLength: 191 };
+  return {
+    type: "object",
+    properties,
+    required: withChallenge ? ["challengeRef", "taskRef", "outcome", "actionTaken"] : ["taskRef", "outcome", "actionTaken"],
+    additionalProperties: false,
+  };
+}
+
+function RESPONSE_SCHEMA(withChallenge: boolean): Record<string, unknown> {
+  const properties: Record<string, unknown> = {
+    promptRef: { type: "string", minLength: 1, maxLength: 191 },
+    kind: { type: "string", enum: [...MEMBER_MCP_RESPONSE_KINDS] },
+    text: { type: "string", maxLength: MEMBER_MCP_RESPONSE_TEXT_MAX_CHARS },
+  };
+  if (withChallenge) properties.challengeRef = { type: "string", minLength: 1, maxLength: 191 };
+  return {
+    type: "object",
+    properties,
+    required: withChallenge ? ["challengeRef", "promptRef", "kind"] : ["promptRef", "kind"],
+    additionalProperties: false,
+  };
+}
 
 function FIELD_REPORT_SCHEMA(withChallenge: boolean): Record<string, unknown> {
   const properties: Record<string, unknown> = {
@@ -224,7 +338,20 @@ export type MemberMcpToolCall =
   | { toolName: "prepare_work_signal"; arguments: MemberWorkSignalInput }
   | { toolName: "submit_work_signal"; arguments: MemberWorkSignalInput & { challengeRef: string } }
   | { toolName: "prepare_field_report"; arguments: MemberFieldReportInput }
-  | { toolName: "submit_field_report"; arguments: MemberFieldReportInput & { challengeRef: string } };
+  | { toolName: "submit_field_report"; arguments: MemberFieldReportInput & { challengeRef: string } }
+  | { toolName: "prepare_prompt_response"; arguments: MemberPromptResponseInput }
+  | { toolName: "submit_prompt_response"; arguments: MemberPromptResponseInput & { challengeRef: string } }
+  | { toolName: "get_prompt_response_status"; arguments: { inboxRef: string } }
+  | { toolName: "list_my_tasks"; arguments: Record<string, never> }
+  | { toolName: "get_task"; arguments: { taskRef: string } }
+  | { toolName: "prepare_task_report"; arguments: MemberTaskReportInput }
+  | { toolName: "submit_task_report"; arguments: MemberTaskReportInput & { challengeRef: string } };
+
+export type MemberPromptResponseInput = {
+  promptRef: string;
+  kind: MemberMcpResponseKind;
+  text: string;
+};
 
 const REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,190}$/;
 
@@ -285,6 +412,81 @@ export function parseMemberMcpToolCall(
     const challengeRef = readChallengeRef(record);
     if (!challengeRef) return { ok: false, message: "challengeRef is malformed" };
     return { ok: true, call: { toolName: name, arguments: { ...report.value, challengeRef } } };
+  }
+  if (name === "prepare_prompt_response" || name === "submit_prompt_response") {
+    const withChallenge = name === "submit_prompt_response";
+    const allowed = new Set(["promptRef", "kind", "text", ...(withChallenge ? ["challengeRef"] : [])]);
+    if (keys.some((key) => !allowed.has(key))) return { ok: false, message: "unknown argument" };
+    const promptRef = record.promptRef;
+    if (typeof promptRef !== "string" || !REF_PATTERN.test(promptRef)) {
+      return { ok: false, message: "promptRef is malformed" };
+    }
+    const kind = record.kind;
+    if (typeof kind !== "string" || !(MEMBER_MCP_RESPONSE_KINDS as readonly string[]).includes(kind)) {
+      return { ok: false, message: `kind must be one of ${MEMBER_MCP_RESPONSE_KINDS.join(", ")}` };
+    }
+    const rawText = record.text === undefined ? "" : record.text;
+    if (typeof rawText !== "string" || CONTROL_CHARACTERS.test(rawText)) {
+      return { ok: false, message: "text must be printable" };
+    }
+    const text = rawText.trim();
+    const textProblem = validateResponseText(kind as MemberMcpResponseKind, text);
+    if (textProblem) return { ok: false, message: textProblem };
+    const value = { promptRef, kind: kind as MemberMcpResponseKind, text };
+    if (!withChallenge) return { ok: true, call: { toolName: name, arguments: value } };
+    const challengeRef = readChallengeRef(record);
+    if (!challengeRef) return { ok: false, message: "challengeRef is malformed" };
+    return { ok: true, call: { toolName: name, arguments: { ...value, challengeRef } } };
+  }
+  if (name === "get_prompt_response_status") {
+    if (keys.some((key) => key !== "inboxRef")) return { ok: false, message: "unknown argument" };
+    const inboxRef = record.inboxRef;
+    if (typeof inboxRef !== "string" || !REF_PATTERN.test(inboxRef)) {
+      return { ok: false, message: "inboxRef is malformed" };
+    }
+    return { ok: true, call: { toolName: name, arguments: { inboxRef } } };
+  }
+  if (name === "list_my_tasks") {
+    if (keys.length > 0) return { ok: false, message: "list_my_tasks takes no arguments" };
+    return { ok: true, call: { toolName: name, arguments: {} } };
+  }
+  if (name === "get_task") {
+    if (keys.some((key) => key !== "taskRef")) return { ok: false, message: "unknown argument" };
+    const taskRef = record.taskRef;
+    if (typeof taskRef !== "string" || !REF_PATTERN.test(taskRef)) return { ok: false, message: "taskRef is malformed" };
+    return { ok: true, call: { toolName: name, arguments: { taskRef } } };
+  }
+  if (name === "prepare_task_report" || name === "submit_task_report") {
+    const withChallenge = name === "submit_task_report";
+    const allowed = new Set(["taskRef", "outcome", "actionTaken", "evidenceRefs", "note", ...(withChallenge ? ["challengeRef"] : [])]);
+    if (keys.some((key) => !allowed.has(key))) return { ok: false, message: "unknown argument" };
+    const taskRef = record.taskRef;
+    if (typeof taskRef !== "string" || !REF_PATTERN.test(taskRef)) return { ok: false, message: "taskRef is malformed" };
+    const outcome = record.outcome;
+    if (typeof outcome !== "string" || !(MEMBER_TASK_REPORT_OUTCOMES as readonly string[]).includes(outcome)) {
+      return { ok: false, message: `outcome must be one of ${MEMBER_TASK_REPORT_OUTCOMES.join(", ")}` };
+    }
+    const evidenceRefs = record.evidenceRefs ?? [];
+    if (!Array.isArray(evidenceRefs) || !evidenceRefs.every((ref) => typeof ref === "string")) {
+      return { ok: false, message: "evidenceRefs must be an array of strings" };
+    }
+    const note = record.note ?? "";
+    if (typeof record.actionTaken !== "string" || typeof note !== "string") {
+      return { ok: false, message: "actionTaken and note must be text" };
+    }
+    const value: MemberTaskReportInput = {
+      taskRef,
+      outcome: outcome as MemberTaskReportOutcome,
+      actionTaken: record.actionTaken.trim(),
+      evidenceRefs: evidenceRefs as string[],
+      note: note.trim(),
+    };
+    const problem = validateMemberTaskReport(value);
+    if (problem) return { ok: false, message: problem };
+    if (!withChallenge) return { ok: true, call: { toolName: name, arguments: value } };
+    const challengeRef = readChallengeRef(record);
+    if (!challengeRef) return { ok: false, message: "challengeRef is malformed" };
+    return { ok: true, call: { toolName: name, arguments: { ...value, challengeRef } } };
   }
   return { ok: false, message: "unknown tool" };
 }

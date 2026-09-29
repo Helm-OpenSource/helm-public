@@ -116,7 +116,22 @@ describe("readMemberMcpWorkspaceFlags", () => {
 describe("memberMcpScopesForRequest", () => {
   it("issues write scopes only on an explicit request", () => {
     expect(memberMcpScopesForRequest(false)).toEqual(["member:brief:read", "member:prompt:read"]);
-    expect(memberMcpScopesForRequest(true)).toEqual(["member:brief:read", "member:prompt:read", "member:signal:write", "member:report:write"]);
+    expect(memberMcpScopesForRequest(true)).toEqual([
+      "member:brief:read",
+      "member:prompt:read",
+      "member:signal:write",
+      "member:report:write",
+      "member:prompt:respond",
+    ]);
+  });
+  it("adds task scopes only on the separate task opt-in", () => {
+    expect(memberMcpScopesForRequest(false, true)).toEqual([
+      "member:brief:read",
+      "member:prompt:read",
+      "member:task:read",
+      "member:task:receipt",
+    ]);
+    expect(memberMcpScopesForRequest(true)).not.toContain("member:task:read");
   });
 });
 

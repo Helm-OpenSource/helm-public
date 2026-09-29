@@ -56,10 +56,28 @@ export const MEMBER_MCP_P1A_WRITE_SCOPES = [
   "member:report:write",
 ] as const satisfies readonly MemberMcpScope[];
 
-export function memberMcpScopesForRequest(includeWrite: boolean): MemberMcpScope[] {
-  return includeWrite
-    ? [...MEMBER_MCP_P0_ISSUABLE_SCOPES, ...MEMBER_MCP_P1A_WRITE_SCOPES]
-    : [...MEMBER_MCP_P0_ISSUABLE_SCOPES];
+// P1b (2026-09-29): responding to CAIO prompts (asynchronous registration,
+// see response-contract.ts). Rides the same explicit write opt-in as P1a.
+export const MEMBER_MCP_P1B_RESPOND_SCOPES = [
+  "member:prompt:respond",
+] as const satisfies readonly MemberMcpScope[];
+
+// P2 (2026-09-29): the Stage 1 work packets an owner dispatched to the member
+// (PR #426's executor grant) and the member's reports on them. A report is an
+// untrusted candidate signal; packets close only through the Stage 1 chain
+// (see task-contract.ts). `member:task:receipt` is the frozen P0 scope name
+// for "report on my task". Separate opt-in from the P1 writes.
+export const MEMBER_MCP_P2_TASK_SCOPES = [
+  "member:task:read",
+  "member:task:receipt",
+] as const satisfies readonly MemberMcpScope[];
+
+export function memberMcpScopesForRequest(includeWrite: boolean, includeTasks = false): MemberMcpScope[] {
+  return [
+    ...MEMBER_MCP_P0_ISSUABLE_SCOPES,
+    ...(includeWrite ? [...MEMBER_MCP_P1A_WRITE_SCOPES, ...MEMBER_MCP_P1B_RESPOND_SCOPES] : []),
+    ...(includeTasks ? MEMBER_MCP_P2_TASK_SCOPES : []),
+  ];
 }
 
 export const MEMBER_MCP_TOKEN_PREFIX = "hmm_";

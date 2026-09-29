@@ -194,6 +194,8 @@ export async function requestMemberAgentConnection(input: {
   // Candidate-write scopes (work signals, field reports) are only issued
   // when the member asks for them; the approver sees the scopes.
   includeWrite?: boolean;
+  // Assigned-task read and self-reported receipts (P2); separate opt-in.
+  includeTasks?: boolean;
   now?: Date;
 }) {
   const now = input.now ?? new Date();
@@ -206,7 +208,7 @@ export async function requestMemberAgentConnection(input: {
   const deviceLabel = normalizeDeviceLabel(input.deviceLabel);
   if (!deviceLabel) throw new MemberAgentConnectionError("INVALID_INPUT", "Device label must be 2-80 printable characters");
 
-  const scopes: MemberMcpScope[] = memberMcpScopesForRequest(input.includeWrite === true);
+  const scopes: MemberMcpScope[] = memberMcpScopesForRequest(input.includeWrite === true, input.includeTasks === true);
   return runWithWriteConflictRetry(() => db.$transaction(async (tx) => {
     // Counted inside the Serializable transaction so concurrent requests from
     // the same member cannot each see room under the cap.

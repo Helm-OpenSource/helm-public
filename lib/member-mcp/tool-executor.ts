@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import type { MemberProjectionDecision, MemberToolEnvelope } from "@/lib/member-gateway/types";
 import type { MemberMcpAuthContext } from "@/lib/member-mcp/connection-service";
 import { memberMcpProviderRef, memberRefForUser } from "@/lib/member-mcp/contract";
+import { executeMemberPromptResponse } from "@/lib/member-mcp/response-intake";
+import { executeMemberTaskTool } from "@/lib/member-mcp/task-executor";
 import { executeMemberMcpWrite } from "@/lib/member-mcp/write-executor";
 import {
   MEMBER_MCP_BLOCK_MESSAGES,
@@ -219,6 +221,23 @@ export async function executeMemberMcpTool(input: {
     call.toolName === "submit_field_report"
   ) {
     return executeMemberMcpWrite({ auth: input.auth, call, providerRef, requestId, now });
+  }
+
+  if (
+    call.toolName === "prepare_prompt_response" ||
+    call.toolName === "submit_prompt_response" ||
+    call.toolName === "get_prompt_response_status"
+  ) {
+    return executeMemberPromptResponse({ auth: input.auth, call, providerRef, requestId, now });
+  }
+
+  if (
+    call.toolName === "list_my_tasks" ||
+    call.toolName === "get_task" ||
+    call.toolName === "prepare_task_report" ||
+    call.toolName === "submit_task_report"
+  ) {
+    return executeMemberTaskTool({ auth: input.auth, call, providerRef, requestId, now });
   }
 
   const row = await db.memberPrompt.findUnique({
