@@ -36,6 +36,9 @@ export type { ExtensionApiRoute, ApiRouteMethod } from "./api-route-registry";
 import type {
   AccountBindingContribution,
   AttentionSourceContribution,
+  AuditDisplayLabel,
+  AuditDisplayLabelContribution,
+  RegisteredAuditDisplayLabels,
   BiBoardContribution,
   BiReportP0ProcessProductionRow,
   BiReportP0ProcessSopRow,
@@ -177,6 +180,13 @@ export type PackContributions = {
    * gate evidence. Patterns are relative to `/api/extensions/`.
    */
   apiRoutes?: ReadonlyArray<ExtensionApiRoute>;
+  /**
+   * Display-only labels for the AuditLog codes this pack writes (**merge**).
+   * Keys are stored codes; on a key collision the first registered pack wins
+   * so a later pack cannot silently rewrite another pack's vocabulary. Core
+   * surfaces fall back to the raw code when no label exists.
+   */
+  auditDisplayLabels?: AuditDisplayLabelContribution;
 };
 
 // ---------------------------------------------------------------------------
@@ -200,6 +210,12 @@ type MutableStore = {
   biReportP0ProcessService: BiReportP0ProcessService | null;
   implementationConsole: ImplementationConsoleContribution | null;
   signalCollectionJobProviders: Array<() => ReadonlyArray<SignalCollectionJob>>;
+  auditDisplayLabels: {
+    actionTypes: Map<string, AuditDisplayLabel>;
+    targetTypes: Map<string, AuditDisplayLabel>;
+    actors: Map<string, AuditDisplayLabel>;
+    sourcePages: Map<string, AuditDisplayLabel>;
+  };
   registeredPackIds: Set<string>;
 };
 
@@ -221,6 +237,12 @@ function emptyStore(): MutableStore {
     biReportP0ProcessService: null,
     implementationConsole: null,
     signalCollectionJobProviders: [],
+    auditDisplayLabels: {
+      actionTypes: new Map(),
+      targetTypes: new Map(),
+      actors: new Map(),
+      sourcePages: new Map(),
+    },
     registeredPackIds: new Set(),
   };
 }
@@ -277,6 +299,45 @@ export function registerPackContributions(
     s.signalCollectionJobProviders.push(contributions.signalCollectionJobs);
   if (contributions.apiRoutes && contributions.apiRoutes.length > 0)
     registerExtensionApiRoutes(packId, contributions.apiRoutes);
+  if (contributions.auditDisplayLabels)
+    mergeAuditDisplayLabels(s.auditDisplayLabels, contributions.auditDisplayLabels);
+}
+
+const AUDIT_DISPLAY_LABEL_KINDS = [
+  "actionTypes",
+  "targetTypes",
+  "actors",
+  "sourcePages",
+] as const;
+
+function isUsableAuditDisplayLabel(value: unknown): value is AuditDisplayLabel {
+  if (!value || typeof value !== "object") return false;
+  const label = value as Record<string, unknown>;
+  return (
+    typeof label.zh === "string" &&
+    label.zh.trim().length > 0 &&
+    typeof label.en === "string" &&
+    label.en.trim().length > 0
+  );
+}
+
+function mergeAuditDisplayLabels(
+  target: MutableStore["auditDisplayLabels"],
+  contribution: AuditDisplayLabelContribution,
+): void {
+  for (const kind of AUDIT_DISPLAY_LABEL_KINDS) {
+    const entries = contribution[kind];
+    if (!entries) continue;
+    for (const [rawCode, label] of Object.entries(entries)) {
+      const code = rawCode.trim();
+      // First registration wins; malformed labels are ignored so a bad entry
+      // degrades to the raw code instead of rendering an empty label.
+      if (!code || target[kind].has(code) || !isUsableAuditDisplayLabel(label)) {
+        continue;
+      }
+      target[kind].set(code, { zh: label.zh.trim(), en: label.en.trim() });
+    }
+  }
 }
 
 /** Test/diagnostic helper: clear the registry (not used in production paths). */
@@ -340,4 +401,14 @@ export function getRegisteredSignalCollectionJobProviders(): ReadonlyArray<
   () => ReadonlyArray<SignalCollectionJob>
 > {
   return store().signalCollectionJobProviders;
+}
+/** Merged audit display labels (plain objects, safe to pass to a client). */
+export function getRegisteredAuditDisplayLabels(): RegisteredAuditDisplayLabels {
+  const labels = store().auditDisplayLabels;
+  return {
+    actionTypes: Object.fromEntries(labels.actionTypes),
+    targetTypes: Object.fromEntries(labels.targetTypes),
+    actors: Object.fromEntries(labels.actors),
+    sourcePages: Object.fromEntries(labels.sourcePages),
+  };
 }
