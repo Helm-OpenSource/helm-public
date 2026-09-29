@@ -949,6 +949,7 @@ jobs:
             printf 'MEMBER_PROMPT_STORE_DATABASE_URL=%s\n' "${url}"
             printf 'MEMBER_PROMPT_RESPONSE_STORE_DATABASE_URL=%s\n' "${url}"
             printf 'MEMBER_SIGNAL_CANDIDATE_DATABASE_URL=%s\n' "${url}"
+            printf 'MEMBER_MCP_DATABASE_URL=%s\n' "${url}"
           } >>"${GITHUB_ENV}"
 
       - name: Setup Node.js
@@ -969,6 +970,9 @@ jobs:
 
       - name: Verify the member gateway stores against MySQL
         run: npm run test:member-gateway:mysql
+
+      - name: Verify the member MCP access chain against MySQL
+        run: npm run test:member-mcp:mysql
 
   quality-regression:
     name: Public Guard Regression
