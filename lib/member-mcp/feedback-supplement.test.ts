@@ -53,6 +53,8 @@ describe("member feedback supplement", () => {
       { ...signal("s2", "u1", "blocker"), supersedesReceiptRef: "s1" },
     ]);
     expect(counts.signals_blocker).toBe(1);
+    expect(counts.signals_total).toBe(1);
+    expect(counts.reporting_members).toBe(1);
   });
 
   it("treats a malformed or unknown report block as a plain signal", () => {

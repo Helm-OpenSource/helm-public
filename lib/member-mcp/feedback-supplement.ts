@@ -73,8 +73,9 @@ export function unknownMemberFeedbackCounts(): Record<MemberFeedbackCountKey, nu
   return Object.fromEntries(MEMBER_FEEDBACK_COUNT_KEYS.map((key) => [key, null])) as Record<MemberFeedbackCountKey, null>;
 }
 
-// Pure projection. A receipt that another receipt in the window supersedes is
-// dropped, so a correction counts once.
+// Pure projection. A receipt that another receipt in the same window
+// supersedes is dropped, so a correction within one window counts once; a
+// correction arriving in a later window counts as arrival volume there.
 export function projectMemberFeedbackCounts(
   receipts: readonly MemberFeedbackReceiptView[],
 ): Record<MemberFeedbackCountKey, number> {
@@ -130,7 +131,9 @@ export function createMemberFeedbackSupplement(
         return [{ key: MEMBER_FEEDBACK_SUPPLEMENT_KEY, counts: unknownMemberFeedbackCounts() }];
       }
       return [{ key: MEMBER_FEEDBACK_SUPPLEMENT_KEY, counts: projectMemberFeedbackCounts(receipts) }];
-    } catch {
+    } catch (error) {
+      // Only the error class is logged: the receipts hold member-authored content.
+      console.warn("[member-feedback-supplement] read failed", error instanceof Error ? error.name : typeof error);
       return [{ key: MEMBER_FEEDBACK_SUPPLEMENT_KEY, counts: unknownMemberFeedbackCounts() }];
     }
   };

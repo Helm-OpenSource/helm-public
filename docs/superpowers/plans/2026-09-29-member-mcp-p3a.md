@@ -28,7 +28,7 @@ public_safety: As-built record for a counts-only CAIO review supplement over
   - 计数是全工作区汇总，不按人拆分。
 - 拒绝、暂停、申诉不计入。这类回应永远不能变成针对提出者的信号。
 - 读失败或窗口被截断时，报 null 而不是 0。
-- 更正只计一次：被取代的回执不计。
+- 同一窗口内的更正只计一次（被取代的回执不计）；跨窗口的更正按到达量计入它所在的窗口。
 - 默认关闭：环境变量 `HELM_CAIO_MEMBER_FEEDBACK_SUPPLEMENT_ENABLED` 未开时，本补充不贡献任何条目。
 
 ## owner 裁定（2026-09-29）
