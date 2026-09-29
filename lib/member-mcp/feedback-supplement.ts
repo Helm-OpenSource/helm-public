@@ -27,6 +27,7 @@ import {
   type MemberFieldReportKind,
 } from "@/lib/member-mcp/tools";
 import { safeParseJson } from "@/lib/utils";
+import { MEMBER_MCP_FIELD_REPORT_POLICY_REF } from "@/lib/member-mcp/write-executor";
 
 export const MEMBER_FEEDBACK_SUPPLEMENT_KEY = "member.feedback.summary";
 export const MEMBER_FEEDBACK_SUPPLEMENT_ENABLED_ENV = "HELM_CAIO_MEMBER_FEEDBACK_SUPPLEMENT_ENABLED";
@@ -46,10 +47,10 @@ export function isMemberFeedbackSupplementEnabled(env: Readonly<Record<string, s
   return env[MEMBER_FEEDBACK_SUPPLEMENT_ENABLED_ENV] === "true";
 }
 
-// Reads only the kind of a field report from its structured block. A block
-// that does not parse, or names an unknown kind, is counted as a plain signal:
-// the block is member-authored and could be forged inside an ordinary signal,
-// which is harmless here because only its kind is read, and only to count it.
+// Reads only the kind of a field report from its structured block. Callers
+// only ask for receipts recorded under the field-report policy, whose block
+// was built by buildFieldReportPayload; a block that does not parse or names
+// an unknown kind still counts as a report of unknown kind, never as data.
 export function fieldReportKindOf(detail: string): MemberFieldReportKind | null {
   if (!detail.startsWith(`${MEMBER_FIELD_REPORT_BLOCK_OPEN}\n`)) return null;
   const end = detail.indexOf("\n```", MEMBER_FIELD_REPORT_BLOCK_OPEN.length);
@@ -65,6 +66,7 @@ export type MemberFeedbackReceiptView = {
   id: string;
   memberRef: string;
   kind: string;
+  policyRef: string;
   payloadJson: string;
   supersedesReceiptRef: string | null;
 };
@@ -85,11 +87,13 @@ export function projectMemberFeedbackCounts(
   for (const receipt of receipts) {
     if (superseded.has(receipt.id)) continue;
     members.add(receipt.memberRef);
-    const payload = safeParseJson<{ detail?: unknown }>(receipt.payloadJson, {});
-    const reportKind = typeof payload.detail === "string" ? fieldReportKindOf(payload.detail) : null;
-    if (reportKind) {
+    // A field report is known by its policy alone, never by what the member
+    // wrote in the detail.
+    if (receipt.policyRef === MEMBER_MCP_FIELD_REPORT_POLICY_REF) {
       counts.field_reports_total += 1;
-      counts[`field_reports_${reportKind}`] += 1;
+      const payload = safeParseJson<{ detail?: unknown }>(receipt.payloadJson, {});
+      const reportKind = typeof payload.detail === "string" ? fieldReportKindOf(payload.detail) : null;
+      if (reportKind) counts[`field_reports_${reportKind}`] += 1;
       continue;
     }
     counts.signals_total += 1;
@@ -111,7 +115,7 @@ export type MemberFeedbackReceiptReader = (input: {
 const defaultReader: MemberFeedbackReceiptReader = ({ workspaceId, windowStart, windowEnd, limit }) =>
   db.memberWorkSignalReceipt.findMany({
     where: { workspaceId, submittedAt: { gte: windowStart, lt: windowEnd } },
-    select: { id: true, memberRef: true, kind: true, payloadJson: true, supersedesReceiptRef: true },
+    select: { id: true, memberRef: true, kind: true, policyRef: true, payloadJson: true, supersedesReceiptRef: true },
     orderBy: { submittedAt: "asc" },
     take: limit,
   });

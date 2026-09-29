@@ -15,6 +15,7 @@ public_safety: As-built record for a counts-only CAIO review supplement over
 
 - 键名：`member.feedback.summary`。
 - 统计窗口内工作信号与现场报告的**数量**，按类型分别计数；另有 `reporting_members`，即提交反馈的人数。
+- 现场报告只按回执的 policyRef（`member-mcp:self-field-report`）识别，不解析成员写的正文；普通信号里即使带有伪造的结构块，也只计为信号。
 
 ## 边界
 成员网关规格 §5.1、§9、§12 规定三条：

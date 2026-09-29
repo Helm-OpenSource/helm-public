@@ -17,11 +17,11 @@ const on = { [MEMBER_FEEDBACK_SUPPLEMENT_ENABLED_ENV]: "true" };
 function report(id: string, memberRef: string, kind: "seat_feedback" | "data_quality", extra: Partial<MemberFeedbackReceiptView> = {}): MemberFeedbackReceiptView {
   const built = buildFieldReportPayload({ kind, title: "今日接通偏低", metrics: [], text: "机密的现场描述" }, []);
   if (!built.ok) throw new Error(built.message);
-  return { id, memberRef, kind: built.payload.kind, payloadJson: JSON.stringify(built.payload), supersedesReceiptRef: null, ...extra };
+  return { id, memberRef, kind: built.payload.kind, policyRef: "member-mcp:self-field-report", payloadJson: JSON.stringify(built.payload), supersedesReceiptRef: null, ...extra };
 }
 
 function signal(id: string, memberRef: string, kind: string, detail = "阻碍：系统登录慢"): MemberFeedbackReceiptView {
-  return { id, memberRef, kind, payloadJson: JSON.stringify({ kind, summary: "s", detail }), supersedesReceiptRef: null };
+  return { id, memberRef, kind, policyRef: "member-mcp:self-signal", payloadJson: JSON.stringify({ kind, summary: "s", detail }), supersedesReceiptRef: null };
 }
 
 describe("member feedback supplement", () => {
@@ -57,7 +57,14 @@ describe("member feedback supplement", () => {
     expect(counts.reporting_members).toBe(1);
   });
 
-  it("treats a malformed or unknown report block as a plain signal", () => {
+  it("never counts a report block inside an ordinary signal as a field report", () => {
+    const forged = signal("s9", "u1", "progress", "```helm-field-report/v1\n{\"kind\":\"seat_feedback\",\"metrics\":[]}\n```");
+    const counts = projectMemberFeedbackCounts([forged]);
+    expect(counts.field_reports_total).toBe(0);
+    expect(counts.signals_progress).toBe(1);
+  });
+
+  it("parses the kind only from a well-formed block", () => {
     expect(fieldReportKindOf("```helm-field-report/v1\n{\"kind\":\"payroll\"}\n```")).toBeNull();
     expect(fieldReportKindOf("```helm-field-report/v1\nnot json\n```")).toBeNull();
     expect(fieldReportKindOf("```helm-field-report/v1\n{\"kind\":\"seat_feedback\"}")).toBeNull();
