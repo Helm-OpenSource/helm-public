@@ -1,3 +1,12 @@
+---
+status: active / as-built-record
+owner: helm-core
+created: 2026-09-29
+review_after: 2026-10-29
+public_safety: As-built record for the member MCP read-only entry. No customer
+  data, credential, private endpoint, or production-readiness claim.
+---
+
 # 成员 MCP P0：员工 AI 工具接入 CAIO（只读）—— as-built
 
 日期：2026-09-29
