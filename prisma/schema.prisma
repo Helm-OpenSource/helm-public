@@ -1371,6 +1371,49 @@ model MemberAgentApproverGrant {
   @@index([workspaceId, groupTag, revokedAt], map: "MAApproverGrant_ws_group_revoked_idx")
 }
 
+/// Member MCP P1b: asynchronous prompt-response intake. The online MCP route
+/// only records the member's confirmed response here (it may not reach the
+/// CAIO governance validators); scripts/member-prompt-response-worker.ts
+/// registers it through the Member Gateway response store and writes the
+/// outcome back. status: received -> registered | rejected | held (held =
+/// protected response the store cannot record; kept for a human, never
+/// dropped). Rows are never deleted.
+model MemberPromptResponseInbox {
+  id                    String    @id
+  workspaceId           String
+  connectionId          String
+  memberRef             String
+  deviceRegistrationRef String
+  clientId              String    @db.VarChar(32)
+  promptRef             String
+  promptVersion         Int
+  kind                  String    @db.VarChar(32)
+  payloadJson           String    @db.LongText
+  payloadHash           String    @db.VarChar(80)
+  memberChallengeRef    String
+  status                String    @db.VarChar(16)
+  version               Int       @default(0)
+  attempts              Int       @default(0)
+  needsHuman            Boolean   @default(false)
+  lastErrorCode         String?   @db.VarChar(64)
+  lastErrorDetail       String?   @db.VarChar(500)
+  responseReceiptRef    String?
+  signalReceiptRef      String?
+  candidateBundleRef    String?
+  candidateCode         String?   @db.VarChar(64)
+  claimToken            String?   @db.VarChar(64)
+  claimedAt             DateTime?
+  receivedAt            DateTime
+  nextAttemptAt         DateTime
+  processedAt           DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([workspaceId, memberChallengeRef], map: "MPRInbox_ws_challenge_key")
+  @@index([status, nextAttemptAt], map: "MPRInbox_status_next_idx")
+  @@index([workspaceId, memberRef], map: "MPRInbox_ws_member_idx")
+}
+
 model AuthSession {
   id                    String     @id @default(cuid())
   userId                String

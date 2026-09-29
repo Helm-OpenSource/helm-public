@@ -42,6 +42,9 @@ describe("parseMemberMcpToolCall", () => {
       submit_work_signal: "member:signal:write",
       prepare_field_report: "member:report:write",
       submit_field_report: "member:report:write",
+      prepare_prompt_response: "member:prompt:respond",
+      submit_prompt_response: "member:prompt:respond",
+      get_prompt_response_status: "member:prompt:respond",
     });
   });
 
@@ -189,3 +192,31 @@ describe("envelopes", () => {
     expect(() => buildMemberMcpEnvelope({ requestId: "r3", now, decision, data: { leaked: true }, error: null })).toThrow(/data_released_without_projection/);
   });
 });
+
+describe("prompt response tool parsing", () => {
+  it("accepts responses and requires a reason for protected kinds", () => {
+    expect(parseMemberMcpToolCall("prepare_prompt_response", { promptRef: "p-1", kind: "acknowledge" })).toEqual({
+      ok: true,
+      call: { toolName: "prepare_prompt_response", arguments: { promptRef: "p-1", kind: "acknowledge", text: "" } },
+    });
+    expect(parseMemberMcpToolCall("prepare_prompt_response", { promptRef: "p-1", kind: "refuse" })).toEqual({ ok: false, message: "reason_required" });
+    expect(parseMemberMcpToolCall("prepare_prompt_response", { promptRef: "p-1", kind: "commitment_confirm", text: "x" }).ok).toBe(false);
+    expect(parseMemberMcpToolCall("submit_prompt_response", { promptRef: "p-1", kind: "pause", text: "出差" }).ok).toBe(false);
+    expect(
+      parseMemberMcpToolCall("submit_prompt_response", { promptRef: "p-1", kind: "pause", text: " 出差 ", challengeRef: "c-1" }),
+    ).toEqual({
+      ok: true,
+      call: { toolName: "submit_prompt_response", arguments: { promptRef: "p-1", kind: "pause", text: "出差", challengeRef: "c-1" } },
+    });
+    expect(parseMemberMcpToolCall("get_prompt_response_status", { inboxRef: "mmcp-inbox:c-1" }).ok).toBe(true);
+    expect(parseMemberMcpToolCall("get_prompt_response_status", { inboxRef: "x", extra: 1 }).ok).toBe(false);
+  });
+
+  it("puts every response tool behind member:prompt:respond", () => {
+    const names = ["prepare_prompt_response", "submit_prompt_response", "get_prompt_response_status"];
+    for (const name of names) {
+      expect(MEMBER_MCP_TOOLS.find((tool) => tool.name === name)?.requiredScope).toBe("member:prompt:respond");
+    }
+  });
+});
+

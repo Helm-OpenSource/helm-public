@@ -60,6 +60,7 @@ const SCOPE_LABELS: Record<string, string> = {
   "member:prompt:read": "读提问",
   "member:signal:write": "写工作信号",
   "member:report:write": "写现场报告",
+  "member:prompt:respond": "回应提问",
 };
 
 function scopeSummary(scopes: string[]) {
@@ -166,7 +167,7 @@ export function AiAccessClient() {
           {overview.approvedClients.map(value => <option key={value} value={value}>{clientLabel(value)}</option>)}
         </select></label>
         <label className="text-sm">设备名称<Input value={deviceLabel} onChange={event => setDeviceLabel(event.target.value)} placeholder="例如：办公室 MacBook" minLength={2} maxLength={80} required disabled={!overview.runtimeEnabled || pending} /></label>
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={includeWrite} onChange={event => setIncludeWrite(event.target.checked)} disabled={!overview.runtimeEnabled || pending} />同时申请写入（提交工作信号与现场报告，只作为待审阅的候选）</label>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={includeWrite} onChange={event => setIncludeWrite(event.target.checked)} disabled={!overview.runtimeEnabled || pending} />同时申请写入（提交工作信号、现场报告与回应 CAIO 提问；信号与报告只作为待审阅的候选）</label>
         <Button type="submit" disabled={!overview.runtimeEnabled || pending || !clientType}>申请接入</Button>
       </form>
       <ConnectionTable rows={overview.mine} actions={row => <>

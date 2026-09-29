@@ -56,9 +56,15 @@ export const MEMBER_MCP_P1A_WRITE_SCOPES = [
   "member:report:write",
 ] as const satisfies readonly MemberMcpScope[];
 
+// P1b (2026-09-29): responding to CAIO prompts (asynchronous registration,
+// see response-contract.ts). Rides the same explicit write opt-in as P1a.
+export const MEMBER_MCP_P1B_RESPOND_SCOPES = [
+  "member:prompt:respond",
+] as const satisfies readonly MemberMcpScope[];
+
 export function memberMcpScopesForRequest(includeWrite: boolean): MemberMcpScope[] {
   return includeWrite
-    ? [...MEMBER_MCP_P0_ISSUABLE_SCOPES, ...MEMBER_MCP_P1A_WRITE_SCOPES]
+    ? [...MEMBER_MCP_P0_ISSUABLE_SCOPES, ...MEMBER_MCP_P1A_WRITE_SCOPES, ...MEMBER_MCP_P1B_RESPOND_SCOPES]
     : [...MEMBER_MCP_P0_ISSUABLE_SCOPES];
 }
 

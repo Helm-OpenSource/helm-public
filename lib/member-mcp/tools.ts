@@ -19,6 +19,12 @@ import type {
   MemberToolEnvelope,
 } from "@/lib/member-gateway/types";
 import type { MemberMcpScope } from "@/lib/member-mcp/contract";
+import {
+  MEMBER_MCP_RESPONSE_KINDS,
+  MEMBER_MCP_RESPONSE_TEXT_MAX_CHARS,
+  validateResponseText,
+  type MemberMcpResponseKind,
+} from "@/lib/member-mcp/response-contract";
 
 export const MEMBER_MCP_TOOL_NAMES = [
   "get_my_brief",
@@ -28,6 +34,9 @@ export const MEMBER_MCP_TOOL_NAMES = [
   "submit_work_signal",
   "prepare_field_report",
   "submit_field_report",
+  "prepare_prompt_response",
+  "submit_prompt_response",
+  "get_prompt_response_status",
 ] as const;
 
 export const MEMBER_MCP_WRITE_TOOL_NAMES = [
@@ -35,6 +44,8 @@ export const MEMBER_MCP_WRITE_TOOL_NAMES = [
   "submit_work_signal",
   "prepare_field_report",
   "submit_field_report",
+  "prepare_prompt_response",
+  "submit_prompt_response",
 ] as const;
 
 // Field-report kinds (staff-connect spec §3). A field report rides the
@@ -160,7 +171,47 @@ export const MEMBER_MCP_TOOLS: readonly MemberMcpToolDefinition[] = [
     requiredScope: "member:report:write",
     inputSchema: FIELD_REPORT_SCHEMA(true),
   },
+  {
+    name: "prepare_prompt_response",
+    description:
+      "回应 CAIO 提问第一步：选择回应方式（已知悉 / 拒绝 / 暂停 / 申诉 / 进展汇报 / 回答）并填写内容，拿到一次性确认码（5 分钟内有效）。拒绝、暂停、申诉始终是你的正当权利，需要写明理由。",
+    requiredScope: "member:prompt:respond",
+    inputSchema: RESPONSE_SCHEMA(false),
+  },
+  {
+    name: "submit_prompt_response",
+    description:
+      "回应 CAIO 提问第二步：带上确认码和与第一步完全相同的内容提交。系统先收下并返回收件编号，后台约 1 分钟内正式登记；用 get_prompt_response_status 查看登记结果。",
+    requiredScope: "member:prompt:respond",
+    inputSchema: RESPONSE_SCHEMA(true),
+  },
+  {
+    name: "get_prompt_response_status",
+    description: "查看一条回应的登记状态：已收到、已登记、未能登记（附原因）或待人工处理。只读。",
+    requiredScope: "member:prompt:respond",
+    inputSchema: {
+      type: "object",
+      properties: { inboxRef: { type: "string", minLength: 1, maxLength: 191 } },
+      required: ["inboxRef"],
+      additionalProperties: false,
+    },
+  },
 ];
+
+function RESPONSE_SCHEMA(withChallenge: boolean): Record<string, unknown> {
+  const properties: Record<string, unknown> = {
+    promptRef: { type: "string", minLength: 1, maxLength: 191 },
+    kind: { type: "string", enum: [...MEMBER_MCP_RESPONSE_KINDS] },
+    text: { type: "string", maxLength: MEMBER_MCP_RESPONSE_TEXT_MAX_CHARS },
+  };
+  if (withChallenge) properties.challengeRef = { type: "string", minLength: 1, maxLength: 191 };
+  return {
+    type: "object",
+    properties,
+    required: withChallenge ? ["challengeRef", "promptRef", "kind"] : ["promptRef", "kind"],
+    additionalProperties: false,
+  };
+}
 
 function FIELD_REPORT_SCHEMA(withChallenge: boolean): Record<string, unknown> {
   const properties: Record<string, unknown> = {
@@ -224,7 +275,16 @@ export type MemberMcpToolCall =
   | { toolName: "prepare_work_signal"; arguments: MemberWorkSignalInput }
   | { toolName: "submit_work_signal"; arguments: MemberWorkSignalInput & { challengeRef: string } }
   | { toolName: "prepare_field_report"; arguments: MemberFieldReportInput }
-  | { toolName: "submit_field_report"; arguments: MemberFieldReportInput & { challengeRef: string } };
+  | { toolName: "submit_field_report"; arguments: MemberFieldReportInput & { challengeRef: string } }
+  | { toolName: "prepare_prompt_response"; arguments: MemberPromptResponseInput }
+  | { toolName: "submit_prompt_response"; arguments: MemberPromptResponseInput & { challengeRef: string } }
+  | { toolName: "get_prompt_response_status"; arguments: { inboxRef: string } };
+
+export type MemberPromptResponseInput = {
+  promptRef: string;
+  kind: MemberMcpResponseKind;
+  text: string;
+};
 
 const REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,190}$/;
 
@@ -285,6 +345,39 @@ export function parseMemberMcpToolCall(
     const challengeRef = readChallengeRef(record);
     if (!challengeRef) return { ok: false, message: "challengeRef is malformed" };
     return { ok: true, call: { toolName: name, arguments: { ...report.value, challengeRef } } };
+  }
+  if (name === "prepare_prompt_response" || name === "submit_prompt_response") {
+    const withChallenge = name === "submit_prompt_response";
+    const allowed = new Set(["promptRef", "kind", "text", ...(withChallenge ? ["challengeRef"] : [])]);
+    if (keys.some((key) => !allowed.has(key))) return { ok: false, message: "unknown argument" };
+    const promptRef = record.promptRef;
+    if (typeof promptRef !== "string" || !REF_PATTERN.test(promptRef)) {
+      return { ok: false, message: "promptRef is malformed" };
+    }
+    const kind = record.kind;
+    if (typeof kind !== "string" || !(MEMBER_MCP_RESPONSE_KINDS as readonly string[]).includes(kind)) {
+      return { ok: false, message: `kind must be one of ${MEMBER_MCP_RESPONSE_KINDS.join(", ")}` };
+    }
+    const rawText = record.text === undefined ? "" : record.text;
+    if (typeof rawText !== "string" || CONTROL_CHARACTERS.test(rawText)) {
+      return { ok: false, message: "text must be printable" };
+    }
+    const text = rawText.trim();
+    const textProblem = validateResponseText(kind as MemberMcpResponseKind, text);
+    if (textProblem) return { ok: false, message: textProblem };
+    const value = { promptRef, kind: kind as MemberMcpResponseKind, text };
+    if (!withChallenge) return { ok: true, call: { toolName: name, arguments: value } };
+    const challengeRef = readChallengeRef(record);
+    if (!challengeRef) return { ok: false, message: "challengeRef is malformed" };
+    return { ok: true, call: { toolName: name, arguments: { ...value, challengeRef } } };
+  }
+  if (name === "get_prompt_response_status") {
+    if (keys.some((key) => key !== "inboxRef")) return { ok: false, message: "unknown argument" };
+    const inboxRef = record.inboxRef;
+    if (typeof inboxRef !== "string" || !REF_PATTERN.test(inboxRef)) {
+      return { ok: false, message: "inboxRef is malformed" };
+    }
+    return { ok: true, call: { toolName: name, arguments: { inboxRef } } };
   }
   return { ok: false, message: "unknown tool" };
 }
