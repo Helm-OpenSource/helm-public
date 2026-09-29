@@ -7,7 +7,7 @@ import {
   type CaioWorkerLogPort,
   type CaioWorkerPassResult,
 } from "./contracts";
-import { buildCaioWorkerPrompt } from "./prompt";
+import { buildCaioWorkerPrompt, CAIO_WORKER_DEFAULT_OUTPUT_LANGUAGE, type CaioWorkerOutputLanguage } from "./prompt";
 
 /**
  * One pass of the pull loop: probe, claim, complete, submit.
@@ -22,6 +22,7 @@ export async function runCaioInferenceWorkerPass(input: {
   model: CaioWorkerLocalModelPort;
   log?: CaioWorkerLogPort;
   signal?: AbortSignal;
+  outputLanguage?: CaioWorkerOutputLanguage;
 }): Promise<CaioWorkerPassResult> {
   const log = input.log ?? (() => undefined);
   const signal = input.signal ? { signal: input.signal } : {};
@@ -50,7 +51,7 @@ export async function runCaioInferenceWorkerPass(input: {
   let raw: string;
   try {
     raw = await input.model.complete({
-      prompt: buildCaioWorkerPrompt(claim.input),
+      prompt: buildCaioWorkerPrompt(claim.input, input.outputLanguage),
       maxOutputTokens: CAIO_WORKER_MAX_OUTPUT_TOKENS,
       ...signal,
     });
@@ -65,6 +66,12 @@ export async function runCaioInferenceWorkerPass(input: {
   const validation = validateCaioLayeredJudgement(output, new Set(claim.input.evidenceRefs));
   if (!validation.ok) {
     log({ event: "local_validation_failed", jobId: claim.jobId, detail: validation.code });
+  }
+  // Report, never retry: a Chinese-configured worker that gets a mostly non-Chinese judgement logs it so the rate
+  // is visible (owner 2026-09-29: the review must be Chinese), and submits it unchanged like any other answer.
+  const language = input.outputLanguage ?? CAIO_WORKER_DEFAULT_OUTPUT_LANGUAGE;
+  if (validation.ok && language === "zh-CN" && isMostlyNonChinese(judgementTexts(validation.value))) {
+    log({ event: "output_language_mismatch", jobId: claim.jobId, detail: language });
   }
 
   const submitted = await input.gateway.submit({
@@ -82,6 +89,28 @@ export async function runCaioInferenceWorkerPass(input: {
     serverCode: submitted.code ?? null,
     locallyValid: validation.ok,
   };
+}
+
+type LayeredTexts = {
+  facts: Array<{ statement: string }>;
+  inferences: Array<{ statement: string }>;
+  risks: Array<{ statement: string }>;
+  unknowns: Array<{ statement: string }>;
+  suggestions: Array<{ summary: string }>;
+};
+
+function judgementTexts(j: LayeredTexts): string[] {
+  return [...j.facts, ...j.inferences, ...j.risks, ...j.unknowns].map((e) => e.statement).concat(j.suggestions.map((s) => s.summary));
+}
+
+/** True when fewer than 30% of the letters are CJK; ids, metric keys and numbers alone do not make text "English". */
+export function isMostlyNonChinese(texts: readonly string[]): boolean {
+  // Dotted/dashed identifiers (metric keys, evidence refs) are not prose in any language: drop them first.
+  const joined = texts.join(" ").replace(/[A-Za-z0-9_]+(?:[.:_-][A-Za-z0-9_]+)+/gu, "");
+  const letters = joined.match(/\p{L}/gu)?.length ?? 0;
+  if (letters === 0) return false;
+  const cjk = joined.match(/[\u4e00-\u9fff]/gu)?.length ?? 0;
+  return cjk / letters < 0.3;
 }
 
 /** A model answer that is not JSON is submitted as the string it was; the server records the rejection. */
