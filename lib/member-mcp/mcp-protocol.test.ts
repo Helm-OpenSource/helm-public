@@ -71,6 +71,23 @@ describe("handleMemberMcpMessage", () => {
     expect(executeTool).not.toHaveBeenCalled();
   });
 
+  it("lists task tools only for a connection holding the task scopes", async () => {
+    const list = async (scopes: readonly string[]) => {
+      const result = await handleMemberMcpMessage({
+        message: { jsonrpc: "2.0", id: 9, method: "tools/list" },
+        auth: { ...auth, scopes } as unknown as typeof auth,
+        executeTool: vi.fn(),
+      });
+      return (result.body as { result: { tools: Array<{ name: string }> } }).result.tools.map((tool) => tool.name);
+    };
+    expect(await list(auth.scopes)).not.toContain("list_my_tasks");
+    expect(await list([...auth.scopes, "member:task:read"])).toEqual(expect.arrayContaining(["list_my_tasks", "get_task"]));
+    expect(await list([...auth.scopes, "member:task:read"])).not.toContain("submit_task_report");
+    expect(await list([...auth.scopes, "member:task:read", "member:task:receipt"])).toEqual(
+      expect.arrayContaining(["prepare_task_report", "submit_task_report"]),
+    );
+  });
+
   it("rejects malformed arguments before execution", async () => {
     const executeTool = vi.fn();
     const result = await handleMemberMcpMessage({

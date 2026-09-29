@@ -43,6 +43,7 @@ export default async function SettingsPage({
 
   return <>
     {process.env.HELM_AUTH_MEMBER_ACTIVATION_ENABLED === "true" && session.membership.status === "ACTIVE" && ["OWNER", "ADMIN"].includes(session.membership.role) ? <a className="block px-6 pt-4 underline" href="/settings/member-activation">成员首次激活</a> : null}
+    {process.env.HELM_MEMBER_MCP_ENABLED === "true" && session.membership.status === "ACTIVE" ? <a className="block px-6 pt-4 underline" href="/settings/ai-access">AI 工具接入（用 Codex / QwenWork / Claude Code / WorkBuddy 连接 CAIO）</a> : null}
     <SettingsClient {...props} />
   </>;
 }
