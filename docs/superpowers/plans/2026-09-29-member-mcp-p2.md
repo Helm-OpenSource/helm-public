@@ -47,3 +47,10 @@ public_safety: As-built record for member MCP task tools aligned with the
 ## 验证
 - 单元测试：`task-contract.test.ts`、`tools.test.ts`、`contract.test.ts`、`mcp-protocol.test.ts`。
 - MySQL：`member-mcp-task.mysql.test.ts`，已挂进 `test:member-mcp:mysql`。
+
+## 已知限制（独立二审 2026-09-29）
+- **状态检查与写入不在同一事务**：成员提交进展回报时，如果恰好在两步之间，私有执行结果入口已把工作包关成 EXECUTED，已关闭的包上会多挂一条候选回报。
+  - 影响有限：这条回报只是不可信候选，不挡正式关闭，也不改变任何状态。接受这个窗口。
+- **旧包可能查不到**：沿用 #426 的 `listWorkPacketsAssignedToMember`，它只看工作区最近 500 条 claim，最多返回 50 个包。
+  - claim 很多的工作区里，仍在 APPROVED 状态的旧包可能落在窗口外，成员查询时会得到 `task_not_found`。
+  - 后续改为在查询里按执行人或 actionItemId 直接过滤。
