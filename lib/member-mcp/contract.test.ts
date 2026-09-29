@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   decideMemberConnectionApproval,
   effectiveMemberConnectionStatus,
+  memberMcpScopesForRequest,
   memberMcpProviderRef,
   normalizeDeviceLabel,
   parseStoredMemberMcpScopes,
@@ -88,13 +89,25 @@ describe("readMemberMcpWorkspaceFlags", () => {
     expect(readMemberMcpWorkspaceFlags(json, on).enabled).toBe(true);
     expect(readMemberMcpWorkspaceFlags(json, {}).enabled).toBe(false);
     expect(readMemberMcpWorkspaceFlags(JSON.stringify({ memberMcp: "true" }), on).enabled).toBe(false);
-    expect(readMemberMcpWorkspaceFlags("not json", on)).toEqual({ enabled: false, approvedClients: [] });
-    expect(readMemberMcpWorkspaceFlags(null, on)).toEqual({ enabled: false, approvedClients: [] });
+    expect(readMemberMcpWorkspaceFlags("not json", on)).toEqual({ enabled: false, approvedClients: [], fieldReportMetricKeys: [] });
+    expect(readMemberMcpWorkspaceFlags(null, on)).toEqual({ enabled: false, approvedClients: [], fieldReportMetricKeys: [] });
+  });
+
+  it("keeps only well-formed field-report metric keys", () => {
+    const json = JSON.stringify({ memberMcp: true, memberMcpFieldReportMetricKeys: ["qc.dial_rate", "bad key", 3, "qc.dial_rate"] });
+    expect(readMemberMcpWorkspaceFlags(json, on).fieldReportMetricKeys).toEqual(["qc.dial_rate"]);
   });
 
   it("keeps only known client types on the approved list", () => {
     const json = JSON.stringify({ memberMcp: true, memberMcpApprovedClients: ["codex", "cursor", "codex", 7] });
     expect(readMemberMcpWorkspaceFlags(json, on).approvedClients).toEqual(["codex"]);
+  });
+});
+
+describe("memberMcpScopesForRequest", () => {
+  it("issues write scopes only on an explicit request", () => {
+    expect(memberMcpScopesForRequest(false)).toEqual(["member:brief:read", "member:prompt:read"]);
+    expect(memberMcpScopesForRequest(true)).toEqual(["member:brief:read", "member:prompt:read", "member:signal:write", "member:report:write"]);
   });
 });
 

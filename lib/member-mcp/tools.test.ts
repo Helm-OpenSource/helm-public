@@ -4,8 +4,10 @@ import { validateMemberToolEnvelope } from "@/lib/member-gateway/contract";
 import {
   MEMBER_MCP_TOOLS,
   buildMemberMcpEnvelope,
+  buildFieldReportPayload,
   buildSelfRecordDecision,
   parseMemberMcpToolCall,
+  type MemberFieldReportInput,
 } from "@/lib/member-mcp/tools";
 
 const now = new Date("2026-09-29T08:00:00.000Z");
@@ -29,8 +31,86 @@ describe("parseMemberMcpToolCall", () => {
     expect(parseMemberMcpToolCall("get_my_brief", []).ok).toBe(false);
   });
 
-  it("exposes only read tools in P0", () => {
-    expect(MEMBER_MCP_TOOLS.map((tool) => tool.requiredScope).every((scope) => scope.endsWith(":read"))).toBe(true);
+  it("gates every write tool behind a write scope", () => {
+    const byName = Object.fromEntries(MEMBER_MCP_TOOLS.map((tool) => [tool.name, tool.requiredScope]));
+    expect(byName).toEqual({
+      get_my_brief: "member:brief:read",
+      list_my_pending_prompts: "member:prompt:read",
+      get_my_prompt: "member:prompt:read",
+      prepare_work_signal: "member:signal:write",
+      submit_work_signal: "member:signal:write",
+      prepare_field_report: "member:report:write",
+      submit_field_report: "member:report:write",
+    });
+  });
+
+  it("parses work-signal calls and requires the challenge on submit", () => {
+    expect(parseMemberMcpToolCall("prepare_work_signal", { kind: "blocker", summary: "  外呼线路今天下午中断 " })).toEqual({
+      ok: true,
+      call: { toolName: "prepare_work_signal", arguments: { kind: "blocker", summary: "外呼线路今天下午中断", detail: "" } },
+    });
+    expect(parseMemberMcpToolCall("submit_work_signal", { kind: "blocker", summary: "x" }).ok).toBe(false);
+    expect(parseMemberMcpToolCall("submit_work_signal", { kind: "blocker", summary: "x", challengeRef: "c-1" })).toMatchObject({ ok: true });
+    expect(parseMemberMcpToolCall("prepare_work_signal", { kind: "decision", summary: "x" }).ok).toBe(false);
+    expect(parseMemberMcpToolCall("prepare_work_signal", { kind: "progress", summary: "" }).ok).toBe(false);
+    expect(parseMemberMcpToolCall("prepare_work_signal", { kind: "progress", summary: "a\u0007b" }).ok).toBe(false);
+    expect(parseMemberMcpToolCall("prepare_work_signal", { kind: "progress", summary: "x", relatedEvidenceRefs: ["e"] }).ok).toBe(false);
+  });
+
+  it("parses field reports and rejects malformed metrics", () => {
+    const ok = parseMemberMcpToolCall("prepare_field_report", {
+      kind: "shadow_check",
+      title: "今日影子核对",
+      metrics: [{ key: "qc.connect_rate", value: 0.31, unit: "ratio", window: "2026-09-29" }],
+      text: "接通率偏低",
+    });
+    expect(ok).toMatchObject({ ok: true, call: { arguments: { metrics: [{ key: "qc.connect_rate", value: 0.31, unit: "ratio", window: "2026-09-29", source_ref: null }] } } });
+    expect(parseMemberMcpToolCall("prepare_field_report", { kind: "gossip", title: "x" }).ok).toBe(false);
+    expect(parseMemberMcpToolCall("prepare_field_report", { kind: "data_quality", title: "x", metrics: [{ key: "a", value: "1" }] }).ok).toBe(false);
+    expect(parseMemberMcpToolCall("prepare_field_report", { kind: "data_quality", title: "x", metrics: [{ key: "a", value: Number.NaN }] }).ok).toBe(false);
+    expect(parseMemberMcpToolCall("prepare_field_report", { kind: "data_quality", title: "x", metrics: [{ key: "a", value: 1, note: "y" }] }).ok).toBe(false);
+    expect(parseMemberMcpToolCall("prepare_field_report", { kind: "data_quality", title: "x", metrics: Array.from({ length: 21 }, () => ({ key: "a", value: 1 })) }).ok).toBe(false);
+  });
+});
+
+describe("buildFieldReportPayload", () => {
+  const report = (overrides: Partial<MemberFieldReportInput> = {}): MemberFieldReportInput => ({
+    kind: "shadow_check",
+    title: "今日影子核对",
+    metrics: [{ key: "qc.connect_rate", value: 0.31, unit: "ratio", window: "2026-09-29", source_ref: null }],
+    text: "接通率偏低",
+    ...overrides,
+  });
+
+  it("embeds the structured part as one canonical block and keeps text separate", () => {
+    const built = buildFieldReportPayload(report(), ["qc.connect_rate"]);
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    expect(built.payload.kind).toBe("progress");
+    expect(built.payload.summary).toBe("现场报告·影子核对：今日影子核对");
+    expect(built.payload.relatedEvidenceRefs).toEqual([]);
+    const [open, json, close, ...rest] = built.payload.detail.split("\n");
+    expect(open).toBe("```helm-field-report/v1");
+    expect(JSON.parse(json)).toEqual({ kind: "shadow_check", metrics: [{ key: "qc.connect_rate", value: 0.31, unit: "ratio", window: "2026-09-29", source_ref: null }] });
+    expect(close).toBe("```");
+    expect(rest.join("\n")).toBe("接通率偏低");
+    // Deterministic: the same input hashes the same at prepare and submit.
+    expect(buildFieldReportPayload(report(), ["qc.connect_rate"])).toEqual(built);
+  });
+
+  it("maps case observations to customer signals", () => {
+    const built = buildFieldReportPayload(report({ kind: "case_observation", metrics: [] }), []);
+    expect(built.ok && built.payload.kind).toBe("customer_signal");
+  });
+
+  it("rejects metric keys that are not registered, and all metrics when none are", () => {
+    expect(buildFieldReportPayload(report(), ["qc.other"])).toMatchObject({ ok: false, message: expect.stringContaining("qc.connect_rate") });
+    expect(buildFieldReportPayload(report(), [])).toMatchObject({ ok: false, message: expect.stringContaining("text only") });
+    expect(buildFieldReportPayload(report({ metrics: [] }), []).ok).toBe(true);
+  });
+
+  it("rejects a report whose detail would exceed the signal limit", () => {
+    expect(buildFieldReportPayload(report({ metrics: [], text: "字".repeat(3990) }), []).ok).toBe(false);
   });
 });
 

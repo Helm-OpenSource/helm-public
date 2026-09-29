@@ -9,6 +9,7 @@ type Connection = {
   userId: string;
   clientType: string;
   deviceLabel: string;
+  scopes: string[];
   status: string | null;
   requestedAt: string;
   decisionReason: string | null;
@@ -54,6 +55,17 @@ const ERROR_LABELS: Record<string, string> = {
   STATE_CONFLICT: "状态已变化，请刷新后重试。",
 };
 
+const SCOPE_LABELS: Record<string, string> = {
+  "member:brief:read": "读简报",
+  "member:prompt:read": "读提问",
+  "member:signal:write": "写工作信号",
+  "member:report:write": "写现场报告",
+};
+
+function scopeSummary(scopes: string[]) {
+  return scopes.map(scope => SCOPE_LABELS[scope] ?? scope).join("、");
+}
+
 function clientLabel(value: string) {
   const label = MEMBER_MCP_CLIENT_LABELS[value as MemberMcpClientType] ?? value;
   return MEMBER_MCP_OVERSEAS_CLIENTS.includes(value as MemberMcpClientType) ? `${label}（境外）` : label;
@@ -90,6 +102,7 @@ export function AiAccessClient() {
   const [pending, startTransition] = useTransition();
   const [clientType, setClientType] = useState<string>("");
   const [deviceLabel, setDeviceLabel] = useState("");
+  const [includeWrite, setIncludeWrite] = useState(false);
   const [claimed, setClaimed] = useState<{ token: string; clientType: string } | null>(null);
   const [grantUser, setGrantUser] = useState("");
   const [grantTag, setGrantTag] = useState("");
@@ -146,13 +159,14 @@ export function AiAccessClient() {
       <h2 className="text-lg font-medium">我的接入</h2>
       <form className="flex flex-wrap items-end gap-3" onSubmit={event => {
         event.preventDefault();
-        run({ action: "request", clientType, deviceLabel }, () => { setDeviceLabel(""); setMessage("已提交申请，等待批准。"); });
+        run({ action: "request", clientType, deviceLabel, includeWrite }, () => { setDeviceLabel(""); setIncludeWrite(false); setMessage("已提交申请，等待批准。"); });
       }}>
         <label className="text-sm">客户端<select className="block border p-2" value={clientType} onChange={event => setClientType(event.target.value)} required disabled={!overview.runtimeEnabled || pending}>
           <option value="">请选择</option>
           {overview.approvedClients.map(value => <option key={value} value={value}>{clientLabel(value)}</option>)}
         </select></label>
         <label className="text-sm">设备名称<Input value={deviceLabel} onChange={event => setDeviceLabel(event.target.value)} placeholder="例如：办公室 MacBook" minLength={2} maxLength={80} required disabled={!overview.runtimeEnabled || pending} /></label>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={includeWrite} onChange={event => setIncludeWrite(event.target.checked)} disabled={!overview.runtimeEnabled || pending} />同时申请写入（提交工作信号与现场报告，只作为待审阅的候选）</label>
         <Button type="submit" disabled={!overview.runtimeEnabled || pending || !clientType}>申请接入</Button>
       </form>
       <ConnectionTable rows={overview.mine} actions={row => <>
@@ -204,7 +218,7 @@ function ConnectionTable({ rows, actions, showMember = false }: { rows: Connecti
     <tbody>{rows.map(row => <tr key={row.id} className="border-t align-top">
       {showMember && <td>{row.memberName ?? row.memberEmail ?? "—"}</td>}
       <td>{clientLabel(row.clientType)}</td>
-      <td>{row.deviceLabel}{row.tokenPrefix && <div className="font-mono text-xs text-muted-foreground">{row.tokenPrefix}…</div>}</td>
+      <td>{row.deviceLabel}{row.tokenPrefix && <div className="font-mono text-xs text-muted-foreground">{row.tokenPrefix}…</div>}<div className="text-xs text-muted-foreground">{scopeSummary(row.scopes)}</div></td>
       <td>{STATUS_LABELS[row.status ?? ""] ?? row.status ?? "未知"}{row.status === "approved" && <div className="text-xs text-muted-foreground">领取截止 {time(row.claimDeadlineAt)}</div>}</td>
       <td>{time(row.requestedAt)}</td>
       <td>{time(row.expiresAt)}</td>

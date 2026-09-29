@@ -41,6 +41,10 @@ describe("handleMemberMcpMessage", () => {
     ]);
     const briefOnly = await list({ ...auth, scopes: ["member:brief:read"] });
     expect((briefOnly.body as { result: { tools: Array<{ name: string }> } }).result.tools.map((tool) => tool.name)).toEqual(["get_my_brief"]);
+    const writer = await list({ ...auth, scopes: [...auth.scopes, "member:signal:write", "member:report:write"] });
+    expect((writer.body as { result: { tools: unknown[] } }).result.tools).toHaveLength(7);
+    const unapprovedWriter = await list({ ...auth, clientType: "qwenwork", scopes: ["member:signal:write"] });
+    expect((unapprovedWriter.body as { result: { tools: unknown[] } }).result.tools).toEqual([]);
     const unapproved = await list({ ...auth, clientType: "qwenwork" });
     expect((unapproved.body as { result: { tools: unknown[] } }).result.tools).toEqual([]);
   });
@@ -50,6 +54,17 @@ describe("handleMemberMcpMessage", () => {
     const result = await handleMemberMcpMessage({
       message: { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "get_my_prompt", arguments: { promptRef: "p1" } } },
       auth: { ...auth, scopes: ["member:brief:read"] },
+      executeTool,
+    });
+    expect(result.httpStatus).toBe(403);
+    expect(executeTool).not.toHaveBeenCalled();
+  });
+
+  it("refuses write tools to a read-only connection without executing", async () => {
+    const executeTool = vi.fn();
+    const result = await handleMemberMcpMessage({
+      message: { jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "prepare_work_signal", arguments: { kind: "progress", summary: "x" } } },
+      auth,
       executeTool,
     });
     expect(result.httpStatus).toBe(403);

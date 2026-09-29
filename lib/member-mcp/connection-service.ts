@@ -8,7 +8,6 @@ import { runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
 import {
   MEMBER_MCP_CLAIM_WINDOW_DAYS,
   MEMBER_MCP_MAX_OPEN_CONNECTIONS_PER_MEMBER,
-  MEMBER_MCP_P0_ISSUABLE_SCOPES,
   MEMBER_MCP_RATE_LIMIT_PER_MINUTE,
   MEMBER_MCP_TOKEN_PREFIX,
   MEMBER_MCP_TOKEN_TTL_DAYS,
@@ -16,6 +15,7 @@ import {
   decideMemberConnectionApproval,
   effectiveMemberConnectionStatus,
   isOpenMemberConnectionStatus,
+  memberMcpScopesForRequest,
   normalizeDeviceLabel,
   normalizeGroupTag,
   parseStoredMemberMcpScopes,
@@ -189,6 +189,9 @@ export async function requestMemberAgentConnection(input: {
   actor: MemberMcpActor;
   clientType: MemberMcpClientType;
   deviceLabel: string;
+  // Candidate-write scopes (work signals, field reports) are only issued
+  // when the member asks for them; the approver sees the scopes.
+  includeWrite?: boolean;
   now?: Date;
 }) {
   const now = input.now ?? new Date();
@@ -210,7 +213,7 @@ export async function requestMemberAgentConnection(input: {
     throw new MemberAgentConnectionError("TOO_MANY_OPEN", "Too many open connections for this member");
   }
 
-  const scopes: MemberMcpScope[] = [...MEMBER_MCP_P0_ISSUABLE_SCOPES];
+  const scopes: MemberMcpScope[] = memberMcpScopesForRequest(input.includeWrite === true);
   return runWithWriteConflictRetry(() => db.$transaction(async (tx) => {
     const row = await tx.memberAgentConnection.create({
       data: {
@@ -541,12 +544,14 @@ export type MemberMcpAuthContext = {
   connectionId: string;
   workspaceId: string;
   userId: string;
+  membershipId: string;
   deviceRef: string;
   clientType: string;
   deviceLabel: string;
   scopes: readonly MemberMcpScope[];
   expiresAt: Date;
   approvedClients: readonly MemberMcpClientType[];
+  fieldReportMetricKeys: readonly string[];
 };
 
 // Every call re-checks: runtime switches, token state and expiry, and that the
@@ -582,12 +587,14 @@ export async function authenticateMemberMcpToken(token: string, now = new Date()
     connectionId: row.id,
     workspaceId: row.workspaceId,
     userId: row.userId,
+    membershipId: row.membershipId,
     deviceRef: row.deviceRef,
     clientType: row.clientType,
     deviceLabel: row.deviceLabel,
     scopes: parseStoredMemberMcpScopes(row.scopesJson),
     expiresAt: row.expiresAt,
     approvedClients: flags.approvedClients,
+    fieldReportMetricKeys: flags.fieldReportMetricKeys,
   };
 }
 

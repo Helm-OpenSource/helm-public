@@ -78,14 +78,26 @@ describeMysql("member MCP P0 with an isolated MySQL database", () => {
     await db.$disconnect();
   });
 
-  const request = (key: keyof typeof actors, clientType: "claude_code" | "codex" | "qwenwork" = "claude_code") =>
+  const request = (
+    key: keyof typeof actors,
+    clientType: "claude_code" | "codex" | "qwenwork" = "claude_code",
+    includeWrite = false,
+  ) =>
     requestMemberAgentConnection({
       workspaceId,
       membershipId: actors[key].membershipId,
       actor: actors[key],
       clientType,
       deviceLabel: `${key} 的电脑`,
+      includeWrite,
     });
+
+  async function activeToken(key: keyof typeof actors, includeWrite: boolean) {
+    const requested = await request(key, "claude_code", includeWrite);
+    await decideMemberAgentConnection({ workspaceId, connectionId: requested.id, actor: actors.owner, decision: "approve" });
+    const claimed = await claimMemberAgentConnection({ workspaceId, connectionId: requested.id, actor: actors[key] });
+    return { connectionId: requested.id, token: claimed.token, scopes: claimed.connection.scopes };
+  }
 
   it("refuses a client type that is not on the workspace's approved list", async () => {
     await expectCode(request("seatA", "qwenwork"), "CLIENT_NOT_APPROVED");
@@ -235,6 +247,89 @@ describeMysql("member MCP P0 with an isolated MySQL database", () => {
     expect((await decideMemberAgentConnection({ workspaceId, connectionId: pendingAfterLeaving.id, actor: actors.owner, decision: "reject" })).status).toBe("rejected");
     expect((await revokeMemberAgentConnection({ workspaceId, connectionId: requested.id, actor: actors.owner })).status).toBe("revoked");
     await db.membership.update({ where: { id: actors.seatB.membershipId }, data: { status: MembershipStatus.ACTIVE } });
+  });
+
+  it("records a work signal through prepare/submit as an untrusted candidate receipt", async () => {
+    const writer = await activeToken("seatA", true);
+    expect(writer.scopes).toEqual(["member:brief:read", "member:prompt:read", "member:signal:write", "member:report:write"]);
+    const auth = await authenticateMemberMcpToken(writer.token);
+    const signal = { kind: "blocker" as const, summary: "下午外呼线路中断两小时", detail: "14:00–16:00 拨号全部失败" };
+    const prepared = await executeMemberMcpTool({ auth, call: { toolName: "prepare_work_signal", arguments: signal } });
+    expect(prepared.ok).toBe(true);
+    const challengeRef = (prepared.data as { challengeRef: string }).challengeRef;
+
+    // A changed payload does not match the prepared hash.
+    const tampered = await executeMemberMcpTool({
+      auth,
+      call: { toolName: "submit_work_signal", arguments: { ...signal, summary: "改过的内容", challengeRef } },
+    });
+    expect(tampered.ok).toBe(false);
+    expect(tampered.error?.code).toBe("signal_rejected");
+    expect(tampered.error?.message).toContain("challenge_payload_hash_mismatch");
+
+    const submitted = await executeMemberMcpTool({ auth, call: { toolName: "submit_work_signal", arguments: { ...signal, challengeRef } } });
+    expect(submitted.ok).toBe(true);
+    expect(submitted.boundary.authorityEffect).toBe("none");
+    expect(submitted.data).toMatchObject({ outcome: "recorded", kind: "blocker", candidate: true, taint: "untrusted" });
+    const receiptRef = (submitted.data as { receiptRef: string }).receiptRef;
+
+    // Retrying the same submit is an idempotent replay, not a second receipt.
+    const replay = await executeMemberMcpTool({ auth, call: { toolName: "submit_work_signal", arguments: { ...signal, challengeRef } } });
+    expect(replay.data).toMatchObject({ outcome: "replayed", receiptRef });
+
+    const row = await db.memberWorkSignalReceipt.findUniqueOrThrow({ where: { id_workspaceId: { id: receiptRef, workspaceId } } });
+    expect(row).toMatchObject({
+      memberRef: actors.seatA.userId,
+      deviceRegistrationRef: auth.deviceRef,
+      clientId: "claude_code",
+      objectRef: `member-self:${actors.seatA.userId}`,
+      candidate: true,
+      taint: "untrusted",
+      policyRef: "member-mcp:self-signal",
+    });
+    expect(row.gatewaySessionRef).not.toBeNull();
+    expect(await db.memberWorkSignalReceipt.count({ where: { workspaceId, challengeRef } })).toBe(1);
+  });
+
+  it("records a field report with registered metric keys only", async () => {
+    await setFlags({ memberMcp: true, memberMcpApprovedClients: ["claude_code", "codex"], memberMcpFieldReportMetricKeys: ["qc.connect_rate"] });
+    const writer = await activeToken("seatB", true);
+    const auth = await authenticateMemberMcpToken(writer.token);
+    const report = {
+      kind: "shadow_check" as const,
+      title: "今日影子核对",
+      metrics: [{ key: "qc.connect_rate", value: 0.31, unit: "ratio", window: "2026-09-29", source_ref: null }],
+      text: "接通率偏低，疑似线路问题",
+    };
+    const unregistered = await executeMemberMcpTool({
+      auth,
+      call: { toolName: "prepare_field_report", arguments: { ...report, metrics: [{ ...report.metrics[0], key: "qc.unknown" }] } },
+    });
+    expect(unregistered.error?.code).toBe("field_report_invalid");
+    const prepared = await executeMemberMcpTool({ auth, call: { toolName: "prepare_field_report", arguments: report } });
+    const challengeRef = (prepared.data as { challengeRef: string }).challengeRef;
+    const submitted = await executeMemberMcpTool({ auth, call: { toolName: "submit_field_report", arguments: { ...report, challengeRef } } });
+    expect(submitted.data).toMatchObject({ outcome: "recorded", kind: "progress", taint: "untrusted" });
+    const row = await db.memberWorkSignalReceipt.findUniqueOrThrow({
+      where: { id_workspaceId: { id: (submitted.data as { receiptRef: string }).receiptRef, workspaceId } },
+    });
+    const payload = JSON.parse(row.payloadJson) as { summary: string; detail: string };
+    expect(payload.summary).toBe("现场报告·影子核对：今日影子核对");
+    expect(payload.detail.split("\n")[1]).toBe(
+      JSON.stringify({ kind: "shadow_check", metrics: [{ key: "qc.connect_rate", value: 0.31, unit: "ratio", window: "2026-09-29", source_ref: null }] }),
+    );
+    await setFlags({ memberMcp: true, memberMcpApprovedClients: ["claude_code", "codex"] });
+  });
+
+  it("refuses writes from a read-only connection, even when called directly", async () => {
+    const reader = await activeToken("supervisor", false);
+    const auth = await authenticateMemberMcpToken(reader.token);
+    const refused = await executeMemberMcpTool({
+      auth,
+      call: { toolName: "prepare_work_signal", arguments: { kind: "progress", summary: "x", detail: "" } },
+    });
+    expect(refused.error?.code).toBe("scope_denied");
+    expect(await db.memberWorkSignalChallenge.count({ where: { workspaceId, memberRef: actors.supervisor.userId } })).toBe(0);
   });
 
   it("rate-limits a token beyond 60 calls a minute", async () => {
