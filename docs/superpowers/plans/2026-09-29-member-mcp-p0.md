@@ -70,6 +70,10 @@ owner 2026-09-29 的四项裁定：
    - 成员主动拉取自己的队列不算打扰，所以静默期和勿扰不适用；读取不改变提问状态。
    - 这是对规格 §6.3"受监督投递"的有意放宽，仅适用于成员本人主动读取；主动推送仍走 P1 的 `poll_my_prompts` 与投递判定。
 
+7b. **放行名单（owner 2026-09-29 裁定）：四家全放**——`memberMcpApprovedClients: ["codex","qwenwork","claude_code","workbuddy"]`。
+   - Codex 与 Claude Code 的厂商在境外，提问摘要会出境；页面对这两家标注"境外"并提示审批人。
+   - 名单是工作区级的，不能按人区分；把关靠逐个令牌的审批（owner 或本组主管）。
+
 8. **权限防火墙。** 工具执行器直接读 `MemberPrompt` 表，不经过 `prompt-store.service`。
    原因是后者会引入 `lib/caio-governance`，而 API 代码不得依赖它（`check:caio-terminology`）。
 
