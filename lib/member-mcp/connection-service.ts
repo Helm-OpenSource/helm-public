@@ -119,7 +119,12 @@ async function loadTargetMembership(workspaceId: string, userId: string) {
   };
 }
 
-async function judgeApproval(workspaceId: string, actor: MemberMcpActor, targetUserId: string) {
+async function judgeApproval(
+  workspaceId: string,
+  actor: MemberMcpActor,
+  targetUserId: string,
+  purpose: "approve" | "close",
+) {
   const [grantedGroupTags, target] = await Promise.all([
     activeGrantTags(workspaceId, actor.userId),
     loadTargetMembership(workspaceId, targetUserId),
@@ -132,6 +137,7 @@ async function judgeApproval(workspaceId: string, actor: MemberMcpActor, targetU
       grantedGroupTags,
     },
     target,
+    purpose,
   );
 }
 
@@ -243,7 +249,12 @@ export async function decideMemberAgentConnection(input: {
     where: { id: input.connectionId, workspaceId: input.workspaceId },
   });
   if (!row) throw new MemberAgentConnectionError("NOT_FOUND", "Connection not found");
-  const approval = await judgeApproval(input.workspaceId, input.actor, row.userId);
+  const approval = await judgeApproval(
+    input.workspaceId,
+    input.actor,
+    row.userId,
+    input.decision === "approve" ? "approve" : "close",
+  );
   if (!approval.allowed) throw new MemberAgentConnectionError("FORBIDDEN", approval.reason);
   if (row.status !== "requested") throw new MemberAgentConnectionError("STATE_CONFLICT", "Connection is not awaiting a decision");
   if (input.decision === "approve") {
@@ -344,7 +355,7 @@ export async function revokeMemberAgentConnection(input: {
   if (!row) throw new MemberAgentConnectionError("NOT_FOUND", "Connection not found");
   const own = row.userId === input.actor.userId;
   if (!own) {
-    const approval = await judgeApproval(input.workspaceId, input.actor, row.userId);
+    const approval = await judgeApproval(input.workspaceId, input.actor, row.userId, "close");
     if (!approval.allowed) throw new MemberAgentConnectionError("FORBIDDEN", approval.reason);
   }
   if (!["requested", "approved", "active"].includes(row.status)) {

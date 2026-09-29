@@ -59,6 +59,14 @@ describe("decideMemberConnectionApproval", () => {
     expect(decideMemberConnectionApproval(approver({ role: WorkspaceRole.OWNER, membershipActive: false }), target())).toEqual({ allowed: false, reason: "approver_inactive" });
     expect(decideMemberConnectionApproval(approver({ role: WorkspaceRole.OWNER }), target({ membershipActive: false }))).toEqual({ allowed: false, reason: "target_inactive" });
   });
+
+  it("still lets approvers close access for a member who has left", () => {
+    const departed = target({ membershipActive: false });
+    expect(decideMemberConnectionApproval(approver({ role: WorkspaceRole.ADMIN }), departed, "close")).toEqual({ allowed: true, basis: "workspace_capability" });
+    expect(decideMemberConnectionApproval(approver({ grantedGroupTags: ["深圳汉普组"] }), departed, "close")).toEqual({ allowed: true, basis: "group_grant" });
+    expect(decideMemberConnectionApproval(approver(), departed, "close")).toEqual({ allowed: false, reason: "no_authority" });
+    expect(decideMemberConnectionApproval(approver({ role: WorkspaceRole.ADMIN, membershipActive: false }), departed, "close")).toEqual({ allowed: false, reason: "approver_inactive" });
+  });
 });
 
 describe("effectiveMemberConnectionStatus", () => {

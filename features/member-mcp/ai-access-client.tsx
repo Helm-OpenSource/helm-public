@@ -78,7 +78,7 @@ function setupSnippets(url: string, clientType: string) {
     return `export HELM_MEMBER_TOKEN=<上面的令牌>\nclaude mcp add --transport http helm ${url} --header "Authorization: Bearer $HELM_MEMBER_TOKEN"`;
   }
   if (clientType === "codex") {
-    return `# ~/.codex/config.toml\n[mcp_servers.helm]\nurl = "${url}"\nbearer_token_env_var = "HELM_MEMBER_TOKEN"\n\n# 再在终端里：export HELM_MEMBER_TOKEN=<上面的令牌>`;
+    return `# ~/.codex/config.toml（示例，字段以 Codex 当前版本文档为准）\n[mcp_servers.helm]\nurl = "${url}"\nbearer_token_env_var = "HELM_MEMBER_TOKEN"\n\n# 再在终端里：export HELM_MEMBER_TOKEN=<上面的令牌>`;
   }
   return `{\n  "mcpServers": {\n    "helm": {\n      "url": "${url}",\n      "headers": { "Authorization": "Bearer <上面的令牌>" }\n    }\n  }\n}`;
 }

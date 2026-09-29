@@ -166,12 +166,16 @@ export type MemberConnectionApprovalDecision =
         | "no_authority";
     };
 
+// purpose "approve" grants access and requires the target to be an active
+// member; "close" (reject a pending request, revoke a connection) removes
+// access and must stay possible after the member has left.
 export function decideMemberConnectionApproval(
   approver: MemberConnectionApprover,
   target: MemberConnectionApprovalTarget,
+  purpose: "approve" | "close" = "approve",
 ): MemberConnectionApprovalDecision {
   if (!approver.membershipActive) return { allowed: false, reason: "approver_inactive" };
-  if (!target.membershipActive) return { allowed: false, reason: "target_inactive" };
+  if (purpose === "approve" && !target.membershipActive) return { allowed: false, reason: "target_inactive" };
   if (approver.userId === target.userId && approver.role !== WorkspaceRole.OWNER) {
     return { allowed: false, reason: "self_approval" };
   }

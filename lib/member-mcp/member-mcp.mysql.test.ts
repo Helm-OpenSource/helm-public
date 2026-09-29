@@ -224,8 +224,16 @@ describeMysql("member MCP P0 with an isolated MySQL database", () => {
     await decideMemberAgentConnection({ workspaceId, connectionId: requested.id, actor: actors.owner, decision: "approve" });
     const claimed = await claimMemberAgentConnection({ workspaceId, connectionId: requested.id, actor: actors.seatB });
     await authenticateMemberMcpToken(claimed.token);
+    const pendingAfterLeaving = await request("seatB", "codex");
     await db.membership.update({ where: { id: actors.seatB.membershipId }, data: { status: MembershipStatus.INACTIVE } });
     await expectCode(authenticateMemberMcpToken(claimed.token), "UNAUTHENTICATED");
+    // Access can still be closed after the member has left, but not granted.
+    await expectCode(
+      decideMemberAgentConnection({ workspaceId, connectionId: pendingAfterLeaving.id, actor: actors.owner, decision: "approve" }),
+      "FORBIDDEN",
+    );
+    expect((await decideMemberAgentConnection({ workspaceId, connectionId: pendingAfterLeaving.id, actor: actors.owner, decision: "reject" })).status).toBe("rejected");
+    expect((await revokeMemberAgentConnection({ workspaceId, connectionId: requested.id, actor: actors.owner })).status).toBe("revoked");
     await db.membership.update({ where: { id: actors.seatB.membershipId }, data: { status: MembershipStatus.ACTIVE } });
   });
 
