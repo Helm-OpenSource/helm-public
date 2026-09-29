@@ -9,8 +9,9 @@ import "server-only";
 // a signal or field report leaves this module — no summaries, no text, and no
 // member-reported metric values. What leaves is volume by kind, which is
 // metadata about the uplink channel, aggregated over the whole workspace and
-// never per person. Metric values and source-reliability statistics are a
-// separate owner decision.
+// never per person. Owner ruling 2026-09-29: member-reported metric values do
+// not enter CAIO, and no per-person source-reliability statistics are kept —
+// counts only is the final shape, not a stepping stone.
 //
 // Protected responses (refuse / pause / appeal) are deliberately not counted:
 // they must never become a signal about the people raising them.
