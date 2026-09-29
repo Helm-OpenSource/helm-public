@@ -128,7 +128,7 @@ export function AiAccessClient() {
     <header className="space-y-2">
       <h1 className="text-xl font-semibold">AI 工具接入</h1>
       <p className="text-sm text-muted-foreground">用你自己的 Codex、QwenWork、Claude Code 或 WorkBuddy 连接 CAIO：读取你的简报和 CAIO 发给你的提问。当前阶段只读，不会替你做任何审批、发送或执行。一台设备一个令牌，由 owner 或你的主管批准后，由你本人领取，令牌只显示一次、30 天有效。</p>
-      <p className="text-sm text-muted-foreground">标注"境外"的工具由境外厂商处理数据：使用时 CAIO 发给你的提问摘要会传到境外。批准前请确认该同事的岗位适合使用。</p>
+      <p className="text-sm text-muted-foreground">标注“境外”的工具由境外厂商处理数据：使用时 CAIO 发给你的提问摘要会传到境外。批准前请确认该同事的岗位适合使用。</p>
       {!overview.runtimeEnabled && <p className="text-sm text-[color:var(--status-warning-text)]">本工作区尚未开启 AI 工具接入，可以查看记录，但暂时不能申请或使用。</p>}
     </header>
 
