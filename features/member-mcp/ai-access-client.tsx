@@ -224,12 +224,13 @@ export function AiAccessClient() {
 
     {overview.needsHuman && <section className="space-y-3">
       <h2 className="text-lg font-medium">待人工处理的回应（{overview.needsHuman.total}）</h2>
-      <p className="text-sm text-muted-foreground">后台没能自动登记的回应。拒绝、暂停、申诉永远不会被丢弃，会一直保留到能够登记为止。理由是同事本人写的，未经核实。</p>
+      <p className="text-sm text-muted-foreground">后台没能自动登记的回应。拒绝、暂停、申诉永远不会被丢弃，会一直保留到能够登记为止。</p>
+      <p className="rounded border border-[color:var(--status-warning-border)] bg-[color:var(--status-warning-bg)] px-3 py-2 text-sm text-[color:var(--status-warning-text)]" data-member-taint="untrusted" data-evaluation-use-prohibited="true">不可信内容 · 禁止用于任何评价：理由由同事本人填写，未经核实。拒绝、暂停、申诉以及不回应，永远不作为对任何人的负面信号。</p>
       {overview.needsHuman.rows.length === 0 ? <p className="text-sm text-muted-foreground">暂无。</p> : <table className="w-full text-sm"><thead><tr className="text-left"><th>成员</th><th>提问</th><th>回应</th><th>状态</th><th>原因码</th><th>收到时间</th></tr></thead><tbody>
         {overview.needsHuman.rows.map(row => <tr key={row.inboxRef} className="border-t align-top">
           <td>{row.memberName ?? "—"}</td>
           <td className="font-mono text-xs">{row.promptRef}</td>
-          <td>{RESPONSE_KIND_LABELS[row.kind] ?? row.kind}{row.unverifiedReason && <div className="text-xs text-muted-foreground">未经核实：{row.unverifiedReason}</div>}</td>
+          <td>{RESPONSE_KIND_LABELS[row.kind] ?? row.kind}{row.unverifiedReason && <div className="mt-1 text-xs"><span className="mr-1 rounded border border-[color:var(--status-warning-border)] px-1 text-[color:var(--status-warning-text)]" data-member-taint="untrusted">不可信·禁止用于评价</span>{row.unverifiedReason}</div>}</td>
           <td>{INBOX_STATUS_LABELS[row.status] ?? row.status}</td>
           <td className="font-mono text-xs">{row.outcomeCode ?? "—"}（{row.attempts} 次）</td>
           <td>{time(row.receivedAt)}</td>
