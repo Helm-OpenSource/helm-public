@@ -93,6 +93,13 @@ describe("handleMemberMcpMessage", () => {
     expect(result.body).toMatchObject({ result: { isError: false, structuredContent: { ok: true } } });
   });
 
+  it("accepts every notification with 202 and no body", async () => {
+    for (const method of ["notifications/initialized", "notifications/cancelled", "notifications/progress"]) {
+      const result = await handleMemberMcpMessage({ message: { jsonrpc: "2.0", method }, auth, executeTool: vi.fn() });
+      expect(result).toEqual({ httpStatus: 202, body: null });
+    }
+  });
+
   it("returns 404 for unknown methods and 400 for invalid requests", async () => {
     expect((await handleMemberMcpMessage({ message: { jsonrpc: "2.0", id: 6, method: "resources/list" }, auth, executeTool: vi.fn() })).httpStatus).toBe(404);
     expect((await handleMemberMcpMessage({ message: [], auth, executeTool: vi.fn() })).httpStatus).toBe(400);

@@ -18,6 +18,10 @@ import {
   WORKSPACE_CAPABILITIES,
   workspaceRoleHasCapability,
 } from "@/lib/auth/authorization";
+import type { MemberObjectClassification } from "@/lib/member-gateway/types";
+import { DATA_ASSET_PROCESSING_DISPOSITIONS } from "@/lib/stage1-owner-loop/data-asset-catalog.types";
+import { OBSERVATION_SENSITIVITY_LEVELS } from "@/lib/stage1-owner-loop/types";
+import { parseInstant } from "@/lib/time/strict-instant";
 
 export {
   MEMBER_MCP_CLIENT_LABELS,
@@ -115,8 +119,10 @@ export function isOpenMemberConnectionStatus(status: MemberMcpEffectiveStatus | 
   return status === "requested" || status === "approved" || status === "active";
 }
 
+// Same namespace as Stage 1 execution targets (executionTargetRef user:<id>).
+// Whoever issues a MemberPrompt for a member must use this exact ref.
 export function memberRefForUser(userId: string) {
-  return userId;
+  return `user:${userId}`;
 }
 
 // Runtime gate: the deployment env switch AND the workspace flag must both be
@@ -128,9 +134,36 @@ export type MemberMcpWorkspaceFlags = {
   // Allowed field-report metric keys (tenant quick-check template ids, which
   // Core cannot know). Empty means field reports carry text only.
   fieldReportMetricKeys: string[];
+  // Owner-authored tenant classification for CAIO content served to members
+  // (prompt summaries, work packets). null = unclassified, which never
+  // projects: content tools fail closed until the owner sets it.
+  contentClassification: MemberObjectClassification | null;
 };
 
 const METRIC_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,79}$/;
+
+function readContentClassification(value: unknown): MemberObjectClassification | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const sensitivity = record.sensitivity;
+  const disposition = record.processingDisposition;
+  const classifiedAt = record.classifiedAt;
+  if (
+    typeof sensitivity !== "string" ||
+    !(OBSERVATION_SENSITIVITY_LEVELS as readonly string[]).includes(sensitivity) ||
+    typeof disposition !== "string" ||
+    !(DATA_ASSET_PROCESSING_DISPOSITIONS as readonly string[]).includes(disposition) ||
+    typeof classifiedAt !== "string" ||
+    parseInstant(classifiedAt) === null
+  ) {
+    return null;
+  }
+  return {
+    sensitivity: sensitivity as MemberObjectClassification["sensitivity"],
+    processingDisposition: disposition as MemberObjectClassification["processingDisposition"],
+    classifiedAt,
+  };
+}
 
 export function readMemberMcpWorkspaceFlags(
   featureFlagsJson: string | null | undefined,
@@ -157,6 +190,7 @@ export function readMemberMcpWorkspaceFlags(
     enabled: env.HELM_MEMBER_MCP_ENABLED === "true" && record.memberMcp === true,
     approvedClients: [...new Set(approved)],
     fieldReportMetricKeys: [...new Set(metricKeys)],
+    contentClassification: readContentClassification(record.memberMcpContentClassification),
   };
 }
 
@@ -185,6 +219,8 @@ export type MemberConnectionApprovalTarget = {
   userId: string;
   groupTag: string | null;
   membershipActive: boolean;
+  // null when the target has no membership row.
+  role: WorkspaceRole | null;
 };
 
 export type MemberConnectionApprovalDecision =
@@ -219,8 +255,14 @@ export function decideMemberConnectionApproval(
   ) {
     return { allowed: true, basis: "workspace_capability" };
   }
+  // A group grant covers frontline members only: it never reaches an owner or
+  // admin who happens to carry the same tag.
+  const targetIsApprover = workspaceRoleHasCapability(
+    target.role,
+    WORKSPACE_CAPABILITIES.APPROVE_MEMBER_AGENT_CONNECTIONS,
+  );
   const tag = target.groupTag?.trim();
-  if (tag && approver.grantedGroupTags.some((granted) => granted.trim() === tag)) {
+  if (!targetIsApprover && tag && approver.grantedGroupTags.some((granted) => granted.trim() === tag)) {
     return { allowed: true, basis: "group_grant" };
   }
   return { allowed: false, reason: "no_authority" };

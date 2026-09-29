@@ -2,7 +2,11 @@
 // Member MCP P0 tool surface: definitions, argument parsing and the Member
 // Gateway envelope every tool result is wrapped in. Pure: no IO, no clock.
 
-import { validateMemberToolEnvelope } from "@/lib/member-gateway/contract";
+import {
+  decideMemberProjection,
+  decideMemberReadSurface,
+  validateMemberToolEnvelope,
+} from "@/lib/member-gateway/contract";
 import {
   MEMBER_SIGNAL_DETAIL_MAX_CHARS,
   MEMBER_SIGNAL_SUMMARY_MAX_CHARS,
@@ -10,6 +14,7 @@ import {
   type MemberWorkSignalPayload,
 } from "@/lib/member-gateway/signal";
 import type {
+  MemberObjectClassification,
   MemberProjectionDecision,
   MemberToolEnvelope,
 } from "@/lib/member-gateway/types";
@@ -383,7 +388,12 @@ function readChallengeRef(record: Record<string, unknown>): string | null {
 }
 
 const WORK_SIGNAL_KINDS: readonly MemberWorkSignalKind[] = ["progress", "blocker", "customer_signal"];
-const CONTROL_CHARACTERS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
+// C0/C1 controls, bidi overrides and zero-width characters: member text is
+// shown to reviewers, so nothing that can disguise what they read is accepted.
+const CONTROL_CHARACTERS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/;
+// Only buildFieldReportPayload may emit the structured block; free text in a
+// work signal or a report must not open (or close) a fence of its own.
+const FENCE = "```";
 
 function parseWorkSignalInput(
   record: Record<string, unknown>,
@@ -399,6 +409,9 @@ function parseWorkSignalInput(
   const detail = record.detail === undefined ? "" : record.detail;
   if (typeof detail !== "string" || detail.length > MEMBER_SIGNAL_DETAIL_MAX_CHARS || CONTROL_CHARACTERS.test(detail)) {
     return { ok: false, message: "detail must be at most 4000 printable characters" };
+  }
+  if (summary.includes(FENCE) || detail.includes(FENCE)) {
+    return { ok: false, message: "work signals may not contain code fences; use the field report tools for structured reports" };
   }
   return { ok: true, value: { kind: kind as MemberWorkSignalKind, summary, detail } };
 }
@@ -419,8 +432,8 @@ function parseFieldReportInput(
     return { ok: false, message: `kind must be one of ${MEMBER_FIELD_REPORT_KINDS.join(", ")}` };
   }
   const title = typeof record.title === "string" ? record.title.trim() : "";
-  if (!title || title.length > 200 || CONTROL_CHARACTERS.test(title)) {
-    return { ok: false, message: "title must be 1-200 printable characters" };
+  if (!title || title.length > 200 || CONTROL_CHARACTERS.test(title) || title.includes(FENCE)) {
+    return { ok: false, message: "title must be 1-200 printable characters without code fences" };
   }
   const rawMetrics = record.metrics ?? [];
   if (!Array.isArray(rawMetrics) || rawMetrics.length > MEMBER_FIELD_REPORT_MAX_METRICS) {
@@ -440,14 +453,20 @@ function parseFieldReportInput(
     const unit = optionalText(metric.unit, 16);
     const window = optionalText(metric.window, 40);
     const sourceRef = optionalText(metric.source_ref, 191);
+    if (typeof sourceRef === "string" && !REF_PATTERN.test(sourceRef)) {
+      return { ok: false, message: `metric ${metric.key} source_ref must be an opaque ref` };
+    }
+    if (metrics.some((seen) => seen.key === metric.key)) {
+      return { ok: false, message: `metric ${metric.key} appears more than once` };
+    }
     if (unit === undefined || window === undefined || sourceRef === undefined) {
       return { ok: false, message: `metric ${metric.key} has a malformed unit, window or source_ref` };
     }
     metrics.push({ key: metric.key, value: metric.value, unit, window, source_ref: sourceRef });
   }
   const text = record.text === undefined ? "" : record.text;
-  if (typeof text !== "string" || text.length > 3000 || CONTROL_CHARACTERS.test(text)) {
-    return { ok: false, message: "text must be at most 3000 printable characters" };
+  if (typeof text !== "string" || text.length > 3000 || CONTROL_CHARACTERS.test(text) || text.includes(FENCE)) {
+    return { ok: false, message: "text must be at most 3000 printable characters without code fences" };
   }
   return { ok: true, value: { kind: kind as MemberFieldReportKind, title, metrics, text: text.trim() } };
 }
@@ -524,6 +543,66 @@ export function buildSelfRecordDecision(input: {
   }
   return { ...base, projection: "remote_projected", blockReason: null };
 }
+
+// CAIO content served to a member (prompt summaries, evidence refs, later
+// work packets) describes business objects, so it goes through the Member
+// Gateway projection ladder (spec §8.2) with the owner-set tenant
+// classification: unclassified never projects (classification_unknown),
+// prohibited → LOCAL_VIEW_REQUIRED, local_only → metadata_only, and the
+// provider must be on the tenant egress list. The read surface evidence is
+// the member's own relationship to the record (their own queue), live
+// membership and the connection scope; decideMemberReadSurface only accepts
+// L1 tool names, so the brief's name stands in for these L3 reads.
+export const MEMBER_MCP_CONTENT_POLICY_REF = "member-mcp:caio-content";
+export const MEMBER_MCP_CONTENT_POLICY_VERSION = 1;
+
+export function buildContentDecision(input: {
+  workspaceId: string;
+  memberRef: string;
+  objectRef: string;
+  connectionRef: string;
+  scope: string;
+  providerRef: string | null;
+  classification: MemberObjectClassification | null;
+  requestedFields: readonly string[];
+  now: Date;
+}): MemberProjectionDecision {
+  const surface = decideMemberReadSurface({
+    workspaceRef: input.workspaceId,
+    memberRef: input.memberRef,
+    objectRef: input.objectRef,
+    tool: "get_my_brief",
+    purpose: MEMBER_MCP_PURPOSE,
+    liveMembershipRef: `live:${input.memberRef}`,
+    toolScopeRef: `${input.connectionRef}#${input.scope}`,
+    objectRelationshipAuthorizationRef: `addressee:${input.memberRef}`,
+    fieldPurposePolicyRef: `${MEMBER_MCP_CONTENT_POLICY_REF}:v${MEMBER_MCP_CONTENT_POLICY_VERSION}`,
+    sourceAuthorizationRef: input.connectionRef,
+    tenantProviderEgressPolicyRef: input.providerRef,
+    classification: input.classification,
+  });
+  const classifiedAtMs = input.classification ? Date.parse(input.classification.classifiedAt) : Number.NaN;
+  return decideMemberProjection({
+    surface,
+    classification: input.classification,
+    freshnessMinutes: Number.isFinite(classifiedAtMs)
+      ? Math.max(0, Math.floor((input.now.getTime() - classifiedAtMs) / 60_000))
+      : null,
+    providerRef: input.providerRef,
+    purpose: MEMBER_MCP_PURPOSE,
+    projectionPolicyRef: MEMBER_MCP_CONTENT_POLICY_REF,
+    projectionPolicyVersion: MEMBER_MCP_CONTENT_POLICY_VERSION,
+    requestedFields: input.requestedFields,
+  });
+}
+
+export const MEMBER_MCP_BLOCK_MESSAGES: Record<string, string> = {
+  provider_not_approved: "This client type is not on the workspace's approved list.",
+  classification_unknown: "The workspace has not classified CAIO content for member AI clients yet; read it in Helm.",
+  LOCAL_VIEW_REQUIRED: "This content may only be viewed inside Helm.",
+  read_surface_denied: "This content is not readable through this connection.",
+  purpose_missing: "Read purpose missing.",
+};
 
 export class MemberMcpEnvelopeInvalidError extends Error {
   constructor(readonly errors: readonly string[]) {
