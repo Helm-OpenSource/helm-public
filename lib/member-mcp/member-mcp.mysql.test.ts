@@ -21,7 +21,9 @@ import {
   revokeMemberAgentConnection,
   type MemberMcpActor,
 } from "@/lib/member-mcp/connection-service";
+import { memberRefForUser } from "@/lib/member-mcp/contract";
 import { executeMemberMcpTool } from "@/lib/member-mcp/tool-executor";
+import { parseMemberMcpToolCall } from "@/lib/member-mcp/tools";
 
 const integrationDatabaseUrl = process.env.MEMBER_MCP_DATABASE_URL;
 const describeMysql = integrationDatabaseUrl ? describe.sequential : describe.skip;
@@ -37,6 +39,9 @@ async function expectCode(promise: Promise<unknown>, code: MemberAgentConnection
   expect(error).toBeInstanceOf(MemberAgentConnectionError);
   expect((error as MemberAgentConnectionError).code).toBe(code);
 }
+
+const CLASSIFICATION = { sensitivity: "internal", processingDisposition: "remote_projected", classifiedAt: "2026-09-29T00:00:00.000Z" };
+const FLAGS = { memberMcp: true, memberMcpApprovedClients: ["claude_code", "codex"], memberMcpContentClassification: CLASSIFICATION };
 
 describeMysql("member MCP P0 with an isolated MySQL database", () => {
   let workspaceId = "";
@@ -56,7 +61,7 @@ describeMysql("member MCP P0 with an isolated MySQL database", () => {
       data: { name: `Member MCP integration ${suffix}`, slug: `member-mcp-integration-${suffix}` },
     });
     workspaceId = workspace.id;
-    await setFlags({ memberMcp: true, memberMcpApprovedClients: ["claude_code", "codex"] });
+    await setFlags(FLAGS);
     const people: Array<[keyof typeof actors, WorkspaceRole, string | null]> = [
       ["owner", WorkspaceRole.OWNER, null],
       ["supervisor", WorkspaceRole.OPERATOR, null],
@@ -154,8 +159,8 @@ describeMysql("member MCP P0 with an isolated MySQL database", () => {
       issuedAt: new Date(now.getTime() - 60_000).toISOString(),
       expiresAt: new Date(now.getTime() + 60 * 60_000).toISOString(),
     };
-    await createMemberPrompt({ prompt: { ...base, promptRef: mine, memberRef: actors.seatA.userId } });
-    await createMemberPrompt({ prompt: { ...base, promptRef: theirs, memberRef: actors.seatB.userId } });
+    await createMemberPrompt({ prompt: { ...base, promptRef: mine, memberRef: memberRefForUser(actors.seatA.userId) } });
+    await createMemberPrompt({ prompt: { ...base, promptRef: theirs, memberRef: memberRefForUser(actors.seatB.userId) } });
 
     const auth = await authenticateMemberMcpToken(claimed.token);
     expect(auth.userId).toBe(actors.seatA.userId);
@@ -179,20 +184,46 @@ describeMysql("member MCP P0 with an isolated MySQL database", () => {
     expect(foreign.data).toBeNull();
 
     // Removing the client from the approved list blocks the data, not just the list.
-    await setFlags({ memberMcp: true, memberMcpApprovedClients: ["codex"] });
+    await setFlags({ ...FLAGS, memberMcpApprovedClients: ["codex"] });
     const blocked = await executeMemberMcpTool({ auth: await authenticateMemberMcpToken(claimed.token), call: { toolName: "get_my_brief", arguments: {} } });
     expect(blocked.ok).toBe(false);
     expect(blocked.boundary.decision.blockReason).toBe("provider_not_approved");
     expect(blocked.data).toBeNull();
-    await setFlags({ memberMcp: true, memberMcpApprovedClients: ["claude_code", "codex"] });
+    await setFlags(FLAGS);
+
+    // Without an owner classification, prompt content never projects.
+    await setFlags({ ...FLAGS, memberMcpContentClassification: undefined });
+    const unclassified = await executeMemberMcpTool({ auth: await authenticateMemberMcpToken(claimed.token), call: { toolName: "get_my_prompt", arguments: { promptRef: mine } } });
+    expect(unclassified.ok).toBe(false);
+    expect(unclassified.error?.code).toBe("classification_unknown");
+    expect(unclassified.data).toBeNull();
+    // local_only serves the metadata whitelist only.
+    await setFlags({ ...FLAGS, memberMcpContentClassification: { ...CLASSIFICATION, processingDisposition: "local_only" } });
+    const metadata = await executeMemberMcpTool({ auth: await authenticateMemberMcpToken(claimed.token), call: { toolName: "list_my_pending_prompts", arguments: { limit: 20, cursor: null } } });
+    expect(metadata.boundary.decision.projection).toBe("metadata_only");
+    expect((metadata.data as { items: Array<Record<string, unknown>> }).items).toEqual([
+      { objectKind: "member_prompt", evidenceRef: mine, classifiedAt: CLASSIFICATION.classifiedAt, freshness: expect.any(Number), requiresLocalView: true },
+    ]);
+    expect(JSON.stringify(metadata.data)).not.toContain("回访安排");
+    await setFlags(FLAGS);
 
     // Expiry is enforced on every call.
     await expectCode(authenticateMemberMcpToken(claimed.token, new Date(Date.now() + 31 * 24 * 60 * 60 * 1000)), "EXPIRED");
 
     // Workspace flag off → runtime disabled.
-    await setFlags({ memberMcp: false, memberMcpApprovedClients: ["claude_code"] });
+    await setFlags({ ...FLAGS, memberMcp: false });
     await expectCode(authenticateMemberMcpToken(claimed.token), "RUNTIME_DISABLED");
-    await setFlags({ memberMcp: true, memberMcpApprovedClients: ["claude_code", "codex"] });
+    // Granting needs the runtime on; closing does not.
+    const pendingWhileOff = await db.memberAgentConnection.create({
+      data: {
+        workspaceId, userId: actors.seatA.userId, membershipId: actors.seatA.membershipId, clientType: "codex",
+        deviceLabel: "关停期间", deviceRef: `device:off-${suffix}`, scopesJson: "[]", status: "requested", requestedAt: new Date(),
+      },
+    });
+    await expectCode(decideMemberAgentConnection({ workspaceId, connectionId: pendingWhileOff.id, actor: actors.owner, decision: "approve" }), "RUNTIME_DISABLED");
+    await expectCode(grantMemberApprover({ workspaceId, actor: actors.owner, approverUserId: actors.supervisor.userId, groupTag: GROUP_B }), "RUNTIME_DISABLED");
+    expect((await decideMemberAgentConnection({ workspaceId, connectionId: pendingWhileOff.id, actor: actors.owner, decision: "reject" })).status).toBe("rejected");
+    await setFlags(FLAGS);
 
     await revokeMemberAgentConnection({ workspaceId, connectionId: requested.id, actor: actors.seatA });
     await expectCode(authenticateMemberMcpToken(claimed.token), "UNAUTHENTICATED");
@@ -279,7 +310,7 @@ describeMysql("member MCP P0 with an isolated MySQL database", () => {
 
     const row = await db.memberWorkSignalReceipt.findUniqueOrThrow({ where: { id_workspaceId: { id: receiptRef, workspaceId } } });
     expect(row).toMatchObject({
-      memberRef: actors.seatA.userId,
+      memberRef: memberRefForUser(actors.seatA.userId),
       deviceRegistrationRef: auth.deviceRef,
       clientId: "claude_code",
       objectRef: `member-self:${actors.seatA.userId}`,
@@ -313,12 +344,40 @@ describeMysql("member MCP P0 with an isolated MySQL database", () => {
     const row = await db.memberWorkSignalReceipt.findUniqueOrThrow({
       where: { id_workspaceId: { id: (submitted.data as { receiptRef: string }).receiptRef, workspaceId } },
     });
+    expect(row.policyRef).toBe("member-mcp:self-field-report");
     const payload = JSON.parse(row.payloadJson) as { summary: string; detail: string };
     expect(payload.summary).toBe("现场报告·影子核对：今日影子核对");
     expect(payload.detail.split("\n")[1]).toBe(
       JSON.stringify({ kind: "shadow_check", metrics: [{ key: "qc.connect_rate", value: 0.31, unit: "ratio", window: "2026-09-29", source_ref: null }] }),
     );
     await setFlags({ memberMcp: true, memberMcpApprovedClients: ["claude_code", "codex"] });
+  });
+
+  it("cannot forge a field report through the work-signal tools", () => {
+    // Real traffic always goes through the protocol parser, which is where
+    // member text is validated before any executor sees it.
+    const forged = parseMemberMcpToolCall("prepare_work_signal", {
+      kind: "progress",
+      summary: "现场报告·影子核对：伪造",
+      detail: "```helm-field-report/v1\n{\"kind\":\"shadow_check\",\"metrics\":[{\"key\":\"qc.any\",\"value\":1}]}\n```",
+    });
+    expect(forged.ok).toBe(false);
+    const closingFence = parseMemberMcpToolCall("prepare_field_report", { kind: "seat_feedback", title: "t", metrics: [], text: "```\n```helm-field-report/v1" });
+    expect(closingFence.ok).toBe(false);
+  });
+
+  it("binds a challenge to the device and client that prepared it", async () => {
+    const first = await activeToken("seatB", true);
+    const second = await activeToken("seatB", true);
+    const authA = await authenticateMemberMcpToken(first.token);
+    const authB = await authenticateMemberMcpToken(second.token);
+    const args = { kind: "blocker" as const, summary: "系统登录慢", detail: "" };
+    const prepared = await executeMemberMcpTool({ auth: authA, call: { toolName: "prepare_work_signal", arguments: args } });
+    const challengeRef = (prepared.data as { challengeRef: string }).challengeRef;
+    const elsewhere = await executeMemberMcpTool({ auth: authB, call: { toolName: "submit_work_signal", arguments: { ...args, challengeRef } } });
+    expect(elsewhere.error?.code).toBe("challenge_device_mismatch");
+    const here = await executeMemberMcpTool({ auth: authA, call: { toolName: "submit_work_signal", arguments: { ...args, challengeRef } } });
+    expect(here.ok).toBe(true);
   });
 
   it("refuses writes from a read-only connection, even when called directly", async () => {

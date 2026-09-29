@@ -52,7 +52,8 @@ export async function handleMemberMcpMessage(input: {
   if (message.jsonrpc !== "2.0" || typeof message.method !== "string") {
     return rpcError(id, -32600, "Invalid Request", "MALFORMED_REQUEST", 400);
   }
-  if (message.method === "notifications/initialized") return { httpStatus: 202, body: null };
+  // Notifications carry no id and expect no response body (MCP Streamable HTTP).
+  if (message.method.startsWith("notifications/")) return { httpStatus: 202, body: null };
 
   if (message.method === "initialize") {
     const requested = readRequestedProtocolVersion(message.params);
