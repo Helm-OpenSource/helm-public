@@ -42,6 +42,24 @@ describe("workspace capability matrix", () => {
     }
   });
 
+  it("keeps workspace-wide member AI access approval on owners and admins", () => {
+    for (const role of [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]) {
+      expect(
+        workspaceRoleHasCapability(role, WORKSPACE_CAPABILITIES.APPROVE_MEMBER_AGENT_CONNECTIONS),
+      ).toBe(true);
+    }
+    for (const role of [
+      WorkspaceRole.BILLING_ADMIN,
+      WorkspaceRole.OPERATOR,
+      WorkspaceRole.REVIEWER,
+      WorkspaceRole.MEMBER,
+    ]) {
+      expect(
+        workspaceRoleHasCapability(role, WORKSPACE_CAPABILITIES.APPROVE_MEMBER_AGENT_CONNECTIONS),
+      ).toBe(false);
+    }
+  });
+
   it("lets owners and admins manage workspace governance controls", () => {
     for (const role of [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]) {
       expect(

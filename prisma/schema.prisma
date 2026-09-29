@@ -1313,6 +1313,64 @@ model MemberActivationToken {
   @@index([workspaceId, membershipId])
 }
 
+/// Member MCP P0: one row per (member, device, client) access request. The
+/// bearer token is minted only when the member claims an approved request and
+/// is stored as a sha256 digest; status moves requested → approved → active
+/// (or rejected / revoked) through version-checked updates.
+model MemberAgentConnection {
+  id                     String    @id @default(cuid())
+  workspaceId            String
+  userId                 String
+  membershipId           String
+  clientType             String    @db.VarChar(32)
+  deviceLabel            String    @db.VarChar(80)
+  deviceRef              String    @db.VarChar(191)
+  scopesJson             String    @db.Text
+  status                 String    @db.VarChar(16)
+  version                Int       @default(0)
+  requestedAt            DateTime
+  decidedAt              DateTime?
+  decidedByUserId        String?
+  decisionReason         String?   @db.VarChar(200)
+  claimDeadlineAt        DateTime?
+  tokenHash              String?   @unique @db.Char(64)
+  tokenPrefix            String?   @db.VarChar(16)
+  issuedAt               DateTime?
+  expiresAt              DateTime?
+  revokedAt              DateTime?
+  revokedByUserId        String?
+  lastUsedAt             DateTime?
+  lastClientName         String?   @db.VarChar(80)
+  lastClientVersion      String?   @db.VarChar(80)
+  lastFailureCode        String?   @db.VarChar(32)
+  rateWindowStartedAt    DateTime?
+  rateWindowRequestCount Int       @default(0)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  @@unique([deviceRef])
+  @@index([workspaceId, status])
+  @@index([workspaceId, userId])
+}
+
+/// Member MCP P0: explicit supervisor designation. A grant lets one member
+/// approve access requests from members carrying the given groupTag. Grants
+/// are never deleted; revocation stamps revokedAt.
+model MemberAgentApproverGrant {
+  id              String    @id @default(cuid())
+  workspaceId     String
+  approverUserId  String
+  groupTag        String    @db.VarChar(60)
+  grantedByUserId String
+  grantedAt       DateTime
+  revokedAt       DateTime?
+  revokedByUserId String?
+  createdAt       DateTime  @default(now())
+
+  @@index([workspaceId, approverUserId, revokedAt], map: "MAApproverGrant_ws_approver_revoked_idx")
+  @@index([workspaceId, groupTag, revokedAt], map: "MAApproverGrant_ws_group_revoked_idx")
+}
+
 model AuthSession {
   id                    String     @id @default(cuid())
   userId                String
