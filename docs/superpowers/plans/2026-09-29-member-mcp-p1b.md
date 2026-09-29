@@ -66,3 +66,16 @@ public_safety: As-built record for member MCP P1b (asynchronous registration of
 ## 验证
 - 单元测试：`lib/member-mcp/response-contract.test.ts` 与 `tools.test.ts`。
 - 隔离 MySQL：`lib/member-mcp/member-mcp-response.mysql.test.ts`（进入 `test:member-mcp:mysql`）。
+
+## 独立二审后的修正（2026-09-29）
+- **防队首阻塞**：收件行新增 `nextAttemptAt`，重试按 1、2、4 分钟……退避，上限 30 分钟。
+  - 扫描只取到期的行，按 `nextAttemptAt` 排序。
+  - 开关已关的工作区在占用每轮名额之前就被排除。
+  - 等 mandate 的受保护回应因此排到队尾，不再挡住新回应。
+- **信号不成孤儿**：候选类回应的工作信号一旦落库，收件行在任何结局下都保留 `signalReceiptRef` 和候选。
+  - 提问已关闭：`signal_recorded_prompt_closed`；
+  - 已被别的回应答复：`prompt_already_answered`。只有 `responseRef` 等于本信号才判登记。
+- **挑战不串用**：P1a 的 `submit_work_signal` / `submit_field_report` 只接受对象为本人记录的挑战，拿回应提问的挑战来提交会被拒（`challenge_not_for_this_tool`）。
+- **收尾失败不中断整轮**：逐行记为 `finalize_failed` 后继续处理下一行；下一轮靠幂等补回。
+- **needsHuman 不被清掉**：受保护回应一旦标记，保持到登记为止。
+- **成员身份核对**：经由提交这条回应的连接找到成员资格，不依赖 memberRef 的写法。

@@ -10,7 +10,9 @@ import { MembershipStatus, WorkspaceRole } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { db } from "@/lib/db";
-import { createMemberPrompt } from "@/lib/member-gateway/prompt-store.service";
+import { decideMemberReadSurface } from "@/lib/member-gateway/contract";
+import { createMemberPrompt, transitionMemberPrompt } from "@/lib/member-gateway/prompt-store.service";
+import { issueMemberWorkSignalChallenge, submitMemberWorkSignal } from "@/lib/member-gateway/signal-store.service";
 import { getMemberPromptResponseReceipt } from "@/lib/member-gateway/prompt-response-store.service";
 import { listMemberWorkSignalCandidateReviews } from "@/lib/member-gateway/signal-candidate-review.service";
 import {
@@ -21,9 +23,11 @@ import {
   type MemberMcpActor,
   type MemberMcpAuthContext,
 } from "@/lib/member-mcp/connection-service";
+import { memberResponseSignalReceiptId } from "@/lib/member-mcp/response-contract";
 import { runMemberPromptResponseProcessor } from "@/lib/member-mcp/response-processor";
 import { executeMemberMcpTool } from "@/lib/member-mcp/tool-executor";
 import { parseMemberMcpToolCall } from "@/lib/member-mcp/tools";
+import { memberMcpPrincipal } from "@/lib/member-mcp/write-executor";
 
 const integrationDatabaseUrl = process.env.MEMBER_MCP_DATABASE_URL;
 const describeMysql = integrationDatabaseUrl ? describe.sequential : describe.skip;
@@ -79,14 +83,14 @@ describeMysql("member MCP P1b prompt responses with an isolated MySQL database",
     await db.$disconnect();
   });
 
-  async function prompt(memberRef: string) {
+  async function prompt(memberRef: string, inWorkspace = workspaceId) {
     promptCounter += 1;
     const promptRef = `p1b-prompt-${suffix}-${promptCounter}`;
     const now = Date.now();
     await createMemberPrompt({
       prompt: {
         promptRef,
-        workspaceRef: workspaceId,
+        workspaceRef: inWorkspace,
         memberRef,
         severity: "normal",
         severityRuleRef: null,
@@ -100,18 +104,58 @@ describeMysql("member MCP P1b prompt responses with an isolated MySQL database",
     return promptRef;
   }
 
-  async function call(name: string, args: Record<string, unknown>) {
+  async function call(name: string, args: Record<string, unknown>, auth: MemberMcpAuthContext = seatAuth) {
     const parsed = parseMemberMcpToolCall(name, args);
     if (!parsed.ok) throw new Error(parsed.message);
-    return executeMemberMcpTool({ auth: seatAuth, call: parsed.call });
+    return executeMemberMcpTool({ auth, call: parsed.call });
   }
 
-  async function respond(promptRef: string, kind: string, text: string) {
-    const prepared = await call("prepare_prompt_response", { promptRef, kind, text });
+  async function respond(promptRef: string, kind: string, text: string, auth: MemberMcpAuthContext = seatAuth) {
+    const prepared = await call("prepare_prompt_response", { promptRef, kind, text }, auth);
     expect(prepared.ok).toBe(true);
     const challengeRef = (prepared.data as { challengeRef: string }).challengeRef;
-    const submitted = await call("submit_prompt_response", { promptRef, kind, text, challengeRef });
+    const submitted = await call("submit_prompt_response", { promptRef, kind, text, challengeRef }, auth);
     return { challengeRef, submitted };
+  }
+
+  // A later run, past the retry backoff (max 30 min) of rows that already tried.
+  const later = (minutes = 31) => () => new Date(Date.now() + minutes * 60_000);
+
+  // Seeds the work signal an earlier processor attempt would have recorded for
+  // a candidate response, without the prompt transition that should follow it.
+  async function seedResponseSignal(inboxRef: string, promptRef: string) {
+    const promptRow = await db.memberPrompt.findUniqueOrThrow({ where: { id_workspaceId: { id: promptRef, workspaceId } } });
+    const principal = memberMcpPrincipal(seatAuth);
+    const payload = { kind: "progress" as const, summary: "回应提问（进展）：已约周五回电", detail: "已约周五回电", relatedEvidenceRefs: [] };
+    const challenge = await issueMemberWorkSignalChallenge({
+      draft: { principal, objectRef: promptRow.subjectObjectRef, objectVersion: 1, payload },
+      ttlMs: 60_000,
+    });
+    const surface = decideMemberReadSurface({
+      workspaceRef: workspaceId,
+      memberRef: principal.memberRef,
+      objectRef: promptRow.subjectObjectRef,
+      tool: "get_my_brief",
+      purpose: "test_seed",
+      liveMembershipRef: `membership:${actors.seat.membershipId}`,
+      toolScopeRef: "test",
+      objectRelationshipAuthorizationRef: "test",
+      fieldPurposePolicyRef: "test",
+      sourceAuthorizationRef: "test",
+      tenantProviderEgressPolicyRef: "test",
+      classification: { sensitivity: "internal", processingDisposition: "remote_projected", classifiedAt: new Date().toISOString() },
+    });
+    await submitMemberWorkSignal({
+      principal,
+      challengeRef: challenge.challengeRef,
+      payload,
+      surface,
+      evidenceSurfaces: new Map(),
+      policyRef: "member-mcp:prompt-response",
+      policyVersion: 1,
+      receiptId: memberResponseSignalReceiptId(inboxRef),
+    });
+    return memberResponseSignalReceiptId(inboxRef);
   }
 
   const inbox = (inboxRef: string) => db.memberPromptResponseInbox.findUniqueOrThrow({ where: { id: inboxRef } });
@@ -197,7 +241,10 @@ describeMysql("member MCP P1b prompt responses with an isolated MySQL database",
     });
     await db.caioActiveMandateClaim.create({ data: { workspaceId, mandateRecordId: mandate.id } });
 
+    // The row backed off after the first attempt; a run before that is not due.
     await runMemberPromptResponseProcessor({ workspaceId });
+    expect((await inbox(inboxRef)).status).toBe("received");
+    await runMemberPromptResponseProcessor({ workspaceId, now: later() });
     row = await inbox(inboxRef);
     expect(row.status).toBe("registered");
     expect(row.needsHuman).toBe(false);
@@ -256,5 +303,107 @@ describeMysql("member MCP P1b prompt responses with an isolated MySQL database",
     expect((await inbox(inboxRef)).status).toBe("received");
     await runMemberPromptResponseProcessor({ workspaceId });
     expect((await inbox(inboxRef)).status).toBe("registered");
+  });
+  it("does not let protected rows waiting for a mandate block newer responses", async () => {
+    // A separate workspace without any CAIO mandate.
+    const ws = await db.workspace.create({
+      data: {
+        name: `Member MCP P1b HOL ${suffix}`,
+        slug: `member-mcp-p1b-hol-${suffix}`,
+        featureFlagsJson: JSON.stringify({ memberMcp: true, memberMcpApprovedClients: ["claude_code"] }),
+      },
+    });
+    const owner = await db.user.create({ data: { email: `mmcp-p1b-hol-owner-${suffix}@example.com`, name: "hol owner" } });
+    const seat = await db.user.create({ data: { email: `mmcp-p1b-hol-seat-${suffix}@example.com`, name: "hol seat" } });
+    await db.membership.create({ data: { workspaceId: ws.id, userId: owner.id, role: WorkspaceRole.OWNER, status: MembershipStatus.ACTIVE } });
+    const seatMembership = await db.membership.create({
+      data: { workspaceId: ws.id, userId: seat.id, role: WorkspaceRole.OPERATOR, status: MembershipStatus.ACTIVE },
+    });
+    const ownerActor = { userId: owner.id, name: "hol owner", role: WorkspaceRole.OWNER, membershipActive: true };
+    const seatActor = { userId: seat.id, name: "hol seat", role: WorkspaceRole.OPERATOR, membershipActive: true };
+    const requested = await requestMemberAgentConnection({
+      workspaceId: ws.id,
+      membershipId: seatMembership.id,
+      actor: seatActor,
+      clientType: "claude_code",
+      deviceLabel: "hol 的电脑",
+      includeWrite: true,
+    });
+    await decideMemberAgentConnection({ workspaceId: ws.id, connectionId: requested.id, actor: ownerActor, decision: "approve" });
+    const claimed = await claimMemberAgentConnection({ workspaceId: ws.id, connectionId: requested.id, actor: seatActor });
+    const auth = await authenticateMemberMcpToken(claimed.token);
+
+    for (let index = 0; index < 60; index += 1) {
+      const promptRef = await prompt(seat.id, ws.id);
+      const { submitted } = await respond(promptRef, "refuse", `第 ${index} 条：不该再联系这位客户`, auth);
+      expect(submitted.ok).toBe(true);
+    }
+    // Each protected row gets its first attempt (limit 50 per run), then backs off.
+    await runMemberPromptResponseProcessor({ workspaceId: ws.id });
+    await runMemberPromptResponseProcessor({ workspaceId: ws.id });
+    expect(await db.memberPromptResponseInbox.count({ where: { workspaceId: ws.id, status: "received", attempts: 0 } })).toBe(0);
+    expect(await db.memberPromptResponseInbox.count({ where: { workspaceId: ws.id, needsHuman: true } })).toBe(60);
+
+    const promptRef = await prompt(seat.id, ws.id);
+    const { submitted } = await respond(promptRef, "acknowledge", "", auth);
+    const ackRef = (submitted.data as { inboxRef: string }).inboxRef;
+    const run = await runMemberPromptResponseProcessor({ workspaceId: ws.id });
+    expect(run.results).toContainEqual(expect.objectContaining({ inboxRef: ackRef, status: "registered" }));
+    // The protected rows are still kept (and still flagged), never dropped.
+    expect(await db.memberPromptResponseInbox.count({ where: { workspaceId: ws.id, kind: "refuse", status: "received", needsHuman: true } })).toBe(60);
+  }, 120_000);
+
+  it("keeps an already-recorded signal and its candidate when the prompt closed meanwhile", async () => {
+    const promptRef = await prompt(actors.seat.userId);
+    const { submitted } = await respond(promptRef, "progress_report", "已约周五回电");
+    const inboxRef = (submitted.data as { inboxRef: string }).inboxRef;
+    const signalRef = await seedResponseSignal(inboxRef, promptRef);
+    const promptRow = await db.memberPrompt.findUniqueOrThrow({ where: { id_workspaceId: { id: promptRef, workspaceId } } });
+    await transitionMemberPrompt({
+      workspaceRef: workspaceId,
+      promptRef,
+      cause: "withdraw",
+      expectedVersion: promptRow.version,
+      receiptId: `test-withdraw-${suffix}-${promptRef}`,
+      now: new Date().toISOString(),
+    });
+    await runMemberPromptResponseProcessor({ workspaceId });
+    const row = await inbox(inboxRef);
+    expect(row.status).toBe("rejected");
+    expect(row.lastErrorCode).toBe("signal_recorded_prompt_closed");
+    expect(row.signalReceiptRef).toBe(signalRef);
+    expect(row.candidateBundleRef).toBeTruthy();
+    expect((await listMemberWorkSignalCandidateReviews(workspaceId)).map((review) => review.artifactBundleId)).toContain(row.candidateBundleRef);
+  });
+
+  it("does not report another response's answer as its own", async () => {
+    const promptRef = await prompt(actors.seat.userId);
+    // A refuse answers the prompt (an acknowledge would not: it is only an
+    // interaction receipt). The workspace has an active mandate by now.
+    const refuse = await respond(promptRef, "refuse", "这位客户在走法务流程");
+    const refuseRef = (refuse.submitted.data as { inboxRef: string }).inboxRef;
+    const progress = await respond(promptRef, "progress_report", "已约周五回电");
+    const progressRef = (progress.submitted.data as { inboxRef: string }).inboxRef;
+    const signalRef = await seedResponseSignal(progressRef, promptRef);
+    await runMemberPromptResponseProcessor({ workspaceId });
+    expect((await inbox(refuseRef)).status).toBe("registered");
+    expect((await db.memberPrompt.findUniqueOrThrow({ where: { id_workspaceId: { id: promptRef, workspaceId } } })).state).toBe("responded");
+    const row = await inbox(progressRef);
+    expect(row.status).toBe("rejected");
+    expect(row.lastErrorCode).toBe("prompt_already_answered");
+    expect(row.signalReceiptRef).toBe(signalRef);
+    expect(row.candidateBundleRef).toBeTruthy();
+  });
+
+  it("refuses to redeem a prompt-response challenge as a work signal", async () => {
+    const promptRef = await prompt(actors.seat.userId);
+    const prepared = await call("prepare_prompt_response", { promptRef, kind: "refuse", text: "不该再联系" });
+    const challengeRef = (prepared.data as { challengeRef: string }).challengeRef;
+    const misuse = await call("submit_work_signal", { kind: "progress", summary: "回应提问·拒绝", detail: "x", challengeRef });
+    expect(misuse.ok).toBe(false);
+    expect(misuse.error?.code).toBe("challenge_not_for_this_tool");
+    // The challenge is untouched and still completes the prompt response.
+    const submitted = await call("submit_prompt_response", { promptRef, kind: "refuse", text: "不该再联系", challengeRef });
+    expect(submitted.ok).toBe(true);
   });
 });

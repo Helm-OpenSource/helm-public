@@ -125,6 +125,17 @@ export async function executeMemberMcpWrite(input: {
       });
     }
 
+    // A challenge issued for another tool (e.g. a prompt response, whose
+    // object is member-prompt-response:<promptRef>) is never redeemable here:
+    // work signals and field reports only ever target the member's own record.
+    const challengeRow = await db.memberWorkSignalChallenge.findUnique({
+      where: { id_workspaceId: { id: call.arguments.challengeRef, workspaceId: auth.workspaceId } },
+      select: { objectRef: true },
+    });
+    if (!challengeRow || challengeRow.objectRef !== objectRef) {
+      return fail("challenge_not_for_this_tool", "This challengeRef was not issued for this tool.");
+    }
+
     // Live membership is re-read at submit time; the surface evidence below
     // is only asserted when the member is still ACTIVE.
     const membership = await db.membership.findUnique({

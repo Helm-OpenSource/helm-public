@@ -126,10 +126,24 @@ export const MEMBER_RESPONSE_OUTCOME_CODES = [
   "mandate_missing",
   "processor_exhausted",
   "payload_corrupt",
+  // Candidate responses whose work signal is already recorded (and kept, with
+  // its reviewable candidate) but whose prompt can no longer take this answer.
+  "signal_recorded_prompt_closed",
+  "prompt_already_answered",
 ] as const;
 export type MemberResponseOutcomeCode = (typeof MEMBER_RESPONSE_OUTCOME_CODES)[number];
 
 export const MEMBER_RESPONSE_MAX_ATTEMPTS = 5;
+
+// Retry backoff after the given (1-based) attempt: 1m, 2m, 4m ... capped at
+// 30m. Rows waiting for a CAIO mandate or retrying a transient failure move
+// to the back of the queue instead of blocking newer responses.
+export const MEMBER_RESPONSE_BACKOFF_BASE_MS = 60_000;
+export const MEMBER_RESPONSE_BACKOFF_CAP_MS = 30 * 60_000;
+export function memberResponseRetryDelayMs(attempts: number): number {
+  const exponent = Math.max(0, Math.min(attempts, 16) - 1);
+  return Math.min(MEMBER_RESPONSE_BACKOFF_CAP_MS, MEMBER_RESPONSE_BACKOFF_BASE_MS * 2 ** exponent);
+}
 
 export function parseStoredResponseIntent(json: string): MemberPromptResponseIntent | null {
   let value: unknown;

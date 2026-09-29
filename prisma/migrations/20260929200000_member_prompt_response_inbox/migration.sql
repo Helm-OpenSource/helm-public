@@ -25,11 +25,12 @@ CREATE TABLE `MemberPromptResponseInbox` (
  `claimToken` VARCHAR(64) NULL,
  `claimedAt` DATETIME(3) NULL,
  `receivedAt` DATETIME(3) NOT NULL,
+ `nextAttemptAt` DATETIME(3) NOT NULL,
  `processedAt` DATETIME(3) NULL,
  `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
  `updatedAt` DATETIME(3) NOT NULL,
  UNIQUE INDEX `MPRInbox_ws_challenge_key` (`workspaceId`, `memberChallengeRef`),
- INDEX `MPRInbox_status_received_idx` (`status`, `receivedAt`),
+ INDEX `MPRInbox_status_next_idx` (`status`, `nextAttemptAt`),
  INDEX `MPRInbox_ws_member_idx` (`workspaceId`, `memberRef`),
  PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
