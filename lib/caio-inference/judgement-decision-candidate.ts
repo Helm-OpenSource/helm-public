@@ -23,6 +23,11 @@ import type { CaioLayeredJudgement } from "./layered-judgement";
 /** A candidate expires if the owner has not confirmed it within three days of the judgement. */
 export const CAIO_JUDGEMENT_DECISION_CANDIDATE_TTL_MS = 72 * 60 * 60 * 1000;
 
+/** A judgement whose candidate review window has already closed; its candidate would be born expired. */
+export function isCaioJudgementStale(completedAt: Date, now: Date): boolean {
+  return completedAt.getTime() + CAIO_JUDGEMENT_DECISION_CANDIDATE_TTL_MS <= now.getTime();
+}
+
 const HASH_RE = /^sha256:[a-f0-9]{64}$/u;
 const PORTFOLIO_REF_RE = /^opportunity:[A-Za-z0-9_-]{1,191}$/u;
 const POLICY_REF = "policy:caio-inference-judgement-advice-only.v1";
