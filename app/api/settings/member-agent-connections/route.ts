@@ -29,6 +29,7 @@ const actionSchema = z.discriminatedUnion("action", [
     action: z.literal("request"),
     clientType: z.enum(MEMBER_MCP_CLIENT_TYPES),
     deviceLabel: z.string().min(2).max(80),
+    includeWrite: z.boolean().optional(),
   }).strict(),
   z.object({ action: z.literal("approve"), connectionId: id, reason: z.string().max(200).optional() }).strict(),
   z.object({ action: z.literal("reject"), connectionId: id, reason: z.string().max(200).optional() }).strict(),
@@ -122,6 +123,7 @@ export async function POST(request: Request) {
           actor,
           clientType: body.clientType,
           deviceLabel: body.deviceLabel,
+          includeWrite: body.includeWrite === true,
         }), 201);
       case "approve":
       case "reject":

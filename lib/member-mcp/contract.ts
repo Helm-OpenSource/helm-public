@@ -47,6 +47,21 @@ export const MEMBER_MCP_P0_ISSUABLE_SCOPES = [
   "member:prompt:read",
 ] as const satisfies readonly MemberMcpScope[];
 
+// P1a (2026-09-29): candidate writes — work signals and field reports. Both
+// land as append-only, untrusted-tainted MemberWorkSignalReceipt rows and
+// grant no authority. Issued only when the member explicitly asks for write
+// access; the approver sees the scopes before approving.
+export const MEMBER_MCP_P1A_WRITE_SCOPES = [
+  "member:signal:write",
+  "member:report:write",
+] as const satisfies readonly MemberMcpScope[];
+
+export function memberMcpScopesForRequest(includeWrite: boolean): MemberMcpScope[] {
+  return includeWrite
+    ? [...MEMBER_MCP_P0_ISSUABLE_SCOPES, ...MEMBER_MCP_P1A_WRITE_SCOPES]
+    : [...MEMBER_MCP_P0_ISSUABLE_SCOPES];
+}
+
 export const MEMBER_MCP_TOKEN_PREFIX = "hmm_";
 export const MEMBER_MCP_TOKEN_TTL_DAYS = 30;
 export const MEMBER_MCP_CLAIM_WINDOW_DAYS = 7;
@@ -110,11 +125,16 @@ export function memberRefForUser(userId: string) {
 export type MemberMcpWorkspaceFlags = {
   enabled: boolean;
   approvedClients: MemberMcpClientType[];
+  // Allowed field-report metric keys (tenant quick-check template ids, which
+  // Core cannot know). Empty means field reports carry text only.
+  fieldReportMetricKeys: string[];
   // Owner-authored tenant classification for CAIO content served to members
   // (prompt summaries, work packets). null = unclassified, which never
   // projects: content tools fail closed until the owner sets it.
   contentClassification: MemberObjectClassification | null;
 };
+
+const METRIC_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,79}$/;
 
 function readContentClassification(value: unknown): MemberObjectClassification | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -155,9 +175,15 @@ export function readMemberMcpWorkspaceFlags(
         (MEMBER_MCP_CLIENT_TYPES as readonly unknown[]).includes(value),
       )
     : [];
+  const metricKeys = Array.isArray(record.memberMcpFieldReportMetricKeys)
+    ? record.memberMcpFieldReportMetricKeys.filter(
+        (value): value is string => typeof value === "string" && METRIC_KEY_PATTERN.test(value),
+      )
+    : [];
   return {
     enabled: env.HELM_MEMBER_MCP_ENABLED === "true" && record.memberMcp === true,
     approvedClients: [...new Set(approved)],
+    fieldReportMetricKeys: [...new Set(metricKeys)],
     contentClassification: readContentClassification(record.memberMcpContentClassification),
   };
 }

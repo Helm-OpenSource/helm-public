@@ -70,10 +70,10 @@ export async function handleMemberMcpMessage(input: {
         name: "helm-member",
         title: "Helm CAIO 成员入口",
         version: "0.1.0",
-        description: "只读：我的简报、CAIO 发给我的提问。不产生任何审批、发送或执行。",
+        description: "我的简报、CAIO 发给我的提问；经授权可提交工作信号与现场报告（仅作为待审阅候选）。不产生任何审批、发送或执行。",
       },
       instructions:
-        "这些工具只返回调用者本人的数据。所有结果都带有 boundary 字段：authorityEffect 恒为 none，不代表任何授权。",
+        "读取工具只返回调用者本人的数据；写入工具分两步（prepare 拿确认码，submit 原样提交），记录为不可信的候选，由人审阅。所有结果都带有 boundary 字段：authorityEffect 恒为 none，不代表任何授权。",
     });
   }
 

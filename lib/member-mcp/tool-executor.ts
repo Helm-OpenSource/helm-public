@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import type { MemberProjectionDecision, MemberToolEnvelope } from "@/lib/member-gateway/types";
 import type { MemberMcpAuthContext } from "@/lib/member-mcp/connection-service";
 import { memberMcpProviderRef, memberRefForUser } from "@/lib/member-mcp/contract";
+import { executeMemberMcpWrite } from "@/lib/member-mcp/write-executor";
 import {
   MEMBER_MCP_BLOCK_MESSAGES,
   buildContentDecision,
@@ -121,7 +122,9 @@ export async function executeMemberMcpTool(input: {
           byState,
         },
         dataAsOf: now.toISOString(),
-        boundary: "只读。回应提问、提交反馈与任务回执将在后续阶段开放。",
+        boundary: input.auth.scopes.includes("member:signal:write") || input.auth.scopes.includes("member:report:write")
+          ? "可读取；可提交工作信号与现场报告（待审阅候选）。回应提问与任务回执将在后续阶段开放。"
+          : "只读。提交反馈需申请写入权限；回应提问与任务回执将在后续阶段开放。",
       },
       error: null,
     });
@@ -207,6 +210,15 @@ export async function executeMemberMcpTool(input: {
       },
       error: null,
     });
+  }
+
+  if (
+    call.toolName === "prepare_work_signal" ||
+    call.toolName === "submit_work_signal" ||
+    call.toolName === "prepare_field_report" ||
+    call.toolName === "submit_field_report"
+  ) {
+    return executeMemberMcpWrite({ auth: input.auth, call, providerRef, requestId, now });
   }
 
   const row = await db.memberPrompt.findUnique({

@@ -7,6 +7,12 @@ import {
   decideMemberReadSurface,
   validateMemberToolEnvelope,
 } from "@/lib/member-gateway/contract";
+import {
+  MEMBER_SIGNAL_DETAIL_MAX_CHARS,
+  MEMBER_SIGNAL_SUMMARY_MAX_CHARS,
+  type MemberWorkSignalKind,
+  type MemberWorkSignalPayload,
+} from "@/lib/member-gateway/signal";
 import type {
   MemberObjectClassification,
   MemberProjectionDecision,
@@ -18,7 +24,51 @@ export const MEMBER_MCP_TOOL_NAMES = [
   "get_my_brief",
   "list_my_pending_prompts",
   "get_my_prompt",
+  "prepare_work_signal",
+  "submit_work_signal",
+  "prepare_field_report",
+  "submit_field_report",
 ] as const;
+
+export const MEMBER_MCP_WRITE_TOOL_NAMES = [
+  "prepare_work_signal",
+  "submit_work_signal",
+  "prepare_field_report",
+  "submit_field_report",
+] as const;
+
+// Field-report kinds (staff-connect spec §3). A field report rides the
+// existing work-signal receipt: the frozen signal kinds are not extended, the
+// report's structured part is embedded in the payload detail as one
+// canonical JSON block (see buildFieldReportPayload).
+export const MEMBER_FIELD_REPORT_KINDS = [
+  "daily_ops_brief",
+  "shadow_check",
+  "data_quality",
+  "seat_feedback",
+  "case_observation",
+] as const;
+
+export type MemberFieldReportKind = (typeof MEMBER_FIELD_REPORT_KINDS)[number];
+
+export const MEMBER_FIELD_REPORT_LABELS: Record<MemberFieldReportKind, string> = {
+  daily_ops_brief: "每日运营简报",
+  shadow_check: "影子核对",
+  data_quality: "数据质量",
+  seat_feedback: "坐席反馈",
+  case_observation: "案件观察",
+};
+
+const FIELD_REPORT_SIGNAL_KIND: Record<MemberFieldReportKind, MemberWorkSignalKind> = {
+  daily_ops_brief: "progress",
+  shadow_check: "progress",
+  data_quality: "progress",
+  seat_feedback: "progress",
+  case_observation: "customer_signal",
+};
+
+export const MEMBER_FIELD_REPORT_BLOCK_OPEN = "```helm-field-report/v1";
+export const MEMBER_FIELD_REPORT_MAX_METRICS = 20;
 
 export type MemberMcpToolName = (typeof MEMBER_MCP_TOOL_NAMES)[number];
 
@@ -63,7 +113,106 @@ export const MEMBER_MCP_TOOLS: readonly MemberMcpToolDefinition[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "prepare_work_signal",
+    description:
+      "提交工作信号第一步：把进展、阻碍或客户信号写成草稿，拿到一次性确认码（5 分钟内有效）。信号只作为待审阅的候选，不产生任何授权。",
+    requiredScope: "member:signal:write",
+    inputSchema: {
+      type: "object",
+      properties: {
+        kind: { type: "string", enum: ["progress", "blocker", "customer_signal"] },
+        summary: { type: "string", minLength: 1, maxLength: 500 },
+        detail: { type: "string", maxLength: 4000 },
+      },
+      required: ["kind", "summary"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "submit_work_signal",
+    description:
+      "提交工作信号第二步：带上确认码和与第一步完全相同的内容提交，返回回执编号。内容不同会被拒绝；同一确认码重复提交返回同一回执。",
+    requiredScope: "member:signal:write",
+    inputSchema: {
+      type: "object",
+      properties: {
+        challengeRef: { type: "string", minLength: 1, maxLength: 191 },
+        kind: { type: "string", enum: ["progress", "blocker", "customer_signal"] },
+        summary: { type: "string", minLength: 1, maxLength: 500 },
+        detail: { type: "string", maxLength: 4000 },
+      },
+      required: ["challengeRef", "kind", "summary"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "prepare_field_report",
+    description:
+      "提交现场报告第一步：选报告类型，填标题、结构化指标（指标键须在本工作区登记的清单内）和文字说明，拿到一次性确认码。文字只给人看，不进入 CAIO 推理。",
+    requiredScope: "member:report:write",
+    inputSchema: FIELD_REPORT_SCHEMA(false),
+  },
+  {
+    name: "submit_field_report",
+    description:
+      "提交现场报告第二步：带上确认码和与第一步完全相同的内容提交，返回回执编号。",
+    requiredScope: "member:report:write",
+    inputSchema: FIELD_REPORT_SCHEMA(true),
+  },
 ];
+
+function FIELD_REPORT_SCHEMA(withChallenge: boolean): Record<string, unknown> {
+  const properties: Record<string, unknown> = {
+    kind: { type: "string", enum: [...MEMBER_FIELD_REPORT_KINDS] },
+    title: { type: "string", minLength: 1, maxLength: 200 },
+    metrics: {
+      type: "array",
+      maxItems: MEMBER_FIELD_REPORT_MAX_METRICS,
+      items: {
+        type: "object",
+        properties: {
+          key: { type: "string" },
+          value: { type: "number" },
+          unit: { type: "string", maxLength: 16 },
+          window: { type: "string", maxLength: 40 },
+          source_ref: { type: "string", maxLength: 191 },
+        },
+        required: ["key", "value"],
+        additionalProperties: false,
+      },
+    },
+    text: { type: "string", maxLength: 3000 },
+  };
+  if (withChallenge) properties.challengeRef = { type: "string", minLength: 1, maxLength: 191 };
+  return {
+    type: "object",
+    properties,
+    required: withChallenge ? ["challengeRef", "kind", "title"] : ["kind", "title"],
+    additionalProperties: false,
+  };
+}
+
+export type MemberFieldReportMetric = {
+  key: string;
+  value: number;
+  unit: string | null;
+  window: string | null;
+  source_ref: string | null;
+};
+
+export type MemberFieldReportInput = {
+  kind: MemberFieldReportKind;
+  title: string;
+  metrics: MemberFieldReportMetric[];
+  text: string;
+};
+
+export type MemberWorkSignalInput = {
+  kind: MemberWorkSignalKind;
+  summary: string;
+  detail: string;
+};
 
 export type MemberMcpToolCall =
   | { toolName: "get_my_brief"; arguments: Record<string, never> }
@@ -71,7 +220,11 @@ export type MemberMcpToolCall =
       toolName: "list_my_pending_prompts";
       arguments: { limit: number; cursor: string | null };
     }
-  | { toolName: "get_my_prompt"; arguments: { promptRef: string } };
+  | { toolName: "get_my_prompt"; arguments: { promptRef: string } }
+  | { toolName: "prepare_work_signal"; arguments: MemberWorkSignalInput }
+  | { toolName: "submit_work_signal"; arguments: MemberWorkSignalInput & { challengeRef: string } }
+  | { toolName: "prepare_field_report"; arguments: MemberFieldReportInput }
+  | { toolName: "submit_field_report"; arguments: MemberFieldReportInput & { challengeRef: string } };
 
 const REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,190}$/;
 
@@ -111,7 +264,159 @@ export function parseMemberMcpToolCall(
     }
     return { ok: true, call: { toolName: name, arguments: { promptRef } } };
   }
+  if (name === "prepare_work_signal" || name === "submit_work_signal") {
+    const withChallenge = name === "submit_work_signal";
+    const allowed = new Set(["kind", "summary", "detail", ...(withChallenge ? ["challengeRef"] : [])]);
+    if (keys.some((key) => !allowed.has(key))) return { ok: false, message: "unknown argument" };
+    const signal = parseWorkSignalInput(record);
+    if (!signal.ok) return signal;
+    if (!withChallenge) return { ok: true, call: { toolName: name, arguments: signal.value } };
+    const challengeRef = readChallengeRef(record);
+    if (!challengeRef) return { ok: false, message: "challengeRef is malformed" };
+    return { ok: true, call: { toolName: name, arguments: { ...signal.value, challengeRef } } };
+  }
+  if (name === "prepare_field_report" || name === "submit_field_report") {
+    const withChallenge = name === "submit_field_report";
+    const allowed = new Set(["kind", "title", "metrics", "text", ...(withChallenge ? ["challengeRef"] : [])]);
+    if (keys.some((key) => !allowed.has(key))) return { ok: false, message: "unknown argument" };
+    const report = parseFieldReportInput(record);
+    if (!report.ok) return report;
+    if (!withChallenge) return { ok: true, call: { toolName: name, arguments: report.value } };
+    const challengeRef = readChallengeRef(record);
+    if (!challengeRef) return { ok: false, message: "challengeRef is malformed" };
+    return { ok: true, call: { toolName: name, arguments: { ...report.value, challengeRef } } };
+  }
   return { ok: false, message: "unknown tool" };
+}
+
+function readChallengeRef(record: Record<string, unknown>): string | null {
+  const value = record.challengeRef;
+  return typeof value === "string" && REF_PATTERN.test(value) ? value : null;
+}
+
+const WORK_SIGNAL_KINDS: readonly MemberWorkSignalKind[] = ["progress", "blocker", "customer_signal"];
+// C0/C1 controls, bidi overrides and zero-width characters: member text is
+// shown to reviewers, so nothing that can disguise what they read is accepted.
+const CONTROL_CHARACTERS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/;
+// Only buildFieldReportPayload may emit the structured block; free text in a
+// work signal or a report must not open (or close) a fence of its own.
+const FENCE = "```";
+
+function parseWorkSignalInput(
+  record: Record<string, unknown>,
+): { ok: true; value: MemberWorkSignalInput } | { ok: false; message: string } {
+  const kind = record.kind;
+  if (typeof kind !== "string" || !(WORK_SIGNAL_KINDS as readonly string[]).includes(kind)) {
+    return { ok: false, message: "kind must be progress, blocker or customer_signal" };
+  }
+  const summary = typeof record.summary === "string" ? record.summary.trim() : "";
+  if (!summary || summary.length > MEMBER_SIGNAL_SUMMARY_MAX_CHARS || CONTROL_CHARACTERS.test(summary)) {
+    return { ok: false, message: "summary must be 1-500 printable characters" };
+  }
+  const detail = record.detail === undefined ? "" : record.detail;
+  if (typeof detail !== "string" || detail.length > MEMBER_SIGNAL_DETAIL_MAX_CHARS || CONTROL_CHARACTERS.test(detail)) {
+    return { ok: false, message: "detail must be at most 4000 printable characters" };
+  }
+  if (summary.includes(FENCE) || detail.includes(FENCE)) {
+    return { ok: false, message: "work signals may not contain code fences; use the field report tools for structured reports" };
+  }
+  return { ok: true, value: { kind: kind as MemberWorkSignalKind, summary, detail } };
+}
+
+function optionalText(value: unknown, max: number): string | null | undefined {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (trimmed.length > max || CONTROL_CHARACTERS.test(trimmed)) return undefined;
+  return trimmed || null;
+}
+
+function parseFieldReportInput(
+  record: Record<string, unknown>,
+): { ok: true; value: MemberFieldReportInput } | { ok: false; message: string } {
+  const kind = record.kind;
+  if (typeof kind !== "string" || !(MEMBER_FIELD_REPORT_KINDS as readonly string[]).includes(kind)) {
+    return { ok: false, message: `kind must be one of ${MEMBER_FIELD_REPORT_KINDS.join(", ")}` };
+  }
+  const title = typeof record.title === "string" ? record.title.trim() : "";
+  if (!title || title.length > 200 || CONTROL_CHARACTERS.test(title) || title.includes(FENCE)) {
+    return { ok: false, message: "title must be 1-200 printable characters without code fences" };
+  }
+  const rawMetrics = record.metrics ?? [];
+  if (!Array.isArray(rawMetrics) || rawMetrics.length > MEMBER_FIELD_REPORT_MAX_METRICS) {
+    return { ok: false, message: `metrics must be an array of at most ${MEMBER_FIELD_REPORT_MAX_METRICS}` };
+  }
+  const metrics: MemberFieldReportMetric[] = [];
+  for (const item of rawMetrics) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return { ok: false, message: "metric must be an object" };
+    const metric = item as Record<string, unknown>;
+    if (Object.keys(metric).some((key) => !["key", "value", "unit", "window", "source_ref"].includes(key))) {
+      return { ok: false, message: "unknown metric field" };
+    }
+    if (typeof metric.key !== "string" || !metric.key) return { ok: false, message: "metric key is required" };
+    if (typeof metric.value !== "number" || !Number.isFinite(metric.value)) {
+      return { ok: false, message: `metric ${metric.key} value must be a finite number` };
+    }
+    const unit = optionalText(metric.unit, 16);
+    const window = optionalText(metric.window, 40);
+    const sourceRef = optionalText(metric.source_ref, 191);
+    if (typeof sourceRef === "string" && !REF_PATTERN.test(sourceRef)) {
+      return { ok: false, message: `metric ${metric.key} source_ref must be an opaque ref` };
+    }
+    if (metrics.some((seen) => seen.key === metric.key)) {
+      return { ok: false, message: `metric ${metric.key} appears more than once` };
+    }
+    if (unit === undefined || window === undefined || sourceRef === undefined) {
+      return { ok: false, message: `metric ${metric.key} has a malformed unit, window or source_ref` };
+    }
+    metrics.push({ key: metric.key, value: metric.value, unit, window, source_ref: sourceRef });
+  }
+  const text = record.text === undefined ? "" : record.text;
+  if (typeof text !== "string" || text.length > 3000 || CONTROL_CHARACTERS.test(text) || text.includes(FENCE)) {
+    return { ok: false, message: "text must be at most 3000 printable characters without code fences" };
+  }
+  return { ok: true, value: { kind: kind as MemberFieldReportKind, title, metrics, text: text.trim() } };
+}
+
+// Builds the work-signal payload a field report is recorded as. Deterministic
+// (same input → same payload → same challenge hash): the structured block is
+// canonical JSON with metrics in submitted order and fixed key order. Metric
+// keys must be on the workspace's registered list; with an empty list only
+// text reports are accepted. The whole payload stays untrusted candidate
+// evidence — the block is structured, not verified.
+export function buildFieldReportPayload(
+  input: MemberFieldReportInput,
+  allowedMetricKeys: readonly string[],
+): { ok: true; payload: MemberWorkSignalPayload } | { ok: false; message: string } {
+  const allowed = new Set(allowedMetricKeys);
+  const unknown = input.metrics.filter((metric) => !allowed.has(metric.key)).map((metric) => metric.key);
+  if (unknown.length > 0) {
+    return {
+      ok: false,
+      message: allowed.size === 0
+        ? "this workspace has no registered metric keys; submit the report as text only"
+        : `unregistered metric keys: ${[...new Set(unknown)].join(", ")}`,
+    };
+  }
+  const block = JSON.stringify({
+    kind: input.kind,
+    metrics: input.metrics.map((metric) => ({
+      key: metric.key,
+      value: metric.value,
+      unit: metric.unit,
+      window: metric.window,
+      source_ref: metric.source_ref,
+    })),
+  });
+  const detail = `${MEMBER_FIELD_REPORT_BLOCK_OPEN}\n${block}\n\`\`\`${input.text ? `\n${input.text}` : ""}`;
+  if (detail.length > MEMBER_SIGNAL_DETAIL_MAX_CHARS) {
+    return { ok: false, message: "report is too long; shorten the text or send fewer metrics" };
+  }
+  const summary = `现场报告·${MEMBER_FIELD_REPORT_LABELS[input.kind]}：${input.title}`.slice(0, MEMBER_SIGNAL_SUMMARY_MAX_CHARS);
+  return {
+    ok: true,
+    payload: { kind: FIELD_REPORT_SIGNAL_KIND[input.kind], summary, detail, relatedEvidenceRefs: [] },
+  };
 }
 
 // P0 reads only the caller's own records, so the projection policy is the
