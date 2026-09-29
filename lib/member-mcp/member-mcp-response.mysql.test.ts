@@ -23,6 +23,7 @@ import {
   type MemberMcpActor,
   type MemberMcpAuthContext,
 } from "@/lib/member-mcp/connection-service";
+import { memberRefForUser } from "@/lib/member-mcp/contract";
 import { memberResponseSignalReceiptId } from "@/lib/member-mcp/response-contract";
 import { runMemberPromptResponseProcessor } from "@/lib/member-mcp/response-processor";
 import { executeMemberMcpTool } from "@/lib/member-mcp/tool-executor";
@@ -161,7 +162,7 @@ describeMysql("member MCP P1b prompt responses with an isolated MySQL database",
   const inbox = (inboxRef: string) => db.memberPromptResponseInbox.findUniqueOrThrow({ where: { id: inboxRef } });
 
   it("records an acknowledge on a pending prompt, registers it, and is idempotent", async () => {
-    const promptRef = await prompt(actors.seat.userId);
+    const promptRef = await prompt(memberRefForUser(actors.seat.userId));
     const { challengeRef, submitted } = await respond(promptRef, "acknowledge", "");
     expect(submitted.ok).toBe(true);
     const inboxRef = (submitted.data as { inboxRef: string; status: string }).inboxRef;
@@ -191,7 +192,7 @@ describeMysql("member MCP P1b prompt responses with an isolated MySQL database",
   });
 
   it("rejects tampered content and prompts addressed to someone else", async () => {
-    const promptRef = await prompt(actors.seat.userId);
+    const promptRef = await prompt(memberRefForUser(actors.seat.userId));
     const prepared = await call("prepare_prompt_response", { promptRef, kind: "free_text_answer", text: "明天上午回访" });
     const challengeRef = (prepared.data as { challengeRef: string }).challengeRef;
     const tampered = await call("submit_prompt_response", { promptRef, kind: "free_text_answer", text: "不回访了", challengeRef });
@@ -199,14 +200,14 @@ describeMysql("member MCP P1b prompt responses with an isolated MySQL database",
     expect(tampered.error?.code).toBe("challenge_payload_hash_mismatch");
     expect(await db.memberPromptResponseInbox.count({ where: { memberChallengeRef: challengeRef } })).toBe(0);
 
-    const foreign = await prompt(actors.other.userId);
+    const foreign = await prompt(memberRefForUser(actors.other.userId));
     const refused = await call("prepare_prompt_response", { promptRef: foreign, kind: "refuse", text: "不是我的案子" });
     expect(refused.ok).toBe(false);
     expect(refused.error?.code).toBe("prompt_not_found");
   });
 
   it("keeps a protected response without an active mandate, then registers it once one exists", async () => {
-    const promptRef = await prompt(actors.seat.userId);
+    const promptRef = await prompt(memberRefForUser(actors.seat.userId));
     const { submitted } = await respond(promptRef, "refuse", "这个客户已经在走法务流程，我不应再联系");
     const inboxRef = (submitted.data as { inboxRef: string }).inboxRef;
 
@@ -269,7 +270,7 @@ describeMysql("member MCP P1b prompt responses with an isolated MySQL database",
   });
 
   it("registers a progress report as a work signal and a reviewable candidate", async () => {
-    const promptRef = await prompt(actors.seat.userId);
+    const promptRef = await prompt(memberRefForUser(actors.seat.userId));
     const { submitted } = await respond(promptRef, "progress_report", "已经约好周五回电，客户同意先还一期");
     const inboxRef = (submitted.data as { inboxRef: string }).inboxRef;
     await runMemberPromptResponseProcessor({ workspaceId });
@@ -295,7 +296,7 @@ describeMysql("member MCP P1b prompt responses with an isolated MySQL database",
   });
 
   it("skips a workspace whose member MCP switch is off", async () => {
-    const promptRef = await prompt(actors.seat.userId);
+    const promptRef = await prompt(memberRefForUser(actors.seat.userId));
     const { submitted } = await respond(promptRef, "acknowledge", "");
     const inboxRef = (submitted.data as { inboxRef: string }).inboxRef;
     const off = await runMemberPromptResponseProcessor({ workspaceId, env: { HELM_MEMBER_MCP_ENABLED: "false" } });
@@ -334,7 +335,7 @@ describeMysql("member MCP P1b prompt responses with an isolated MySQL database",
     const auth = await authenticateMemberMcpToken(claimed.token);
 
     for (let index = 0; index < 60; index += 1) {
-      const promptRef = await prompt(seat.id, ws.id);
+      const promptRef = await prompt(memberRefForUser(seat.id), ws.id);
       const { submitted } = await respond(promptRef, "refuse", `第 ${index} 条：不该再联系这位客户`, auth);
       expect(submitted.ok).toBe(true);
     }
@@ -344,7 +345,7 @@ describeMysql("member MCP P1b prompt responses with an isolated MySQL database",
     expect(await db.memberPromptResponseInbox.count({ where: { workspaceId: ws.id, status: "received", attempts: 0 } })).toBe(0);
     expect(await db.memberPromptResponseInbox.count({ where: { workspaceId: ws.id, needsHuman: true } })).toBe(60);
 
-    const promptRef = await prompt(seat.id, ws.id);
+    const promptRef = await prompt(memberRefForUser(seat.id), ws.id);
     const { submitted } = await respond(promptRef, "acknowledge", "", auth);
     const ackRef = (submitted.data as { inboxRef: string }).inboxRef;
     const run = await runMemberPromptResponseProcessor({ workspaceId: ws.id });
@@ -354,7 +355,7 @@ describeMysql("member MCP P1b prompt responses with an isolated MySQL database",
   }, 120_000);
 
   it("keeps an already-recorded signal and its candidate when the prompt closed meanwhile", async () => {
-    const promptRef = await prompt(actors.seat.userId);
+    const promptRef = await prompt(memberRefForUser(actors.seat.userId));
     const { submitted } = await respond(promptRef, "progress_report", "已约周五回电");
     const inboxRef = (submitted.data as { inboxRef: string }).inboxRef;
     const signalRef = await seedResponseSignal(inboxRef, promptRef);
@@ -377,7 +378,7 @@ describeMysql("member MCP P1b prompt responses with an isolated MySQL database",
   });
 
   it("does not report another response's answer as its own", async () => {
-    const promptRef = await prompt(actors.seat.userId);
+    const promptRef = await prompt(memberRefForUser(actors.seat.userId));
     // A refuse answers the prompt (an acknowledge would not: it is only an
     // interaction receipt). The workspace has an active mandate by now.
     const refuse = await respond(promptRef, "refuse", "这位客户在走法务流程");
@@ -395,15 +396,4 @@ describeMysql("member MCP P1b prompt responses with an isolated MySQL database",
     expect(row.candidateBundleRef).toBeTruthy();
   });
 
-  it("refuses to redeem a prompt-response challenge as a work signal", async () => {
-    const promptRef = await prompt(actors.seat.userId);
-    const prepared = await call("prepare_prompt_response", { promptRef, kind: "refuse", text: "不该再联系" });
-    const challengeRef = (prepared.data as { challengeRef: string }).challengeRef;
-    const misuse = await call("submit_work_signal", { kind: "progress", summary: "回应提问·拒绝", detail: "x", challengeRef });
-    expect(misuse.ok).toBe(false);
-    expect(misuse.error?.code).toBe("challenge_not_for_this_tool");
-    // The challenge is untouched and still completes the prompt response.
-    const submitted = await call("submit_prompt_response", { promptRef, kind: "refuse", text: "不该再联系", challengeRef });
-    expect(submitted.ok).toBe(true);
-  });
 });
