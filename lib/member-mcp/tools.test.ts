@@ -44,7 +44,28 @@ describe("parseMemberMcpToolCall", () => {
       prepare_prompt_response: "member:prompt:respond",
       submit_prompt_response: "member:prompt:respond",
       get_prompt_response_status: "member:prompt:respond",
+      list_my_tasks: "member:task:read",
+      get_task: "member:task:read",
+      prepare_task_report: "member:task:receipt",
+      submit_task_report: "member:task:receipt",
     });
+  });
+
+  it("parses task calls and requires the challenge on submit", () => {
+    expect(parseMemberMcpToolCall("list_my_tasks", {})).toEqual({ ok: true, call: { toolName: "list_my_tasks", arguments: {} } });
+    expect(parseMemberMcpToolCall("list_my_tasks", { memberRef: "someone" }).ok).toBe(false);
+    expect(parseMemberMcpToolCall("get_task", { taskRef: "act_1" })).toEqual({ ok: true, call: { toolName: "get_task", arguments: { taskRef: "act_1" } } });
+    const report = { taskRef: "act_1", outcome: "partly_done", actionTaken: " 回访 5 户 ", evidenceRefs: ["case:1"], note: " 余下明天 " };
+    expect(parseMemberMcpToolCall("prepare_task_report", report)).toEqual({
+      ok: true,
+      call: { toolName: "prepare_task_report", arguments: { taskRef: "act_1", outcome: "partly_done", actionTaken: "回访 5 户", evidenceRefs: ["case:1"], note: "余下明天" } },
+    });
+    expect(parseMemberMcpToolCall("submit_task_report", report).ok).toBe(false);
+    expect(parseMemberMcpToolCall("submit_task_report", { ...report, challengeRef: "c-1" })).toMatchObject({ ok: true });
+    expect(parseMemberMcpToolCall("prepare_task_report", { ...report, outcome: "closed" }).ok).toBe(false);
+    expect(parseMemberMcpToolCall("prepare_task_report", { ...report, evidenceRefs: ["https://example.com/x"] }).ok).toBe(false);
+    expect(parseMemberMcpToolCall("prepare_task_report", { ...report, actionTaken: "" }).ok).toBe(false);
+    expect(parseMemberMcpToolCall("prepare_task_report", { ...report, receiptOutcome: "SUCCESS" }).ok).toBe(false);
   });
 
   it("parses work-signal calls and requires the challenge on submit", () => {

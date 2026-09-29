@@ -115,6 +115,15 @@ describe("memberMcpScopesForRequest", () => {
       "member:prompt:respond",
     ]);
   });
+  it("adds task scopes only on the separate task opt-in", () => {
+    expect(memberMcpScopesForRequest(false, true)).toEqual([
+      "member:brief:read",
+      "member:prompt:read",
+      "member:task:read",
+      "member:task:receipt",
+    ]);
+    expect(memberMcpScopesForRequest(true)).not.toContain("member:task:read");
+  });
 });
 
 describe("memberMcpProviderRef", () => {

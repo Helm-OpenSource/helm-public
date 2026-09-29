@@ -6,6 +6,7 @@ import type { MemberToolEnvelope } from "@/lib/member-gateway/types";
 import type { MemberMcpAuthContext } from "@/lib/member-mcp/connection-service";
 import { memberMcpProviderRef, memberRefForUser } from "@/lib/member-mcp/contract";
 import { executeMemberPromptResponse } from "@/lib/member-mcp/response-intake";
+import { executeMemberTaskTool } from "@/lib/member-mcp/task-executor";
 import { executeMemberMcpWrite } from "@/lib/member-mcp/write-executor";
 import {
   buildMemberMcpEnvelope,
@@ -188,6 +189,15 @@ export async function executeMemberMcpTool(input: {
     call.toolName === "get_prompt_response_status"
   ) {
     return executeMemberPromptResponse({ auth: input.auth, call, providerRef, requestId, now });
+  }
+
+  if (
+    call.toolName === "list_my_tasks" ||
+    call.toolName === "get_task" ||
+    call.toolName === "prepare_task_report" ||
+    call.toolName === "submit_task_report"
+  ) {
+    return executeMemberTaskTool({ auth: input.auth, call, providerRef, requestId, now });
   }
 
   const row = await db.memberPrompt.findUnique({

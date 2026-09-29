@@ -2,6 +2,7 @@ import { MembershipStatus } from "@prisma/client";
 import { z } from "zod";
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { listMemberResponsesNeedingHuman } from "@/lib/member-mcp/needs-human";
 import {
   MemberAgentConnectionError,
   claimMemberAgentConnection,
@@ -30,6 +31,7 @@ const actionSchema = z.discriminatedUnion("action", [
     clientType: z.enum(MEMBER_MCP_CLIENT_TYPES),
     deviceLabel: z.string().min(2).max(80),
     includeWrite: z.boolean().optional(),
+    includeTasks: z.boolean().optional(),
   }).strict(),
   z.object({ action: z.literal("approve"), connectionId: id, reason: z.string().max(200).optional() }).strict(),
   z.object({ action: z.literal("reject"), connectionId: id, reason: z.string().max(200).optional() }).strict(),
@@ -57,12 +59,14 @@ export async function GET() {
   const now = new Date();
   const flags = readMemberMcpWorkspaceFlags(workspace.featureFlagsJson);
   const manager = actor.membershipActive && canManageMemberApproverGrants(actor.role);
-  const [mine, approvable, grants, groupTags, members] = await Promise.all([
+  const [mine, approvable, grants, groupTags, members, needsHuman] = await Promise.all([
     listMyMemberAgentConnections(workspace.id, actor.userId, now),
     listApprovableMemberAgentConnections(workspace.id, actor, now),
     manager ? listMemberApproverGrants(workspace.id) : Promise.resolve(null),
     manager ? listGroupTags(workspace.id) : Promise.resolve(null),
     manager ? listActiveMembers(workspace.id) : Promise.resolve(null),
+    // Owners and admins only: protected-response reasons are shown here.
+    manager ? listMemberResponsesNeedingHuman(workspace.id) : Promise.resolve(null),
   ]);
   return Response.json(
     {
@@ -75,6 +79,7 @@ export async function GET() {
       grants,
       groupTags,
       members,
+      needsHuman,
     },
     { headers: NO_STORE_HEADERS },
   );
@@ -116,6 +121,7 @@ export async function POST(request: Request) {
           clientType: body.clientType,
           deviceLabel: body.deviceLabel,
           includeWrite: body.includeWrite === true,
+          includeTasks: body.includeTasks === true,
         }), 201);
       case "approve":
       case "reject":

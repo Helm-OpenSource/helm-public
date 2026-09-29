@@ -33,6 +33,20 @@ type Overview = {
   grants: Array<{ id: string; approverName: string | null; approverEmail: string | null; groupTag: string; grantedAt: string }> | null;
   groupTags: Array<{ groupTag: string; members: number }> | null;
   members: Array<{ userId: string; name: string | null; email: string | null; title: string | null }> | null;
+  needsHuman: {
+    total: number;
+    rows: Array<{
+      inboxRef: string;
+      memberName: string | null;
+      promptRef: string;
+      kind: string;
+      status: string;
+      outcomeCode: string | null;
+      attempts: number;
+      receivedAt: string;
+      unverifiedReason: string | null;
+    }>;
+  } | null;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -61,6 +75,24 @@ const SCOPE_LABELS: Record<string, string> = {
   "member:signal:write": "写工作信号",
   "member:report:write": "写现场报告",
   "member:prompt:respond": "回应提问",
+  "member:task:read": "读派给我的任务",
+  "member:task:receipt": "回报任务进展",
+};
+
+const RESPONSE_KIND_LABELS: Record<string, string> = {
+  acknowledge: "已知悉",
+  refuse: "拒绝",
+  pause: "暂停",
+  appeal: "申诉",
+  progress_report: "进展汇报",
+  free_text_answer: "回答",
+};
+
+const INBOX_STATUS_LABELS: Record<string, string> = {
+  received: "已收到、待登记",
+  held: "暂缓（待人工）",
+  registered: "已登记",
+  rejected: "未能登记",
 };
 
 function scopeSummary(scopes: string[]) {
@@ -104,6 +136,7 @@ export function AiAccessClient() {
   const [clientType, setClientType] = useState<string>("");
   const [deviceLabel, setDeviceLabel] = useState("");
   const [includeWrite, setIncludeWrite] = useState(false);
+  const [includeTasks, setIncludeTasks] = useState(false);
   const [claimed, setClaimed] = useState<{ token: string; clientType: string } | null>(null);
   const [grantUser, setGrantUser] = useState("");
   const [grantTag, setGrantTag] = useState("");
@@ -143,6 +176,7 @@ export function AiAccessClient() {
       <h1 className="text-xl font-semibold">AI 工具接入</h1>
       <p className="text-sm text-muted-foreground">用你自己的 Codex、QwenWork、Claude Code 或 WorkBuddy 连接 CAIO：读取你的简报和 CAIO 发给你的提问。当前阶段只读，不会替你做任何审批、发送或执行。一台设备一个令牌，由 owner 或你的主管批准后，由你本人领取，令牌只显示一次、30 天有效。</p>
       <p className="text-sm text-muted-foreground">标注“境外”的工具由境外厂商处理数据：使用时 CAIO 发给你的提问摘要会传到境外。批准前请确认该同事的岗位适合使用。</p>
+      <p className="text-sm text-muted-foreground">派给你的任务也可以在网页上看：<a className="underline" href="/caio/my-work">我的 CAIO 任务</a>。</p>
       {!overview.runtimeEnabled && <p className="text-sm text-[color:var(--status-warning-text)]">本工作区尚未开启 AI 工具接入，可以查看记录，但暂时不能申请或使用。</p>}
     </header>
 
@@ -160,7 +194,7 @@ export function AiAccessClient() {
       <h2 className="text-lg font-medium">我的接入</h2>
       <form className="flex flex-wrap items-end gap-3" onSubmit={event => {
         event.preventDefault();
-        run({ action: "request", clientType, deviceLabel, includeWrite }, () => { setDeviceLabel(""); setIncludeWrite(false); setMessage("已提交申请，等待批准。"); });
+        run({ action: "request", clientType, deviceLabel, includeWrite, includeTasks }, () => { setDeviceLabel(""); setIncludeWrite(false); setIncludeTasks(false); setMessage("已提交申请，等待批准。"); });
       }}>
         <label className="text-sm">客户端<select className="block border p-2" value={clientType} onChange={event => setClientType(event.target.value)} required disabled={!overview.runtimeEnabled || pending}>
           <option value="">请选择</option>
@@ -168,6 +202,7 @@ export function AiAccessClient() {
         </select></label>
         <label className="text-sm">设备名称<Input value={deviceLabel} onChange={event => setDeviceLabel(event.target.value)} placeholder="例如：办公室 MacBook" minLength={2} maxLength={80} required disabled={!overview.runtimeEnabled || pending} /></label>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={includeWrite} onChange={event => setIncludeWrite(event.target.checked)} disabled={!overview.runtimeEnabled || pending} />同时申请写入（提交工作信号、现场报告与回应 CAIO 提问；信号与报告只作为待审阅的候选）</label>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={includeTasks} onChange={event => setIncludeTasks(event.target.checked)} disabled={!overview.runtimeEnabled || pending} />同时申请任务（查看一把手派给我的工作包并回报进展；回报只作为待审阅的候选，不会关闭任务）</label>
         <Button type="submit" disabled={!overview.runtimeEnabled || pending || !clientType}>申请接入</Button>
       </form>
       <ConnectionTable rows={overview.mine} actions={row => <>
@@ -185,6 +220,21 @@ export function AiAccessClient() {
         </>}
         {["approved", "active"].includes(row.status ?? "") && <Button size="sm" variant="outline" disabled={pending} onClick={() => run({ action: "revoke", connectionId: row.id })}>吊销</Button>}
       </>} />
+    </section>}
+
+    {overview.needsHuman && <section className="space-y-3">
+      <h2 className="text-lg font-medium">待人工处理的回应（{overview.needsHuman.total}）</h2>
+      <p className="text-sm text-muted-foreground">后台没能自动登记的回应。拒绝、暂停、申诉永远不会被丢弃，会一直保留到能够登记为止。理由是同事本人写的，未经核实。</p>
+      {overview.needsHuman.rows.length === 0 ? <p className="text-sm text-muted-foreground">暂无。</p> : <table className="w-full text-sm"><thead><tr className="text-left"><th>成员</th><th>提问</th><th>回应</th><th>状态</th><th>原因码</th><th>收到时间</th></tr></thead><tbody>
+        {overview.needsHuman.rows.map(row => <tr key={row.inboxRef} className="border-t align-top">
+          <td>{row.memberName ?? "—"}</td>
+          <td className="font-mono text-xs">{row.promptRef}</td>
+          <td>{RESPONSE_KIND_LABELS[row.kind] ?? row.kind}{row.unverifiedReason && <div className="text-xs text-muted-foreground">未经核实：{row.unverifiedReason}</div>}</td>
+          <td>{INBOX_STATUS_LABELS[row.status] ?? row.status}</td>
+          <td className="font-mono text-xs">{row.outcomeCode ?? "—"}（{row.attempts} 次）</td>
+          <td>{time(row.receivedAt)}</td>
+        </tr>)}
+      </tbody></table>}
     </section>}
 
     {overview.canManageApprovers && <section className="space-y-3">

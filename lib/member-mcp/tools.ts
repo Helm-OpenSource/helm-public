@@ -20,6 +20,15 @@ import {
   validateResponseText,
   type MemberMcpResponseKind,
 } from "@/lib/member-mcp/response-contract";
+import {
+  MEMBER_TASK_ACTION_TAKEN_MAX,
+  MEMBER_TASK_MAX_EVIDENCE_REFS,
+  MEMBER_TASK_NOTE_MAX,
+  MEMBER_TASK_REPORT_OUTCOMES,
+  validateMemberTaskReport,
+  type MemberTaskReportInput,
+  type MemberTaskReportOutcome,
+} from "@/lib/member-mcp/task-contract";
 
 export const MEMBER_MCP_TOOL_NAMES = [
   "get_my_brief",
@@ -32,6 +41,10 @@ export const MEMBER_MCP_TOOL_NAMES = [
   "prepare_prompt_response",
   "submit_prompt_response",
   "get_prompt_response_status",
+  "list_my_tasks",
+  "get_task",
+  "prepare_task_report",
+  "submit_task_report",
 ] as const;
 
 export const MEMBER_MCP_WRITE_TOOL_NAMES = [
@@ -41,6 +54,8 @@ export const MEMBER_MCP_WRITE_TOOL_NAMES = [
   "submit_field_report",
   "prepare_prompt_response",
   "submit_prompt_response",
+  "prepare_task_report",
+  "submit_task_report",
 ] as const;
 
 // Field-report kinds (staff-connect spec §3). A field report rides the
@@ -191,7 +206,55 @@ export const MEMBER_MCP_TOOLS: readonly MemberMcpToolDefinition[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "list_my_tasks",
+    description:
+      "列出一把手确认并派给我的工作包（与工作台“我的 CAIO 任务”同一范围）：目标、动作、截止时间、验收标准与状态。只读。",
+    requiredScope: "member:task:read",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "get_task",
+    description: "读取一个派给我的工作包详情。只读。",
+    requiredScope: "member:task:read",
+    inputSchema: {
+      type: "object",
+      properties: { taskRef: { type: "string", minLength: 1, maxLength: 191 } },
+      required: ["taskRef"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "prepare_task_report",
+    description:
+      "回报工作包进展第一步：选择状态（已完成 / 部分完成 / 受阻 / 未开始），写明做了什么、证据引用（如 case:123，不能是网址）和备注，拿到一次性确认码。回报只作为待审阅的候选，不会关闭任务；任务由一把手侧的验收流程关闭。",
+    requiredScope: "member:task:receipt",
+    inputSchema: TASK_REPORT_SCHEMA(false),
+  },
+  {
+    name: "submit_task_report",
+    description: "回报工作包进展第二步：带上确认码和与第一步完全相同的内容提交。",
+    requiredScope: "member:task:receipt",
+    inputSchema: TASK_REPORT_SCHEMA(true),
+  },
 ];
+
+function TASK_REPORT_SCHEMA(withChallenge: boolean): Record<string, unknown> {
+  const properties: Record<string, unknown> = {
+    taskRef: { type: "string", minLength: 1, maxLength: 191 },
+    outcome: { type: "string", enum: [...MEMBER_TASK_REPORT_OUTCOMES] },
+    actionTaken: { type: "string", minLength: 1, maxLength: MEMBER_TASK_ACTION_TAKEN_MAX },
+    evidenceRefs: { type: "array", items: { type: "string", maxLength: 220 }, maxItems: MEMBER_TASK_MAX_EVIDENCE_REFS },
+    note: { type: "string", maxLength: MEMBER_TASK_NOTE_MAX },
+  };
+  if (withChallenge) properties.challengeRef = { type: "string", minLength: 1, maxLength: 191 };
+  return {
+    type: "object",
+    properties,
+    required: withChallenge ? ["challengeRef", "taskRef", "outcome", "actionTaken"] : ["taskRef", "outcome", "actionTaken"],
+    additionalProperties: false,
+  };
+}
 
 function RESPONSE_SCHEMA(withChallenge: boolean): Record<string, unknown> {
   const properties: Record<string, unknown> = {
@@ -273,7 +336,11 @@ export type MemberMcpToolCall =
   | { toolName: "submit_field_report"; arguments: MemberFieldReportInput & { challengeRef: string } }
   | { toolName: "prepare_prompt_response"; arguments: MemberPromptResponseInput }
   | { toolName: "submit_prompt_response"; arguments: MemberPromptResponseInput & { challengeRef: string } }
-  | { toolName: "get_prompt_response_status"; arguments: { inboxRef: string } };
+  | { toolName: "get_prompt_response_status"; arguments: { inboxRef: string } }
+  | { toolName: "list_my_tasks"; arguments: Record<string, never> }
+  | { toolName: "get_task"; arguments: { taskRef: string } }
+  | { toolName: "prepare_task_report"; arguments: MemberTaskReportInput }
+  | { toolName: "submit_task_report"; arguments: MemberTaskReportInput & { challengeRef: string } };
 
 export type MemberPromptResponseInput = {
   promptRef: string;
@@ -373,6 +440,48 @@ export function parseMemberMcpToolCall(
       return { ok: false, message: "inboxRef is malformed" };
     }
     return { ok: true, call: { toolName: name, arguments: { inboxRef } } };
+  }
+  if (name === "list_my_tasks") {
+    if (keys.length > 0) return { ok: false, message: "list_my_tasks takes no arguments" };
+    return { ok: true, call: { toolName: name, arguments: {} } };
+  }
+  if (name === "get_task") {
+    if (keys.some((key) => key !== "taskRef")) return { ok: false, message: "unknown argument" };
+    const taskRef = record.taskRef;
+    if (typeof taskRef !== "string" || !REF_PATTERN.test(taskRef)) return { ok: false, message: "taskRef is malformed" };
+    return { ok: true, call: { toolName: name, arguments: { taskRef } } };
+  }
+  if (name === "prepare_task_report" || name === "submit_task_report") {
+    const withChallenge = name === "submit_task_report";
+    const allowed = new Set(["taskRef", "outcome", "actionTaken", "evidenceRefs", "note", ...(withChallenge ? ["challengeRef"] : [])]);
+    if (keys.some((key) => !allowed.has(key))) return { ok: false, message: "unknown argument" };
+    const taskRef = record.taskRef;
+    if (typeof taskRef !== "string" || !REF_PATTERN.test(taskRef)) return { ok: false, message: "taskRef is malformed" };
+    const outcome = record.outcome;
+    if (typeof outcome !== "string" || !(MEMBER_TASK_REPORT_OUTCOMES as readonly string[]).includes(outcome)) {
+      return { ok: false, message: `outcome must be one of ${MEMBER_TASK_REPORT_OUTCOMES.join(", ")}` };
+    }
+    const evidenceRefs = record.evidenceRefs ?? [];
+    if (!Array.isArray(evidenceRefs) || !evidenceRefs.every((ref) => typeof ref === "string")) {
+      return { ok: false, message: "evidenceRefs must be an array of strings" };
+    }
+    const note = record.note ?? "";
+    if (typeof record.actionTaken !== "string" || typeof note !== "string") {
+      return { ok: false, message: "actionTaken and note must be text" };
+    }
+    const value: MemberTaskReportInput = {
+      taskRef,
+      outcome: outcome as MemberTaskReportOutcome,
+      actionTaken: record.actionTaken.trim(),
+      evidenceRefs: evidenceRefs as string[],
+      note: note.trim(),
+    };
+    const problem = validateMemberTaskReport(value);
+    if (problem) return { ok: false, message: problem };
+    if (!withChallenge) return { ok: true, call: { toolName: name, arguments: value } };
+    const challengeRef = readChallengeRef(record);
+    if (!challengeRef) return { ok: false, message: "challengeRef is malformed" };
+    return { ok: true, call: { toolName: name, arguments: { ...value, challengeRef } } };
   }
   return { ok: false, message: "unknown tool" };
 }

@@ -192,6 +192,8 @@ export async function requestMemberAgentConnection(input: {
   // Candidate-write scopes (work signals, field reports) are only issued
   // when the member asks for them; the approver sees the scopes.
   includeWrite?: boolean;
+  // Assigned-task read and self-reported receipts (P2); separate opt-in.
+  includeTasks?: boolean;
   now?: Date;
 }) {
   const now = input.now ?? new Date();
@@ -213,7 +215,7 @@ export async function requestMemberAgentConnection(input: {
     throw new MemberAgentConnectionError("TOO_MANY_OPEN", "Too many open connections for this member");
   }
 
-  const scopes: MemberMcpScope[] = memberMcpScopesForRequest(input.includeWrite === true);
+  const scopes: MemberMcpScope[] = memberMcpScopesForRequest(input.includeWrite === true, input.includeTasks === true);
   return runWithWriteConflictRetry(() => db.$transaction(async (tx) => {
     const row = await tx.memberAgentConnection.create({
       data: {
