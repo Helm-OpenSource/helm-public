@@ -74,6 +74,23 @@ describe("parseMemberMcpToolCall", () => {
   });
 });
 
+describe("free-text hardening", () => {
+  it("keeps code fences, invisible and bidi characters out of member text", () => {
+    expect(parseMemberMcpToolCall("prepare_work_signal", { kind: "progress", summary: "ok", detail: "a ``` b" }).ok).toBe(false);
+    expect(parseMemberMcpToolCall("prepare_work_signal", { kind: "progress", summary: "a\u202eb", detail: "" }).ok).toBe(false);
+    expect(parseMemberMcpToolCall("prepare_work_signal", { kind: "progress", summary: "a\u200bb", detail: "" }).ok).toBe(false);
+    expect(parseMemberMcpToolCall("prepare_work_signal", { kind: "progress", summary: "a\u0085b", detail: "" }).ok).toBe(false);
+    expect(parseMemberMcpToolCall("prepare_field_report", { kind: "seat_feedback", title: "t", metrics: [], text: "```" }).ok).toBe(false);
+  });
+
+  it("requires opaque source refs and unique metric keys", () => {
+    const metric = { key: "qc.a", value: 1, unit: null, window: null, source_ref: null };
+    expect(parseMemberMcpToolCall("prepare_field_report", { kind: "seat_feedback", title: "t", metrics: [{ ...metric, source_ref: "not a ref" }] }).ok).toBe(false);
+    expect(parseMemberMcpToolCall("prepare_field_report", { kind: "seat_feedback", title: "t", metrics: [metric, metric] }).ok).toBe(false);
+    expect(parseMemberMcpToolCall("prepare_field_report", { kind: "seat_feedback", title: "t", metrics: [{ ...metric, source_ref: "report:2026-09-29" }] }).ok).toBe(true);
+  });
+});
+
 describe("buildFieldReportPayload", () => {
   const report = (overrides: Partial<MemberFieldReportInput> = {}): MemberFieldReportInput => ({
     kind: "shadow_check",

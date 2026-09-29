@@ -295,7 +295,12 @@ function readChallengeRef(record: Record<string, unknown>): string | null {
 }
 
 const WORK_SIGNAL_KINDS: readonly MemberWorkSignalKind[] = ["progress", "blocker", "customer_signal"];
-const CONTROL_CHARACTERS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
+// C0/C1 controls, bidi overrides and zero-width characters: member text is
+// shown to reviewers, so nothing that can disguise what they read is accepted.
+const CONTROL_CHARACTERS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/;
+// Only buildFieldReportPayload may emit the structured block; free text in a
+// work signal or a report must not open (or close) a fence of its own.
+const FENCE = "```";
 
 function parseWorkSignalInput(
   record: Record<string, unknown>,
@@ -311,6 +316,9 @@ function parseWorkSignalInput(
   const detail = record.detail === undefined ? "" : record.detail;
   if (typeof detail !== "string" || detail.length > MEMBER_SIGNAL_DETAIL_MAX_CHARS || CONTROL_CHARACTERS.test(detail)) {
     return { ok: false, message: "detail must be at most 4000 printable characters" };
+  }
+  if (summary.includes(FENCE) || detail.includes(FENCE)) {
+    return { ok: false, message: "work signals may not contain code fences; use the field report tools for structured reports" };
   }
   return { ok: true, value: { kind: kind as MemberWorkSignalKind, summary, detail } };
 }
@@ -331,8 +339,8 @@ function parseFieldReportInput(
     return { ok: false, message: `kind must be one of ${MEMBER_FIELD_REPORT_KINDS.join(", ")}` };
   }
   const title = typeof record.title === "string" ? record.title.trim() : "";
-  if (!title || title.length > 200 || CONTROL_CHARACTERS.test(title)) {
-    return { ok: false, message: "title must be 1-200 printable characters" };
+  if (!title || title.length > 200 || CONTROL_CHARACTERS.test(title) || title.includes(FENCE)) {
+    return { ok: false, message: "title must be 1-200 printable characters without code fences" };
   }
   const rawMetrics = record.metrics ?? [];
   if (!Array.isArray(rawMetrics) || rawMetrics.length > MEMBER_FIELD_REPORT_MAX_METRICS) {
@@ -352,14 +360,20 @@ function parseFieldReportInput(
     const unit = optionalText(metric.unit, 16);
     const window = optionalText(metric.window, 40);
     const sourceRef = optionalText(metric.source_ref, 191);
+    if (typeof sourceRef === "string" && !REF_PATTERN.test(sourceRef)) {
+      return { ok: false, message: `metric ${metric.key} source_ref must be an opaque ref` };
+    }
+    if (metrics.some((seen) => seen.key === metric.key)) {
+      return { ok: false, message: `metric ${metric.key} appears more than once` };
+    }
     if (unit === undefined || window === undefined || sourceRef === undefined) {
       return { ok: false, message: `metric ${metric.key} has a malformed unit, window or source_ref` };
     }
     metrics.push({ key: metric.key, value: metric.value, unit, window, source_ref: sourceRef });
   }
   const text = record.text === undefined ? "" : record.text;
-  if (typeof text !== "string" || text.length > 3000 || CONTROL_CHARACTERS.test(text)) {
-    return { ok: false, message: "text must be at most 3000 printable characters" };
+  if (typeof text !== "string" || text.length > 3000 || CONTROL_CHARACTERS.test(text) || text.includes(FENCE)) {
+    return { ok: false, message: "text must be at most 3000 printable characters without code fences" };
   }
   return { ok: true, value: { kind: kind as MemberFieldReportKind, title, metrics, text: text.trim() } };
 }

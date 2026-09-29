@@ -38,6 +38,10 @@ import {
 } from "@/lib/member-mcp/tools";
 
 export const MEMBER_MCP_SIGNAL_POLICY_REF = "member-mcp:self-signal";
+// Field reports are recorded under their own policy: downstream readers tell a
+// field report from a work signal by this ref alone, never by parsing the
+// member-authored detail.
+export const MEMBER_MCP_FIELD_REPORT_POLICY_REF = "member-mcp:self-field-report";
 export const MEMBER_MCP_SIGNAL_POLICY_VERSION = 1;
 const CHALLENGE_TTL_MS = MEMBER_SIGNAL_CHALLENGE_TTL_CAP_MS;
 
@@ -81,10 +85,8 @@ export async function executeMemberMcpWrite(input: {
   // Defense in depth: the protocol layer already refuses a call outside the
   // connection's scopes; the executor refuses it again rather than trusting
   // every caller to have gone through that layer.
-  const requiredScope =
-    call.toolName === "prepare_field_report" || call.toolName === "submit_field_report"
-      ? "member:report:write"
-      : "member:signal:write";
+  const isReport = call.toolName === "prepare_field_report" || call.toolName === "submit_field_report";
+  const requiredScope = isReport ? "member:report:write" : "member:signal:write";
   if (!auth.scopes.includes(requiredScope)) return fail("scope_denied", `This connection lacks ${requiredScope}.`);
 
   let payload: MemberWorkSignalPayload;
@@ -124,6 +126,25 @@ export async function executeMemberMcpWrite(input: {
       });
     }
 
+    // The challenge must have been issued to this very device and client: a
+    // member holding several connections cannot prepare on one and submit on
+    // another, which would split the receipt's provenance.
+    const challengeRow = await db.memberWorkSignalChallenge.findUnique({
+      where: { id_workspaceId: { id: call.arguments.challengeRef, workspaceId: auth.workspaceId } },
+      select: { deviceRegistrationRef: true, clientId: true, objectRef: true },
+    });
+    if (
+      challengeRow &&
+      (challengeRow.deviceRegistrationRef !== principal.deviceRegistrationRef || challengeRow.clientId !== principal.clientId)
+    ) {
+      return fail("challenge_device_mismatch", "This challenge was issued to a different device or client.");
+    }
+    // A challenge issued for another object (e.g. a prompt response) is never
+    // redeemed as a self signal or field report.
+    if (challengeRow && challengeRow.objectRef !== objectRef) {
+      return fail("challenge_not_for_this_tool", "This challenge belongs to a different kind of submission.");
+    }
+
     // Live membership is re-read at submit time; the surface evidence below
     // is only asserted when the member is still ACTIVE.
     const membership = await db.membership.findUnique({
@@ -143,7 +164,7 @@ export async function executeMemberMcpWrite(input: {
       liveMembershipRef: live ? `membership:${auth.membershipId}` : null,
       toolScopeRef: `member-mcp-connection:${auth.connectionId}#${requiredScope}`,
       objectRelationshipAuthorizationRef: `self:${auth.userId}`,
-      fieldPurposePolicyRef: `${MEMBER_MCP_SIGNAL_POLICY_REF}:v${MEMBER_MCP_SIGNAL_POLICY_VERSION}`,
+      fieldPurposePolicyRef: `${isReport ? MEMBER_MCP_FIELD_REPORT_POLICY_REF : MEMBER_MCP_SIGNAL_POLICY_REF}:v${MEMBER_MCP_SIGNAL_POLICY_VERSION}`,
       sourceAuthorizationRef: `member-mcp-connection:${auth.connectionId}`,
       tenantProviderEgressPolicyRef: providerRef,
       classification: { sensitivity: "internal", processingDisposition: "remote_projected", classifiedAt: now.toISOString() },
@@ -154,7 +175,7 @@ export async function executeMemberMcpWrite(input: {
       payload,
       surface,
       evidenceSurfaces: new Map(),
-      policyRef: MEMBER_MCP_SIGNAL_POLICY_REF,
+      policyRef: isReport ? MEMBER_MCP_FIELD_REPORT_POLICY_REF : MEMBER_MCP_SIGNAL_POLICY_REF,
       policyVersion: MEMBER_MCP_SIGNAL_POLICY_VERSION,
       receiptId: memberSignalReceiptId(call.arguments.challengeRef),
     });

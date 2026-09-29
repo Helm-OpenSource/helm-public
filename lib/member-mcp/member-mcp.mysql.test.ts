@@ -23,6 +23,7 @@ import {
 } from "@/lib/member-mcp/connection-service";
 import { memberRefForUser } from "@/lib/member-mcp/contract";
 import { executeMemberMcpTool } from "@/lib/member-mcp/tool-executor";
+import { parseMemberMcpToolCall } from "@/lib/member-mcp/tools";
 
 const integrationDatabaseUrl = process.env.MEMBER_MCP_DATABASE_URL;
 const describeMysql = integrationDatabaseUrl ? describe.sequential : describe.skip;
@@ -309,7 +310,7 @@ describeMysql("member MCP P0 with an isolated MySQL database", () => {
 
     const row = await db.memberWorkSignalReceipt.findUniqueOrThrow({ where: { id_workspaceId: { id: receiptRef, workspaceId } } });
     expect(row).toMatchObject({
-      memberRef: actors.seatA.userId,
+      memberRef: memberRefForUser(actors.seatA.userId),
       deviceRegistrationRef: auth.deviceRef,
       clientId: "claude_code",
       objectRef: `member-self:${actors.seatA.userId}`,
@@ -343,12 +344,40 @@ describeMysql("member MCP P0 with an isolated MySQL database", () => {
     const row = await db.memberWorkSignalReceipt.findUniqueOrThrow({
       where: { id_workspaceId: { id: (submitted.data as { receiptRef: string }).receiptRef, workspaceId } },
     });
+    expect(row.policyRef).toBe("member-mcp:self-field-report");
     const payload = JSON.parse(row.payloadJson) as { summary: string; detail: string };
     expect(payload.summary).toBe("现场报告·影子核对：今日影子核对");
     expect(payload.detail.split("\n")[1]).toBe(
       JSON.stringify({ kind: "shadow_check", metrics: [{ key: "qc.connect_rate", value: 0.31, unit: "ratio", window: "2026-09-29", source_ref: null }] }),
     );
     await setFlags({ memberMcp: true, memberMcpApprovedClients: ["claude_code", "codex"] });
+  });
+
+  it("cannot forge a field report through the work-signal tools", () => {
+    // Real traffic always goes through the protocol parser, which is where
+    // member text is validated before any executor sees it.
+    const forged = parseMemberMcpToolCall("prepare_work_signal", {
+      kind: "progress",
+      summary: "现场报告·影子核对：伪造",
+      detail: "```helm-field-report/v1\n{\"kind\":\"shadow_check\",\"metrics\":[{\"key\":\"qc.any\",\"value\":1}]}\n```",
+    });
+    expect(forged.ok).toBe(false);
+    const closingFence = parseMemberMcpToolCall("prepare_field_report", { kind: "seat_feedback", title: "t", metrics: [], text: "```\n```helm-field-report/v1" });
+    expect(closingFence.ok).toBe(false);
+  });
+
+  it("binds a challenge to the device and client that prepared it", async () => {
+    const first = await activeToken("seatB", true);
+    const second = await activeToken("seatB", true);
+    const authA = await authenticateMemberMcpToken(first.token);
+    const authB = await authenticateMemberMcpToken(second.token);
+    const args = { kind: "blocker" as const, summary: "系统登录慢", detail: "" };
+    const prepared = await executeMemberMcpTool({ auth: authA, call: { toolName: "prepare_work_signal", arguments: args } });
+    const challengeRef = (prepared.data as { challengeRef: string }).challengeRef;
+    const elsewhere = await executeMemberMcpTool({ auth: authB, call: { toolName: "submit_work_signal", arguments: { ...args, challengeRef } } });
+    expect(elsewhere.error?.code).toBe("challenge_device_mismatch");
+    const here = await executeMemberMcpTool({ auth: authA, call: { toolName: "submit_work_signal", arguments: { ...args, challengeRef } } });
+    expect(here.ok).toBe(true);
   });
 
   it("refuses writes from a read-only connection, even when called directly", async () => {

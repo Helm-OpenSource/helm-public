@@ -60,3 +60,13 @@ public_safety: As-built record for member MCP candidate writes (work signals
 - `lib/member-mcp` 单元测试。
 - `npm run test:member-mcp:mysql`：在 P0 用例之外，新增工作信号全链路、现场报告、只读连接被拒三组用例。
 - `check:boundaries` 全过，包括权限防火墙 caio-terminology 和 conditional-update-cas。
+
+## 独立二审后的修订（2026-09-29 晚）
+1. **现场报告用独立 policyRef `member-mcp:self-field-report`**：下游只按 policyRef 区分现场报告和工作信号，不解析成员写的 detail。
+2. **自由文本不得包含代码围栏（```）**：工作信号的 summary 和 detail、现场报告的 title 和 text 都适用。结构化块只能由 `buildFieldReportPayload` 生成，从而无法伪造或提前闭合。
+3. **禁止的字符**：C1 控制字符、bidi 覆盖字符、零宽字符。这些文本会展示给审阅人。
+4. **指标字段校验**：`source_ref` 必须是不透明引用；同一份报告里指标键不得重复。
+5. **提交时校验确认码**：
+   - 必须由同一设备、同一客户端签发，否则返回 `challenge_device_mismatch`；
+   - 必须指向本人记录（`member-self:<userId>`），否则返回 `challenge_not_for_this_tool`，防止把回应提问的确认码当作信号兑现。
+6. **memberRef 已随 P0 改为 `user:<userId>`。**
