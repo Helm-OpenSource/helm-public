@@ -65,11 +65,10 @@ owner 2026-09-29 的四项裁定：
    - 提问摘要在 CAIO 发放时已经完成投影；classifiedAt 取提问的发放时刻，聚合数据取读取时刻。
    - 从 P1 起，涉及他人或业务对象的读取走七元交集（`decideMemberReadSurface`）。
 
-7. **待 owner 确认的一处偏离。**
-   - 现状：`list_my_pending_prompts` 包含 `pending`，也就是尚未投递的提问。
-     理由是成员主动拉取自己的队列，不算打扰，所以静默期和勿扰不适用。读取也不会改变提问状态。
-   - 规格 §6.3 的投递是受监督的，另一种做法是只返回 delivered 和 snoozed。
-     但在 P1 的 `poll_my_prompts` 上线之前，这样做会什么都看不到。
+7. **未投递的提问对成员可见（owner 2026-09-29 裁定）。**
+   - `list_my_pending_prompts` 包含 `pending`，也就是尚未投递的提问。
+   - 成员主动拉取自己的队列不算打扰，所以静默期和勿扰不适用；读取不改变提问状态。
+   - 这是对规格 §6.3"受监督投递"的有意放宽，仅适用于成员本人主动读取；主动推送仍走 P1 的 `poll_my_prompts` 与投递判定。
 
 8. **权限防火墙。** 工具执行器直接读 `MemberPrompt` 表，不经过 `prompt-store.service`。
    原因是后者会引入 `lib/caio-governance`，而 API 代码不得依赖它（`check:caio-terminology`）。
