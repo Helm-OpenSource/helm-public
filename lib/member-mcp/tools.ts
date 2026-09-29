@@ -2,7 +2,11 @@
 // Member MCP P0 tool surface: definitions, argument parsing and the Member
 // Gateway envelope every tool result is wrapped in. Pure: no IO, no clock.
 
-import { validateMemberToolEnvelope } from "@/lib/member-gateway/contract";
+import {
+  decideMemberProjection,
+  decideMemberReadSurface,
+  validateMemberToolEnvelope,
+} from "@/lib/member-gateway/contract";
 import {
   MEMBER_SIGNAL_DETAIL_MAX_CHARS,
   MEMBER_SIGNAL_SUMMARY_MAX_CHARS,
@@ -10,6 +14,7 @@ import {
   type MemberWorkSignalPayload,
 } from "@/lib/member-gateway/signal";
 import type {
+  MemberObjectClassification,
   MemberProjectionDecision,
   MemberToolEnvelope,
 } from "@/lib/member-gateway/types";
@@ -431,6 +436,66 @@ export function buildSelfRecordDecision(input: {
   }
   return { ...base, projection: "remote_projected", blockReason: null };
 }
+
+// CAIO content served to a member (prompt summaries, evidence refs, later
+// work packets) describes business objects, so it goes through the Member
+// Gateway projection ladder (spec §8.2) with the owner-set tenant
+// classification: unclassified never projects (classification_unknown),
+// prohibited → LOCAL_VIEW_REQUIRED, local_only → metadata_only, and the
+// provider must be on the tenant egress list. The read surface evidence is
+// the member's own relationship to the record (their own queue), live
+// membership and the connection scope; decideMemberReadSurface only accepts
+// L1 tool names, so the brief's name stands in for these L3 reads.
+export const MEMBER_MCP_CONTENT_POLICY_REF = "member-mcp:caio-content";
+export const MEMBER_MCP_CONTENT_POLICY_VERSION = 1;
+
+export function buildContentDecision(input: {
+  workspaceId: string;
+  memberRef: string;
+  objectRef: string;
+  connectionRef: string;
+  scope: string;
+  providerRef: string | null;
+  classification: MemberObjectClassification | null;
+  requestedFields: readonly string[];
+  now: Date;
+}): MemberProjectionDecision {
+  const surface = decideMemberReadSurface({
+    workspaceRef: input.workspaceId,
+    memberRef: input.memberRef,
+    objectRef: input.objectRef,
+    tool: "get_my_brief",
+    purpose: MEMBER_MCP_PURPOSE,
+    liveMembershipRef: `live:${input.memberRef}`,
+    toolScopeRef: `${input.connectionRef}#${input.scope}`,
+    objectRelationshipAuthorizationRef: `addressee:${input.memberRef}`,
+    fieldPurposePolicyRef: `${MEMBER_MCP_CONTENT_POLICY_REF}:v${MEMBER_MCP_CONTENT_POLICY_VERSION}`,
+    sourceAuthorizationRef: input.connectionRef,
+    tenantProviderEgressPolicyRef: input.providerRef,
+    classification: input.classification,
+  });
+  const classifiedAtMs = input.classification ? Date.parse(input.classification.classifiedAt) : Number.NaN;
+  return decideMemberProjection({
+    surface,
+    classification: input.classification,
+    freshnessMinutes: Number.isFinite(classifiedAtMs)
+      ? Math.max(0, Math.floor((input.now.getTime() - classifiedAtMs) / 60_000))
+      : null,
+    providerRef: input.providerRef,
+    purpose: MEMBER_MCP_PURPOSE,
+    projectionPolicyRef: MEMBER_MCP_CONTENT_POLICY_REF,
+    projectionPolicyVersion: MEMBER_MCP_CONTENT_POLICY_VERSION,
+    requestedFields: input.requestedFields,
+  });
+}
+
+export const MEMBER_MCP_BLOCK_MESSAGES: Record<string, string> = {
+  provider_not_approved: "This client type is not on the workspace's approved list.",
+  classification_unknown: "The workspace has not classified CAIO content for member AI clients yet; read it in Helm.",
+  LOCAL_VIEW_REQUIRED: "This content may only be viewed inside Helm.",
+  read_surface_denied: "This content is not readable through this connection.",
+  purpose_missing: "Read purpose missing.",
+};
 
 export class MemberMcpEnvelopeInvalidError extends Error {
   constructor(readonly errors: readonly string[]) {
