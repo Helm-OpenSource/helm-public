@@ -57,6 +57,8 @@ import {
 } from "@/lib/operating-system";
 import { formatDateLabel, safeParseJson } from "@/lib/utils";
 import { formatMemoryDateLabel } from "@/features/memory/memory-date-labels";
+import { buildAuditCardDisplay } from "@/features/memory/audit-card-display";
+import type { AuditLogDisplayLabels } from "@/lib/audit/display-labels";
 import {
   acceptReflectionCarryForwardAction,
   dismissReflectionCarryForwardAction,
@@ -253,6 +255,8 @@ type MemoryClientProps = {
     targetType: string;
     summary: string;
     payload: string | null;
+    sourcePage?: string | null;
+    displayLabels?: AuditLogDisplayLabels | null;
     createdAt: Date;
   }>;
   externalMemoryRecords: Array<{
@@ -3474,7 +3478,13 @@ export function MemoryClient({
             </CardHeader>
             <CardContent className="space-y-3">
               {auditLogs.length ? (
-                auditLogs.slice(0, 8).map((log) => (
+                auditLogs.slice(0, 8).map((log) => {
+                  const auditCard = buildAuditCardDisplay(
+                    log,
+                    english,
+                    memoryText,
+                  );
+                  return (
                   <div
                     key={log.id}
                     id={buildMemoryItemAnchor("audit", log.id)}
@@ -3482,19 +3492,30 @@ export function MemoryClient({
                   >
                     <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
                       <p className="min-w-0 break-words font-medium text-[color:var(--foreground)]">
-                        {memoryText(log.summary)}
+                        {auditCard.title}
                       </p>
-                      <Badge variant="default">
-                        {memoryText(log.actionType)}
-                      </Badge>
+                      {auditCard.badge ? (
+                        <Badge variant="default" title={auditCard.actionCode}>
+                          {auditCard.badge}
+                        </Badge>
+                      ) : null}
                     </div>
+                    {auditCard.detail ? (
+                      <p
+                        className="mt-1 min-w-0 break-words text-xs text-[color:var(--muted-foreground)]"
+                        title={auditCard.actionCode}
+                      >
+                        {english ? "Recorded as: " : "原始记录："}
+                        {auditCard.detail}
+                      </p>
+                    ) : null}
                     <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2 text-xs text-[color:var(--muted-foreground)]">
                       <span className="min-w-0 break-words">
-                        {memoryText(log.actor)}
+                        {auditCard.actor}
                       </span>
                       <span>·</span>
                       <span className="min-w-0 break-words">
-                        {memoryText(log.targetType)}
+                        {auditCard.targetType}
                       </span>
                       <span>·</span>
                       <span>{dateLabel(log.createdAt)}</span>
@@ -3512,7 +3533,8 @@ export function MemoryClient({
                       ))}
                     </div>
                   </div>
-                ))
+                  );
+                })
               ) : (
                 <EmptyState
                   title={english ? "No audit replay yet" : "还没有审计回放"}

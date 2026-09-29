@@ -15,6 +15,8 @@ import {
 } from "@/lib/auth/capture-runtime-governance";
 import { canExportMemory, canManageMemoryFacts } from "@/lib/memory/permissions";
 import { normalizeWorkspaceUiConfig } from "@/lib/workspace-ops";
+import { resolveAuditDisplayLabels } from "@/lib/extensions/registry";
+import { resolveAuditLogDisplayLabels } from "@/lib/audit/display-labels";
 
 type MemorySearchParams = Promise<{
   query?: string;
@@ -62,13 +64,23 @@ export async function loadMemoryPageData(searchParams: MemorySearchParams) {
       ? rawObjectType
       : null;
 
-  const data = await getMemoryData(workspace.id, {
+  const memoryData = await getMemoryData(workspace.id, {
     query,
     objectLevel,
     source,
     objectType: objectType ?? undefined,
     objectId: objectId ?? undefined,
   });
+  // Pack/Overlay-registered display labels for the audit codes on this page
+  // (zh + en pairs; the client picks by its own locale).
+  const auditDisplayLabels = resolveAuditDisplayLabels();
+  const data = {
+    ...memoryData,
+    auditLogs: memoryData.auditLogs.map((log) => ({
+      ...log,
+      displayLabels: resolveAuditLogDisplayLabels(log, auditDisplayLabels),
+    })),
+  };
   const firstLoopModel = await getWorkspaceFirstLoopModel({
     workspaceId: workspace.id,
     currentUserId: user.id,
