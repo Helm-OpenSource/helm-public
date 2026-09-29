@@ -115,6 +115,10 @@ LIGHT_CHAIN_FOLLOW_THROUGH_CRON_ENABLED="false"
 # flag and the owner-authorized workspace feature flag are enabled. Origins are
 # optional for desktop clients; browser Origins must match this comma list.
 HELM_QODERWORK_MCP_ENABLED="false"
+# Member MCP entry (/api/mcp/member): members connect their own AI clients; also needs workspace featureFlags.memberMcp.
+HELM_MEMBER_MCP_ENABLED="false"
+# CAIO review supplement: workspace-aggregated member feedback volume by type (counts only).
+HELM_CAIO_MEMBER_FEEDBACK_SUPPLEMENT_ENABLED="false"
 HELM_MCP_ALLOWED_ORIGINS=""
 
 ALIYUN_MAIL_FOUNDER_EMAIL=""
