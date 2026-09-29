@@ -5,6 +5,7 @@ import {
   decideMemberConnectionApproval,
   effectiveMemberConnectionStatus,
   memberMcpProviderRef,
+  memberRefForUser,
   normalizeDeviceLabel,
   parseStoredMemberMcpScopes,
   readMemberMcpWorkspaceFlags,
@@ -25,6 +26,7 @@ const target = (overrides: Partial<Parameters<typeof decideMemberConnectionAppro
   userId: "u-seat",
   groupTag: "深圳汉普组",
   membershipActive: true,
+  role: WorkspaceRole.OPERATOR as WorkspaceRole | null,
   ...overrides,
 });
 
@@ -47,6 +49,13 @@ describe("decideMemberConnectionApproval", () => {
     expect(decideMemberConnectionApproval(supervisor, target({ groupTag: "江西融凡组" }))).toEqual({ allowed: false, reason: "no_authority" });
     expect(decideMemberConnectionApproval(supervisor, target({ groupTag: null }))).toEqual({ allowed: false, reason: "no_authority" });
     expect(decideMemberConnectionApproval(supervisor, target({ groupTag: "  " }))).toEqual({ allowed: false, reason: "no_authority" });
+  });
+
+  it("never lets a group grant reach an owner or admin carrying the same tag", () => {
+    const supervisor = approver({ grantedGroupTags: ["深圳汉普组"] });
+    expect(decideMemberConnectionApproval(supervisor, target({ role: WorkspaceRole.ADMIN }))).toEqual({ allowed: false, reason: "no_authority" });
+    expect(decideMemberConnectionApproval(supervisor, target({ role: WorkspaceRole.OWNER }), "close")).toEqual({ allowed: false, reason: "no_authority" });
+    expect(decideMemberConnectionApproval(supervisor, target({ role: WorkspaceRole.REVIEWER }))).toEqual({ allowed: true, basis: "group_grant" });
   });
 
   it("forbids self-approval except for the owner", () => {
@@ -88,13 +97,32 @@ describe("readMemberMcpWorkspaceFlags", () => {
     expect(readMemberMcpWorkspaceFlags(json, on).enabled).toBe(true);
     expect(readMemberMcpWorkspaceFlags(json, {}).enabled).toBe(false);
     expect(readMemberMcpWorkspaceFlags(JSON.stringify({ memberMcp: "true" }), on).enabled).toBe(false);
-    expect(readMemberMcpWorkspaceFlags("not json", on)).toEqual({ enabled: false, approvedClients: [] });
-    expect(readMemberMcpWorkspaceFlags(null, on)).toEqual({ enabled: false, approvedClients: [] });
+    expect(readMemberMcpWorkspaceFlags("not json", on)).toEqual({ enabled: false, approvedClients: [], contentClassification: null });
+    expect(readMemberMcpWorkspaceFlags(null, on)).toEqual({ enabled: false, approvedClients: [], contentClassification: null });
   });
 
   it("keeps only known client types on the approved list", () => {
     const json = JSON.stringify({ memberMcp: true, memberMcpApprovedClients: ["codex", "cursor", "codex", 7] });
     expect(readMemberMcpWorkspaceFlags(json, on).approvedClients).toEqual(["codex"]);
+  });
+});
+
+describe("content classification policy", () => {
+  const on = { HELM_MEMBER_MCP_ENABLED: "true" };
+  const flags = (value: unknown) => readMemberMcpWorkspaceFlags(JSON.stringify({ memberMcp: true, memberMcpContentClassification: value }), on);
+  it("accepts only a complete, closed-set classification with a strict instant", () => {
+    expect(flags({ sensitivity: "internal", processingDisposition: "remote_projected", classifiedAt: "2026-09-29T12:00:00.000Z" }).contentClassification)
+      .toEqual({ sensitivity: "internal", processingDisposition: "remote_projected", classifiedAt: "2026-09-29T12:00:00.000Z" });
+    expect(flags(undefined).contentClassification).toBeNull();
+    expect(flags({ sensitivity: "secret", processingDisposition: "remote_projected", classifiedAt: "2026-09-29T12:00:00.000Z" }).contentClassification).toBeNull();
+    expect(flags({ sensitivity: "internal", processingDisposition: "anywhere", classifiedAt: "2026-09-29T12:00:00.000Z" }).contentClassification).toBeNull();
+    expect(flags({ sensitivity: "internal", processingDisposition: "local_only", classifiedAt: "yesterday" }).contentClassification).toBeNull();
+  });
+});
+
+describe("memberRefForUser", () => {
+  it("uses the Stage 1 user: namespace", () => {
+    expect(memberRefForUser("abc")).toBe("user:abc");
   });
 });
 

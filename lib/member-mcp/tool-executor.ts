@@ -2,10 +2,12 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
-import type { MemberToolEnvelope } from "@/lib/member-gateway/types";
+import type { MemberProjectionDecision, MemberToolEnvelope } from "@/lib/member-gateway/types";
 import type { MemberMcpAuthContext } from "@/lib/member-mcp/connection-service";
 import { memberMcpProviderRef, memberRefForUser } from "@/lib/member-mcp/contract";
 import {
+  MEMBER_MCP_BLOCK_MESSAGES,
+  buildContentDecision,
   buildMemberMcpEnvelope,
   buildSelfRecordDecision,
   type MemberMcpToolCall,
@@ -44,6 +46,30 @@ export async function executeMemberMcpTool(input: {
   }
   const memberRef = memberRefForUser(input.auth.userId);
   const call = input.call;
+  const contentDecision = (objectRef: string, fields: readonly string[]) =>
+    buildContentDecision({
+      workspaceId: input.auth.workspaceId,
+      memberRef,
+      objectRef,
+      connectionRef: `member-mcp-connection:${input.auth.connectionId}`,
+      scope: "member:prompt:read",
+      providerRef,
+      classification: input.auth.contentClassification,
+      requestedFields: fields,
+      now,
+    });
+  const blocked = (decision: MemberProjectionDecision) => {
+    // Without an owner classification the surface denies on
+    // current_classification; name that cause for the member.
+    const code = input.auth.contentClassification === null ? "classification_unknown" : (decision.blockReason ?? "blocked");
+    return buildMemberMcpEnvelope({
+      requestId,
+      now,
+      decision,
+      data: null,
+      error: { code, message: MEMBER_MCP_BLOCK_MESSAGES[code] ?? "Content is not projectable.", retryable: false },
+    });
+  };
 
   if (call.toolName === "get_my_brief") {
     const [membership, workspace, counts] = await Promise.all([
@@ -147,10 +173,24 @@ export async function executeMemberMcpTool(input: {
       },
     });
     const page = rows.slice(0, call.arguments.limit);
+    const decision = contentDecision("member-prompt-queue", PROMPT_FIELDS);
+    if (decision.projection === null) return blocked(decision);
+    if (decision.projection === "metadata_only") {
+      return buildMemberMcpEnvelope({
+        requestId,
+        now,
+        decision,
+        data: {
+          items: page.map((row) => promptMetadata(row.id, decision)),
+          nextCursor: rows.length > call.arguments.limit ? (page.at(-1)?.id ?? null) : null,
+        },
+        error: null,
+      });
+    }
     return buildMemberMcpEnvelope({
       requestId,
       now,
-      decision: buildSelfRecordDecision({ providerRef, classifiedAt: now, now }),
+      decision,
       data: {
         items: page.map((row) => ({
           promptRef: row.id,
@@ -183,10 +223,15 @@ export async function executeMemberMcpTool(input: {
       error: { code: "prompt_not_found", message: "No such prompt for this member.", retryable: false },
     });
   }
+  const decision = contentDecision(row.id, PROMPT_FIELDS);
+  if (decision.projection === null) return blocked(decision);
+  if (decision.projection === "metadata_only") {
+    return buildMemberMcpEnvelope({ requestId, now, decision, data: promptMetadata(row.id, decision), error: null });
+  }
   return buildMemberMcpEnvelope({
     requestId,
     now,
-    decision: buildSelfRecordDecision({ providerRef, classifiedAt: row.issuedAt, now }),
+    decision,
     data: {
       promptRef: row.id,
       severity: row.severity,
@@ -202,6 +247,32 @@ export async function executeMemberMcpTool(input: {
     },
     error: null,
   });
+}
+
+const PROMPT_FIELDS = [
+  "promptRef",
+  "severity",
+  "severityRuleRef",
+  "subjectObjectRef",
+  "summary",
+  "evidenceRefs",
+  "state",
+  "version",
+  "issuedAt",
+  "expiresAt",
+  "snoozeUntil",
+] as const;
+
+// metadata_only is the spec's field whitelist (METADATA_ONLY_FIELD_WHITELIST):
+// the member learns a prompt exists and must be read inside Helm.
+function promptMetadata(promptRef: string, decision: MemberProjectionDecision) {
+  return {
+    objectKind: "member_prompt",
+    evidenceRef: promptRef,
+    classifiedAt: decision.classifiedAt,
+    freshness: decision.freshnessMinutes,
+    requiresLocalView: true,
+  };
 }
 
 // Same corruption guard as the prompt store: evidence refs must be a JSON

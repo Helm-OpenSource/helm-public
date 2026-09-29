@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { validateMemberToolEnvelope } from "@/lib/member-gateway/contract";
 import {
   MEMBER_MCP_TOOLS,
+  buildContentDecision,
   buildMemberMcpEnvelope,
   buildSelfRecordDecision,
   parseMemberMcpToolCall,
@@ -31,6 +32,34 @@ describe("parseMemberMcpToolCall", () => {
 
   it("exposes only read tools in P0", () => {
     expect(MEMBER_MCP_TOOLS.map((tool) => tool.requiredScope).every((scope) => scope.endsWith(":read"))).toBe(true);
+  });
+});
+
+describe("content decision", () => {
+  const base = {
+    workspaceId: "w1",
+    memberRef: "user:u1",
+    objectRef: "prompt-1",
+    connectionRef: "member-mcp-connection:c1",
+    scope: "member:prompt:read",
+    providerRef: "member-mcp-client:codex",
+    requestedFields: ["summary", "evidenceRefs"],
+    now,
+  };
+  const cls = (processingDisposition: "remote_projected" | "local_only" | "prohibited") => ({
+    sensitivity: "internal" as const,
+    processingDisposition,
+    classifiedAt: "2026-09-29T07:00:00.000Z",
+  });
+  it("fails closed without an owner classification", () => {
+    // The seven-way surface already denies on current_classification.
+    expect(buildContentDecision({ ...base, classification: null })).toMatchObject({ projection: null, blockReason: "read_surface_denied" });
+  });
+  it("follows the projection ladder", () => {
+    expect(buildContentDecision({ ...base, classification: cls("remote_projected") })).toMatchObject({ projection: "remote_projected", freshnessMinutes: 60 });
+    expect(buildContentDecision({ ...base, classification: cls("local_only") })).toMatchObject({ projection: "metadata_only", deniedFields: ["summary", "evidenceRefs"] });
+    expect(buildContentDecision({ ...base, classification: cls("prohibited") })).toMatchObject({ projection: null, blockReason: "LOCAL_VIEW_REQUIRED" });
+    expect(buildContentDecision({ ...base, providerRef: null, classification: cls("remote_projected") })).toMatchObject({ projection: null });
   });
 });
 

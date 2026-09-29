@@ -88,3 +88,20 @@ owner 2026-09-29 的四项裁定：
 - 单元测试：`lib/member-mcp/*.test.ts`。
 - 隔离 MySQL：`npm run test:member-mcp:mysql`，挂在 CI 的 Member Gateway MySQL 作业里。
 - `check:boundaries` 全过。
+
+## 独立二审后的修订（2026-09-29 晚）
+1. **CAIO 内容按规格投影阶梯判定**
+   - 提问摘要、主题对象、证据引用描述的是业务对象，不只是"本人记录"。现在一律经过 `decideMemberReadSurface` 与 `decideMemberProjection`。
+   - 分类来源：工作区 featureFlags 里由 owner 设定的租户级分类 `memberMcpContentClassification`，取值为 `{sensitivity, processingDisposition, classifiedAt}`。
+   - 未设定分类时内容不投影，错误码 `classification_unknown`。
+   - 各处置取值的结果：
+     - `local_only`：只返回元数据白名单（objectKind、evidenceRef、classifiedAt、freshness、requiresLocalView）；
+     - `prohibited`：返回 LOCAL_VIEW_REQUIRED；
+     - 客户端不在放行名单：返回 provider_not_approved。
+   - `get_my_brief` 只含本人档案与计数，继续用 self-record 策略。
+2. **管理 API 受部署开关约束**：`HELM_MEMBER_MCP_ENABLED` 关闭时，管理 API 与页面、MCP 路由一样返回 404。批准和指定主管还要求工作区开关开启；驳回和吊销不受限，方便关停后收尾。
+3. **每人 5 个未关闭连接的上限**在 Serializable 事务内计数。
+4. **组主管的分组授权**只覆盖不持有审批能力的成员，碰不到同组的 owner 或 admin。
+5. **memberRef 改为 `user:<userId>`**，与 Stage 1 的 executionTargetRef 同一命名空间；发放 MemberPrompt 的一方必须使用 `memberRefForUser`。
+6. **所有 `notifications/*` 回 202**，不带正文。
+7. **接受的窗口**：批准权限在事务外判定；主管授权在判定之后、写入之前被撤销的极小窗口可以接受。

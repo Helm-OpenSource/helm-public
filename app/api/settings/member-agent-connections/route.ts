@@ -51,7 +51,14 @@ async function currentActor() {
   return { actor, membership, workspace };
 }
 
+// The whole management API is absent while the deployment switch is off, the
+// same as the page and the MCP route.
+function runtimeOff() {
+  return process.env.HELM_MEMBER_MCP_ENABLED !== "true";
+}
+
 export async function GET() {
+  if (runtimeOff()) return jsonError("RUNTIME_DISABLED", 404);
   const { actor, workspace } = await currentActor();
   const now = new Date();
   const flags = readMemberMcpWorkspaceFlags(workspace.featureFlagsJson);
@@ -101,6 +108,7 @@ async function listGroupTags(workspaceId: string) {
 }
 
 export async function POST(request: Request) {
+  if (runtimeOff()) return jsonError("RUNTIME_DISABLED", 404);
   const { actor, membership, workspace } = await currentActor();
   const parsed = actionSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return jsonError("INVALID_INPUT", 400);

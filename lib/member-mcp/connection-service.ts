@@ -4,6 +4,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { ActorType, MembershipStatus, Prisma, type WorkspaceRole } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { db } from "@/lib/db";
+import type { MemberObjectClassification } from "@/lib/member-gateway/types";
 import { runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
 import {
   MEMBER_MCP_CLAIM_WINDOW_DAYS,
@@ -110,12 +111,13 @@ async function activeGrantTags(workspaceId: string, userId: string) {
 async function loadTargetMembership(workspaceId: string, userId: string) {
   const membership = await db.membership.findUnique({
     where: { workspaceId_userId: { workspaceId, userId } },
-    select: { status: true, groupTag: true },
+    select: { status: true, groupTag: true, role: true },
   });
   return {
     userId,
     groupTag: membership?.groupTag ?? null,
     membershipActive: membership?.status === MembershipStatus.ACTIVE,
+    role: membership?.role ?? null,
   };
 }
 
@@ -201,17 +203,18 @@ export async function requestMemberAgentConnection(input: {
   const deviceLabel = normalizeDeviceLabel(input.deviceLabel);
   if (!deviceLabel) throw new MemberAgentConnectionError("INVALID_INPUT", "Device label must be 2-80 printable characters");
 
-  const existing = await db.memberAgentConnection.findMany({
-    where: { workspaceId: input.workspaceId, userId: input.actor.userId, status: { in: ["requested", "approved", "active"] } },
-    select: { status: true, claimDeadlineAt: true, expiresAt: true },
-  });
-  const open = existing.filter((row) => isOpenMemberConnectionStatus(effectiveMemberConnectionStatus(row, now)));
-  if (open.length >= MEMBER_MCP_MAX_OPEN_CONNECTIONS_PER_MEMBER) {
-    throw new MemberAgentConnectionError("TOO_MANY_OPEN", "Too many open connections for this member");
-  }
-
   const scopes: MemberMcpScope[] = [...MEMBER_MCP_P0_ISSUABLE_SCOPES];
   return runWithWriteConflictRetry(() => db.$transaction(async (tx) => {
+    // Counted inside the Serializable transaction so concurrent requests from
+    // the same member cannot each see room under the cap.
+    const existing = await tx.memberAgentConnection.findMany({
+      where: { workspaceId: input.workspaceId, userId: input.actor.userId, status: { in: ["requested", "approved", "active"] } },
+      select: { status: true, claimDeadlineAt: true, expiresAt: true },
+    });
+    const open = existing.filter((row) => isOpenMemberConnectionStatus(effectiveMemberConnectionStatus(row, now)));
+    if (open.length >= MEMBER_MCP_MAX_OPEN_CONNECTIONS_PER_MEMBER) {
+      throw new MemberAgentConnectionError("TOO_MANY_OPEN", "Too many open connections for this member");
+    }
     const row = await tx.memberAgentConnection.create({
       data: {
         workspaceId: input.workspaceId,
@@ -258,7 +261,10 @@ export async function decideMemberAgentConnection(input: {
   if (!approval.allowed) throw new MemberAgentConnectionError("FORBIDDEN", approval.reason);
   if (row.status !== "requested") throw new MemberAgentConnectionError("STATE_CONFLICT", "Connection is not awaiting a decision");
   if (input.decision === "approve") {
+    // Granting access needs the runtime on; rejecting stays possible so a
+    // switched-off workspace can still be cleaned up.
     const flags = await loadWorkspaceFlags(input.workspaceId);
+    if (!flags.enabled) throw new MemberAgentConnectionError("RUNTIME_DISABLED", "Member MCP is disabled");
     if (!flags.approvedClients.includes(row.clientType as MemberMcpClientType)) {
       throw new MemberAgentConnectionError("CLIENT_NOT_APPROVED", "Client type is no longer approved");
     }
@@ -459,6 +465,9 @@ export async function grantMemberApprover(input: {
   if (!input.actor.membershipActive || !canManageMemberApproverGrants(input.actor.role)) {
     throw new MemberAgentConnectionError("FORBIDDEN", "Only owners and admins designate approvers");
   }
+  if (!(await loadWorkspaceFlags(input.workspaceId)).enabled) {
+    throw new MemberAgentConnectionError("RUNTIME_DISABLED", "Member MCP is disabled");
+  }
   const groupTag = normalizeGroupTag(input.groupTag);
   if (!groupTag) throw new MemberAgentConnectionError("INVALID_INPUT", "Group tag must be 1-60 characters");
   const approver = await db.membership.findUnique({
@@ -547,6 +556,7 @@ export type MemberMcpAuthContext = {
   scopes: readonly MemberMcpScope[];
   expiresAt: Date;
   approvedClients: readonly MemberMcpClientType[];
+  contentClassification: MemberObjectClassification | null;
 };
 
 // Every call re-checks: runtime switches, token state and expiry, and that the
@@ -588,6 +598,7 @@ export async function authenticateMemberMcpToken(token: string, now = new Date()
     scopes: parseStoredMemberMcpScopes(row.scopesJson),
     expiresAt: row.expiresAt,
     approvedClients: flags.approvedClients,
+    contentClassification: flags.contentClassification,
   };
 }
 
