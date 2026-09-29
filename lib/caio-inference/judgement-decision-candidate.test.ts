@@ -4,6 +4,7 @@ import { validateDecisionObject } from "@/lib/agentos-decision-supervision/contr
 
 import {
   CAIO_JUDGEMENT_DECISION_CANDIDATE_TTL_MS,
+  isCaioJudgementStale,
   projectCaioJudgementToDecisionCandidate,
 } from "./judgement-decision-candidate";
 import {
@@ -127,5 +128,14 @@ describe("projectCaioJudgementToDecisionCandidate", () => {
     ] as const) {
       expect(() => projectCaioJudgementToDecisionCandidate(input(overrides as Record<string, unknown>))).toThrow(reason);
     }
+  });
+});
+
+describe("isCaioJudgementStale", () => {
+  it("treats a judgement whose review window has closed as stale", () => {
+    const completedAt = new Date("2026-09-20T00:00:00.000Z");
+    const edge = new Date(completedAt.getTime() + CAIO_JUDGEMENT_DECISION_CANDIDATE_TTL_MS);
+    expect(isCaioJudgementStale(completedAt, new Date(edge.getTime() - 1))).toBe(false);
+    expect(isCaioJudgementStale(completedAt, edge)).toBe(true);
   });
 });

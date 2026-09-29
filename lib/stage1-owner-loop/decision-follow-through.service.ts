@@ -573,6 +573,9 @@ export async function recordStage1OwnerReviewOutcome(input: {
     actorType: ActorType.USER,
     english: input.english ?? false,
   });
+  // Rejecting, deferring or asking for evidence on a CAIO candidate is the
+  // founder's call too, not only confirming it.
+  await assertCaioInferenceDecisionOwnerGate(input);
 
   const status =
     input.action === "reject"
@@ -846,6 +849,9 @@ export async function dispatchStage1DecisionWorkPacket(input: {
     actorType: ActorType.USER,
     english: input.english ?? false,
   });
+  // Defense in depth: the confirmer of a CAIO candidate must still be an active
+  // OWNER when the work packet is dispatched (a demoted confirmer cannot).
+  await assertCaioInferenceDecisionOwnerGate(input);
   const commandValidation = validateOwnerCommandDraft(input.command);
   if (!commandValidation.valid)
     throw new Stage1DecisionGateError(commandValidation.errors);

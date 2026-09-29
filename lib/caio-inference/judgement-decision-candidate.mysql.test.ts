@@ -23,6 +23,7 @@ import { canonicalJson } from "@/lib/expert-capability/hashing";
 import {
   confirmStage1DecisionRecord,
   dispatchStage1DecisionWorkPacket,
+  recordStage1OwnerReviewOutcome,
   Stage1DecisionGateError,
 } from "@/lib/stage1-owner-loop/decision-follow-through.service";
 import {
@@ -41,6 +42,7 @@ import {
   projectPendingCaioInferenceDecisionCandidates,
   CaioJudgementDecisionCandidateError,
 } from "./judgement-decision-candidate.service";
+import { CAIO_JUDGEMENT_DECISION_CANDIDATE_TTL_MS } from "./judgement-decision-candidate";
 import { buildCaioInferenceJudgementPacket } from "./judgement-packet";
 import { CAIO_LAYERED_JUDGEMENT_SCHEMA_VERSION, validateCaioLayeredJudgement } from "./layered-judgement";
 
@@ -112,6 +114,29 @@ describeMysql("CAIO judgement to assigned task on an isolated MySQL database", (
       },
     });
     return row.id;
+  }
+
+  function commandFor(decisionRef: string, executorId: string, commandId: string): OwnerCommandDraft {
+    return {
+      commandId,
+      workspaceRef: `workspace:${workspaceId}`,
+      decisionRef,
+      ownerRef: ownerId,
+      executionTargetRef: `user:${executorId}`,
+      portfolioRef,
+      goal: "Validate the revised reminder script without contacting anyone.",
+      action: "Prepare a dry-run plan for owner review.",
+      dueAt: new Date(Date.now() + 24 * 3_600_000).toISOString(),
+      acceptanceCriteria: ["Dry-run plan reviewed by the owner"],
+      evidenceRequirements: ["evidence:dry-run-plan"],
+      invalidationConditions: ["Cohort recovers before the due date"],
+      escalationOwnerRef: ownerId,
+      automationLevel: "assist",
+      allowedToolRefs: ["tool:task-draft"],
+      externalSideEffects: [],
+      policyEnvelopeRef: null,
+      status: "owner_confirmed",
+    };
   }
 
   beforeAll(async () => {
@@ -285,5 +310,104 @@ describeMysql("CAIO judgement to assigned task on an isolated MySQL database", (
       projectCaioInferenceJobDecisionCandidate({ workspaceId, jobId: otherJob, portfolioRef }),
     ).rejects.toMatchObject({ code: "job_not_completed" });
     expect(Stage1DecisionGateError).toBeDefined();
+  });
+
+  it("a judgement past its review window yields no candidate, and the batch does not pick it up", async () => {
+    const staleJob = await completedJob();
+    await db.caioInferenceJob.update({
+      where: { id: staleJob },
+      data: { completedAt: new Date(Date.now() - CAIO_JUDGEMENT_DECISION_CANDIDATE_TTL_MS - 60_000) },
+    });
+    expect(await projectCaioInferenceJobDecisionCandidate({ workspaceId, jobId: staleJob, portfolioRef })).toEqual({
+      kind: "no_candidate",
+      jobId: staleJob,
+      reason: "judgement_stale",
+    });
+    expect(
+      await db.decisionRecord.count({ where: { workspaceId, decisionKey: `caio-inference-decision:${staleJob}` } }),
+    ).toBe(0);
+    const batch = await projectPendingCaioInferenceDecisionCandidates({ workspaceId, portfolioRef });
+    expect(batch.map((outcome) => outcome.jobId)).not.toContain(staleJob);
+  });
+
+  it("one failing job does not stop the batch or hide what was written", async () => {
+    // The tampered job from the previous test is still completed and unprojected.
+    const goodJob = await completedJob();
+    const batch = await projectPendingCaioInferenceDecisionCandidates({ workspaceId, portfolioRef });
+    expect(batch).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "failed", code: "judgement_integrity_failed" }),
+        expect.objectContaining({ kind: "created", jobId: goodJob }),
+      ]),
+    );
+  });
+
+  it("two concurrent runs on the same job converge on one record", async () => {
+    const jobId = await completedJob();
+    const [first, second] = await Promise.all([
+      projectCaioInferenceJobDecisionCandidate({ workspaceId, jobId, portfolioRef }),
+      projectCaioInferenceJobDecisionCandidate({ workspaceId, jobId, portfolioRef }),
+    ]);
+    expect([first.kind, second.kind].sort()).toEqual(["created", "replayed"]);
+    if (first.kind === "no_candidate" || first.kind === "failed" || second.kind === "no_candidate" || second.kind === "failed") return;
+    expect(first.decisionRecordId).toBe(second.decisionRecordId);
+    expect(
+      await db.decisionRecord.count({ where: { workspaceId, decisionKey: `caio-inference-decision:${jobId}` } }),
+    ).toBe(1);
+  });
+
+  it("rejecting a CAIO candidate and dispatching its packet both require a still-active OWNER", async () => {
+    const jobId = await completedJob();
+    const created = await projectCaioInferenceJobDecisionCandidate({ workspaceId, jobId, portfolioRef });
+    if (created.kind !== "created") throw new Error(`expected a candidate, got ${created.kind}`);
+    await expect(
+      recordStage1OwnerReviewOutcome({
+        workspaceId,
+        decisionRecordId: created.decisionRecordId,
+        action: "reject",
+        reason: "Not now.",
+        actorName: "Operator",
+        actorUserId: operatorId,
+      }),
+    ).rejects.toMatchObject({ reasons: ["caio_inference_decision_owner_required"] });
+    await confirmStage1DecisionRecord({
+      workspaceId,
+      decisionRecordId: created.decisionRecordId,
+      conclusion: "Proceed.",
+      actorName: "CAIO owner",
+      actorUserId: ownerId,
+    });
+    const command = commandFor(created.decisionRecordId, bystanderId, `command-gate-${suffix}`);
+    // The confirmer is demoted before dispatching: the packet must not go out.
+    await db.membership.updateMany({ where: { workspaceId, userId: ownerId }, data: { role: WorkspaceRole.ADMIN } });
+    try {
+      await expect(
+        dispatchStage1DecisionWorkPacket({
+          workspaceId,
+          decisionRecordId: created.decisionRecordId,
+          command,
+          actorName: "Former owner",
+          actorUserId: ownerId,
+        }),
+      ).rejects.toMatchObject({ reasons: ["caio_inference_decision_owner_required"] });
+    } finally {
+      await db.membership.updateMany({ where: { workspaceId, userId: ownerId }, data: { role: WorkspaceRole.OWNER } });
+    }
+    const dispatched = await dispatchStage1DecisionWorkPacket({
+      workspaceId,
+      decisionRecordId: created.decisionRecordId,
+      command,
+      actorName: "CAIO owner",
+      actorUserId: ownerId,
+    });
+    expect(dispatched.created).toBe(true);
+  });
+
+  it("a member still sees an older packet once newer claims for others fill the first page", async () => {
+    // By now the workspace has the assignee's packet (oldest) and a newer one for the bystander.
+    const assigneePackets = await listWorkPacketsAssignedToMember({ workspaceId, userId: assigneeId, pageSize: 1 });
+    expect(assigneePackets).toHaveLength(1);
+    const bystanderPackets = await listWorkPacketsAssignedToMember({ workspaceId, userId: bystanderId, pageSize: 1 });
+    expect(bystanderPackets).toHaveLength(1);
   });
 });
