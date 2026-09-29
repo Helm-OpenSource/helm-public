@@ -232,6 +232,7 @@ export async function executeMemberPromptResponse(input: {
                 memberChallengeRef: challengeRef,
                 status: "received",
                 receivedAt: now,
+                nextAttemptAt: now,
               },
             });
             return { replay: false as const, row };

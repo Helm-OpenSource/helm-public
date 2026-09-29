@@ -1404,12 +1404,13 @@ model MemberPromptResponseInbox {
   claimToken            String?   @db.VarChar(64)
   claimedAt             DateTime?
   receivedAt            DateTime
+  nextAttemptAt         DateTime
   processedAt           DateTime?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
   @@unique([workspaceId, memberChallengeRef], map: "MPRInbox_ws_challenge_key")
-  @@index([status, receivedAt], map: "MPRInbox_status_received_idx")
+  @@index([status, nextAttemptAt], map: "MPRInbox_status_next_idx")
   @@index([workspaceId, memberRef], map: "MPRInbox_ws_member_idx")
 }
 

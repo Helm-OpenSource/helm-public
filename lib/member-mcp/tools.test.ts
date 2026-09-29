@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { validateMemberToolEnvelope } from "@/lib/member-gateway/contract";
 import {
   MEMBER_MCP_TOOLS,
+  buildContentDecision,
   buildMemberMcpEnvelope,
   buildFieldReportPayload,
   buildSelfRecordDecision,
@@ -97,6 +98,23 @@ describe("parseMemberMcpToolCall", () => {
   });
 });
 
+describe("free-text hardening", () => {
+  it("keeps code fences, invisible and bidi characters out of member text", () => {
+    expect(parseMemberMcpToolCall("prepare_work_signal", { kind: "progress", summary: "ok", detail: "a ``` b" }).ok).toBe(false);
+    expect(parseMemberMcpToolCall("prepare_work_signal", { kind: "progress", summary: "a\u202eb", detail: "" }).ok).toBe(false);
+    expect(parseMemberMcpToolCall("prepare_work_signal", { kind: "progress", summary: "a\u200bb", detail: "" }).ok).toBe(false);
+    expect(parseMemberMcpToolCall("prepare_work_signal", { kind: "progress", summary: "a\u0085b", detail: "" }).ok).toBe(false);
+    expect(parseMemberMcpToolCall("prepare_field_report", { kind: "seat_feedback", title: "t", metrics: [], text: "```" }).ok).toBe(false);
+  });
+
+  it("requires opaque source refs and unique metric keys", () => {
+    const metric = { key: "qc.a", value: 1, unit: null, window: null, source_ref: null };
+    expect(parseMemberMcpToolCall("prepare_field_report", { kind: "seat_feedback", title: "t", metrics: [{ ...metric, source_ref: "not a ref" }] }).ok).toBe(false);
+    expect(parseMemberMcpToolCall("prepare_field_report", { kind: "seat_feedback", title: "t", metrics: [metric, metric] }).ok).toBe(false);
+    expect(parseMemberMcpToolCall("prepare_field_report", { kind: "seat_feedback", title: "t", metrics: [{ ...metric, source_ref: "report:2026-09-29" }] }).ok).toBe(true);
+  });
+});
+
 describe("buildFieldReportPayload", () => {
   const report = (overrides: Partial<MemberFieldReportInput> = {}): MemberFieldReportInput => ({
     kind: "shadow_check",
@@ -135,6 +153,34 @@ describe("buildFieldReportPayload", () => {
 
   it("rejects a report whose detail would exceed the signal limit", () => {
     expect(buildFieldReportPayload(report({ metrics: [], text: "字".repeat(3990) }), []).ok).toBe(false);
+  });
+});
+
+describe("content decision", () => {
+  const base = {
+    workspaceId: "w1",
+    memberRef: "user:u1",
+    objectRef: "prompt-1",
+    connectionRef: "member-mcp-connection:c1",
+    scope: "member:prompt:read",
+    providerRef: "member-mcp-client:codex",
+    requestedFields: ["summary", "evidenceRefs"],
+    now,
+  };
+  const cls = (processingDisposition: "remote_projected" | "local_only" | "prohibited") => ({
+    sensitivity: "internal" as const,
+    processingDisposition,
+    classifiedAt: "2026-09-29T07:00:00.000Z",
+  });
+  it("fails closed without an owner classification", () => {
+    // The seven-way surface already denies on current_classification.
+    expect(buildContentDecision({ ...base, classification: null })).toMatchObject({ projection: null, blockReason: "read_surface_denied" });
+  });
+  it("follows the projection ladder", () => {
+    expect(buildContentDecision({ ...base, classification: cls("remote_projected") })).toMatchObject({ projection: "remote_projected", freshnessMinutes: 60 });
+    expect(buildContentDecision({ ...base, classification: cls("local_only") })).toMatchObject({ projection: "metadata_only", deniedFields: ["summary", "evidenceRefs"] });
+    expect(buildContentDecision({ ...base, classification: cls("prohibited") })).toMatchObject({ projection: null, blockReason: "LOCAL_VIEW_REQUIRED" });
+    expect(buildContentDecision({ ...base, providerRef: null, classification: cls("remote_projected") })).toMatchObject({ projection: null });
   });
 });
 

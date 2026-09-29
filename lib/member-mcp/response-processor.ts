@@ -45,6 +45,7 @@ import {
   memberResponseConfirmationPayload,
   memberResponseReceiptId,
   memberResponseSignalReceiptId,
+  memberResponseRetryDelayMs,
   memberResponseTransitionReceiptId,
   parseStoredResponseIntent,
   type MemberPromptResponseIntent,
@@ -65,10 +66,15 @@ const TRANSIENT_STORE_REASONS = new Set([
   "challenge_consumption_conflict",
 ]);
 
+// signalReceiptRef / candidate ride on every outcome of a candidate response
+// once its work signal exists, so a recorded signal is never orphaned: the
+// inbox row always points at it, whatever the row's final status.
+type SignalFields = { signalReceiptRef?: string | null; candidate?: CandidateFields };
+
 export type ProcessorOutcome =
-  | { status: "registered"; responseReceiptRef: string | null; signalReceiptRef: string | null; candidate?: CandidateFields }
-  | { status: "rejected" | "held"; code: MemberResponseOutcomeCode; detail: string | null }
-  | { status: "retry"; code: MemberResponseOutcomeCode | "transient"; detail: string | null; needsHuman: boolean };
+  | ({ status: "registered"; responseReceiptRef: string | null; signalReceiptRef: string | null } & Pick<SignalFields, "candidate">)
+  | ({ status: "rejected" | "held"; code: MemberResponseOutcomeCode; detail: string | null } & SignalFields)
+  | ({ status: "retry"; code: MemberResponseOutcomeCode | "transient"; detail: string | null; needsHuman: boolean } & SignalFields);
 
 type CandidateFields = { candidateBundleRef: string | null; candidateCode: string | null };
 
@@ -90,21 +96,33 @@ export async function runMemberPromptResponseProcessor(options: {
   const clock = options.now ?? (() => new Date());
   const env = options.env ?? process.env;
   const dryRun = options.dryRun === true;
-  const rows = await db.memberPromptResponseInbox.findMany({
-    where: { status: "received", ...(options.workspaceId ? { workspaceId: options.workspaceId } : {}) },
-    orderBy: { receivedAt: "asc" },
-    take: options.limit ?? 50,
+  const scanStart = clock();
+  const due = { status: "received", nextAttemptAt: { lte: scanStart } } as const;
+  // Disabled workspaces are excluded before the take budget is spent, so rows
+  // left behind in a workspace that was switched off can never starve others.
+  const pending = await db.memberPromptResponseInbox.groupBy({
+    by: ["workspaceId"],
+    where: { ...due, ...(options.workspaceId ? { workspaceId: options.workspaceId } : {}) },
   });
-  const summary: ProcessorRunSummary = { dryRun, scanned: rows.length, claimed: 0, results: [], skippedWorkspaces: [] };
-  const flagCache = new Map<string, boolean>();
+  const summary: ProcessorRunSummary = { dryRun, scanned: 0, claimed: 0, results: [], skippedWorkspaces: [] };
+  const enabledWorkspaces: string[] = [];
+  for (const { workspaceId } of pending) {
+    const workspace = await db.workspace.findUnique({ where: { id: workspaceId }, select: { featureFlagsJson: true } });
+    if (readMemberMcpWorkspaceFlags(workspace?.featureFlagsJson, env).enabled) enabledWorkspaces.push(workspaceId);
+    else summary.skippedWorkspaces.push(workspaceId);
+  }
+  // Due rows only, oldest attempt time first: a row that is retrying (e.g. a
+  // protected response waiting for a CAIO mandate) backs off and moves behind
+  // newer responses instead of holding the head of the queue.
+  const rows = enabledWorkspaces.length === 0
+    ? []
+    : await db.memberPromptResponseInbox.findMany({
+        where: { ...due, workspaceId: { in: enabledWorkspaces } },
+        orderBy: [{ nextAttemptAt: "asc" }, { receivedAt: "asc" }],
+        take: options.limit ?? 50,
+      });
+  summary.scanned = rows.length;
   for (const row of rows) {
-    if (!flagCache.has(row.workspaceId)) {
-      const workspace = await db.workspace.findUnique({ where: { id: row.workspaceId }, select: { featureFlagsJson: true } });
-      const enabled = readMemberMcpWorkspaceFlags(workspace?.featureFlagsJson, env).enabled;
-      flagCache.set(row.workspaceId, enabled);
-      if (!enabled) summary.skippedWorkspaces.push(row.workspaceId);
-    }
-    if (!flagCache.get(row.workspaceId)) continue;
     if (dryRun) {
       summary.results.push({ inboxRef: row.id, kind: row.kind, status: "would_process", code: null });
       continue;
@@ -125,7 +143,15 @@ export async function runMemberPromptResponseProcessor(options: {
         needsHuman: false,
       };
     }
-    const status = await finalizeRow(claimed, claimToken, outcome, now);
+    let status: string;
+    try {
+      status = await finalizeRow(claimed, claimToken, outcome, now);
+    } catch (error) {
+      // Lease lost (another run took the row over) or a write failure: record
+      // it and move on; the row is still consistent and the next run resumes it.
+      status = "finalize_failed";
+      console.warn("[member-prompt-response] finalize failed", row.id, error instanceof Error ? error.message : String(error));
+    }
     summary.results.push({
       inboxRef: row.id,
       kind: row.kind,
@@ -166,6 +192,10 @@ async function finalizeRow(row: InboxRow, claimToken: string, outcome: Processor
   const protectedKind = isProtectedResponseKind(row.kind);
   let data: Prisma.MemberPromptResponseInboxUpdateManyMutationInput;
   let status: string;
+  const signal: Prisma.MemberPromptResponseInboxUpdateManyMutationInput =
+    outcome.status !== "registered" && outcome.signalReceiptRef
+      ? { signalReceiptRef: outcome.signalReceiptRef, ...(outcome.candidate ?? {}) }
+      : {};
   if (outcome.status === "registered") {
     status = "registered";
     data = {
@@ -181,6 +211,7 @@ async function finalizeRow(row: InboxRow, claimToken: string, outcome: Processor
   } else if (outcome.status === "rejected" || outcome.status === "held") {
     status = outcome.status;
     data = {
+      ...signal,
       status,
       processedAt: now,
       needsHuman: outcome.status === "held",
@@ -191,6 +222,7 @@ async function finalizeRow(row: InboxRow, claimToken: string, outcome: Processor
     // A rejection always writes a terminal state (never left dangling).
     status = "rejected";
     data = {
+      ...signal,
       status,
       processedAt: now,
       lastErrorCode: "processor_exhausted",
@@ -199,9 +231,15 @@ async function finalizeRow(row: InboxRow, claimToken: string, outcome: Processor
   } else if (outcome.status === "retry") {
     status = "received";
     data = {
-      needsHuman: outcome.needsHuman || (protectedKind && row.attempts >= MEMBER_RESPONSE_MAX_ATTEMPTS),
+      ...signal,
+      // A protected response flagged for a human stays flagged until it is
+      // registered; a later transient error must not hide it from the queue.
+      needsHuman:
+        outcome.needsHuman ||
+        (protectedKind && (row.needsHuman || row.attempts >= MEMBER_RESPONSE_MAX_ATTEMPTS)),
       lastErrorCode: outcome.code === "transient" ? null : outcome.code,
       lastErrorDetail: outcome.detail,
+      nextAttemptAt: new Date(now.getTime() + memberResponseRetryDelayMs(row.attempts)),
     };
   } else {
     throw new Error("unreachable processor outcome");
@@ -350,7 +388,7 @@ function mapStoreError(row: InboxRow, error: unknown): ProcessorOutcome {
 async function readPrompt(row: InboxRow) {
   return db.memberPrompt.findUnique({
     where: { id_workspaceId: { id: row.promptRef, workspaceId: row.workspaceId } },
-    select: { id: true, memberRef: true, state: true, version: true, expiresAt: true, subjectObjectRef: true },
+    select: { id: true, memberRef: true, state: true, version: true, expiresAt: true, subjectObjectRef: true, responseRef: true },
   });
 }
 
@@ -425,30 +463,34 @@ async function processCandidate(
     select: { id: true },
   });
   if (existingSignal) {
-    // The signal was recorded by an earlier attempt; finish the transition.
-    if (prompt.state !== "responded") {
-      const ready = await bringToDelivered(row, now);
-      if (ready.status !== "ready") return ready.outcome;
-      try {
-        await transitionMemberPrompt({
-          workspaceRef: row.workspaceId,
-          promptRef: row.promptRef,
-          cause: "respond",
-          expectedVersion: ready.version,
-          receiptId: memberResponseTransitionReceiptId(row.id, "respond"),
-          now: new Date().toISOString(),
-          responseRef: signalReceiptId,
-        });
-      } catch (error) {
-        return mapStoreError(row, error);
+    // The signal was recorded by an earlier attempt. It stands whatever
+    // happens to the prompt, so its candidate is materialized and the row
+    // keeps pointing at it in every outcome.
+    const candidate = await materialize(row, signalReceiptId, prompt.subjectObjectRef);
+    const signal = { signalReceiptRef: signalReceiptId, candidate };
+    if (prompt.state === "responded") {
+      if (prompt.responseRef === signalReceiptId) {
+        return { status: "registered", responseReceiptRef: null, signalReceiptRef: signalReceiptId, candidate };
       }
+      // Answered by another response; this signal is kept as a candidate.
+      return { status: "rejected", code: "prompt_already_answered", detail: null, ...signal };
     }
-    return {
-      status: "registered",
-      responseReceiptRef: null,
-      signalReceiptRef: signalReceiptId,
-      candidate: await materialize(row, signalReceiptId, prompt.subjectObjectRef),
-    };
+    const ready = await bringToDelivered(row, now);
+    if (ready.status !== "ready") return keepSignal(ready.outcome, signal);
+    try {
+      await transitionMemberPrompt({
+        workspaceRef: row.workspaceId,
+        promptRef: row.promptRef,
+        cause: "respond",
+        expectedVersion: ready.version,
+        receiptId: memberResponseTransitionReceiptId(row.id, "respond"),
+        now: new Date().toISOString(),
+        responseRef: signalReceiptId,
+      });
+    } catch (error) {
+      return keepSignal(mapStoreError(row, error), signal);
+    }
+    return { status: "registered", responseReceiptRef: null, signalReceiptRef: signalReceiptId, candidate };
   }
 
   const ready = await bringToDelivered(row, now);
@@ -461,10 +503,16 @@ async function processCandidate(
     detail: intent.text,
     relatedEvidenceRefs: [],
   };
-  const membership = await db.membership.findUnique({
-    where: { workspaceId_userId: { workspaceId: row.workspaceId, userId: row.memberRef } },
-    select: { id: true, status: true },
+  // Live membership through the connection that submitted the response, so
+  // the check does not depend on how memberRef is spelled.
+  const connection = await db.memberAgentConnection.findUnique({
+    where: { id: row.connectionId },
+    select: { workspaceId: true, membershipId: true },
   });
+  const membership =
+    connection && connection.workspaceId === row.workspaceId
+      ? await db.membership.findUnique({ where: { id: connection.membershipId }, select: { id: true, status: true } })
+      : null;
   const surface = decideMemberReadSurface({
     workspaceRef: row.workspaceId,
     memberRef: row.memberRef,
@@ -500,8 +548,16 @@ async function processCandidate(
       now: new Date().toISOString(),
     });
     if (!result.transitioned) {
-      // The signal stands; the transition is retried on the next run.
-      return { status: "retry", code: "transient", detail: truncate(result.transitionError ?? "transition failed"), needsHuman: false };
+      // The signal stands (with its candidate); the transition is retried on
+      // the next run through the existingSignal branch.
+      return {
+        status: "retry",
+        code: "transient",
+        detail: truncate(result.transitionError ?? "transition failed"),
+        needsHuman: false,
+        signalReceiptRef: result.receipt.receiptId,
+        candidate: await materialize(row, result.receipt.receiptId, prompt.subjectObjectRef),
+      };
     }
     return {
       status: "registered",
@@ -512,6 +568,15 @@ async function processCandidate(
   } catch (error) {
     return mapStoreError(row, error);
   }
+}
+
+// A candidate response whose signal exists can no longer be "rejected" as if
+// nothing was recorded: a terminal outcome becomes signal_recorded_prompt_closed
+// with the signal and candidate kept; a retry keeps retrying with them attached.
+function keepSignal(outcome: ProcessorOutcome, signal: Required<SignalFields>): ProcessorOutcome {
+  if (outcome.status === "registered") return outcome;
+  if (outcome.status === "retry") return { ...outcome, ...signal };
+  return { status: "rejected", code: "signal_recorded_prompt_closed", detail: outcome.detail ?? outcome.code, ...signal };
 }
 
 async function materialize(row: InboxRow, signalReceiptId: string, subjectObjectRef: string): Promise<CandidateFields> {
