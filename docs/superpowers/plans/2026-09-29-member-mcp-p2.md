@@ -54,3 +54,12 @@ public_safety: As-built record for member MCP task tools aligned with the
 - **旧包可能查不到**：沿用 #426 的 `listWorkPacketsAssignedToMember`，它只看工作区最近 500 条 claim，最多返回 50 个包。
   - claim 很多的工作区里，仍在 APPROVED 状态的旧包可能落在窗口外，成员查询时会得到 `task_not_found`。
   - 后续改为在查询里按执行人或 actionItemId 直接过滤。
+
+## 随 P0 二审补上的内容投影（2026-09-29 晚）
+- 工作包的标题、目标、动作、验收标准都描述业务工作，和 CAIO 提问一样经过投影阶梯（`buildContentDecision`），分类取 owner 设定的租户分类。
+- 投影结果：
+  - 未分类：返回 `classification_unknown`；
+  - local_only：只给元数据白名单；
+  - prohibited：只能在 Helm 内查看。
+- 准备进展回报时，回显的摘要里含任务标题；只有内容允许远程投影时才回显。
+- 已合入 #426 的二审修订：成员工作包查询改为分页扫描，不再只看最近 500 条。

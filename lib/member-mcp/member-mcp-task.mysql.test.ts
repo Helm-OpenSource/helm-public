@@ -32,6 +32,7 @@ describeMysql("member MCP P2 tasks with an isolated MySQL database", () => {
   let readOnlyAuth: MemberMcpAuthContext;
   let packetCounter = 0;
   const previousEnv = process.env.HELM_MEMBER_MCP_ENABLED;
+  let seatToken = "";
 
   async function connect(key: "seat", includeTasks: boolean) {
     const requested = await requestMemberAgentConnection({
@@ -44,6 +45,7 @@ describeMysql("member MCP P2 tasks with an isolated MySQL database", () => {
     });
     await decideMemberAgentConnection({ workspaceId, connectionId: requested.id, actor: actors.owner, decision: "approve" });
     const claimed = await claimMemberAgentConnection({ workspaceId, connectionId: requested.id, actor: actors[key] });
+    if (includeTasks) seatToken = claimed.token;
     return authenticateMemberMcpToken(claimed.token);
   }
 
@@ -56,7 +58,11 @@ describeMysql("member MCP P2 tasks with an isolated MySQL database", () => {
       data: {
         name: `Member MCP P2 ${suffix}`,
         slug: `member-mcp-p2-${suffix}`,
-        featureFlagsJson: JSON.stringify({ memberMcp: true, memberMcpApprovedClients: ["claude_code"] }),
+        featureFlagsJson: JSON.stringify({
+          memberMcp: true,
+          memberMcpApprovedClients: ["claude_code"],
+          memberMcpContentClassification: { sensitivity: "internal", processingDisposition: "remote_projected", classifiedAt: "2026-09-29T00:00:00.000Z" },
+        }),
       },
     });
     workspaceId = workspace.id;
@@ -168,6 +174,24 @@ describeMysql("member MCP P2 tasks with an isolated MySQL database", () => {
     expect(foreign.error?.code).toBe("task_not_found");
     const own = await call(seatAuth, "get_task", { taskRef: mine });
     expect(own.data).toMatchObject({ taskRef: mine, reportable: true, goal: "提升本周接通后回款" });
+  });
+
+  it("serves packet content only as far as the owner's classification allows", async () => {
+    const mine = await packet(actors.seat.userId, ActionStatus.APPROVED);
+    const base = { memberMcp: true, memberMcpApprovedClients: ["claude_code"] };
+    const setFlags = (extra: Record<string, unknown>) =>
+      db.workspace.update({ where: { id: workspaceId }, data: { featureFlagsJson: JSON.stringify({ ...base, ...extra }) } });
+    const reauth = async () => authenticateMemberMcpToken(seatToken);
+    await setFlags({ memberMcpContentClassification: { sensitivity: "confidential", processingDisposition: "local_only", classifiedAt: "2026-09-29T00:00:00.000Z" } });
+    const local = await call(await reauth(), "get_task", { taskRef: mine });
+    expect(local.boundary.decision.projection).toBe("metadata_only");
+    expect(local.data).toEqual({ objectKind: "work_packet", evidenceRef: mine, classifiedAt: "2026-09-29T00:00:00.000Z", freshness: expect.any(Number), requiresLocalView: true });
+    await setFlags({});
+    const unclassified = await call(await reauth(), "list_my_tasks", {});
+    expect(unclassified.ok).toBe(false);
+    expect(unclassified.error?.code).toBe("classification_unknown");
+    expect(unclassified.data).toBeNull();
+    await setFlags({ memberMcpContentClassification: { sensitivity: "internal", processingDisposition: "remote_projected", classifiedAt: "2026-09-29T00:00:00.000Z" } });
   });
 
   it("records a report as a candidate on the packet and leaves the task and receipts untouched", async () => {

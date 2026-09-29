@@ -18,7 +18,8 @@ import {
   issueMemberWorkSignalChallenge,
   submitMemberWorkSignal,
 } from "@/lib/member-gateway/signal-store.service";
-import type { MemberToolEnvelope } from "@/lib/member-gateway/types";
+import type { MemberProjectionDecision, MemberToolEnvelope } from "@/lib/member-gateway/types";
+import { memberRefForUser } from "@/lib/member-mcp/contract";
 import { materializeMemberSignalCandidateSafely } from "@/lib/member-mcp/candidate";
 import type { MemberMcpAuthContext } from "@/lib/member-mcp/connection-service";
 import {
@@ -28,6 +29,8 @@ import {
 } from "@/lib/member-mcp/task-contract";
 import {
   buildMemberMcpEnvelope,
+  MEMBER_MCP_BLOCK_MESSAGES,
+  buildContentDecision,
   buildSelfRecordDecision,
   type MemberMcpToolCall,
 } from "@/lib/member-mcp/tools";
@@ -54,6 +57,19 @@ type TaskCall = Extract<
 export function memberTaskReportReceiptId(challengeRef: string) {
   return `mmcp-task-report:${challengeRef}`;
 }
+
+const PACKET_FIELDS = [
+  "taskRef",
+  "decisionRef",
+  "title",
+  "status",
+  "reportable",
+  "goal",
+  "action",
+  "dueAt",
+  "acceptanceCriteria",
+  "dispatchedAt",
+] as const;
 
 function projectPacket(packet: MemberWorkPacket) {
   return {
@@ -98,14 +114,69 @@ export async function executeMemberTaskTool(input: {
     throw error;
   }
 
+  // Work packets describe business work, so their content goes through the
+  // same projection ladder as CAIO prompts, with the owner's tenant
+  // classification: unclassified never projects, local_only serves the
+  // metadata whitelist, prohibited stays inside Helm.
+  const content = (objectRef: string) =>
+    buildContentDecision({
+      workspaceId: auth.workspaceId,
+      memberRef: memberRefForUser(auth.userId),
+      objectRef,
+      connectionRef: `member-mcp-connection:${auth.connectionId}`,
+      scope: requiredScope,
+      providerRef,
+      classification: auth.contentClassification,
+      requestedFields: PACKET_FIELDS,
+      now,
+    });
+  const blocked = (projection: MemberProjectionDecision) => {
+    const code = auth.contentClassification === null ? "classification_unknown" : (projection.blockReason ?? "blocked");
+    return buildMemberMcpEnvelope({
+      requestId,
+      now,
+      decision: projection,
+      data: null,
+      error: { code, message: MEMBER_MCP_BLOCK_MESSAGES[code] ?? "Content is not projectable.", retryable: false },
+    });
+  };
+  const metadata = (packetRef: string, projection: MemberProjectionDecision) => ({
+    objectKind: "work_packet",
+    evidenceRef: packetRef,
+    classifiedAt: projection.classifiedAt,
+    freshness: projection.freshnessMinutes,
+    requiresLocalView: true,
+  });
+
   if (call.toolName === "list_my_tasks") {
-    return ok({ items: packets.map(projectPacket), note: "一把手确认并派给你的工作包；本工具只读。" });
+    const projection = content("member-work-packets");
+    if (projection.projection === null) return blocked(projection);
+    const items = projection.projection === "metadata_only"
+      ? packets.map((packet) => metadata(packet.actionItemRef, projection))
+      : packets.map(projectPacket);
+    return buildMemberMcpEnvelope({
+      requestId,
+      now,
+      decision: projection,
+      data: { items, note: "一把手确认并派给你的工作包；本工具只读。" },
+      error: null,
+    });
   }
 
   // A packet dispatched to someone else is indistinguishable from a missing one.
   const packet = packets.find((entry) => entry.actionItemRef === call.arguments.taskRef);
   if (!packet) return fail("task_not_found", "No such task dispatched to this member.");
-  if (call.toolName === "get_task") return ok(projectPacket(packet));
+  const packetProjection = content(packet.actionItemRef);
+  if (call.toolName === "get_task") {
+    if (packetProjection.projection === null) return blocked(packetProjection);
+    return buildMemberMcpEnvelope({
+      requestId,
+      now,
+      decision: packetProjection,
+      data: packetProjection.projection === "metadata_only" ? metadata(packet.actionItemRef, packetProjection) : projectPacket(packet),
+      error: null,
+    });
+  }
 
   if (!REPORTABLE_STATUSES.has(packet.status)) {
     return fail("task_not_reportable", "This task is not open for reports (not yet approved, or already closed).");
@@ -130,7 +201,11 @@ export async function executeMemberTaskTool(input: {
       return ok({
         challengeRef: challenge.challengeRef,
         expiresAt: challenge.expiresAt,
-        recordedAs: { kind: payload.kind, summary: payload.summary },
+        // The summary quotes the task title, so it is echoed only when task
+        // content may leave Helm at all.
+        recordedAs: packetProjection.projection === "remote_projected"
+          ? { kind: payload.kind, summary: payload.summary }
+          : { kind: payload.kind },
         next: "用同样的内容加上 challengeRef 调用 submit_task_report 完成提交。",
       });
     }
