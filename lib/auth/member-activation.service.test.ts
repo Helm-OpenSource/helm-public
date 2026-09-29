@@ -11,6 +11,7 @@ vi.mock("@/lib/db", () => ({ db: mocks.db }));
 vi.mock("@/lib/audit", () => ({ writeAuditLog: mocks.audit }));
 vi.mock("./formal-auth", () => ({ hashPassword: mocks.hash, verifyPassword: mocks.verify }));
 import { consumeMemberActivation, issueMemberActivation } from "./member-activation.service";
+import { MemberActivationError, type MemberActivationFailureCode } from "./member-activation-error";
 const now = new Date("2026-01-01T00:00:00Z");
 const rawToken = Buffer.alloc(32, 2).toString("base64url");
 const member = () => ({ id: "m1", userId: "u1", workspaceId: "w1", status: "INVITED", updatedAt: now, user: { email: "member@example.com", passwordHash: null, memberships: [{ id: "m1", userId: "u1", workspaceId: "w1", status: "INVITED" }] } });
@@ -114,5 +115,76 @@ describe("first-password activation service", () => {
     vi.stubEnv("HELM_AUTH_MEMBER_ACTIVATION_ENABLED", "false");
     await expect(consumeMemberActivation({ token: rawToken, password: "newPassword9" })).rejects.toThrow();
     expect(mocks.tx.memberActivationToken.findUnique).not.toHaveBeenCalled();
+  });
+});
+describe("first-password activation failure codes", () => {
+  const issueInput = { issuerUserId: "admin", issuerSessionId: "s1", workspaceId: "w1", membershipId: "m1", password: "adminPassword9" };
+  const expectCode = async (promise: Promise<unknown>, code: MemberActivationFailureCode) => {
+    const err = await promise.then(() => { throw new Error("expected rejection"); }, (e: unknown) => e);
+    expect(err instanceof MemberActivationError && err.code === code).toBe(true);
+    expect((err as Error).message).toBe("Member activation unavailable");
+  };
+  const governedCrossWorkspace = () => {
+    mocks.tx.memberActivationToken.findUnique.mockResolvedValue({ ...row(), issuerWorkspaceId: "platform", authorityBindingRef: "registration", authorityBindingVersion: BigInt(2) });
+    mocks.tx.authSession.findUnique.mockResolvedValue({ userId: "admin", activeWorkspaceId: "platform", providerType: "PASSWORD", revokedAt: null, expiresAt: new Date(now.getTime()+60000) });
+    mocks.tx.membership.findUnique.mockImplementation(async (args: {where: {id?: string}}) => args.where.id ? member() : { role: "OWNER", status: "ACTIVE", workspaceId: "platform", workspace: { status: "ACTIVE" } });
+  };
+  it("activation_disabled", async () => { vi.stubEnv("HELM_AUTH_MEMBER_ACTIVATION_ENABLED", "false"); await expectCode(issueMemberActivation(issueInput), "activation_disabled"); });
+  it("evidence_ref_invalid", async () => expectCode(issueMemberActivation({ ...issueInput, evidenceRef: "has spaces" }), "evidence_ref_invalid"));
+  it("issuer_password_format", async () => expectCode(issueMemberActivation({ ...issueInput, password: "short" }), "issuer_password_format"));
+  it("issuer_credential_missing", async () => { mocks.db.user.findUnique.mockResolvedValue({ passwordHash: null }); await expectCode(issueMemberActivation(issueInput), "issuer_credential_missing"); expect(mocks.verify).not.toHaveBeenCalled(); });
+  it("issuer_password_mismatch", async () => { mocks.verify.mockReturnValue(false); await expectCode(issueMemberActivation(issueInput), "issuer_password_mismatch"); expect(mocks.db.$transaction).not.toHaveBeenCalled(); });
+  it("clock_unavailable", async () => { mocks.tx.$queryRaw.mockResolvedValue([{ now: "not-a-date" }]); await expectCode(issueMemberActivation(issueInput), "clock_unavailable"); });
+  it("issuer_session_invalid", async () => { mocks.tx.authSession.findUnique.mockResolvedValue(null); await expectCode(issueMemberActivation(issueInput), "issuer_session_invalid"); });
+  it("issuer_membership_invalid", async () => {
+    mocks.tx.membership.findUnique.mockImplementation(async (args: {where: {id?: string}}) => args.where.id ? member() : { role: "MEMBER", status: "ACTIVE", workspaceId: "w1", workspace: { status: "ACTIVE" } });
+    await expectCode(issueMemberActivation(issueInput), "issuer_membership_invalid");
+  });
+  it("issuer_changed", async () => { mocks.tx.user.findUnique.mockResolvedValue({ passwordHash: "rotated-admin-hash" }); await expectCode(issueMemberActivation(issueInput), "issuer_changed"); });
+  it("target_membership_invalid", async () => {
+    mocks.tx.membership.findUnique.mockImplementation(async (args: {where: {id?: string}}) => args.where.id ? null : { role: "OWNER", status: "ACTIVE", workspaceId: "w1", workspace: { status: "ACTIVE" } });
+    await expectCode(issueMemberActivation(issueInput), "target_membership_invalid");
+  });
+  it("target_already_activated", async () => {
+    mocks.tx.membership.findUnique.mockImplementation(async (args: {where: {id?: string}}) => args.where.id ? { ...member(), user: { ...member().user, passwordSetAt: now } } : { role: "OWNER", status: "ACTIVE", workspaceId: "w1", workspace: { status: "ACTIVE" } });
+    await expectCode(issueMemberActivation(issueInput), "target_already_activated");
+  });
+  it("authority_binding_mismatch on issue", async () => {
+    vi.stubEnv("HELM_ORGANIZATION_CREATION_MODE", "governed");
+    mocks.authority.mockResolvedValue({ bindingRef: "registration", bindingVersion: 3 });
+    await expectCode(issueMemberActivation({ ...issueInput, expectedAuthorityBinding: { bindingRef: "registration", bindingVersion: 2 } }), "authority_binding_mismatch");
+  });
+  it("authority_binding_mismatch on consume (changed binding and legacy-unbound token)", async () => {
+    governedCrossWorkspace();
+    mocks.authority.mockResolvedValue({ bindingRef: "registration", bindingVersion: 3 });
+    await expectCode(consumeMemberActivation({ token: rawToken, password: "newPassword9" }), "authority_binding_mismatch");
+    mocks.tx.memberActivationToken.findUnique.mockResolvedValue({ ...row(), authorityBindingVersion: BigInt(2) });
+    mocks.tx.authSession.findUnique.mockResolvedValue({ userId: "admin", activeWorkspaceId: "w1", providerType: "PASSWORD", revokedAt: null, expiresAt: new Date(now.getTime()+60000) });
+    mocks.tx.membership.findUnique.mockImplementation(async (args: {where: {id?: string}}) => args.where.id ? member() : { role: "OWNER", status: "ACTIVE", workspaceId: "w1", workspace: { status: "ACTIVE" } });
+    await expectCode(consumeMemberActivation({ token: rawToken, password: "newPassword9" }), "authority_binding_mismatch");
+    expect(mocks.tx.user.updateMany).not.toHaveBeenCalled();
+  });
+  it("passes an authorizer's own error through unchanged", async () => {
+    governedCrossWorkspace();
+    const own = Object.assign(new Error("binding required"), { code: "enterprise_binding_required" });
+    mocks.authority.mockRejectedValue(own);
+    await expect(consumeMemberActivation({ token: rawToken, password: "newPassword9" })).rejects.toBe(own);
+  });
+  it("password_policy", async () => expectCode(consumeMemberActivation({ token: rawToken, password: "lettersonly" }), "password_policy"));
+  it("token_invalid (malformed and unknown)", async () => {
+    await expectCode(consumeMemberActivation({ token: "short", password: "newPassword9" }), "token_invalid");
+    mocks.tx.memberActivationToken.findUnique.mockResolvedValue(null);
+    await expectCode(consumeMemberActivation({ token: rawToken, password: "newPassword9" }), "token_invalid");
+    expect(mocks.hash).not.toHaveBeenCalled();
+  });
+  it("token_consumed", async () => { mocks.tx.memberActivationToken.findUnique.mockResolvedValue({ ...row(), consumedAt: now }); await expectCode(consumeMemberActivation({ token: rawToken, password: "newPassword9" }), "token_consumed"); });
+  it("token_revoked", async () => { mocks.tx.memberActivationToken.findUnique.mockResolvedValue({ ...row(), revokedAt: now }); await expectCode(consumeMemberActivation({ token: rawToken, password: "newPassword9" }), "token_revoked"); });
+  it("token_expired", async () => { mocks.tx.memberActivationToken.findUnique.mockResolvedValue({ ...row(), expiresAt: now }); await expectCode(consumeMemberActivation({ token: rawToken, password: "newPassword9" }), "token_expired"); });
+  it("target_drifted", async () => { mocks.tx.memberActivationToken.findUnique.mockResolvedValue({ ...row(), emailHash: "wrong" }); await expectCode(consumeMemberActivation({ token: rawToken, password: "newPassword9" }), "target_drifted"); });
+  it("claim_conflict (token claim and password write races)", async () => {
+    mocks.tx.memberActivationToken.updateMany.mockResolvedValueOnce({ count: 0 });
+    await expectCode(consumeMemberActivation({ token: rawToken, password: "newPassword9" }), "claim_conflict");
+    mocks.tx.user.updateMany.mockResolvedValueOnce({ count: 0 });
+    await expectCode(consumeMemberActivation({ token: rawToken, password: "newPassword9" }), "claim_conflict");
   });
 });
