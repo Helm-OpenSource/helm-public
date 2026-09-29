@@ -83,6 +83,7 @@
     "test:caio-operating-context:mysql": "vitest run lib/caio-operating-context/schema.mysql.test.ts lib/caio-operating-context/quick-check.mysql.test.ts lib/caio-operating-context/g0-preparation.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
     "caio:g0-prepare": "node --import tsx --import ./scripts/node-hooks/allow-server-only.mjs scripts/caio-g0-prepare.ts",
     "caio:inference-token": "node --import tsx --import ./scripts/node-hooks/allow-server-only.mjs scripts/caio-inference-token.ts",
+    "caio:inference-decision-candidates": "node --import tsx --import ./scripts/node-hooks/allow-server-only.mjs scripts/caio-inference-decision-candidates.ts",
     "member:prompt-response-worker": "node --import tsx --import ./scripts/node-hooks/allow-server-only.mjs scripts/member-prompt-response-worker.ts",
     "caio:inference-decision-candidates": "node --import tsx --import ./scripts/node-hooks/allow-server-only.mjs scripts/caio-inference-decision-candidates.ts",
     "test:member-gateway:mysql": "vitest run lib/member-gateway/signal-store.mysql.test.ts lib/member-gateway/prompt-store.mysql.test.ts lib/member-gateway/prompt-response-store.mysql.test.ts lib/member-gateway/signal-candidate.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
