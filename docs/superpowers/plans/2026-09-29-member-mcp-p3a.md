@@ -31,6 +31,6 @@ public_safety: As-built record for a counts-only CAIO review supplement over
 - 更正只计一次：被取代的回执不计。
 - 默认关闭：环境变量 `HELM_CAIO_MEMBER_FEEDBACK_SUPPLEMENT_ENABLED` 未开时，本补充不贡献任何条目。
 
-## 待 owner 定
-- 成员上报的指标值要不要进 CAIO，进的前提是什么（例如须有系统指标印证，只走本地模型）。
-- 按人统计的来源可靠度要不要做（规格要求只用于分析、不用于绩效）。
+## owner 裁定（2026-09-29）
+- 成员上报的指标值**不进** CAIO。本模块只计数就是最终形态，不是过渡。
+- **不做**按人统计的来源可靠度。
