@@ -29,6 +29,7 @@ export const WORKSPACE_CAPABILITIES = {
   REVIEW_RUNTIME: "workspace.review_runtime",
   READ_ADMIN_AUDIT: "workspace.read_admin_audit",
   EXPORT_ADMIN_SUPPORT_PACK: "workspace.export_admin_support_pack",
+  APPROVE_MEMBER_AGENT_CONNECTIONS: "workspace.approve_member_agent_connections",
 } as const;
 
 export type WorkspaceCapability =
@@ -74,6 +75,7 @@ const ROLE_CAPABILITY_MATRIX: Record<WorkspaceRole, readonly WorkspaceCapability
     WORKSPACE_CAPABILITIES.REVIEW_RUNTIME,
     WORKSPACE_CAPABILITIES.READ_ADMIN_AUDIT,
     WORKSPACE_CAPABILITIES.EXPORT_ADMIN_SUPPORT_PACK,
+    WORKSPACE_CAPABILITIES.APPROVE_MEMBER_AGENT_CONNECTIONS,
   ],
   [WorkspaceRole.OPERATOR]: [
     WORKSPACE_CAPABILITIES.EXPORT_MEMORY,
