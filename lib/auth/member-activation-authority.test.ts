@@ -27,3 +27,29 @@ describe("controlled member activation authority", () => {
     await expect(authorizeMemberActivation({} as never, context)).rejects.toThrow();
   });
 });
+describe("member activation authority failure codes", () => {
+  // resetModules gives each test a fresh error module, so import it alongside the module under test.
+  const load = async () => ({ ...(await import("./member-activation-authority")), ...(await import("./member-activation-error")) });
+  it("tags an unregistered authority as authority_unavailable with the unchanged message", async () => {
+    const { authorizeMemberActivation, MemberActivationError } = await load();
+    const err = await authorizeMemberActivation({} as never, context).catch(e => e);
+    expect(err instanceof MemberActivationError && err.code === "authority_unavailable").toBe(true);
+    expect(err.message).toBe("Member activation unavailable");
+  });
+  it.each([null, { bindingRef: "", bindingVersion: 1 }, { bindingRef: "ok", bindingVersion: 0 }])("tags an invalid authority result %j as authority_result_invalid", async value => {
+    const { registerMemberActivationAuthority, authorizeMemberActivation, MemberActivationError } = await load();
+    registerMemberActivationAuthority(vi.fn().mockResolvedValue(value));
+    const err = await authorizeMemberActivation({} as never, context).catch(e => e);
+    expect(err instanceof MemberActivationError && err.code === "authority_result_invalid").toBe(true);
+    expect(err.message).toBe("Member activation unavailable");
+  });
+  it("propagates the authorizer's own error unchanged, preserving its code", async () => {
+    const { registerMemberActivationAuthority, authorizeMemberActivation, MemberActivationError } = await load();
+    const own = Object.assign(new Error("binding required"), { code: "enterprise_binding_required" });
+    registerMemberActivationAuthority(vi.fn().mockRejectedValue(own));
+    const err = await authorizeMemberActivation({} as never, context).catch(e => e);
+    expect(err).toBe(own);
+    expect(err instanceof MemberActivationError).toBe(false);
+    expect(err.code).toBe("enterprise_binding_required");
+  });
+});
