@@ -43,7 +43,8 @@ const JOB_STATUS_LABELS: Record<string, { zh: string; en: string }> = {
  * hash, so the text is shown as written, with a note, rather than rewritten.
  */
 export function isMostlyNonChinese(texts: readonly string[]): boolean {
-  const joined = texts.join("");
+  // Dotted/dashed identifiers (metric keys, evidence refs) are not prose in any language: drop them first.
+  const joined = texts.join(" ").replace(/[A-Za-z0-9_]+(?:[.:_-][A-Za-z0-9_]+)+/gu, "");
   const letters = joined.match(/[\p{L}]/gu)?.length ?? 0;
   if (letters === 0) return false;
   const cjk = joined.match(/[\u4e00-\u9fff]/gu)?.length ?? 0;

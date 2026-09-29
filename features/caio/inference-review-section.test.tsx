@@ -61,6 +61,7 @@ describe("InferenceReviewSection", () => {
   it("detects mostly non-Chinese text but not Chinese text with ids and numbers", () => {
     expect(isMostlyNonChinese(["The window shows zero cases."])).toBe(true);
     expect(isMostlyNonChinese(["anson.reach.dial-attempts 在本窗口为 0，与上一小时相同。"])).toBe(false);
+    expect(isMostlyNonChinese(["anson.reach.dial-attempts 在本窗口为 0。"])).toBe(false);
     expect(isMostlyNonChinese([])).toBe(false);
   });
 });
