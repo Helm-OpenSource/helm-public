@@ -396,3 +396,36 @@ export type BiReportP0ProcessSopRow = {
   complaintCount: number | null;
   complaintResolutionRatePct: number | null;
 };
+
+/**
+ * A bilingual display label for a stable audit code. `zh` / `en` are the
+ * human-readable names shown on audit surfaces; the underlying code stays the
+ * stored identifier and is never rewritten.
+ */
+export type AuditDisplayLabel = {
+  zh: string;
+  en: string;
+};
+
+/**
+ * Display labels a Pack/Overlay contributes for the AuditLog codes it writes
+ * (**merge** surface, display-only). Keys must equal the stored column value
+ * exactly (`AuditLog.actionType`, `.targetType`, `.actor`, `.sourcePage`).
+ * Labels never change what is stored, queried or authorized — they only let
+ * audit surfaces render a readable name instead of the raw code. When no label
+ * is registered, Core falls back to the raw code.
+ */
+export type AuditDisplayLabelContribution = {
+  actionTypes?: Readonly<Record<string, AuditDisplayLabel>>;
+  targetTypes?: Readonly<Record<string, AuditDisplayLabel>>;
+  actors?: Readonly<Record<string, AuditDisplayLabel>>;
+  sourcePages?: Readonly<Record<string, AuditDisplayLabel>>;
+};
+
+/** Merged, read-only view of every registered audit display label. */
+export type RegisteredAuditDisplayLabels = {
+  actionTypes: Readonly<Record<string, AuditDisplayLabel>>;
+  targetTypes: Readonly<Record<string, AuditDisplayLabel>>;
+  actors: Readonly<Record<string, AuditDisplayLabel>>;
+  sourcePages: Readonly<Record<string, AuditDisplayLabel>>;
+};
