@@ -1,31 +1,13 @@
 /**
- * Reserve-then-settle admission for LLM spend.
+ * Candidate reserve-then-settle admission for LLM spend.
  *
- * WHAT THIS FIXES. The budget check used to be a pure read: it computed
- * month-to-date spend, compared it to the budget, and returned. The deduction
- * happened only after the provider answered. So N concurrent callers all read
- * the same total, all passed, and all spent — the check could not refuse a
- * single one of them, because nothing was written between the read and the call.
+ * The store must atomically create the per-attempt ledger entry AND advance the
+ * period counter. Separate writes plus compensating release are unsafe: on a
+ * duplicate, release(attemptRef) would release the original reservation.
  *
- * The reservation is the write that makes the check mean something, and it
- * happens BEFORE the provider is contacted.
- *
- * HOW ADMISSION IS ATOMIC. A single conditional update against one
- * per-(workspace, period) counter row, with the pre-state in its own WHERE:
- *
- *   reservedMicros + settledMicros + amount <= budget
- *
- * Exactly one caller wins each unit of budget. This shape is atomic on ANY
- * isolation level, which is deliberate: the MySQL this ships against defaults to
- * READ COMMITTED, and `SELECT SUM(...) FOR UPDATE` would have needed that raised
- * — an RDS parameter change, i.e. an infrastructure dependency for a
- * correctness property. See the LLMSpendPeriodCounter model comment.
- *
- * WHAT THIS MODULE DOES NOT DO. It is not wired into `executeLLMTask`.
- * Enforcement has its own activation conditions (RF-01.8: metering complete,
- * every charged entry point covered, per-workspace approval), and today no
- * workspace has a budget configured at all. Wiring it in here would be an
- * unverifiable behaviour change.
+ * No persistent store or provider integration is supplied here. The port below
+ * specifies a transaction contract; in-memory tests do not establish database
+ * isolation, crash recovery, or production budget enforcement.
  */
 
 export type SpendPeriodTotals = {
@@ -40,35 +22,43 @@ export type SpendBudgetPolicy =
   | { mode: "unlimited" }
   | { mode: "limited"; budgetMicros: bigint };
 
-/**
- * Store port. Every method is one statement's worth of work so the atomicity
- * lives in the store, not in a sequence the caller has to get right.
- */
+export type ReserveSpendRecord = {
+  workspaceId: string;
+  periodKey: string;
+  periodPolicyVersion: string;
+  attemptRef: string;
+  reservedMicros: bigint;
+  budgetMicros: bigint | null;
+  provider: string;
+  model: string;
+  expiresAt: Date;
+};
+
+export type AtomicReservationResult =
+  | "reserved"
+  | "duplicate"
+  | "conflict"
+  | "period_policy_conflict"
+  | "budget_exhausted";
+
 export type SpendReservationStore = {
   /**
-   * Single conditional update. Returns true only if the counter was actually
-   * advanced — a false means the budget would have been exceeded.
+   * One atomic transaction, never independently committed counter/ledger writes.
+   * A unique (workspaceId, attemptRef) covers ALL states, including terminal ones.
+   * Check that key before budget admission: matching period, policy version,
+   * amount, provider and model returns duplicate without any mutation; different
+   * identity returns conflict. A retry's expiresAt/budget does not rewrite the
+   * original row. Duplicate does NOT grant permission to call the provider again.
    *
-   * `budgetMicros === null` means "no ceiling": advance unconditionally.
+   * For a new attempt, reject an existing counter's mismatched policy version.
+   * Include reserved + settled + unknownBound + requested in the budget predicate.
+   * Null budget means explicitly unlimited, still tracked. Commit counter and
+   * ledger together; refusal/definite failure commits neither. Unique-key races
+   * must roll back this transaction, never release somebody else's reservation.
+   * A lost commit acknowledgement must throw/stop; retry the SAME immutable key
+   * to discover its state, rather than releasing or claiming it was not charged.
    */
-  tryAdvanceReserved: (input: {
-    workspaceId: string;
-    periodKey: string;
-    periodPolicyVersion: string;
-    amountMicros: bigint;
-    budgetMicros: bigint | null;
-  }) => Promise<boolean>;
-  /** Insert the per-attempt row. Must reject a duplicate `attemptRef`. */
-  insertReservation: (input: {
-    workspaceId: string;
-    periodKey: string;
-    periodPolicyVersion: string;
-    attemptRef: string;
-    reservedMicros: bigint;
-    provider: string;
-    model: string;
-    expiresAt: Date;
-  }) => Promise<"inserted" | "duplicate">;
+  reserve: (input: ReserveSpendRecord) => Promise<AtomicReservationResult>;
   /** reserved → settled, moving the amount on the counter. */
   settle: (input: {
     workspaceId: string;
@@ -103,8 +93,10 @@ export type ReservationRefusalReason =
   | "budget_unconfigured"
   /** The reservation would exceed the declared ceiling. */
   | "budget_exhausted"
-  /** This attempt already holds a reservation; a retry must not reserve twice. */
-  | "attempt_already_reserved";
+  /** This attempt already exists in any state; never authorize a second call. */
+  | "attempt_already_reserved"
+  | "attempt_conflict"
+  | "period_policy_conflict";
 
 export async function reserveSpend(input: {
   store: SpendReservationStore;
@@ -128,31 +120,25 @@ export async function reserveSpend(input: {
   const amountMicros = input.estimatedMicros < BigInt(0) ? BigInt(0) : input.estimatedMicros;
   const budgetMicros = input.policy.mode === "limited" ? input.policy.budgetMicros : null;
 
-  const advanced = await input.store.tryAdvanceReserved({
-    workspaceId: input.workspaceId,
-    periodKey: input.periodKey,
-    periodPolicyVersion: input.periodPolicyVersion,
-    amountMicros,
-    budgetMicros,
-  });
-  if (!advanced) return { admitted: false, reason: "budget_exhausted" };
-
-  const inserted = await input.store.insertReservation({
+  const result = await input.store.reserve({
     workspaceId: input.workspaceId,
     periodKey: input.periodKey,
     periodPolicyVersion: input.periodPolicyVersion,
     attemptRef: input.attemptRef,
     reservedMicros: amountMicros,
+    budgetMicros,
     provider: input.provider,
     model: input.model,
     expiresAt: new Date(input.now.getTime() + input.leaseMs),
   });
-  if (inserted === "duplicate") {
-    // The counter was already advanced for this attempt by the first reservation;
-    // give back what this duplicate just took, or the period total drifts up by
-    // one estimate per retry and never comes back down.
-    await input.store.release({ workspaceId: input.workspaceId, attemptRef: input.attemptRef });
-    return { admitted: false, reason: "attempt_already_reserved" };
+  if (result !== "reserved") {
+    const reasons = {
+      duplicate: "attempt_already_reserved",
+      conflict: "attempt_conflict",
+      period_policy_conflict: "period_policy_conflict",
+      budget_exhausted: "budget_exhausted",
+    } as const;
+    return { admitted: false, reason: reasons[result] };
   }
   return { admitted: true, attemptRef: input.attemptRef, reservedMicros: amountMicros };
 }

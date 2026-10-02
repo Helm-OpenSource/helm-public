@@ -8,6 +8,8 @@
 >
 > 它不是让 AI 自动经营企业，也不是替人自动决策。Helm 帮团队更快看清：现在发生了什么，谁需要判断，风险在哪里，下一步该怎么推进，以及哪些事情绝不能自动承诺。
 
+交付预算接入前请核对 [LLM spend reservation contract](docs/operations/LLM_SPEND_RESERVATION_CONTRACT.md)：当前为候选端口，尚未形成数据库事务适配器或生产限额。
+
 **License**：Apache-2.0 · **仓库姿态**：open-source Core，已在 owner Go/No-Go 后公开 · **Helm Cloud / Enterprise**：商业版可选，不替代开源
 
 > **最快理解路径**：企业管理者先看下方"为什么关心"与"方法论"；交付工程师直接跑 `docker compose up` 和 Golden Path；合作伙伴可先用公开样例判断咨询 / 交付场景，不需要客户数据。
