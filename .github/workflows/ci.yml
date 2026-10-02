@@ -200,6 +200,9 @@ jobs:
       - name: Run unit tests
         run: npm run test
 
+      - name: Verify read-only LLM spend policy
+        run: npm run test:llm-spend-policy
+
       - name: Upload coverage reports
         uses: actions/upload-artifact@v6
         if: always()

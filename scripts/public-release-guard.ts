@@ -1019,6 +1019,7 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "check:member-gateway",
   "test:model-egress:mysql",
   "test:spend-reservation:mysql",
+  "test:llm-spend-policy",
   "sarp:proof",
   "public-mirror:build",
   "db:generate",
