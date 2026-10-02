@@ -7372,24 +7372,14 @@ model LLMSpendLedgerEntry {
   @@index([state, expiresAt])
 }
 
-/// Per-(workspace, period) reserved+settled total, maintained so that ADMISSION can be a
-/// single conditional UPDATE.
+/// Candidate per-(workspace, period) reserved+settled+unknown admission counter.
 ///
-/// Why this row exists rather than summing the ledger on every call. Admission has to check
-/// and reserve ATOMICALLY — the defect being fixed is exactly that the check was a pure read
-/// and the deduction happened after the provider returned, so N concurrent callers all saw
-/// the same total and all passed. Three ways to make it atomic:
-///
-///   (a) SELECT SUM(...) FOR UPDATE inside a transaction — needs REPEATABLE READ or
-///       SERIALISABLE. The MySQL this ships against defaults to READ COMMITTED and raising
-///       it is an RDS console parameter change: an infrastructure dependency outside the code.
-///   (b) insert first, then sum and roll back if over — admits transient overshoot.
-///   (c) one aggregate row updated with a single conditional UPDATE whose pre-state lives in
-///       its own WHERE, admitting exactly one winner per unit of budget.
-///
-/// (c) is chosen: atomic on any isolation level, and it is the same shape this repository's
-/// static CAS check already pins elsewhere. The ledger stays the per-attempt record of what
-/// happened; this row is the counter admission reads and writes in one statement.
+/// Candidate aggregate for admission, not a deployed enforcement claim. A persistent
+/// adapter must atomically create the unique attempt ledger entry and conditionally
+/// advance this counter in ONE transaction. The predicate includes reservedMicros +
+/// settledMicros + unknownBoundMicros + requestedMicros. A counter update alone cannot
+/// protect the ledger from duplicate-attempt races or partial failure.
+/// The repository currently declares the port and schema, not a persistent adapter.
 model LLMSpendPeriodCounter {
   id                  String   @id @default(cuid())
   workspaceId         String

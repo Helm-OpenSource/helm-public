@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   recoverExpiredReservations,
@@ -6,22 +6,19 @@ import {
   settleReservation,
   type SpendBudgetPolicy,
   type SpendReservationStore,
+  type ReserveSpendRecord,
 } from "@/lib/llm/spend-reservation";
 
-/**
- * In-memory store that reproduces the store port's ATOMICITY, not just its
- * shape: `tryAdvanceReserved` refuses when the ceiling would be exceeded, and
- * `insertReservation` refuses a duplicate attemptRef. A double that always
- * succeeds would let every test below pass against a broken service.
- */
+/** Contract model only: synchronous map commits simulate one atomic reserve.
+ * This is deliberately not evidence that a database store has been implemented. */
 function createStore(initial?: Partial<{ reserved: bigint; settled: bigint }>) {
   const counters = new Map<
     string,
-    { reservedMicros: bigint; settledMicros: bigint; unknownBoundMicros: bigint; unknownCalls: number }
+    { reservedMicros: bigint; settledMicros: bigint; unknownBoundMicros: bigint; unknownCalls: number; periodPolicyVersion: string }
   >();
   const entries = new Map<
     string,
-    { workspaceId: string; periodKey: string; reservedMicros: bigint; state: string; expiresAt: Date }
+    ReserveSpendRecord & { state: string }
   >();
   const counterKey = (workspaceId: string, periodKey: string) => `${workspaceId}:${periodKey}`;
   const entryKey = (workspaceId: string, attemptRef: string) => `${workspaceId}:${attemptRef}`;
@@ -29,34 +26,30 @@ function createStore(initial?: Partial<{ reserved: bigint; settled: bigint }>) {
   const store: SpendReservationStore & { counters: typeof counters; entries: typeof entries } = {
     counters,
     entries,
-    async tryAdvanceReserved({ workspaceId, periodKey, amountMicros, budgetMicros }) {
-      const key = counterKey(workspaceId, periodKey);
-      const row =
-        counters.get(key) ??
-        {
-          reservedMicros: initial?.reserved ?? BigInt(0),
-          settledMicros: initial?.settled ?? BigInt(0),
-          unknownBoundMicros: BigInt(0),
-          unknownCalls: 0,
-        };
-      if (budgetMicros !== null && row.reservedMicros + row.settledMicros + amountMicros > budgetMicros) {
-        counters.set(key, row);
-        return false;
+    async reserve(input) {
+      const { workspaceId, periodKey, reservedMicros: amountMicros, budgetMicros } = input;
+      const attemptKey = entryKey(workspaceId, input.attemptRef);
+      const existing = entries.get(attemptKey);
+      if (existing) {
+        const fields = ["periodKey", "periodPolicyVersion", "reservedMicros", "provider", "model"] as const;
+        return fields.every((key) => existing[key] === input[key]) ? "duplicate" : "conflict";
       }
+      const key = counterKey(workspaceId, periodKey);
+      const row = counters.get(key) ?? {
+        reservedMicros: initial?.reserved ?? BigInt(0),
+        settledMicros: initial?.settled ?? BigInt(0),
+        unknownBoundMicros: BigInt(0),
+        unknownCalls: 0,
+        periodPolicyVersion: input.periodPolicyVersion,
+      };
+      if (row.periodPolicyVersion !== input.periodPolicyVersion) return "period_policy_conflict";
+      if (budgetMicros !== null && row.reservedMicros + row.settledMicros + row.unknownBoundMicros + amountMicros > budgetMicros) {
+        return "budget_exhausted";
+      }
+      // No await between these writes: one simulated commit, not two service calls.
       counters.set(key, { ...row, reservedMicros: row.reservedMicros + amountMicros });
-      return true;
-    },
-    async insertReservation(input) {
-      const key = entryKey(input.workspaceId, input.attemptRef);
-      if (entries.has(key)) return "duplicate";
-      entries.set(key, {
-        workspaceId: input.workspaceId,
-        periodKey: input.periodKey,
-        reservedMicros: input.reservedMicros,
-        state: "reserved",
-        expiresAt: input.expiresAt,
-      });
-      return "inserted";
+      entries.set(attemptKey, { ...input, state: "reserved" });
+      return "reserved";
     },
     async settle({ workspaceId, attemptRef, settledMicros }) {
       const entry = entries.get(entryKey(workspaceId, attemptRef));
@@ -167,14 +160,13 @@ describe("reserveSpend", () => {
     expect((await store.readTotals({ workspaceId: "ws", periodKey: "2026-09" })).reservedMicros).toBe(BigInt(1_000));
   });
 
-  it("refuses a retry of the same attempt and gives back what the retry took", async () => {
+  it("refuses a duplicate without mutating the original reservation", async () => {
     const store = createStore();
     expect((await reserve(store, "attempt-1", BigInt(400))).admitted).toBe(true);
     const retry = await reserve(store, "attempt-1", BigInt(400));
 
     expect(retry).toEqual({ admitted: false, reason: "attempt_already_reserved" });
-    // Without the release, each retry would leak one estimate into the period
-    // total and never come back down.
+    // Neither the original reservation nor its counter is modified by a retry.
     expect((await store.readTotals({ workspaceId: "ws", periodKey: "2026-09" })).reservedMicros).toBe(BigInt(400));
   });
 
@@ -207,6 +199,86 @@ describe("reserveSpend", () => {
     const store = createStore({ settled: BigInt(900) });
     const outcome = await reserve(store, "attempt-1", BigInt(200));
     expect(outcome).toEqual({ admitted: false, reason: "budget_exhausted" });
+  });
+});
+
+describe("reservation integrity regressions", () => {
+  it("admits one owner for concurrent identical attempts and preserves its settlement", async () => {
+    const store = createStore();
+    const results = await Promise.all(Array.from({ length: 8 }, () => reserve(store, "same", BigInt(400))));
+    expect(results.filter((r) => r.admitted)).toHaveLength(1);
+    expect(store.entries.size).toBe(1);
+    expect(await settleReservation({ store, workspaceId: "ws", attemptRef: "same", usage: { kind: "known", measuredMicros: BigInt(300) } })).toBe("settled");
+    expect((await store.readTotals({ workspaceId: "ws", periodKey: "2026-09" })).reservedMicros).toBe(BigInt(0));
+  });
+
+  it.each(["known", "unknown", "not_consumed"] as const)("does not resurrect or credit a terminal %s attempt", async (kind) => {
+    const store = createStore();
+    await reserve(store, "a", BigInt(400));
+    await settleReservation({ store, workspaceId: "ws", attemptRef: "a", usage: kind === "known" ? { kind, measuredMicros: BigInt(400) } : { kind } });
+    const before = { ...(await store.readTotals({ workspaceId: "ws", periodKey: "2026-09" })) };
+    const entry = { ...store.entries.get("ws:a") };
+    expect(await reserve(store, "a", BigInt(400))).toEqual({ admitted: false, reason: "attempt_already_reserved" });
+    expect(await store.readTotals({ workspaceId: "ws", periodKey: "2026-09" })).toEqual(before);
+    expect(store.entries.get("ws:a")).toEqual(entry);
+  });
+
+  it.each([
+    { periodKey: "2026-10" }, { periodPolicyVersion: "utc-month.v2" },
+    { reservedMicros: BigInt(300) }, { provider: "other" }, { model: "other" },
+  ])("refuses changed identity on the same attempt: %s", async (change) => {
+    const store = createStore();
+    await reserve(store, "a", BigInt(400));
+    const original = store.entries.get("ws:a")!;
+    expect(await store.reserve({ ...original, ...change })).toBe("conflict");
+    expect(store.entries.get("ws:a")).toEqual(original);
+    expect((await store.readTotals({ workspaceId: "ws", periodKey: "2026-09" })).reservedMicros).toBe(BigInt(400));
+    expect(await reserve(store, "a", BigInt(300))).toEqual({ admitted: false, reason: "attempt_conflict" });
+  });
+
+  it("detects duplicates before ceiling exhaustion and keeps their original lease", async () => {
+    const store = createStore();
+    await reserve(store, "a", BigInt(1000));
+    expect(await reserve(store, "a", BigInt(1000))).toEqual({ admitted: false, reason: "attempt_already_reserved" });
+    const original = store.entries.get("ws:a")!;
+    expect(await store.reserve({ ...original, expiresAt: new Date(NOW.getTime() + 120_000), budgetMicros: BigInt(1) })).toBe("duplicate");
+    expect(store.entries.get("ws:a")?.expiresAt).toEqual(original.expiresAt);
+  });
+
+  it("rejects period policy drift for a new attempt without changing either record", async () => {
+    const store = createStore();
+    await reserve(store, "a", BigInt(400));
+    expect(await store.reserve({ ...store.entries.get("ws:a")!, attemptRef: "b", periodPolicyVersion: "changed" })).toBe("period_policy_conflict");
+    expect(store.entries.size).toBe(1);
+    expect((await store.readTotals({ workspaceId: "ws", periodKey: "2026-09" })).reservedMicros).toBe(BigInt(400));
+  });
+
+  it("propagates an atomic store failure without releasing any attempt", async () => {
+    const store = createStore();
+    await reserve(store, "a", BigInt(400));
+    const release = vi.spyOn(store, "release");
+    vi.spyOn(store, "reserve").mockRejectedValueOnce(new Error("transaction failed or commit unconfirmed"));
+    await expect(reserve(store, "a", BigInt(400))).rejects.toThrow("transaction failed or commit unconfirmed");
+    expect(release).not.toHaveBeenCalled();
+    expect(store.entries.get("ws:a")?.state).toBe("reserved");
+    expect((await store.readTotals({ workspaceId: "ws", periodKey: "2026-09" })).reservedMicros).toBe(BigInt(400));
+  });
+
+  it("keeps the original reservation settleable after repeated duplicates", async () => {
+    const store = createStore();
+    await reserve(store, "a", BigInt(400));
+    await reserve(store, "a", BigInt(400));
+    await reserve(store, "a", BigInt(400));
+    expect(store.entries.get("ws:a")?.state).toBe("reserved");
+    expect(await settleReservation({ store, workspaceId: "ws", attemptRef: "a", usage: { kind: "known", measuredMicros: BigInt(300) } })).toBe("settled");
+    expect(await store.readTotals({ workspaceId: "ws", periodKey: "2026-09" })).toMatchObject({ reservedMicros: BigInt(0), settledMicros: BigInt(300) });
+  });
+
+  it("continues counting unknown consumption when admitting another call", async () => {
+    const store = createStore();
+    await reserve(store, "a", BigInt(800));
+    await settleReservation({ store, workspaceId: "ws", attemptRef: "a", usage: { kind: "unknown" } });
+    expect(await reserve(store, "b", BigInt(300))).toEqual({ admitted: false, reason: "budget_exhausted" });
   });
 });
 
