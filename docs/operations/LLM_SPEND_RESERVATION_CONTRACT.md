@@ -1,3 +1,11 @@
+---
+status: active
+owner: helm-core
+created: 2026-10-03
+review_after: 2026-11-03
+public_safety: Generic candidate spend-reservation contract; no customer, credential, endpoint, or production evidence.
+---
+
 # LLM spend reservation: atomic store contract
 
 Status: candidate port and regression model. There is no persistent reservation adapter or provider activation in this change. The existing ledger/counter schema remains unchanged; only its explanatory comments are corrected. A passing in-memory test is not evidence of database atomicity or an enforced monthly limit.
