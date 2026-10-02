@@ -7379,7 +7379,7 @@ model LLMSpendLedgerEntry {
 /// advance this counter in ONE transaction. The predicate includes reservedMicros +
 /// settledMicros + unknownBoundMicros + requestedMicros. A counter update alone cannot
 /// protect the ledger from duplicate-attempt races or partial failure.
-/// The repository currently declares the port and schema, not a persistent adapter.
+/// A candidate Prisma/MySQL adapter exists but is not connected to provider dispatch.
 model LLMSpendPeriodCounter {
   id                  String   @id @default(cuid())
   workspaceId         String

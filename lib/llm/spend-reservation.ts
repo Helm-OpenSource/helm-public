@@ -5,8 +5,8 @@
  * period counter. Separate writes plus compensating release are unsafe: on a
  * duplicate, release(attemptRef) would release the original reservation.
  *
- * No persistent store or provider integration is supplied here. The port below
- * specifies a transaction contract; in-memory tests do not establish database
+ * A separate candidate Prisma/MySQL store implements this port, but no provider
+ * integration is supplied. In-memory tests alone do not establish database
  * isolation, crash recovery, or production budget enforcement.
  */
 
