@@ -476,6 +476,7 @@ jobs:
           {
             printf 'DATABASE_URL=%s\n' "${url}"
             printf 'MODEL_EGRESS_STORE_DATABASE_URL=%s\n' "${url}"
+            printf 'SPEND_RESERVATION_MYSQL_DATABASE_URL=%s\n' "${url}"
           } >>"${GITHUB_ENV}"
 
       - name: Setup Node.js
@@ -496,6 +497,14 @@ jobs:
 
       - name: Verify governed model egress against MySQL
         run: npm run test:model-egress:mysql
+
+      - name: Verify candidate spend reservation transactions against MySQL
+        env:
+          SPEND_RESERVATION_MYSQL_REQUIRED: '1'
+          SPEND_RESERVATION_MYSQL_EXPECTED_DATABASE: helm_caio_p1d_ci
+          SPEND_RESERVATION_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+          LLM_ENABLED: 'false'
+        run: npm run test:spend-reservation:mysql
 
   caio-access-gateway-mysql:
     name: CAIO Access Gateway Token Store MySQL
