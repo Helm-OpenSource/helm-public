@@ -71,6 +71,7 @@
     "db:seed:force": "env LLM_ENABLED=false SEED_FORCE_RESET=true node --import tsx prisma/seed.ts",
     "smoke:docker:d2": "bash scripts/d2-docker-smoke.sh",
     "test": "vitest run --config vitest.public.config.ts",
+    "test:llm-spend-policy": "vitest run lib/llm/workspace-spend-budget-policy.test.ts --config vitest.public.config.ts",
     "test:caio-stage1:mysql": "vitest run lib/stage1-owner-loop/stage1-owner-loop.mysql.test.ts lib/stage1-owner-loop/caio-initialization-gate-store.mysql.test.ts lib/caio-inference/judgement-decision-candidate.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
     "test:caio-pro-v1:mysql": "vitest run lib/stage1-owner-loop/caio-pro-v1-synthetic-loop.mysql.test.ts lib/stage1-owner-loop/caio-pro-completion-store.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
     "test:caio-inference:mysql": "vitest run lib/caio-inference/job-store.service.mysql.test.ts lib/caio-inference/review-loop.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
