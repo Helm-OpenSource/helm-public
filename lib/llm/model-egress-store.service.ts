@@ -5,6 +5,9 @@ import { writeAuditLog } from "@/lib/audit";
 import { canonicalJson, sha256 } from "@/lib/expert-capability/hashing";
 import { db } from "@/lib/db";
 import { runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
+import { parseWorkspaceSpendBudgetPolicy } from "@/lib/llm/workspace-spend-budget-policy";
+import { reserveSpendInTransaction, transitionSpendInTransaction } from "@/lib/llm/spend-reservation-prisma-store";
+import { reserveSpend, type SpendChargeQuote, type SpendReservationStore } from "@/lib/llm/spend-reservation";
 import {
   computeModelEgressReceiptHash,
   computeGovernedModelProjectionReceiptHash,
@@ -52,6 +55,29 @@ import type {
 import { jsonStringify, safeParseJson } from "@/lib/utils";
 
 type Tx = Prisma.TransactionClient;
+
+/** An independently governed implementation must authenticate policy approval,
+ * price book, FX, month boundary and provider usage evidence using these same
+ * transactions. There is no default implementation; syntactically valid
+ * references and adapter-supplied cost are not authority. */
+export type GovernedSpendAuthority = {
+  resolveDispatch: (input: {
+    tx: Tx; workspaceId: string; decision: ModelRouteDecision;
+    runtime: GovernedProviderRuntimeDescriptor; now: Date;
+  }) => Promise<{
+    periodKey: string; periodPolicyVersion: string; quote: SpendChargeQuote;
+  }>;
+  verifyTerminal: (input: {
+    tx: Tx; workspaceId: string; decision: ModelRouteDecision;
+    reserved: Prisma.LLMSpendLedgerEntryGetPayload<object>;
+    actualCostUsdMicros: number; promptTokens: number | null;
+    completionTokens: number | null; pricingVersion: string;
+    providerRequestRefHash: string | null;
+    dispatchClaimHash: string;
+    requestDisposition: "accepted" | "not_accepted";
+    outcome: Exclude<ModelEgressOutcome, "unknown">;
+  }) => Promise<bigint>;
+};
 type DecisionRow = Prisma.ModelRouteDecisionGetPayload<object>;
 type EgressReceiptRow = Prisma.ModelEgressReceiptGetPayload<object>;
 type ProjectionReceiptRow =
@@ -2211,6 +2237,7 @@ function assertRuntimeDescriptorMatches(input: {
 
 export async function claimModelRouteDispatch(input: {
   authority: GovernedModelEgressAuthority;
+  spendAuthority?: GovernedSpendAuthority | null;
   workspaceId: string;
   decisionId: string;
   gatewayRef: string;
@@ -2218,6 +2245,7 @@ export async function claimModelRouteDispatch(input: {
   now?: Date;
 }) {
   assertAuthority(input.authority);
+  if (!input.spendAuthority) throw new ModelEgressStoreError("spend_charge_authority_unconfigured");
   const gatewayRef = nonEmpty(input.gatewayRef, "gateway_ref_required");
   if (!isSafeModelGovernanceRef(gatewayRef)) {
     throw new ModelEgressStoreError("gateway_ref_invalid");
@@ -2528,6 +2556,57 @@ export async function claimModelRouteDispatch(input: {
             decisionRef: decision.decisionId,
             dispatchClaimHash: claimHash,
           });
+        const spend = await input.spendAuthority!.resolveDispatch({
+          tx, workspaceId: input.workspaceId, decision, runtime: input.runtime, now,
+        });
+        const workspaceSpend = await tx.workspace.findUnique({
+          where: { id: input.workspaceId },
+          select: {
+            llmBudgetMode: true, llmMonthlyBudgetMicros: true,
+            llmBudgetEnforcementMode: true, llmBudgetPeriodPolicyVersion: true,
+            llmBudgetConfigVersion: true, llmBudgetApprovalRef: true,
+            llmBudgetUpdatedBy: true, llmBudgetUpdatedAt: true,
+          },
+        });
+        const parsedSpend = workspaceSpend && parseWorkspaceSpendBudgetPolicy({
+          row: workspaceSpend, expectedPeriodPolicyVersion: spend.periodPolicyVersion,
+        });
+        if (!parsedSpend || parsedSpend.status !== "enforce_blocked" || !parsedSpend.declaration) {
+          throw new ModelEgressStoreError("spend_budget_policy_not_enforceable");
+        }
+        const spendPolicy = parsedSpend.declaration;
+        if (spend.quote.policyApprovalRef !== spendPolicy.approvalRef ||
+            spend.quote.operationRef !== decision.decisionId ||
+            spend.quote.maximumChargeMicros > BigInt(decision.routeSnapshot.maxCostUsdMicros) ||
+            spend.quote.budgetCurrency !== "USD" ||
+            spend.quote.priceBookVersion !== decision.routeSnapshot.pricingVersion) {
+          throw new ModelEgressStoreError("spend_quote_route_or_policy_mismatch");
+        }
+        const inTransactionStore: SpendReservationStore = {
+          reserve: (reservation) => reserveSpendInTransaction(tx, reservation),
+          settle: async () => { throw new Error("dispatch_only_spend_store"); },
+          markUnknown: async () => { throw new Error("dispatch_only_spend_store"); },
+          release: async () => { throw new Error("dispatch_only_spend_store"); },
+          readTotals: async () => { throw new Error("dispatch_only_spend_store"); },
+          listExpiredReservations: async () => { throw new Error("dispatch_only_spend_store"); },
+        };
+        const admission = await reserveSpend({
+          store: inTransactionStore,
+          policy: spendPolicy.mode === "limited" ? {
+            mode: "limited", budgetMicros: spendPolicy.budgetMicros!,
+            configVersion: spendPolicy.configVersion, approvalRef: spendPolicy.approvalRef,
+          } : {
+            mode: "unlimited", configVersion: spendPolicy.configVersion,
+            approvalRef: spendPolicy.approvalRef,
+          },
+          workspaceId: input.workspaceId, periodKey: spend.periodKey,
+          periodPolicyVersion: spend.periodPolicyVersion,
+          attemptRef: providerIdempotencyKey, quote: spend.quote,
+          provider: decision.routeSnapshot.provider,
+          model: decision.routeSnapshot.modelId,
+          leaseMs: leaseExpiresAt.getTime() - now.getTime(), now,
+        });
+        if (!admission.admitted) throw new ModelEgressStoreError(`spend_reservation_${admission.reason}`);
         const claimed = await tx.modelRouteDecision.updateMany({
           where: {
             id: row.id,
@@ -2651,6 +2730,7 @@ function terminalInputMatches(input: {
 
 export async function recordModelEgressTerminalReceipt(input: {
   authority: GovernedModelEgressAuthority;
+  spendAuthority?: GovernedSpendAuthority | null;
   workspaceId: string;
   decisionId: string;
   gatewayRef: string;
@@ -2679,6 +2759,7 @@ export async function recordModelEgressTerminalReceipt(input: {
   recordedAt?: Date;
 }) {
   assertAuthority(input.authority);
+  if (!input.spendAuthority) throw new ModelEgressStoreError("spend_charge_authority_unconfigured");
   if (input.outcome === ("unknown" as ModelEgressOutcome)) {
     throw new ModelEgressStoreError(
       "terminal_receipt_outcome_must_be_known",
@@ -2886,7 +2967,44 @@ export async function recordModelEgressTerminalReceipt(input: {
               "terminal_receipt_idempotency_conflict",
             );
           }
-          return { receipt, replayed: true };
+          const ledger = await tx.lLMSpendLedgerEntry.findUnique({
+            where: { workspaceId_attemptRef: {
+              workspaceId: input.workspaceId, attemptRef: row.dispatchProviderIdempotencyKey!,
+            } },
+          });
+          if (!ledger || ledger.operationRef !== decision.decisionId ||
+              ledger.contractVersion !== 2 || ledger.provenanceState !== "complete" ||
+              (receipt.requestDisposition === "not_accepted" && ledger.state !== "released") ||
+              (receipt.requestDisposition === "accepted" && ledger.state !== "settled" &&
+                ledger.state !== "invariant_breach")) {
+            throw new ModelEgressStoreError("terminal_spend_replay_inconsistent");
+          }
+          return { receipt, replayed: true, spendOutcome: ledger.state };
+        }
+        const reserved = await tx.lLMSpendLedgerEntry.findUnique({
+          where: { workspaceId_attemptRef: {
+            workspaceId: input.workspaceId, attemptRef: row.dispatchProviderIdempotencyKey!,
+          } },
+        });
+        if (!reserved || reserved.state !== "reserved" ||
+            reserved.operationRef !== decision.decisionId ||
+            reserved.contractVersion !== 2 || reserved.provenanceState !== "complete" ||
+            reserved.priceBookVersion !== input.pricingVersion) {
+          throw new ModelEgressStoreError("terminal_spend_reservation_missing_or_changed");
+        }
+        const measured = await input.spendAuthority!.verifyTerminal({
+          tx, workspaceId: input.workspaceId, decision, reserved,
+          actualCostUsdMicros: input.actualCostUsdMicros,
+          promptTokens: input.promptTokens,
+          completionTokens: input.completionTokens,
+          pricingVersion: input.pricingVersion,
+          providerRequestRefHash: input.providerRequestRefHash,
+          dispatchClaimHash: input.dispatchClaimHash,
+          requestDisposition: input.requestDisposition,
+          outcome: input.outcome,
+        });
+        if (measured !== BigInt(input.actualCostUsdMicros)) {
+          throw new ModelEgressStoreError("terminal_spend_measurement_mismatch");
         }
         const startedRow =
           await tx.modelEgressReceipt.findUnique({
@@ -3040,10 +3158,58 @@ export async function recordModelEgressTerminalReceipt(input: {
           workspaceId: input.workspaceId,
           receipt: terminal,
         });
-        return { receipt: terminal, replayed: false };
+        const spendOutcome = await transitionSpendInTransaction(tx, input.workspaceId,
+          row.dispatchProviderIdempotencyKey!, input.requestDisposition === "not_accepted" ? "released" : "settled",
+          measured);
+        if (spendOutcome === "not_reserved") {
+          throw new ModelEgressStoreError("terminal_spend_transition_missing");
+        }
+        return { receipt: terminal, replayed: false, spendOutcome };
       }, TRANSACTION_OPTIONS),
     WRITE_RETRY_OPTIONS,
   );
+}
+
+/** A lost/unknown provider outcome consumes its maximum bound without
+ * inventing a zero-cost terminal receipt. The claim and ledger share a lock. */
+export async function markModelEgressSpendUnknown(input: {
+  authority: GovernedModelEgressAuthority;
+  workspaceId: string; decisionId: string; gatewayRef: string;
+  dispatchClaimHash: string;
+}) {
+  assertAuthority(input.authority);
+  return runWithWriteConflictRetry(() => db.$transaction(async (tx) => {
+    await lockModelEgressWorkspace(tx, input.workspaceId);
+    const row = await tx.modelRouteDecision.findFirst({
+      where: { id: input.decisionId, workspaceId: input.workspaceId },
+    });
+    if (!row || row.dispatchGatewayRef !== input.gatewayRef ||
+        row.dispatchClaimHash !== input.dispatchClaimHash ||
+        !row.dispatchProviderIdempotencyKey) {
+      throw new ModelEgressStoreError("unknown_spend_claim_mismatch");
+    }
+    const terminal = await tx.modelEgressReceipt.findUnique({
+      where: { decisionId_sequence: { decisionId: input.decisionId, sequence: 2 } },
+    });
+    if (terminal) return "terminal_exists" as const;
+    const ledger = await tx.lLMSpendLedgerEntry.findUnique({
+      where: { workspaceId_attemptRef: {
+        workspaceId: input.workspaceId, attemptRef: row.dispatchProviderIdempotencyKey,
+      } },
+    });
+    if (ledger?.operationRef !== input.decisionId || ledger.contractVersion !== 2 ||
+        ledger.provenanceState !== "complete") {
+      throw new ModelEgressStoreError("unknown_spend_reservation_missing_or_changed");
+    }
+    if (ledger.state === "unknown") return "unknown" as const;
+    if (!ledger || ledger.state !== "reserved") {
+      throw new ModelEgressStoreError("unknown_spend_reservation_missing_or_changed");
+    }
+    const result = await transitionSpendInTransaction(tx, input.workspaceId,
+      row.dispatchProviderIdempotencyKey, "unknown");
+    if (result !== "unknown") throw new ModelEgressStoreError("unknown_spend_transition_failed");
+    return result;
+  }, TRANSACTION_OPTIONS), WRITE_RETRY_OPTIONS);
 }
 
 export async function readModelRouteDecision(input: {

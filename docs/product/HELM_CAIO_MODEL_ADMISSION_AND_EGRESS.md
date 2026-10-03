@@ -240,9 +240,9 @@ owner 批准的精确版本。实际费用超限、证据缺失或版本不匹�
 2. `complete`：worker 在 lease 内提交结果，结果经与同步路径相同的规范化和预算校验后，先追加终态回执，
    再释放输出。claim 身份（decision、gatewayRef、claimHash）不一致时拒绝。以下两种情况保持 `in_doubt`、
    不写回执：lease 到期后才提交的结果、规范化后仍为 unknown 的结果。
-3. `expire`：lease 到期仍没有终态回执时，以 `resolutionSource=reconcile` 追加一条 `failure`：
-   请求已交付，结果没有在 lease 内被接受；费用记为零并带上 owner 批准的定价版本。这样该 claim 不再占用
-   路由并发。它不是重发许可。
+3. `expire`：lease 到期仍没有终态回执时，保持 `in_doubt`，把已预约最大费用移入 unknown 占额；
+   不从“未收到 worker 结果”推断费用为零，也不伪造终态回执。该 claim 仍占用路由并发，
+   后续需要原 provider 幂等键的独立对账；它不是重发许可。
 
 ## 8. OWNER-only 治理读模型
 
@@ -312,6 +312,6 @@ defaults to restricted and local-only. Fallback is explicit and must be no
 broader in every governed dimension. A deferred (pull) dispatch for on-premises workers
 stays inside the governed gateway: it shares the same pre-dispatch stage and
 claim, releases a worker result only after the terminal receipt, keeps late or
-unnormalizable results in doubt, and records a lease-expired claim as a
-reconciled failure so it stops holding route concurrency. Public Core ships no production adapter,
+unnormalizable results in doubt, and keeps a lease-expired claim in doubt with its charge bound marked unknown,
+without inventing a zero-cost terminal or releasing route concurrency. Public Core ships no production adapter,
 credential, tenant policy, or runtime activation.

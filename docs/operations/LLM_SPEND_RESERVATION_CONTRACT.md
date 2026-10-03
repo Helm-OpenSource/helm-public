@@ -8,7 +8,7 @@ public_safety: Generic charge-contract candidate; no customer, credential, endpo
 
 # LLM spend charge contract v2
 
-Status: Core contract, additive schema, and Prisma/MySQL transaction adapter. No provider entry point uses this contract, no authoritative price/FX/policy verifier exists here, and no production migration or enforcement is claimed. The canonical budget denomination is USD micros. CNY input requires an immutable FX snapshot reference and hash; the reference is recorded evidence, not proof that its issuer is trusted.
+Status: Core contract, additive schema, and Prisma/MySQL transaction adapter. The governed model gateway now joins reserve+dispatch claim and terminal+settlement in their respective transactions, but its trusted charge authority port has no default implementation. Thus default gateway dispatch is closed; no authoritative price/FX/policy verifier, production migration, deployment, or full-provider enforcement is claimed. The candidate ledger denomination is USD micros. CNY input requires an immutable FX snapshot reference and hash; the reference is recorded evidence, not proof that its issuer is trusted.
 
 ## Pre-call contract
 
@@ -22,7 +22,7 @@ The adapter commits the attempt row and counter change in one transaction. It ad
 reserved + settled + unknown_bound + invariant_breach_bound + new_maximum <= monthly_budget
 ```
 
-Explicit unlimited policy still records every maximum. Unconfigured policy fails closed. A signature-shaped string or stored reference never authenticates a price, FX snapshot, or approval; the later gateway composition must obtain those from approved authorities and verify them before reservation.
+Explicit unlimited policy still records every maximum. Unconfigured policy fails closed. A signature-shaped string or stored reference never authenticates a price, FX snapshot, or approval; the gateway's separately governed charge authority must verify them inside the claim transaction before reservation.
 
 ## Settlement states
 
@@ -69,7 +69,7 @@ The unit suite verifies invalid bounds, immutable identities, config drift, CNY/
 
 Activation still requires both remaining layers:
 
-1. The gateway must atomically couple a verified quote, policy snapshot, reservation, and dispatch claim. C1 remains blocked while those authorities are absent.
-2. Every chargeable HTTP, worker, retry/provider-attempt, and CAIO path must use that gateway, then settle from authoritative usage/cost data. Unknown outcomes must remain occupied and observable.
+1. A separately governed implementation of the gateway's charge authority must verify budget-policy approval, exact period rule, price book, FX snapshot where applicable, and provider cost observation inside the gateway transactions. The current default is `null` and refuses dispatch. A valid-looking reference or syntactic C1 declaration is not proof.
+2. Every chargeable HTTP, worker, retry/provider-attempt, and CAIO path must use an atomic charged gateway. This slice covers the governed sync/deferred gateway only; other call paths have not been migrated. Unknown outcomes stay occupied and do not create zero-cost terminal receipts.
 
 Until both layers and site-specific DDL/ACL approval are proven, this code is not a monthly hard limit. Adding environment keys or recording cost after a call does not close the gate.

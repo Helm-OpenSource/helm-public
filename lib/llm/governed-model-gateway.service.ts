@@ -31,6 +31,8 @@ import {
   readGovernedModelProjectionReceipt,
   readModelRouteDecision,
   recordModelEgressTerminalReceipt,
+  markModelEgressSpendUnknown,
+  type GovernedSpendAuthority,
 } from "@/lib/llm/model-egress-store.service";
 import {
   isSafeModelGovernanceIdentifier,
@@ -99,6 +101,8 @@ export type GovernedModelGatewayDependencies = {
   readDecision: typeof readModelRouteDecision;
   claimDispatch: typeof claimModelRouteDispatch;
   recordTerminal: typeof recordModelEgressTerminalReceipt;
+  markUnknownSpend: typeof markModelEgressSpendUnknown;
+  spendAuthority: GovernedSpendAuthority | null;
   now: () => Date;
 };
 
@@ -108,6 +112,8 @@ const DEFAULT_DEPENDENCIES: GovernedModelGatewayDependencies = {
   readDecision: readModelRouteDecision,
   claimDispatch: claimModelRouteDispatch,
   recordTerminal: recordModelEgressTerminalReceipt,
+  markUnknownSpend: markModelEgressSpendUnknown,
+  spendAuthority: null,
   now: () => new Date(),
 };
 
@@ -703,6 +709,7 @@ async function reconcileClaimedAttempt<
     const terminal =
       await input.dependencies.recordTerminal({
         authority: GOVERNED_GATEWAY_AUTHORITY,
+        spendAuthority: input.dependencies.spendAuthority,
         workspaceId: input.request.workspaceId,
         decisionId: input.decision.decisionId,
         gatewayRef: input.dispatch.gatewayRef,
@@ -730,6 +737,9 @@ async function reconcileClaimedAttempt<
         fallbackReason: null,
         recordedAt: finishedAt,
       });
+    if (terminal.spendOutcome !== "settled" && terminal.spendOutcome !== "released") {
+      throw new GovernedModelGatewayError("spend_invariant_breach_output_withheld", input.decision.decisionId);
+    }
     return resultWithoutOutput({
       attempt: {
         decision: input.decision,
@@ -921,6 +931,14 @@ async function claimAttempt<
       fallbackAttempted: input.parentDecisionRef !== null,
     }) };
   }
+  if (!input.dependencies.spendAuthority) {
+    return { kind: "result", result: resultWithoutOutput({
+      attempt: { decision, startedReceipt: prepared.startedReceipt,
+        terminalReceipt: null, status: "not_dispatched",
+        reasonCode: "spend_charge_authority_unconfigured", replayed: false },
+      fallbackAttempted: input.parentDecisionRef !== null,
+    }) };
+  }
   const adapter = input.registry.resolve(
     decision.routeSnapshot,
   );
@@ -1005,6 +1023,7 @@ async function claimAttempt<
 
   const claim = await input.dependencies.claimDispatch({
     authority: GOVERNED_GATEWAY_AUTHORITY,
+    spendAuthority: input.dependencies.spendAuthority,
     workspaceId: input.request.workspaceId,
     decisionId: decision.decisionId,
     gatewayRef: input.request.gatewayRef,
@@ -1125,6 +1144,13 @@ async function executeAttempt<
     };
   }
   if (normalized.outcome === "unknown") {
+    await input.dependencies.markUnknownSpend({
+      authority: GOVERNED_GATEWAY_AUTHORITY,
+      workspaceId: input.request.workspaceId,
+      decisionId: decision.decisionId,
+      gatewayRef: input.request.gatewayRef,
+      dispatchClaimHash: claim.claimHash,
+    });
     return resultWithoutOutput({
       attempt: {
         decision,
@@ -1164,6 +1190,7 @@ async function executeAttempt<
   try {
     terminal = await input.dependencies.recordTerminal({
       authority: GOVERNED_GATEWAY_AUTHORITY,
+      spendAuthority: input.dependencies.spendAuthority,
       workspaceId: input.request.workspaceId,
       decisionId: decision.decisionId,
       gatewayRef: input.request.gatewayRef,
@@ -1204,6 +1231,9 @@ async function executeAttempt<
     reasonCode: normalized.errorCode,
     replayed: terminal.replayed,
   };
+  if (terminal.spendOutcome !== "settled" && terminal.spendOutcome !== "released") {
+    throw new GovernedModelGatewayError("spend_invariant_breach_output_withheld", decision.decisionId);
+  }
 
   if (fallbackTargetRouteRef && fallbackReason) {
     const fallback = await executeAttempt({
@@ -1352,8 +1382,9 @@ const DEFERRED_LEASE_EXPIRED = "deferred_dispatch_lease_expired";
  * - complete: records the worker's result as the terminal receipt before any output is returned. A result
  *   for another claim is refused; a result after the lease, or one that does not normalize to a known
  *   outcome, stays in doubt and is not recorded.
- * - expire: after the lease ends without a terminal receipt, records a reconciled failure (the payload was
- *   handed over, no result was accepted in time) so the claim stops counting against route concurrency.
+ * - expire: after the lease ends without a terminal receipt, moves the reserved
+ *   maximum into unknown occupancy and stays in doubt. Absence of a worker
+ *   result does not prove zero cost or release route concurrency.
  */
 export function createGovernedDeferredModelDispatch<
   TPayload extends GovernedJsonValue = GovernedJsonValue,
@@ -1485,6 +1516,7 @@ export function createGovernedDeferredModelDispatch<
     try {
       terminal = await dependencies.recordTerminal({
         authority: GOVERNED_GATEWAY_AUTHORITY,
+        spendAuthority: dependencies.spendAuthority,
         workspaceId: input.workspaceId,
         decisionId: stored.decision.decisionId,
         gatewayRef: dispatch.gatewayRef,
@@ -1513,6 +1545,9 @@ export function createGovernedDeferredModelDispatch<
         stored.decision.decisionId,
       );
     }
+    if (terminal.spendOutcome !== "settled" && terminal.spendOutcome !== "released") {
+      throw new GovernedModelGatewayError("spend_invariant_breach_output_withheld", stored.decision.decisionId);
+    }
     return {
       status: normalized.outcome,
       output:
@@ -1539,52 +1574,25 @@ export function createGovernedDeferredModelDispatch<
   async function expire(
     input: GovernedDeferredDispatchRef,
   ): Promise<GovernedModelGatewayResult<TOutput>> {
-    const { stored, dispatch, route, startedReceipt, inDoubt, replayed } = await loadClaim(input);
+    const { stored, dispatch, inDoubt, replayed } = await loadClaim(input);
     if (replayed) return replayed;
     const now = dependencies.now();
     const leaseExpiresAt = Date.parse(dispatch.leaseExpiresAt);
     if (!Number.isFinite(leaseExpiresAt) || now.getTime() < leaseExpiresAt) {
       return inDoubt("dispatch_lease_active_terminal_missing");
     }
-    let terminal: Awaited<ReturnType<GovernedModelGatewayDependencies["recordTerminal"]>>;
     try {
-      terminal = await dependencies.recordTerminal({
+      await dependencies.markUnknownSpend({
         authority: GOVERNED_GATEWAY_AUTHORITY,
         workspaceId: input.workspaceId,
         decisionId: stored.decision.decisionId,
         gatewayRef: dispatch.gatewayRef,
         dispatchClaimHash: dispatch.claimHash,
-        idempotencyKey: stableIdentifier("model-terminal", { decisionRef: stored.decision.decisionId }),
-        outcome: "failure",
-        resolutionSource: "reconcile",
-        requestDisposition: "accepted",
-        providerRequestRefHash: sha256(dispatch.providerIdempotencyKey),
-        finishedAt: now,
-        latencyMs: null,
-        promptTokens: null,
-        completionTokens: null,
-        actualCostUsdMicros: 0,
-        costCurrency: "USD",
-        pricingVersion: route.pricingVersion,
-        costBand: "zero",
-        errorCode: DEFERRED_LEASE_EXPIRED,
-        fallbackTargetRouteRef: null,
-        fallbackReason: null,
-        recordedAt: now,
       });
     } catch {
-      return inDoubt("dispatch_reconciliation_receipt_persistence_failed");
+      return inDoubt("dispatch_unknown_spend_persistence_failed");
     }
-    return resultWithoutOutput({
-      attempt: {
-        decision: stored.decision,
-        startedReceipt,
-        terminalReceipt: terminal.receipt,
-        status: terminal.receipt.outcome,
-        reasonCode: DEFERRED_LEASE_EXPIRED,
-        replayed: terminal.replayed,
-      },
-    });
+    return inDoubt(DEFERRED_LEASE_EXPIRED);
   }
 
   return Object.freeze({ claim, complete, expire });

@@ -383,6 +383,7 @@ function buildTerminal(
 }
 
 function createHarness(input: {
+  spendUnconfigured?: boolean;
   blocked?: boolean;
   preclaimed?: boolean;
   preclaimedLeaseExpired?: boolean;
@@ -548,8 +549,11 @@ function createHarness(input: {
       request,
     );
     receipts.set(request.decisionId, [started, terminal]);
-    return { receipt: terminal, replayed: false };
+    return { receipt: terminal, replayed: false, spendOutcome: "settled" };
   });
+  const markUnknownSpend = vi.fn<GovernedModelGatewayDependencies["markUnknownSpend"]>(
+    async () => "unknown",
+  );
 
   return {
     primary,
@@ -564,6 +568,11 @@ function createHarness(input: {
       readDecision,
       claimDispatch,
       recordTerminal,
+      markUnknownSpend,
+      spendAuthority: input.spendUnconfigured ? null : {
+        resolveDispatch: async () => { throw new Error("synthetic_store_did_not_resolve_spend"); },
+        verifyTerminal: async () => { throw new Error("synthetic_store_did_not_verify_spend"); },
+      },
       now,
     } satisfies GovernedModelGatewayDependencies,
   };
@@ -638,6 +647,51 @@ const successResult: GovernedModelAdapterResult<Output> = {
 };
 
 describe("governed model gateway", () => {
+  it("refuses a paid provider attempt before invoke when charge authority is unconfigured", async () => {
+    const harness = createHarness({ spendUnconfigured: true });
+    const selectedAdapter = adapter({ selectedRoute: harness.primary, result: successResult });
+    const gateway = createGovernedModelGateway({
+      adapters: [selectedAdapter],
+      dependencies: harness.dependencies,
+    });
+
+    const result = await gateway(request());
+
+    expect(result.output).toBeNull();
+    expect(result.status).not.toBe("success");
+    expect(selectedAdapter.preflight).not.toHaveBeenCalled();
+    expect(selectedAdapter.invoke).not.toHaveBeenCalled();
+    expect(harness.dependencies.claimDispatch).not.toHaveBeenCalled();
+  });
+
+  it("never invokes the provider when atomic claim or reservation persistence fails", async () => {
+    const harness = createHarness({});
+    vi.mocked(harness.dependencies.claimDispatch).mockRejectedValueOnce(
+      new Error("synthetic_atomic_claim_failure"),
+    );
+    const selectedAdapter = adapter({ selectedRoute: harness.primary, result: successResult });
+    const gateway = createGovernedModelGateway({
+      adapters: [selectedAdapter], dependencies: harness.dependencies,
+    });
+    await expect(gateway(request())).rejects.toThrow("synthetic_atomic_claim_failure");
+    expect(selectedAdapter.invoke).not.toHaveBeenCalled();
+    expect(harness.dependencies.recordTerminal).not.toHaveBeenCalled();
+  });
+
+  it("withholds a successful provider output when the atomic spend transition reports a breach", async () => {
+    const harness = createHarness({});
+    const original = harness.dependencies.recordTerminal;
+    vi.mocked(original).mockImplementationOnce(async (input) => ({
+      ...await original(input), spendOutcome: "invariant_breach",
+    }));
+    const selectedAdapter = adapter({ selectedRoute: harness.primary, result: successResult });
+    const gateway = createGovernedModelGateway({
+      adapters: [selectedAdapter], dependencies: harness.dependencies,
+    });
+    await expect(gateway(request())).rejects.toThrow("spend_invariant_breach_output_withheld");
+    expect(selectedAdapter.invoke).toHaveBeenCalledOnce();
+  });
+
   it("does not preflight or invoke a registered adapter for a blocked decision", async () => {
     const harness = createHarness({ blocked: true });
     const selectedAdapter = adapter({
@@ -690,7 +744,7 @@ describe("governed model gateway", () => {
         started,
         terminal,
       ]);
-      return { receipt: terminal, replayed: false };
+      return { receipt: terminal, replayed: false, spendOutcome: "settled" };
     });
     const gateway = createGovernedModelGateway({
       adapters: [selectedAdapter],
@@ -1408,7 +1462,7 @@ function deferredAdapter(
   return { registration, probeReadiness, preflight };
 }
 
-function deferredHarness(input: { blocked?: boolean } = {}) {
+function deferredHarness(input: { blocked?: boolean; spendUnconfigured?: boolean } = {}) {
   const harness = createHarness(input);
   let clock = BASE_TIME;
   const dependencies = {
@@ -1431,6 +1485,17 @@ const localSuccess: GovernedModelAdapterResult<Output> = {
 };
 
 describe("governed deferred model dispatch", () => {
+  it("refuses an unconfigured charge authority before worker claim and preflight", async () => {
+    const harness = deferredHarness({ spendUnconfigured: true });
+    const selectedAdapter = deferredAdapter(harness.primary);
+    const result = await createGovernedDeferredModelDispatch({
+      adapters: [selectedAdapter], dependencies: harness.dependencies,
+    }).claim(request());
+    expect(result).toMatchObject({ status: "not_dispatched",
+      attempt: { reasonCode: "spend_charge_authority_unconfigured" } });
+    expect(selectedAdapter.preflight).not.toHaveBeenCalled();
+    expect(harness.dependencies.claimDispatch).not.toHaveBeenCalled();
+  });
   it("claims a pull dispatch without invoking anything and hands out the claim identity", async () => {
     const harness = deferredHarness();
     const selectedAdapter = deferredAdapter(harness.primary);
@@ -1600,7 +1665,7 @@ describe("governed deferred model dispatch", () => {
     expect(harness.dependencies.recordTerminal).not.toHaveBeenCalled();
   });
 
-  it("records a lease-expired dispatch as a reconciled failure only after the lease ends", async () => {
+  it("holds unknown spend without inventing a zero-cost terminal after the lease ends", async () => {
     const harness = deferredHarness();
     const deferred = createGovernedDeferredModelDispatch({
       adapters: [deferredAdapter(harness.primary)],
@@ -1622,18 +1687,9 @@ describe("governed deferred model dispatch", () => {
 
     harness.advance(60_000);
     const expired = await deferred.expire(claimRef);
-    expect(expired).toMatchObject({ status: "failure", output: null });
-    expect(vi.mocked(harness.dependencies.recordTerminal).mock.calls[0]![0]).toMatchObject({
-      outcome: "failure",
-      resolutionSource: "reconcile",
-      requestDisposition: "accepted",
-      providerRequestRefHash: sha256(claimed.providerIdempotencyKey),
-      actualCostUsdMicros: 0,
-      costCurrency: "USD",
-      pricingVersion: harness.primary.pricingVersion,
-      costBand: "zero",
-      errorCode: "deferred_dispatch_lease_expired",
-      latencyMs: null,
-    });
+    expect(expired).toMatchObject({ status: "in_doubt", output: null });
+    expect(expired.attempts[0]!.reasonCode).toBe("deferred_dispatch_lease_expired");
+    expect(harness.dependencies.markUnknownSpend).toHaveBeenCalledOnce();
+    expect(harness.dependencies.recordTerminal).not.toHaveBeenCalled();
   });
 });
