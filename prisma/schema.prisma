@@ -7463,3 +7463,38 @@ model LLMSpendPeriodCompatibility {
   @@unique([workspaceId, periodKey])
   @@index([workspaceId, periodKey, state], map: "LLMSpendPeriodCompatibility_workspace_period_state_idx")
 }
+
+/// Protected governance registry. Runtime receives SELECT only. No grant issuer
+/// endpoint is supplied by Core; external authenticated provisioning is required.
+model LLMSpendIssuerGrant {
+  id               String    @id @db.VarChar(191)
+  workspaceId      String    @db.VarChar(191)
+  issuerUserId     String    @db.VarChar(191)
+  publicKeyPem     String    @db.Text
+  allowedKindsJson String    @db.Text
+  sourceReceiptHash String   @db.VarChar(71)
+  contentHash      String    @db.VarChar(71)
+  validFrom        DateTime  @db.DateTime(3)
+  validUntil       DateTime  @db.DateTime(3)
+  revokedAt        DateTime? @db.DateTime(3)
+  createdAt        DateTime  @default(now()) @db.DateTime(3)
+  @@index([workspaceId, issuerUserId])
+}
+
+/// Immutable signed policy/price/FX/approval record. Only one-way revocation is
+/// mutable. A reference or stored hash is never a substitute for the signature.
+model LLMSpendAuthorityRecord {
+  id               String    @id @db.VarChar(191)
+  workspaceId      String    @db.VarChar(191)
+  ref              String    @db.VarChar(191)
+  kind             String    @db.VarChar(16)
+  version          String    @db.VarChar(64)
+  issuerGrantId    String    @db.VarChar(191)
+  envelopeJson     String    @db.LongText
+  signatureBase64  String    @db.VarChar(88)
+  contentHash      String    @db.VarChar(71)
+  revokedAt        DateTime? @db.DateTime(3)
+  createdAt        DateTime  @default(now()) @db.DateTime(3)
+  @@unique([workspaceId, ref])
+  @@index([issuerGrantId])
+}

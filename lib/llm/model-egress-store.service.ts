@@ -64,6 +64,7 @@ export type GovernedSpendAuthority = {
   resolveDispatch: (input: {
     tx: Tx; workspaceId: string; decision: ModelRouteDecision;
     runtime: GovernedProviderRuntimeDescriptor; now: Date;
+    dispatchLeaseExpiresAt: Date;
   }) => Promise<{
     periodKey: string; periodPolicyVersion: string; quote: SpendChargeQuote;
   }>;
@@ -2250,11 +2251,20 @@ export async function claimModelRouteDispatch(input: {
   if (!isSafeModelGovernanceRef(gatewayRef)) {
     throw new ModelEgressStoreError("gateway_ref_invalid");
   }
-  const now = input.now ?? new Date();
   return runWithWriteConflictRetry(
     () =>
       db.$transaction(async (tx) => {
         await lockModelEgressWorkspace(tx, input.workspaceId);
+        const databaseNow = async () => {
+          const [clock] = await tx.$queryRaw<Array<{ now: Date }>>`SELECT UTC_TIMESTAMP(3) AS now`;
+          if (!(clock?.now instanceof Date) || !Number.isFinite(clock.now.getTime())) {
+            throw new ModelEgressStoreError("model_dispatch_clock_invalid");
+          }
+          return clock.now;
+        };
+        // Dispatch metadata and authorization use database time. A supplied now
+        // may tighten a test's early rejection but cannot grant future validity.
+        const now = await databaseNow();
         const row = await tx.modelRouteDecision.findFirst({
           where: {
             id: input.decisionId,
@@ -2270,7 +2280,8 @@ export async function claimModelRouteDispatch(input: {
             "blocked_model_route_decision_not_dispatchable",
           );
         }
-        if (row.validUntil.getTime() <= now.getTime()) {
+        if (row.validUntil.getTime() <= now.getTime() ||
+            (input.now && row.validUntil.getTime() <= input.now.getTime())) {
           throw new ModelEgressStoreError(
             "model_route_decision_expired",
           );
@@ -2558,6 +2569,7 @@ export async function claimModelRouteDispatch(input: {
           });
         const spend = await input.spendAuthority!.resolveDispatch({
           tx, workspaceId: input.workspaceId, decision, runtime: input.runtime, now,
+          dispatchLeaseExpiresAt: leaseExpiresAt,
         });
         const workspaceSpend = await tx.workspace.findUnique({
           where: { id: input.workspaceId },
@@ -2607,6 +2619,29 @@ export async function claimModelRouteDispatch(input: {
           leaseMs: leaseExpiresAt.getTime() - now.getTime(), now,
         });
         if (!admission.admitted) throw new ModelEgressStoreError(`spend_reservation_${admission.reason}`);
+        const assertFinalTemporalAuthority = async () => {
+          // All facts were read under SERIALIZABLE and remain locked in this
+          // transaction. Revalidate their time boundaries after spend/row/audit
+          // waits; caller time and a previously checked quote cannot admit expiry.
+          const current = await databaseNow();
+          if (row.validUntil <= current) throw new ModelEgressStoreError("model_route_decision_expired");
+          if (policyRow.validFrom > current || policyRow.validUntil <= current) {
+            throw new ModelEgressStoreError("model_route_policy_not_active");
+          }
+          if (Date.parse(projection.validUntil) <= current.getTime()) {
+            throw new ModelEgressStoreError("model_route_projection_trust_changed", ["projection_receipt_expired"]);
+          }
+          const sourceExpired = currentSourceAuthority.sourceAssetBindings.some((binding) =>
+            (binding.authorizationValidFrom !== null && Date.parse(binding.authorizationValidFrom) > current.getTime()) ||
+            (binding.authorizationValidUntil !== null && Date.parse(binding.authorizationValidUntil) <= current.getTime()));
+          if (sourceExpired) throw new ModelEgressStoreError("source_asset_authority_changed", ["source_asset_authorization_expired_or_future"]);
+          const currentReadiness = readinessReceiptMatchesRoute({ receipt: readiness, route: decision.routeSnapshot!, now: current });
+          if (!currentReadiness.valid) throw new ModelEgressStoreError("model_route_readiness_expired_or_changed", currentReadiness.errors);
+          assertRuntimeDescriptorMatches({ descriptor: input.runtime, route: decision.routeSnapshot!, readiness, now: current });
+          if (leaseExpiresAt <= current) throw new ModelEgressStoreError("model_route_dispatch_lease_expired");
+          return current;
+        };
+        const casNow = await assertFinalTemporalAuthority();
         const claimed = await tx.modelRouteDecision.updateMany({
           where: {
             id: row.id,
@@ -2619,7 +2654,7 @@ export async function claimModelRouteDispatch(input: {
             dispatchClaimHash: null,
             dispatchProviderIdempotencyKey: null,
             dispatchLeaseExpiresAt: null,
-            validUntil: { gt: now },
+            validUntil: { gt: casNow },
           },
           data: {
             dispatchClaimedAt: now,
@@ -2664,6 +2699,7 @@ export async function claimModelRouteDispatch(input: {
           },
           { client: tx },
         );
+        await assertFinalTemporalAuthority();
         return {
           decision,
           startedReceipt,

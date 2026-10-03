@@ -442,8 +442,10 @@ jobs:
           set -euo pipefail
           app_password="$(openssl rand -hex 24)"
           root_password="$(openssl rand -hex 24)"
+          c4_password="$(openssl rand -hex 24)"
           echo "::add-mask::${app_password}"
           echo "::add-mask::${root_password}"
+          echo "::add-mask::${c4_password}"
           bootstrap_sql="$(mktemp)"
           chmod 600 "${bootstrap_sql}"
           {
@@ -451,6 +453,7 @@ jobs:
               "${HELM_CI_MYSQL_USER}" "${app_password}"
             printf "GRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
               "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
+            printf "CREATE USER 'c4_runtime'@'%%' IDENTIFIED BY '%s';\n" "${c4_password}"
             # Migrations create append-only triggers, which the server refuses
             # under binary logging from a user without SUPER (error 1419).
             # Measured on the pinned mysql:8.4 image: SET_USER_ID no longer
@@ -460,7 +463,7 @@ jobs:
             # application user stays scoped to its own database.
             #
             # This is safe HERE and nowhere else: the container is ephemeral,
-            # loopback-only, and has exactly one non-root user. Do not copy this
+            # loopback-only, and has only isolated fixture identities. Do not copy this
             # line to a server that outlives a job or serves anyone else.
             printf "SET GLOBAL log_bin_trust_function_creators = 1;\n"
             printf "ALTER USER IF EXISTS 'root'@'%%' IDENTIFIED BY '%s';\n" \
@@ -474,12 +477,20 @@ jobs:
             <"${bootstrap_sql}"
           rm -f "${bootstrap_sql}"
           credential="${HELM_CI_MYSQL_USER}:${app_password}"
+          root_file="${RUNNER_TEMP}/helm-c4-root-password"
+          (umask 077; printf '%s\n' "${root_password}" >"${root_file}")
           url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
           [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
           {
             printf 'DATABASE_URL=%s\n' "${url}"
             printf 'MODEL_EGRESS_STORE_DATABASE_URL=%s\n' "${url}"
             printf 'SPEND_RESERVATION_MYSQL_DATABASE_URL=%s\n' "${url}"
+          } >>"${GITHUB_ENV}"
+          credential="c4_runtime:${c4_password}"
+          url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
+          [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
+          {
+            printf 'MODEL_EGRESS_RUNTIME_DATABASE_URL=%s\n' "${url}"
           } >>"${GITHUB_ENV}"
 
       - name: Setup Node.js
@@ -498,11 +509,47 @@ jobs:
       - name: Replay migrations on an empty database
         run: npx tsx prisma/setup-db.ts prepare
 
+      - name: Bind a restricted C4 read and reservation identity
+        env:
+          HELM_CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          [[ "${HELM_CI_MYSQL_DATABASE}" == "helm_caio_p1d_ci" ]] || exit 1
+          acl_sql="$(mktemp)"
+          chmod 600 "${acl_sql}"
+          root_file="${RUNNER_TEMP}/helm-c4-root-password"
+          trap 'rm -f "${acl_sql}" "${root_file}"' EXIT
+          IFS= read -r root_password <"${root_file}"
+          {
+            printf "GRANT SELECT, UPDATE(updatedAt) ON \`%s\`.Workspace TO 'c4_runtime'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
+            for table in User Membership LLMSpendIssuerGrant LLMSpendAuthorityRecord ModelRouteDecision ModelEgressReceipt TenantModelRoutePolicyHead TenantModelRoutePolicy ModelRoutePolicyApprovalReceipt DataAssetCatalogEntry DataAssetStageReceipt GovernedModelProjectionReceipt ProviderAdapterReadinessReceipt AuditLog; do
+              printf "GRANT SELECT ON \`%s\`.\`%s\` TO 'c4_runtime'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}" "${table}"
+            done
+            for table in LLMSpendLedgerEntry LLMSpendPeriodCounter LLMSpendPeriodCompatibility ModelRouteDecision ModelEgressReceipt; do
+              printf "GRANT SELECT, INSERT, UPDATE ON \`%s\`.\`%s\` TO 'c4_runtime'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}" "${table}"
+            done
+            printf "GRANT SELECT ON performance_schema.data_lock_waits TO '%s'@'%%';\n" "${HELM_CI_MYSQL_USER}"
+            printf "GRANT INSERT ON \`%s\`.AuditLog TO 'c4_runtime'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
+          } >"${acl_sql}"
+          MYSQL_PWD="${root_password}" docker exec -e MYSQL_PWD -i "${HELM_CI_MYSQL_CONTAINER}" \
+            mysql --host=127.0.0.1 --protocol=tcp --user=root --batch <"${acl_sql}"
+          rm -f "${acl_sql}"
+          unset root_password
+
       - name: Verify spend charge contract and migration guards
         run: npx vitest run lib/llm/spend-reservation.test.ts lib/llm/spend-charge-contract-migration.test.ts --config vitest.public.config.ts
 
       - name: Verify governed model egress against MySQL
+        env:
+          HELM_CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
         run: npm run test:model-egress:mysql
+
+      - name: Verify signed spend authority against MySQL
+        env:
+          TRUSTED_SPEND_MYSQL_URL: ${{ env.DATABASE_URL }}
+          TRUSTED_SPEND_MYSQL_DATABASE: helm_caio_p1d_ci
+          TRUSTED_SPEND_MYSQL_CI_CONTAINER: ${{ job.services.mysql.id }}
+        run: npm run test:trusted-spend-authority:mysql
 
       - name: Verify spend charge contract transactions against MySQL
         env:
@@ -511,6 +558,10 @@ jobs:
           SPEND_RESERVATION_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
           LLM_ENABLED: 'false'
         run: npm run test:spend-reservation:mysql
+
+      - name: Remove isolated bootstrap credential on all outcomes
+        if: always()
+        run: rm -f "${RUNNER_TEMP}/helm-c4-root-password"
 
   caio-access-gateway-mysql:
     name: CAIO Access Gateway Token Store MySQL

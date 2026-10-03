@@ -85,7 +85,10 @@ const REQUIRED_STORE_TOKENS = [
   "dispatchClaimHash: null",
   "dispatchProviderIdempotencyKey: null",
   "dispatchLeaseExpiresAt: null",
-  "validUntil: { gt: now }",
+  "validUntil: { gt: casNow }",
+  "const casNow = await assertFinalTemporalAuthority()",
+  "SELECT UTC_TIMESTAMP(3) AS now",
+  "await assertFinalTemporalAuthority()",
   "activeRouteDispatches",
   "model_route_concurrency_limit_reached",
   "decision.routeSnapshot.maxConcurrency",
@@ -205,9 +208,15 @@ const REQUIRED_MYSQL_CI_TOKENS = [
   // $GITHUB_ENV, so the gate pins the injection point, not a literal value.
   "DATABASE_URL=",
   "MODEL_EGRESS_STORE_DATABASE_URL=",
+  "MODEL_EGRESS_RUNTIME_DATABASE_URL=",
+  "Bind a restricted C4 read and reservation identity",
+  "GRANT SELECT, UPDATE(updatedAt)",
+  "helm-c4-root-password",
   "MODEL_EGRESS_STORE_TEST_DATABASE_NAME: helm_caio_p1d_ci",
   "npx tsx prisma/setup-db.ts prepare",
   "npm run test:model-egress:mysql",
+  "npm run test:trusted-spend-authority:mysql",
+  "TRUSTED_SPEND_MYSQL_CI_CONTAINER:",
 ] as const;
 
 function toPosix(value: string): string {

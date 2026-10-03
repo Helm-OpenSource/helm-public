@@ -8,7 +8,7 @@
 >
 > 它不是让 AI 自动经营企业，也不是替人自动决策。Helm 帮团队更快看清：现在发生了什么，谁需要判断，风险在哪里，下一步该怎么推进，以及哪些事情绝不能自动承诺。
 
-交付预算接入前请核对 [LLM spend charge contract v2](docs/operations/LLM_SPEND_RESERVATION_CONTRACT.md)：当前只有最大费用、不可变价格/汇率/策略来源快照及原子账本候选，尚未接模型调用、权威来源或生产限额。
+交付预算接入前请核对 [LLM spend charge contract v2](docs/operations/LLM_SPEND_RESERVATION_CONTRACT.md)：当前只有最大费用、不可变价格/汇率/策略来源快照及原子账本候选，新增空注册表的签名元数据读回候选及 opt-in C3 接口；发行者身份、真实计价/用量、普通付费出口和生产限额仍未闭合，默认 authority 保持关闭。
 
 **License**：Apache-2.0 · **仓库姿态**：open-source Core，已在 owner Go/No-Go 后公开 · **Helm Cloud / Enterprise**：商业版可选，不替代开源
 
