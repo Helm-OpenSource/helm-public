@@ -1,4 +1,7 @@
+import { ordinaryPaidWriterClient } from "@/lib/llm/ordinary-paid-composition.service";
 import { analyzeBiReportWithLLM } from "@/lib/llm-workflows/analyze-bi-report.workflow";
+import { prepareOrdinaryPaidOperationOrFallback } from "@/lib/llm/ordinary-paid-operation.service";
+import { isLLMEnabledByEnv } from "@/lib/llm/config";
 import { retrieveBiReportOdpsKnowledgeContext } from "@/lib/bi-report-skill/odps-knowledge";
 import { assertValidBiReportRows } from "@/lib/bi-report-skill/schema-validator";
 import { computeBiReportMetrics } from "@/lib/bi-report-skill/metric-engine";
@@ -28,6 +31,8 @@ export async function prepareBiReportDryRun(input: {
   resolvedSqlParams?: Record<string, string>;
   rows: Array<Record<string, unknown>>;
   useLLM?: boolean;
+  /** Persisted by the executor before this analysis; dry runs have no paid source. */
+  persistedRunId?: string | null;
   recentRuns?: BiReportRunMemoryEntry[];
   recentFeedbacks?: BiReportFeedbackMemoryEntry[];
 }): Promise<PreparedBiReportDryRun> {
@@ -73,6 +78,16 @@ export async function prepareBiReportDryRun(input: {
     deterministicFindings: evaluation.topFindings,
     matchedRules: evaluation.matchedRules.map((rule) => rule.title),
   });
+  const ordinaryOperations = isLLMEnabledByEnv() && input.useLLM && input.persistedRunId && input.userId
+    ? await Promise.all([
+        prepareOrdinaryPaidOperationOrFallback({ client: ordinaryPaidWriterClient(), workspaceId: input.workspaceId,
+          actorUserId: input.userId ?? null, sourceType: "bi_run", sourceId: input.persistedRunId,
+          kind: "bi_analysis", slot: "analysis" }),
+        prepareOrdinaryPaidOperationOrFallback({ client: ordinaryPaidWriterClient(), workspaceId: input.workspaceId,
+          actorUserId: input.userId ?? null, sourceType: "bi_run", sourceId: input.persistedRunId,
+          kind: "bi_review", slot: "review" }),
+      ])
+    : null;
   const analysis = input.useLLM
     ? (
         await analyzeBiReportWithLLM({
@@ -94,6 +109,8 @@ export async function prepareBiReportDryRun(input: {
           similarCaseContext,
           odpsKnowledgeContext,
           fallback: fallbackAnalysis,
+          ordinaryOperationId: ordinaryOperations?.[0]?.id,
+          reviewOperationId: ordinaryOperations?.[1]?.id,
         })
       ).output
     : fallbackAnalysis;

@@ -186,6 +186,8 @@ export type ModelEgressReceipt = {
   latencyMs: number | null;
   promptTokens: number | null;
   completionTokens: number | null;
+  /** Digest of the returned structured output. Omitted in existing v1 receipts. */
+  outputContentHash?: string;
   actualCostUsdMicros: number | null;
   costCurrency: "USD" | null;
   pricingVersion: string | null;
@@ -430,6 +432,7 @@ function modelEgressReceiptHashContent(receipt: ModelEgressReceipt) {
     latencyMs: receipt.latencyMs,
     promptTokens: receipt.promptTokens,
     completionTokens: receipt.completionTokens,
+    ...(receipt.outputContentHash === undefined ? {} : { outputContentHash: receipt.outputContentHash }),
     actualCostUsdMicros: receipt.actualCostUsdMicros,
     costCurrency: receipt.costCurrency,
     pricingVersion: receipt.pricingVersion,
@@ -1270,6 +1273,10 @@ export function validateModelEgressReceipt(
     !HASH_PATTERN.test(receipt.providerRequestRefHash)
   ) {
     errors.push("provider_request_ref_hash_invalid");
+  }
+  if (receipt.outputContentHash !== undefined &&
+      !HASH_PATTERN.test(receipt.outputContentHash)) {
+    errors.push("output_content_hash_invalid");
   }
   if (
     receipt.dispatchRuntimeHash !== null &&

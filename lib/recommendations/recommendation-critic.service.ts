@@ -16,6 +16,8 @@ import type {
 export interface RecommendationCriticInput {
   workspaceId: string;
   userId?: string | null;
+  /** Persisted RecommendationLog source; the display ref is never a charge key. */
+  recommendationLogId?: string;
   context: RecommendationObjectContext;
   evidence: RecommendationEvidence;
   ranked: RankedRecommendationCandidate;
@@ -31,7 +33,8 @@ export interface RecommendationCriticAdvisory {
 }
 
 function getRecommendationRef(input: RecommendationCriticInput): string {
-  return `${input.context.objectType}:${input.context.objectId}:${input.ranked.actionType}`;
+  return input.recommendationLogId ??
+    `${input.context.objectType}:${input.context.objectId}:${input.ranked.actionType}`;
 }
 
 export function buildRecommendationCriticContextPacket(
@@ -179,6 +182,7 @@ export async function reviewRecommendationCandidateWithLLM(
     userId: input.userId,
     contextPacket,
     candidate: judgementCandidate,
+    recommendationLogId: input.recommendationLogId,
     egressPolicy: input.egressPolicy,
     traceId: input.traceId,
   });

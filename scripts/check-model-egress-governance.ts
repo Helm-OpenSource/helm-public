@@ -176,6 +176,13 @@ const INTERNAL_AUTHORITY_BOUNDARIES = [
     tokens: ["GovernedModelProviderAdapter"],
     allowedFiles: [ADAPTER_REGISTRY, GOVERNED_GATEWAY],
   },
+  {
+    // The historical transport factory still exists for its transport
+    // contract tests and the closed Qwen singleton. Runtime callers may
+    // only receive the closed exported singleton, never mint a raw one.
+    tokens: ["createOpenAICompatibleAdapter"],
+    allowedFiles: ["lib/llm/openai-adapter.ts", "lib/llm/qwen-adapter.ts"],
+  },
 ] as const;
 const REQUIRED_OWNER_QUERY_TOKENS = [
   "db.membership.findUnique",

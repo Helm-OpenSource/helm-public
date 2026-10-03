@@ -1,6 +1,9 @@
+import { ordinaryPaidWriterClient } from "@/lib/llm/ordinary-paid-composition.service";
 import { ActorType, ObjectType } from "@prisma/client";
 import { assertWorkspaceMemoryServiceAccess } from "@/lib/auth/service-governance";
 import { db } from "@/lib/db";
+import { prepareOrdinaryPaidOperationOrFallback } from "@/lib/llm/ordinary-paid-operation.service";
+import { isLLMEnabledByEnv } from "@/lib/llm/config";
 import { generateBriefingWithLLM } from "@/lib/llm-workflows/generate-briefing.workflow";
 import { getBlockers } from "@/lib/memory/blocker.service";
 import { getCommitments } from "@/lib/memory/commitment.service";
@@ -158,6 +161,15 @@ export async function generateObjectBriefingSnapshot(input: GenericBriefingInput
     blockers,
     retrievalPackTrace: retrievalPack.trace,
   });
+  const paidSourceType = input.objectType === ObjectType.CONTACT ? "contact"
+    : input.objectType === ObjectType.COMPANY ? "company"
+      : input.objectType === ObjectType.OPPORTUNITY ? "opportunity"
+        : input.objectType === ObjectType.MEETING ? "meeting" : null;
+  const ordinaryOperation = isLLMEnabledByEnv() && paidSourceType && input.actorUserId
+    ? await prepareOrdinaryPaidOperationOrFallback({ client: ordinaryPaidWriterClient(), workspaceId: input.workspaceId,
+        actorUserId: input.actorUserId, kind: "briefing", sourceType: paidSourceType,
+        sourceId: input.objectId, slot: input.snapshotType })
+    : null;
   const llmBriefing = await generateBriefingWithLLM({
     workspaceId: input.workspaceId,
     userId: input.actorUserId,
@@ -165,6 +177,7 @@ export async function generateObjectBriefingSnapshot(input: GenericBriefingInput
     objectLabel: resource.objectLabel,
     currentStage: resource.currentStage,
     fallbackPayload,
+    ordinaryOperationId: ordinaryOperation?.id,
   });
   const payload = llmBriefing.output;
 

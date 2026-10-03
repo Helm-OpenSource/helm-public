@@ -1,0 +1,23 @@
+CREATE TABLE `LLMWorkflowOperation` (
+  `id` VARCHAR(191) NOT NULL,
+  `workspaceId` VARCHAR(191) NOT NULL,
+  `operationKey` VARCHAR(71) NOT NULL,
+  `requestKey` VARCHAR(191) NOT NULL,
+  `kind` VARCHAR(64) NOT NULL,
+  `sourceType` VARCHAR(64) NOT NULL,
+  `sourceId` VARCHAR(191) NOT NULL,
+  `sourceVersion` VARCHAR(191) NOT NULL,
+  `sourceDigest` VARCHAR(71) NOT NULL,
+  `actorUserId` VARCHAR(191) NULL,
+  `generation` INTEGER NOT NULL,
+  `slot` VARCHAR(64) NOT NULL,
+  `projectedPayloadHash` VARCHAR(71) NULL,
+  `projectionReceiptRef` VARCHAR(191) NULL,
+  `status` VARCHAR(32) NOT NULL DEFAULT 'prepared',
+  `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updatedAt` DATETIME(3) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE INDEX `LLMWorkflowOperation_workspace_operation_key` (`workspaceId`, `operationKey`),
+  UNIQUE INDEX `LLMWorkflowOperation_workspace_request_key` (`workspaceId`, `requestKey`),
+  INDEX `LLMWorkflowOperation_source_idx` (`workspaceId`, `kind`, `sourceType`, `sourceId`, `generation`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

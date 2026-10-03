@@ -29,6 +29,8 @@ export type LLMTaskInput<TOutput> = {
   taskType: LLMTaskType;
   workspaceId: string;
   userId?: string | null;
+  /** Server-created operation; the C3 claim rechecks its source and actor. */
+  ordinaryOperationId?: string;
   promptKey: string;
   promptVersion: string;
   systemPrompt: string;
@@ -68,6 +70,8 @@ export type LLMProviderRunResult<TOutput> = {
   rawOutput: string;
   usage?: LLMUsage;
   modelVersion?: string | null;
+  /** The committed governed route used for this charged attempt. */
+  governedRoute?: { provider: string; model: string; modelVersion: string };
 };
 
 export type LLMTaskExecutionResult<TOutput> = {

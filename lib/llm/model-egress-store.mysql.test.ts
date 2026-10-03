@@ -7,6 +7,7 @@ import { authorityHash, canonicalAuthorityJson } from "./trusted-spend-authority
 import { createRegisteredGovernedSpendAuthority, issuerGrantHash } from "./trusted-spend-authority-prisma";
 import {
   MembershipStatus,
+  ActorType,
   type Prisma,
   WorkspaceRole,
 } from "@prisma/client";
@@ -14,7 +15,19 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { getWorkspaceModelEgressOwnerReadout } from "@/features/dashboard/model-egress-query";
 import { db } from "@/lib/db";
-import { createGovernedModelGateway } from "@/lib/llm/governed-model-gateway.service";
+import { createGovernedModelGateway, createGovernedModelGatewayForChargeClient } from "@/lib/llm/governed-model-gateway.service";
+import { bindOrdinaryPaidProjection, prepareOrdinaryPaidOperation } from "@/lib/llm/ordinary-paid-operation.service";
+import { createOrdinaryPaidAdapterBridge, type OrdinaryPaidOutput, type OrdinaryPaidPayload } from "@/lib/llm/ordinary-paid-adapter-bridge.service";
+import { installOrdinaryPaidServerBootstrap } from "@/lib/llm/ordinary-paid-server-bootstrap.service";
+import { enhanceRecommendationExplanationWithLLM } from "@/lib/llm-workflows/enhance-recommendation-explanation.workflow";
+import { reviewJudgementBoundaryWithLLM } from "@/lib/llm-workflows/review-judgement-boundary.workflow";
+import { reviewCounterfactualWithLLM } from "@/lib/llm-workflows/review-counterfactual.workflow";
+import { executeMultiPassReview } from "@/lib/llm-workflows/multi-pass-review.workflow";
+import { prepareBiReportDryRun } from "@/lib/bi-report-skill/run-service";
+import type { BiReportSkillPack, BiReportSubscriptionConfig } from "@/lib/bi-report-skill/types";
+import { generateContactBriefingSnapshot } from "@/lib/memory/briefing.service";
+import { processMeetingMemory } from "@/lib/memory/meeting-memory-pipeline.service";
+import { getProviderAdapter } from "@/lib/llm/provider-registry";
 import { createGovernedModelAdapterRegistry } from "@/lib/llm/governed-model-adapter-registry.service";
 import {
   canonicalJson,
@@ -211,7 +224,8 @@ function route(
     deploymentForm: "domestic_cloud",
     jurisdiction: "domestic",
     region: "cn-test-1",
-    allowedTaskClasses: ["summary_briefing"],
+    allowedTaskClasses: ["summary_briefing", "reasoning_counterfactual",
+      "extraction_classification", "multi_pass_review"],
     maximumSensitivity: "confidential",
     allowedProcessingDispositions: ["remote_projected"],
     retentionDays: 0,
@@ -274,6 +288,8 @@ function readiness(input: {
 }
 
 describeMysql("model egress store with an isolated MySQL database", () => {
+  const ordinaryTestCharge = integrationDatabaseUrl
+    ? new PrismaClient({ datasources: { db: { url: integrationDatabaseUrl } } }) : null;
   let workspaceId = "";
   let ownerUserId = "";
   let invitedUserId = "";
@@ -334,7 +350,9 @@ describeMysql("model egress store with an isolated MySQL database", () => {
     return recorded.receipt.receiptId;
   }
 
-  async function initializeFixture(fixtureSuffix = suffix) {
+  async function initializeFixture(fixtureSuffix = suffix, options: {
+    primaryMaxOutputTokens?: number;
+  } = {}) {
     assertIsolatedDatabaseTarget();
     const now = new Date();
     const workspace = await db.workspace.create({
@@ -445,6 +463,8 @@ describeMysql("model egress store with an isolated MySQL database", () => {
     const fallbackRouteId = `synthetic-fallback-${fixtureSuffix}`;
     const primaryReadinessBase = route(primaryRouteId, HASH_A, {
       fallbackRouteIds: [fallbackRouteId],
+      ...(options.primaryMaxOutputTokens
+        ? { maxOutputTokens: options.primaryMaxOutputTokens } : {}),
     });
     const primaryReadiness = readiness({
       workspaceId,
@@ -503,6 +523,9 @@ describeMysql("model egress store with an isolated MySQL database", () => {
           taskClass: "summary_briefing",
           routeRef: primaryRoute.routeId,
         },
+        { taskClass: "reasoning_counterfactual", routeRef: primaryRoute.routeId },
+        { taskClass: "extraction_classification", routeRef: primaryRoute.routeId },
+        { taskClass: "multi_pass_review", routeRef: primaryRoute.routeId },
       ],
       validFrom: new Date(now.getTime() - 60_000).toISOString(),
       validUntil: new Date(now.getTime() + 86_400_000).toISOString(),
@@ -546,6 +569,7 @@ describeMysql("model egress store with an isolated MySQL database", () => {
     // This suite targets a disposable, prefix-guarded database. Immutable
     // egress evidence is intentionally not deleted during teardown.
     await db.$disconnect();
+    await ordinaryTestCharge?.$disconnect();
   });
 
   async function prepareAllowed(
@@ -2500,7 +2524,8 @@ describeMysql("model egress store with an isolated MySQL database", () => {
 
   async function provisionC4(label: string) {
     const now=new Date(), before=new Date(now.getTime()-60_000), until=new Date(now.getTime()+3_600_000);
-    const keys=generateKeyPairSync("ed25519"), grantId=`issuer:${label}`;
+    const scopedLabel = `${label}:${suffix}`;
+    const keys=generateKeyPairSync("ed25519"), grantId=`issuer:${scopedLabel}`;
     const grant={id:grantId,workspaceId,issuerUserId:ownerUserId,publicKeyPem:keys.publicKey.export({type:"spki",format:"pem"}).toString(),allowedKindsJson:canonicalAuthorityJson(["budget","period","price"]),sourceReceiptHash:HASH_A,validFrom:before,validUntil:until,revokedAt:null,contentHash:""};
     grant.contentHash=issuerGrantHash(grant);
     await db.$executeRaw`INSERT INTO LLMSpendIssuerGrant(id,workspaceId,issuerUserId,publicKeyPem,allowedKindsJson,sourceReceiptHash,contentHash,validFrom,validUntil)
@@ -2512,10 +2537,10 @@ describeMysql("model egress store with an isolated MySQL database", () => {
         VALUES (${ref},${workspaceId},${ref},${kind},${version},${grantId},${json},${signature},${hash})`;
       return {ref,hash};
     };
-    const period=await issue("period",`period:${label}`,SPEND_PERIOD_VERSION,{algorithm:"calendar-month-v1",timezone:"Asia/Shanghai"});
-    const price=await issue("price",`price:${label}`,PRICING_VERSION,{billing:"input-output-only-v1",provider:primaryRoute.provider,model:primaryRoute.modelId,sku:"text-only",currency:"USD",input:{numerator:"0",denominator:"1",ceiling:String(primaryRoute.maxInputTokens)},output:{numerator:"1",denominator:"1",ceiling:String(primaryRoute.maxOutputTokens)}});
-    await issue("budget",`approval:${label}`,"v1",{configVersion:1,mode:"unlimited",limitMicros:null,currency:"USD",updatedBy:ownerUserId,updatedAt:now.toISOString(),periodRef:period.ref,periodHash:period.hash,priceRef:price.ref,priceHash:price.hash,fxRef:null,fxHash:null});
-    await db.workspace.update({where:{id:workspaceId},data:{llmBudgetApprovalRef:`approval:${label}`,llmBudgetCurrency:"USD",llmBudgetUpdatedBy:ownerUserId,llmBudgetUpdatedAt:now,llmBudgetPriceBookRef:price.ref,llmBudgetFxPolicyRef:null}});
+    const period=await issue("period",`period:${scopedLabel}`,SPEND_PERIOD_VERSION,{algorithm:"calendar-month-v1",timezone:"Asia/Shanghai"});
+    const price=await issue("price",`price:${scopedLabel}`,PRICING_VERSION,{billing:"input-output-only-v1",provider:primaryRoute.provider,model:primaryRoute.modelId,sku:"text-only",currency:"USD",input:{numerator:"0",denominator:"1",ceiling:String(primaryRoute.maxInputTokens)},output:{numerator:"1",denominator:"1",ceiling:String(primaryRoute.maxOutputTokens)}});
+    await issue("budget",`approval:${scopedLabel}`,"v1",{configVersion:1,mode:"unlimited",limitMicros:null,currency:"USD",updatedBy:ownerUserId,updatedAt:now.toISOString(),periodRef:period.ref,periodHash:period.hash,priceRef:price.ref,priceHash:price.hash,fxRef:null,fxHash:null});
+    await db.workspace.update({where:{id:workspaceId},data:{llmBudgetApprovalRef:`approval:${scopedLabel}`,llmBudgetCurrency:"USD",llmBudgetUpdatedBy:ownerUserId,llmBudgetUpdatedAt:now,llmBudgetPriceBookRef:price.ref,llmBudgetFxPolicyRef:null}});
     const registered=createRegisteredGovernedSpendAuthority({expectedPeriodPolicyVersion:SPEND_PERIOD_VERSION,trustedIssuerGrants:{[grantId]:grant.contentHash}});
     const authority: GovernedSpendAuthority={...registered,resolveDispatch:async(input)=>{
       // Assert the actual C3 transaction identity, not an unrelated negative
@@ -2549,6 +2574,73 @@ describeMysql("model egress store with an isolated MySQL database", () => {
       const counter=await restricted.lLMSpendPeriodCounter.findUniqueOrThrow({where:{workspaceId_periodKey:{workspaceId,periodKey:ledger.periodKey}}});
       expect(counter.unknownBoundMicros).toBe(BigInt(REQUESTED_MAX_OUTPUT_TOKENS));
     } finally { transaction.mockRestore();await restricted.$disconnect(); }
+  });
+
+  it("withholds the actual ordinary bridge after registered C4 cannot attest terminal usage", async () => {
+    const writerUrl = process.env.ORDINARY_PAID_WRITER_DATABASE_URL;
+    const chargeUrl = process.env.MODEL_EGRESS_RUNTIME_DATABASE_URL;
+    if (!writerUrl || !chargeUrl) throw new Error("ordinary_paid_split_database_required");
+    await initializeFixture(`c4-ordinary-unknown-${suffix}`);
+    const { authority } = await provisionC4(`c4-ordinary-unknown-${suffix}`);
+    const source = await db.recommendationLog.create({ data: {
+      workspaceId, userId: ownerUserId, objectType: "COMPANY",
+      objectId: `synthetic-object-${suffix}`, actionType: "CREATE_TASK",
+      title: "Synthetic action", description: "Synthetic source",
+      policyResult: "SUGGEST_ONLY", explanation: "Synthetic baseline",
+    } });
+    const writer = new PrismaClient({ datasources: { db: { url: writerUrl } } });
+    const charge = new PrismaClient({ datasources: { db: { url: chargeUrl } } });
+    const invoke = vi.fn(async () => ({
+      outcome: "success" as const,
+      output: { rawOutput: '{"synthetic":"charged"}',
+        modelVersion: "synthetic-model-20260723", promptTokens: 10, completionTokens: 10 },
+      requestDisposition: "accepted" as const,
+      providerRequestRef: `synthetic-registered-${suffix}`, promptTokens: 10,
+      completionTokens: 10, actualCostUsdMicros: 10,
+      costCurrency: "USD" as const, pricingVersion: PRICING_VERSION,
+      costBand: "low" as const, errorCode: null,
+    }));
+    try {
+      const operation = await prepareOrdinaryPaidOperation({ client: writer,
+        workspaceId, actorUserId: ownerUserId, kind: "recommendation_explanation",
+        sourceType: "recommendation_log", sourceId: source.id, slot: "explanation" });
+      const gateway = createGovernedModelGatewayForChargeClient<OrdinaryPaidPayload, OrdinaryPaidOutput>({
+        client: charge, spendAuthority: authority, adapters: [{
+          registration: SYNTHETIC_REGISTRATION,
+          probeReadiness: async () => ({ endpointFingerprint: HASH_C,
+            credentialConfigured: true, modelProbeStatus: "ready" as const,
+            capabilityRefs: [], evidenceRefs: [], checkedAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + 60_000).toISOString() }),
+          preflight: async () => ({ endpointFingerprint: HASH_C,
+            credentialConfigured: true, observedAt: new Date().toISOString(),
+            estimatedInputTokens: 10, estimatedMaxCostUsdMicros: 10 }), invoke,
+        }],
+      });
+      const bridge = createOrdinaryPaidAdapterBridge({ policyKey: "caio-pro-default",
+        operationWriterClient: writer, chargeClient: charge, gateway,
+        issueProjection: ({ operationId, projectedPayload, projectedPayloadHash }) =>
+          projection(`evidence:registered-${operationId}`,
+            `projection:registered-${operationId}`, undefined, assetId, new Date(),
+            projectedPayloadHash, Buffer.byteLength(canonicalJson(projectedPayload), "utf8")),
+      });
+      await expect(bridge({ taskType: "RECOMMENDATION_EXPLANATION",
+        workspaceId, userId: ownerUserId, promptKey: "synthetic.recommendation",
+        promptVersion: "v1", systemPrompt: "Synthetic", userPrompt: "Synthetic",
+        outputMode: "json", parseOutput: (raw) => JSON.parse(raw) as { synthetic: string },
+        fallbackOutput: { synthetic: "fallback" }, ordinaryOperationId: operation.id,
+        effectiveMaxOutputTokens: 200 })).rejects.toThrow("paid_egress_in_doubt");
+      expect(invoke).toHaveBeenCalledTimes(1);
+      const decision = await charge.modelRouteDecision.findFirstOrThrow({ where: {
+        workspaceId, requestKey: operation.requestKey,
+      } });
+      expect((await charge.lLMSpendLedgerEntry.findUniqueOrThrow({ where: {
+        workspaceId_attemptRef: { workspaceId,
+          attemptRef: decision.dispatchProviderIdempotencyKey! },
+      } })).state).toBe("unknown");
+      expect(await charge.modelEgressReceipt.count({ where: {
+        decisionId: decision.id, sequence: 2,
+      } })).toBe(0);
+    } finally { await Promise.all([writer.$disconnect(), charge.$disconnect()]); }
   });
 
   it("registered C4 rejects decision expiry during an actual issuer lock wait", async () => {
@@ -2658,4 +2750,571 @@ describeMysql("model egress store with an isolated MySQL database", () => {
       }),
     ).rejects.toThrow(/model_route_policy_head_changed/u);
   });
+  it("joins a persisted ordinary BI operation to the same claim and settlement transaction", async () => {
+    // A deliberately UNKNOWN charge occupies this fixture's concurrency slot.
+    // Keep it in a separate workspace from all existing route tests.
+    await initializeFixture(`ordinary-${suffix}`);
+    const subId = `sub-ordinary-${suffix}`;
+    const runId = `run-ordinary-${suffix}`;
+    await db.biReportSubscription.create({ data: {
+      id: subId, workspaceId, createdByUserId: ownerUserId,
+      name: "Synthetic ordinary BI", skillKey: "synthetic", skillVersion: "v1",
+      scheduleCron: "0 0 * * *", deliveryTargetsJson: "[]",
+    } });
+    await db.biReportRun.create({ data: {
+      id: runId, workspaceId, subscriptionId: subId,
+      scheduledFor: new Date("2026-10-03T00:00:00.000Z"), dedupeKey: runId,
+    } });
+    const operation = await prepareOrdinaryPaidOperation({ client: db,
+      workspaceId, actorUserId: ownerUserId, kind: "bi_analysis", sourceType: "bi_run",
+      sourceId: runId, slot: "analysis",
+    });
+    const projectedPayload: OrdinaryPaidPayload = {
+      taskType: "BI_REPORT_ANALYSIS", promptKey: "synthetic.bi", promptVersion: "v1",
+      systemPrompt: `synthetic system ${suffix}`, userPrompt: "synthetic user",
+      outputMode: "json", jsonSchema: null,
+    };
+    const serialized = canonicalJson(projectedPayload);
+    const projectionReceiptRef = await projection(`evidence:ordinary-${suffix}`,
+      `projection:ordinary-${suffix}`, undefined, assetId, new Date(),
+      sha256(serialized), Buffer.byteLength(serialized, "utf8"));
+    const invoke = vi.fn(async () => ({
+      outcome: "success" as const, output: { rawOutput: '{"synthetic":"complete"}',
+        modelVersion: "synthetic-model-20260723", promptTokens: 10, completionTokens: 10 },
+      requestDisposition: "accepted" as const,
+      providerRequestRef: "synthetic-ordinary-request", promptTokens: 10,
+      completionTokens: 10, actualCostUsdMicros: 12_500,
+      costCurrency: "USD" as const, pricingVersion: PRICING_VERSION,
+      costBand: "low" as const, errorCode: null,
+    }));
+    const registry = createGovernedModelAdapterRegistry<OrdinaryPaidPayload, OrdinaryPaidOutput>([{
+      registration: SYNTHETIC_REGISTRATION,
+      probeReadiness: async () => ({ endpointFingerprint: HASH_C, credentialConfigured: true,
+        modelProbeStatus: "ready", capabilityRefs: [], evidenceRefs: [],
+        checkedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000).toISOString() }),
+      preflight: async () => ({ endpointFingerprint: HASH_C, credentialConfigured: true,
+        observedAt: new Date().toISOString(), estimatedInputTokens: 10,
+        estimatedMaxCostUsdMicros: 12_500 }),
+      invoke,
+    }]);
+    const execute = createGovernedModelGateway({ registry,
+      dependencies: { spendAuthority: syntheticSpendAuthority } });
+    const request = { workspaceId, gatewayRef: "gateway:ordinary-synthetic", policyKey: "caio-pro-default",
+      requestKey: operation.requestKey, taskClass: "summary_briefing" as const,
+      taskRef: `ordinary:${operation.id}`, ordinaryOperationId: operation.id,
+      projectionReceiptRef, projectedPayload, requestedMaxOutputTokens: REQUESTED_MAX_OUTPUT_TOKENS };
+    await expect(execute({ ...request, ordinaryOperationId: undefined }))
+      .rejects.toThrow("ordinary_operation_required");
+    expect(invoke).not.toHaveBeenCalled();
+    let committedGatewayResult: Awaited<ReturnType<typeof execute>> | null = null;
+    const issueProjection = vi.fn(async ({ operationId, projectedPayloadHash }: {
+      operationId: string; projectedPayloadHash: string;
+    }) => {
+      expect(operationId).toBe(operation.id);
+      expect(projectedPayloadHash).toBe(sha256(serialized));
+      return projectionReceiptRef;
+    });
+    const bridge = createOrdinaryPaidAdapterBridge({ policyKey: "caio-pro-default",
+      operationWriterClient: db, chargeClient: ordinaryTestCharge,
+      issueProjection,
+      gateway: async (request) => {
+        const result = await execute(request);
+        if (result.status === "success") committedGatewayResult = result;
+        return result;
+      },
+    });
+    const ordinaryInput = { taskType: "BI_REPORT_ANALYSIS" as const, workspaceId,
+      userId: ownerUserId, promptKey: projectedPayload.promptKey,
+      promptVersion: projectedPayload.promptVersion, systemPrompt: projectedPayload.systemPrompt,
+      userPrompt: projectedPayload.userPrompt, outputMode: "json" as const,
+      parseOutput: (raw: string) => JSON.parse(raw) as { synthetic: string },
+      fallbackOutput: { synthetic: "fallback" }, ordinaryOperationId: operation.id,
+      effectiveMaxOutputTokens: REQUESTED_MAX_OUTPUT_TOKENS };
+    const concurrent = await Promise.allSettled([bridge(ordinaryInput), bridge(ordinaryInput)]);
+    expect(concurrent.some((result) => result.status === "fulfilled" && result.value.output.synthetic === "complete"))
+      .toBe(true);
+    expect(issueProjection).toHaveBeenCalled();
+    expect((await db.lLMWorkflowOperation.findUniqueOrThrow({ where: { id: operation.id } })).projectionReceiptRef)
+      .toBe(projectionReceiptRef);
+    expect(invoke).toHaveBeenCalledTimes(1);
+    const decision = await db.modelRouteDecision.findFirstOrThrow({ where: {
+      workspaceId, requestKey: operation.requestKey,
+    } });
+    const ledger = await db.lLMSpendLedgerEntry.findUniqueOrThrow({ where: {
+      workspaceId_attemptRef: { workspaceId, attemptRef: decision.dispatchProviderIdempotencyKey! },
+    } });
+    expect(ledger.state).toBe("settled");
+    expect(ledger.settledMicros).toBe(BigInt(12_500));
+    expect(await db.modelEgressReceipt.count({ where: { decisionId: decision.id, sequence: 2 } })).toBe(1);
+    const committedReceipt = await db.modelEgressReceipt.findUniqueOrThrow({ where: {
+      decisionId_sequence: { decisionId: decision.id, sequence: 2 },
+    } });
+    expect(committedReceipt.receiptJson).not.toContain("complete");
+    expect(committedReceipt.receiptJson).toContain("outputContentHash");
+    expect(committedGatewayResult?.status).toBe("success");
+    const settled = committedGatewayResult!;
+    for (const changedOutput of [
+      { ...settled.output!, promptTokens: 11 },
+      { ...settled.output!, completionTokens: 11 },
+      { ...settled.output!, modelVersion: "synthetic-other-version" },
+      { ...settled.output!, rawOutput: '{"synthetic":"altered"}' },
+    ]) {
+      const tampered = createOrdinaryPaidAdapterBridge({ policyKey: "caio-pro-default",
+        operationWriterClient: db, chargeClient: ordinaryTestCharge,
+        gateway: async () => ({ ...settled, output: changedOutput }),
+      });
+      await expect(tampered(ordinaryInput)).rejects.toThrow("paid_egress_committed_readback_invalid");
+    }
+
+    // A distinct persisted business run represents another operation. A
+    // mutable revision of the first run cannot mint a second paid attempt.
+    const unknownRunId = `run-ordinary-unknown-${suffix}`;
+    await db.biReportRun.create({ data: {
+      id: unknownRunId, workspaceId, subscriptionId: subId,
+      scheduledFor: new Date("2026-10-04T00:00:00.000Z"), dedupeKey: unknownRunId,
+    } });
+    const unknownOperation = await prepareOrdinaryPaidOperation({ client: db,
+      workspaceId, actorUserId: ownerUserId, kind: "bi_analysis", sourceType: "bi_run",
+      sourceId: unknownRunId, slot: "analysis",
+    });
+    const unknownPayload: OrdinaryPaidPayload = { ...projectedPayload,
+      userPrompt: "synthetic user revision" };
+    const unknownSerialized = canonicalJson(unknownPayload);
+    const unknownProjectionRef = await projection(`evidence:ordinary-unknown-${suffix}`,
+      `projection:ordinary-unknown-${suffix}`, undefined, assetId, new Date(),
+      sha256(unknownSerialized), Buffer.byteLength(unknownSerialized, "utf8"));
+    await bindOrdinaryPaidProjection({ client: db, workspaceId,
+      operationId: unknownOperation.id, projectionReceiptRef: unknownProjectionRef,
+      projectedPayloadHash: sha256(unknownSerialized) });
+    invoke.mockImplementationOnce(async () => { throw new Error("synthetic outcome unknown"); });
+    const unknownInput = { ...ordinaryInput, userPrompt: unknownPayload.userPrompt,
+      ordinaryOperationId: unknownOperation.id };
+    await expect(bridge(unknownInput)).rejects.toThrow("paid_egress_in_doubt");
+    const invokeCountAfterUnknown = invoke.mock.calls.length;
+    await expect(bridge(unknownInput)).rejects.toThrow();
+    expect(invoke).toHaveBeenCalledTimes(invokeCountAfterUnknown);
+    const unknownDecision = await db.modelRouteDecision.findFirstOrThrow({ where: {
+      workspaceId, requestKey: unknownOperation.requestKey,
+    } });
+    const unknownLedger = await db.lLMSpendLedgerEntry.findUniqueOrThrow({ where: {
+      workspaceId_attemptRef: { workspaceId,
+        attemptRef: unknownDecision.dispatchProviderIdempotencyKey! },
+    } });
+    expect(unknownLedger.state).toBe("unknown");
+    expect(unknownLedger.reservedMicros).toBe(unknownLedger.maximumChargeMicros);
+    expect(unknownLedger.reservedMicros).toBeGreaterThan(BigInt(0));
+    expect(await db.modelEgressReceipt.count({ where: {
+      decisionId: unknownDecision.id, sequence: 2,
+    } })).toBe(0);
+  });
+
+  it("charges each ordinary task kind and each distinct multi-pass role through C3", async () => {
+    const writerUrl = process.env.ORDINARY_PAID_WRITER_DATABASE_URL;
+    if (!writerUrl) throw new Error("ordinary_paid_writer_database_required");
+    const writerTarget = new URL(writerUrl);
+    const chargeTarget = runtimeDatabaseUrl();
+    const rootTarget = new URL(integrationDatabaseUrl!);
+    if (writerTarget.pathname !== rootTarget.pathname ||
+        chargeTarget.pathname !== rootTarget.pathname ||
+        writerTarget.search !== rootTarget.search ||
+        chargeTarget.search !== rootTarget.search ||
+        writerTarget.username === chargeTarget.username ||
+        writerTarget.username === rootTarget.username) {
+      throw new Error("ordinary_paid_split_realm_invalid");
+    }
+    const writer = new PrismaClient({ datasources: { db: { url: writerUrl } } });
+    const charge = new PrismaClient({ datasources: { db: { url: process.env.MODEL_EGRESS_RUNTIME_DATABASE_URL! } } });
+    try {
+    const [writerPrincipal] = await writer.$queryRaw<Array<{ principal: string }>>`SELECT CURRENT_USER() AS principal`;
+    const [chargePrincipal] = await charge.$queryRaw<Array<{ principal: string }>>`SELECT CURRENT_USER() AS principal`;
+    expect(writerPrincipal?.principal).toContain("c5_writer");
+    expect(chargePrincipal?.principal).toContain("c4_runtime");
+    await initializeFixture(`ordinary-review-${suffix}`);
+    const subscriptionId = `sub-review-${suffix}`;
+    const runId = `run-review-${suffix}`;
+    await db.biReportSubscription.create({ data: {
+      id: subscriptionId, workspaceId, createdByUserId: ownerUserId,
+      name: "Synthetic review source", skillKey: "synthetic", skillVersion: "v1",
+      scheduleCron: "0 0 * * *", deliveryTargetsJson: "[]",
+    } });
+    await db.biReportRun.create({ data: {
+      id: runId, workspaceId, subscriptionId,
+      scheduledFor: new Date("2026-10-03T00:00:00.000Z"), dedupeKey: runId,
+    } });
+    const recommendationId = `recommendation-review-${suffix}`;
+    await db.recommendationLog.create({ data: {
+      id: recommendationId, workspaceId, userId: ownerUserId,
+      objectType: "COMPANY", objectId: `synthetic-company-${suffix}`,
+      actionType: "CREATE_TASK", title: "Synthetic recommendation",
+      description: "Synthetic deterministic source", policyResult: "SUGGEST_ONLY",
+      explanation: "Deterministic explanation",
+    } });
+    const companyId = `company-review-${suffix}`;
+    const meetingId = `meeting-review-${suffix}`;
+    const meetingNoteId = `meeting-note-review-${suffix}`;
+    await db.company.create({ data: { id: companyId, workspaceId,
+      name: "Synthetic company" } });
+    await db.meeting.create({ data: { id: meetingId, workspaceId,
+      title: "Synthetic meeting", startsAt: new Date("2026-10-03T00:00:00.000Z"),
+      endsAt: new Date("2026-10-03T01:00:00.000Z") } });
+    await db.meetingNote.create({ data: { id: meetingNoteId, workspaceId,
+      meetingId, summary: "Synthetic meeting note" } });
+    const invoke = vi.fn(async () => ({
+      outcome: "success" as const,
+      output: { rawOutput: '{"synthetic":"reviewed"}',
+        modelVersion: "synthetic-model-20260723", promptTokens: 10, completionTokens: 10 },
+      requestDisposition: "accepted" as const,
+      providerRequestRef: `synthetic-reviewed-${invoke.mock.calls.length}`,
+      promptTokens: 10, completionTokens: 10,
+      actualCostUsdMicros: 12_500, costCurrency: "USD" as const,
+      pricingVersion: PRICING_VERSION, costBand: "low" as const, errorCode: null,
+    }));
+    const registry = createGovernedModelAdapterRegistry<OrdinaryPaidPayload, OrdinaryPaidOutput>([{
+      registration: SYNTHETIC_REGISTRATION,
+      probeReadiness: async () => ({ endpointFingerprint: HASH_C, credentialConfigured: true,
+        modelProbeStatus: "ready", capabilityRefs: [], evidenceRefs: [],
+        checkedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000).toISOString() }),
+      preflight: async () => ({ endpointFingerprint: HASH_C, credentialConfigured: true,
+        observedAt: new Date().toISOString(), estimatedInputTokens: 10,
+        estimatedMaxCostUsdMicros: 12_500 }),
+      invoke,
+    }]);
+    const gateway = createGovernedModelGatewayForChargeClient({
+      client: charge, registry, spendAuthority: syntheticSpendAuthority });
+    const tasks = [
+      { kind: "bi_analysis" as const, slot: "analysis" as const,
+        taskType: "BI_REPORT_ANALYSIS" as const, taskClass: "summary_briefing" as const,
+        sourceType: "bi_run" as const, sourceId: runId },
+      { kind: "bi_review" as const, slot: "review" as const,
+        taskType: "BI_REPORT_REVIEW" as const, taskClass: "reasoning_counterfactual" as const,
+        sourceType: "bi_run" as const, sourceId: runId },
+      { kind: "meeting_extraction" as const, slot: "extraction" as const,
+        taskType: "MEETING_MEMORY_EXTRACTION" as const, taskClass: "extraction_classification" as const,
+        sourceType: "meeting_note" as const, sourceId: meetingNoteId },
+      { kind: "recommendation_explanation" as const, slot: "explanation" as const,
+        taskType: "RECOMMENDATION_EXPLANATION" as const, taskClass: "summary_briefing" as const,
+        sourceType: "recommendation_log" as const, sourceId: recommendationId },
+      { kind: "briefing" as const, slot: "object_brief" as const,
+        taskType: "COMPANY_BRIEFING" as const, taskClass: "summary_briefing" as const,
+        sourceType: "company" as const, sourceId: companyId },
+      { kind: "counterfactual_review" as const, slot: "counterfactual" as const,
+        taskType: "COUNTERFACTUAL_REVIEW" as const, taskClass: "reasoning_counterfactual" as const,
+        sourceType: "bi_run" as const, sourceId: runId },
+      { kind: "judgement_review" as const, slot: "critique" as const,
+        taskType: "JUDGEMENT_BOUNDARY_REVIEW" as const, taskClass: "reasoning_counterfactual" as const,
+        sourceType: "recommendation_log" as const, sourceId: recommendationId },
+      ...(["generator", "critic", "adversary"] as const).map((slot) => ({
+        kind: "multi_pass_review" as const, slot,
+        taskType: "MULTI_PASS_REVIEW" as const, taskClass: "multi_pass_review" as const,
+        sourceType: "bi_run" as const, sourceId: runId,
+      })),
+    ];
+    for (const task of tasks) {
+      const operation = await prepareOrdinaryPaidOperation({ client: writer,
+        workspaceId, actorUserId: ownerUserId, kind: task.kind,
+        sourceType: task.sourceType, sourceId: task.sourceId, slot: task.slot });
+      if (task.kind === "bi_analysis") {
+        await expect(writer.$executeRaw`UPDATE LLMWorkflowOperation SET generation=2 WHERE id=${operation.id}`)
+          .rejects.toThrow();
+        await expect(writer.$executeRaw`UPDATE LLMWorkflowOperation SET requestKey='forged' WHERE id=${operation.id}`)
+          .rejects.toThrow();
+        await expect(writer.$executeRaw`DELETE FROM LLMWorkflowOperation WHERE id=${operation.id}`)
+          .rejects.toThrow();
+        await expect(charge.lLMWorkflowOperation.create({ data: {
+          workspaceId, operationKey: `sha256:${"a".repeat(64)}`,
+          requestKey: "ordinary:forged", kind: "bi_analysis",
+          sourceType: "bi_run", sourceId: runId, sourceVersion: "forged",
+          sourceDigest: `sha256:${"b".repeat(64)}`,
+          actorUserId: ownerUserId, generation: 2, slot: "analysis",
+        } })).rejects.toThrow();
+      }
+      // The judgement and critic roles exercise the same gateway with restricted C4
+      // runtime connection. Its projection is issued/bound beforehand by the
+      // privileged fixture so runtime only needs SELECT on the operation.
+      if (task.slot === "critic" || task.slot === "critique") {
+        const projectedPayload: OrdinaryPaidPayload = {
+          taskType: task.taskType, promptKey: `synthetic.review.${task.slot}`,
+          promptVersion: "v1", systemPrompt: "synthetic system",
+          userPrompt: `synthetic ${task.slot}`, outputMode: "json", jsonSchema: null,
+        };
+        const serialized = canonicalJson(projectedPayload);
+        const receiptRef = await projection(
+          `evidence:ordinary-review-${task.slot}-${suffix}`,
+          `projection:ordinary-review-${task.slot}-${suffix}`, undefined,
+          assetId, new Date(), sha256(serialized), Buffer.byteLength(serialized, "utf8"));
+        await bindOrdinaryPaidProjection({ client: writer, workspaceId,
+          operationId: operation.id, projectionReceiptRef: receiptRef,
+          projectedPayloadHash: sha256(serialized) });
+      }
+      const bridge = createOrdinaryPaidAdapterBridge({ policyKey: "caio-pro-default",
+        operationWriterClient: writer, chargeClient: charge,
+        gateway,
+        issueProjection: task.slot === "critic" || task.slot === "critique" ? undefined : async ({ projectedPayload, projectedPayloadHash }) =>
+          projection(`evidence:ordinary-review-${task.slot}-${suffix}`,
+            `projection:ordinary-review-${task.slot}-${suffix}`, undefined, assetId,
+            new Date(), projectedPayloadHash,
+            Buffer.byteLength(canonicalJson(projectedPayload), "utf8")),
+      });
+      const runBridge = () => bridge({ workspaceId, userId: ownerUserId,
+        taskType: task.taskType, promptKey: `synthetic.review.${task.slot}`,
+        promptVersion: "v1", systemPrompt: "synthetic system",
+        userPrompt: `synthetic ${task.slot}`, outputMode: "json",
+        parseOutput: (raw: string) => JSON.parse(raw) as { synthetic: string },
+        fallbackOutput: { synthetic: "fallback" },
+        ordinaryOperationId: operation.id, effectiveMaxOutputTokens: REQUESTED_MAX_OUTPUT_TOKENS });
+      let result;
+      try { result = await runBridge(); } catch (error) {
+        throw new Error(`synthetic_task_kind=${task.kind}: ${String(error)}`);
+      }
+      expect(result.output.synthetic).toBe("reviewed");
+      const decision = await db.modelRouteDecision.findFirstOrThrow({ where: {
+        workspaceId, requestKey: operation.requestKey,
+      } });
+      expect(decision.taskClass).toBe(task.taskClass.toUpperCase());
+      const ledger = await db.lLMSpendLedgerEntry.findUniqueOrThrow({ where: {
+        workspaceId_attemptRef: { workspaceId,
+          attemptRef: decision.dispatchProviderIdempotencyKey! },
+      } });
+      expect(ledger.state).toBe("settled");
+    }
+    expect(invoke).toHaveBeenCalledTimes(tasks.length);
+    } finally { await Promise.all([writer.$disconnect(), charge.$disconnect()]); }
+  });
+
+  it("runs real recommendation and review hosts from fresh source through writer and C4 charge", async () => {
+    const writerUrl = process.env.ORDINARY_PAID_WRITER_DATABASE_URL;
+    const chargeUrl = process.env.MODEL_EGRESS_RUNTIME_DATABASE_URL;
+    if (!writerUrl || !chargeUrl) throw new Error("ordinary_paid_split_database_required");
+    await initializeFixture(`ordinary-host-${suffix}`, { primaryMaxOutputTokens: 8_192 });
+    const logId = `rec-host-${suffix}`;
+    await db.recommendationLog.create({ data: {
+      id: logId, workspaceId, userId: ownerUserId,
+      objectType: "COMPANY", objectId: `synthetic-object-${suffix}`,
+      actionType: "CREATE_TASK", title: "Synthetic action",
+      description: "Synthetic explanation input", policyResult: "SUGGEST_ONLY",
+      explanation: "Synthetic deterministic baseline",
+    } });
+    expect(await db.lLMWorkflowOperation.count({ where: { workspaceId } })).toBe(0);
+    const writer = new PrismaClient({ datasources: { db: { url: writerUrl } } });
+    const charge = new PrismaClient({ datasources: { db: { url: chargeUrl } } });
+    const fallback = { explanation: "synthetic fallback", whyNow: "now",
+      expectedImpact: "impact", ifNoAction: "no action", currentBlocker: null,
+      currentCommitment: null, personalizationHint: null,
+      supportingHighlights: ["synthetic"], evidenceSummary: "synthetic evidence" };
+    const invoke = vi.fn(async ({ taskRef, projectedPayload }: {
+      taskRef: string; projectedPayload: { taskType: string };
+    }) => {
+      const sourceOperation = await charge.lLMWorkflowOperation.findUnique({
+        where: { id: taskRef.replace(/^ordinary:/u, "") },
+      });
+      const syntheticOutput = projectedPayload.taskType === "MULTI_PASS_REVIEW"
+        ? { role: sourceOperation?.slot, reviewState: "candidate",
+            evidenceRefs: ["synthetic-evidence"], notes: ["Synthetic note"] }
+        : projectedPayload.taskType === "MEETING_MEMORY_EXTRACTION"
+          ? { summary: "Synthetic meeting", facts: [], commitments: [], blockers: [],
+              candidateActions: [] }
+          : projectedPayload.taskType.endsWith("_BRIEFING")
+            ? { summary: "Synthetic briefing", recommendedQuestions: [],
+                recommendedNextSteps: [], importantFactHighlights: [] }
+            : projectedPayload.taskType === "BI_REPORT_ANALYSIS"
+              ? { headline: "Synthetic", summary: "Synthetic analysis", findings: [],
+                  possibleCauses: [], recommendedActions: [], confidence: 0.5,
+                  continuityStatus: "first_seen", historicalContext: null,
+                  feedbackContext: null, boundaryNote: "Synthetic only" }
+              : { ...fallback, explanation: "charged output" };
+      const rawOutput = JSON.stringify(syntheticOutput);
+      return ({
+      outcome: "success" as const,
+      output: { rawOutput,
+        modelVersion: "synthetic-model-20260723", promptTokens: 10, completionTokens: 10 },
+      requestDisposition: "accepted" as const,
+      providerRequestRef: `synthetic-host-request:${taskRef}`, promptTokens: 10,
+      completionTokens: 10, actualCostUsdMicros: 12_500,
+      costCurrency: "USD" as const, pricingVersion: PRICING_VERSION,
+      costBand: "low" as const, errorCode: null,
+    }); });
+    const adapter = {
+      registration: SYNTHETIC_REGISTRATION,
+      probeReadiness: async () => ({ endpointFingerprint: HASH_C, credentialConfigured: true,
+        modelProbeStatus: "ready" as const, capabilityRefs: [], evidenceRefs: [],
+        checkedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000).toISOString() }),
+      preflight: async () => ({ endpointFingerprint: HASH_C, credentialConfigured: true,
+        observedAt: new Date().toISOString(), estimatedInputTokens: 10,
+        estimatedMaxCostUsdMicros: 12_500 }),
+      invoke,
+    };
+    const oldLLM = process.env.LLM_ENABLED;
+    process.env.LLM_ENABLED = "true";
+    const ordinaryAdapter = getProviderAdapter("qwen")!;
+    const configured = vi.spyOn(ordinaryAdapter, "isConfigured").mockReturnValue(true);
+    const directRun = vi.spyOn(ordinaryAdapter, "run").mockRejectedValue(new Error("direct_adapter_forbidden"));
+    try {
+      await installOrdinaryPaidServerBootstrap({
+        operationWriterClient: writer, chargeClient: charge,
+        policyKey: "caio-pro-default", spendAuthority: syntheticSpendAuthority,
+        adapters: [adapter],
+        issueProjection: ({ operationId, projectedPayload, projectedPayloadHash }) =>
+          projection(`evidence:host-${operationId}`, `projection:host-${operationId}`,
+            { maxInputTokens: 8_000, maxOutputTokens: 8_192 },
+            assetId, new Date(), projectedPayloadHash,
+            Buffer.byteLength(canonicalJson(projectedPayload), "utf8")),
+      });
+      const result = await enhanceRecommendationExplanationWithLLM({
+        workspaceId, userId: ownerUserId, objectLabel: "Synthetic object",
+        recommendationTitle: "Synthetic action",
+        recommendationDescription: "Synthetic description",
+        deterministicExplanation: "Synthetic baseline",
+        policyResultLabel: "Suggest only", fallback, recommendationLogId: logId,
+      });
+      expect(result.output.explanation).toBe("charged output");
+      expect(result.success).toBe(true);
+      expect(invoke).toHaveBeenCalledTimes(1);
+      expect(directRun).not.toHaveBeenCalled();
+      const operation = await charge.lLMWorkflowOperation.findFirstOrThrow({ where: { workspaceId } });
+      const decision = await charge.modelRouteDecision.findFirstOrThrow({ where: {
+        workspaceId, requestKey: operation.requestKey,
+      } });
+      const ledger = await charge.lLMSpendLedgerEntry.findUniqueOrThrow({ where: {
+        workspaceId_attemptRef: { workspaceId,
+          attemptRef: decision.dispatchProviderIdempotencyKey! },
+      } });
+      expect(ledger.state).toBe("settled");
+      const packet = { packetId: `packet-${suffix}`, workspaceId,
+        objectRef: { objectType: "recommendation", objectId: logId },
+        timeline: [], evidenceRefs: [], signals: [], commitments: [], blockers: [],
+        policySnapshot: {}, permissions: { allowedUses: ["human_review"],
+          forbiddenUses: ["external_send", "writeback"], requiredHumanReview: true },
+        privacyClass: "public_safe_synthetic", tokenBudget: { maxInputTokens: 1_000,
+          maxOutputTokens: 200 }, missingEvidence: [], boundaryNotes: ["Synthetic."] } as const;
+      const candidate = { candidateId: `candidate-${suffix}`, packetId: packet.packetId,
+        workspaceId, targetObjectRef: { objectType: "recommendation", objectId: logId },
+        judgementType: "recommendation_critic", reviewState: "candidate", confidence: 72,
+        summary: "Synthetic review", rationale: ["Synthetic evidence"], evidenceRefIds: [],
+        missingEvidenceIds: [], boundaryNotes: ["Synthetic note"] } as const;
+      const judgementResult = await reviewJudgementBoundaryWithLLM({ workspaceId, userId: ownerUserId,
+        recommendationLogId: logId, contextPacket: packet, candidate });
+      const judgementOperations = await charge.lLMWorkflowOperation.count({ where: {
+        workspaceId, kind: "judgement_review",
+      } });
+      expect(judgementOperations, JSON.stringify({ judgementResult })).toBe(1);
+      const reviewOperation = await charge.lLMWorkflowOperation.findFirstOrThrow({ where: {
+        workspaceId, kind: "judgement_review",
+      } });
+      expect(reviewOperation.sourceId).toBe(logId);
+      const reviewCall = await db.lLMCallLog.findFirst({ where: { workspaceId },
+        orderBy: { createdAt: "desc" } });
+      expect(reviewCall?.fallbackReason, JSON.stringify({ judgementResult,
+        errorMessage: reviewCall?.errorMessage })).toBeNull();
+      const reviewDecision = await charge.modelRouteDecision.findFirstOrThrow({ where: {
+        workspaceId, requestKey: reviewOperation.requestKey,
+      } });
+      expect(invoke, JSON.stringify({ judgementResult, reviewDecision })).toHaveBeenCalledTimes(2);
+      expect((await charge.lLMSpendLedgerEntry.findUniqueOrThrow({ where: {
+        workspaceId_attemptRef: { workspaceId,
+          attemptRef: reviewDecision.dispatchProviderIdempotencyKey! },
+      } })).state).toBe("settled");
+      const counterfactualResult = await reviewCounterfactualWithLLM({ workspaceId, userId: ownerUserId,
+        contextStub: { objectRef: { objectType: "recommendation", objectId: logId },
+          selectedEvidenceRefs: ["evidence:synthetic"], missingEvidence: [],
+          policySnapshotHash: "sha256:synthetic", privacyClass: "public_safe_synthetic",
+          tokenBudget: { maxInputTokens: 1_000, maxOutputTokens: 200 } },
+        judgementSummary: "Synthetic", capabilityRequested: { capabilityRef: "boundary_review" } });
+      const counterfactualCall = await db.lLMCallLog.findFirst({ where: { workspaceId },
+        orderBy: { createdAt: "desc" } });
+      expect(invoke, JSON.stringify({ counterfactualResult,
+        errorMessage: counterfactualCall?.errorMessage })).toHaveBeenCalledTimes(3);
+      expect((await charge.lLMWorkflowOperation.findFirstOrThrow({ where: {
+        workspaceId, kind: "counterfactual_review",
+      } })).sourceId).toBe(logId);
+      const multiPassProfile = { profileKey: "synthetic-remote-review",
+        contextMode: "remote_projected_review_required", providerMode: "remote",
+        reasoningDepth: "deep", toolCoordination: "programmatic",
+        multiPassAllowed: true, remoteEgressPolicy: "projection_requires_consent",
+        budgetClass: "premium", allowedWorkflowClasses: ["multi_pass_review"] } as const;
+      const multiPassResult = await executeMultiPassReview({ workspaceId,
+        userId: ownerUserId, profileKey: multiPassProfile.profileKey,
+        profileRegistry: { [multiPassProfile.profileKey]: multiPassProfile },
+        contextStub: { objectRef: { objectType: "recommendation", objectId: logId },
+          selectedEvidenceRefs: ["synthetic-evidence"], missingEvidence: [],
+          policySnapshotHash: "sha256:synthetic", privacyClass: "public_safe_synthetic",
+          tokenBudget: { maxInputTokens: 1_000, maxOutputTokens: 200 } },
+        proposalSummary: "Synthetic proposal", businessValue: "high",
+        uncertainty: "high", riskClass: "read", evidenceCompleteness: "partial",
+        egressPolicy: { consentGranted: true, promptPreviewAccepted: true,
+          auditRef: "synthetic-reviewed-egress" },
+      });
+      expect(invoke, JSON.stringify({ multiPassResult })).toHaveBeenCalledTimes(6);
+      expect(await charge.lLMWorkflowOperation.count({ where: { workspaceId,
+        kind: "multi_pass_review" } })).toBe(3);
+      const subscriptionConfig: BiReportSubscriptionConfig = {
+        name: "Synthetic count", skillKey: "synthetic_count", skillVersion: "v1",
+        enabled: true, scheduleCron: "0 9 * * *", timezone: "UTC", sqlParams: {},
+        deliveryTargets: [],
+      };
+      const skill: BiReportSkillPack = { baseDir: "/synthetic",
+        manifest: { skillKey: "synthetic_count", name: "Synthetic count", version: "v1",
+          sourceType: "synthetic", analysisMode: "metric_rule_only",
+          defaultSchedule: "0 9 * * *", timezone: "UTC", supportedDeliveryChannels: [],
+          parameters: [], boundaries: [] }, querySql: "SELECT 1",
+        schema: { version: "v1", type: "table", columns: [
+          { name: "synthetic_count", type: "integer", required: true },
+        ] }, metrics: { version: "v1", aggregations: [
+          { key: "synthetic_count", label: "Count", type: "sum", field: "synthetic_count" },
+        ] }, resultCriteria: { version: "v1", summaryMetricKeys: ["synthetic_count"],
+          rules: [] }, promptTemplate: "Synthetic {{metrics.synthetic_count}}",
+        messageTemplate: "{{skill.name}} {{metrics.synthetic_count}}" };
+      const subscription = await db.biReportSubscription.create({ data: {
+        workspaceId, createdByUserId: ownerUserId, name: "Synthetic count",
+        skillKey: skill.manifest.skillKey, skillVersion: skill.manifest.version,
+        scheduleCron: subscriptionConfig.scheduleCron, timezone: "UTC",
+        deliveryTargetsJson: "[]", sqlParamsJson: "{}",
+      } });
+      const run = await db.biReportRun.create({ data: { workspaceId,
+        subscriptionId: subscription.id, scheduledFor: new Date(),
+        dedupeKey: `synthetic:${suffix}`, querySummaryJson: "{}" } });
+      await prepareBiReportDryRun({ workspaceId, userId: ownerUserId, skill,
+        subscription: subscriptionConfig, rows: [{ synthetic_count: 1 }],
+        useLLM: true, persistedRunId: run.id });
+      expect(invoke).toHaveBeenCalledTimes(8);
+      expect(await charge.lLMWorkflowOperation.count({ where: { workspaceId,
+        sourceType: "bi_run", sourceId: run.id } })).toBe(2);
+      const contact = await db.contact.create({ data: { workspaceId,
+        ownerId: ownerUserId, name: "Synthetic contact" } });
+      const briefing = await generateContactBriefingSnapshot({ workspaceId,
+        actorName: "Synthetic owner", actorUserId: ownerUserId,
+        actorType: ActorType.USER, contactId: contact.id });
+      expect(briefing.payload.summary).toBe("Synthetic briefing");
+      expect(invoke).toHaveBeenCalledTimes(9);
+      expect(await charge.lLMWorkflowOperation.count({ where: { workspaceId,
+        kind: "briefing", sourceType: "contact", sourceId: contact.id } })).toBe(1);
+      const meeting = await db.meeting.create({ data: { workspaceId,
+        ownerId: ownerUserId, title: "Synthetic meeting",
+        startsAt: new Date("2026-10-03T08:00:00.000Z"),
+        endsAt: new Date("2026-10-03T09:00:00.000Z") } });
+      const note = await db.meetingNote.create({ data: { workspaceId,
+        meetingId: meeting.id, summary: "Synthetic discussion" } });
+      await processMeetingMemory({ workspaceId, actorName: "Synthetic owner",
+        actorUserId: ownerUserId, actorType: ActorType.USER, meetingId: meeting.id });
+      expect(invoke).toHaveBeenCalledTimes(11);
+      expect(await charge.lLMWorkflowOperation.count({ where: { workspaceId,
+        kind: "meeting_extraction", sourceType: "meeting_note", sourceId: note.id } })).toBe(1);
+      const operations = await charge.lLMWorkflowOperation.findMany({ where: { workspaceId } });
+      expect(operations).toHaveLength(11);
+      for (const charged of operations) {
+        const chargedDecision = await charge.modelRouteDecision.findFirstOrThrow({ where: {
+          workspaceId, requestKey: charged.requestKey,
+        } });
+        expect((await charge.lLMSpendLedgerEntry.findUniqueOrThrow({ where: {
+          workspaceId_attemptRef: { workspaceId,
+            attemptRef: chargedDecision.dispatchProviderIdempotencyKey! },
+        } })).state).toBe("settled");
+      }
+    } finally {
+      configured.mockRestore(); directRun.mockRestore();
+      if (oldLLM === undefined) delete process.env.LLM_ENABLED;
+      else process.env.LLM_ENABLED = oldLLM;
+      await Promise.all([writer.$disconnect(), charge.$disconnect()]);
+    }
+  });
+
 });

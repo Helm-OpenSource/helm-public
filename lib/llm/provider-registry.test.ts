@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   getWorkspaceLLMConfig: vi.fn(),
   resolveModelForTask: vi.fn(),
   adapterRun: vi.fn(),
+  bridgeRun: vi.fn(),
   adapterIsConfigured: vi.fn(),
 }));
 
@@ -18,6 +19,11 @@ vi.mock("@/lib/llm/config", () => ({
 
 vi.mock("@/lib/llm/model-router", () => ({
   resolveModelForTask: mocks.resolveModelForTask,
+}));
+
+vi.mock("@/lib/llm/ordinary-paid-adapter-bridge.service", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/llm/ordinary-paid-adapter-bridge.service")>()),
+  runOrdinaryPaidAdapter: mocks.bridgeRun,
 }));
 
 vi.mock("@/lib/llm/openai-adapter", () => ({
@@ -50,6 +56,7 @@ vi.mock("@/lib/llm/qwen-adapter", () => ({
 
 import { executeLLMTask } from "@/lib/llm/provider-registry";
 import { LlmOutputSchemaError } from "@/lib/llm/output-parse-error";
+import { OrdinaryPaidEgressError } from "@/lib/llm/ordinary-paid-adapter-bridge.service";
 
 describe("provider registry logging guard", () => {
   beforeEach(() => {
@@ -71,17 +78,40 @@ describe("provider registry logging guard", () => {
       modelRole: "REASONING",
       budgetTier: "pilot",
     });
+    mocks.bridgeRun.mockRejectedValue(new OrdinaryPaidEgressError("paid_egress_operation_or_policy_unconfigured"));
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it("keeps the successful LLM path working even if call-log persistence fails", async () => {
+  it("refuses paid dispatch without a persisted trusted operation and reservation", async () => {
     mocks.adapterRun.mockResolvedValue({
+      output: { summary: "synthetic" },
+      rawOutput: '{"summary":"synthetic"}',
+      usage: { promptTokens: 1, completionTokens: 1 },
+    });
+    const result = await executeLLMTask({
+      taskType: "RECOMMENDATION_EXPLANATION",
+      workspaceId: "workspace_demo",
+      promptKey: "synthetic.prompt",
+      promptVersion: "v1",
+      systemPrompt: "synthetic",
+      userPrompt: "synthetic",
+      parseOutput: (raw) => JSON.parse(raw) as { summary: string },
+      fallbackOutput: { summary: "fallback" },
+    });
+    expect(mocks.adapterRun).not.toHaveBeenCalled();
+    expect(result.success).toBe(false);
+    expect(result.fallbackUsed).toBe(true);
+  });
+
+  it("keeps the successful LLM path working even if call-log persistence fails", async () => {
+    mocks.bridgeRun.mockResolvedValue({
       output: { summary: "done" },
       rawOutput: "{\"summary\":\"done\"}",
       modelVersion: "gpt-4.1-mini",
+      governedRoute: { provider: "openai", model: "gpt-4.1-mini", modelVersion: "gpt-4.1-mini" },
       usage: { promptTokens: 12, completionTokens: 8 },
     });
     mocks.recordLLMCall.mockRejectedValue(new Error("sqlite busy"));
@@ -147,7 +177,7 @@ describe("provider registry logging guard", () => {
     expect(mocks.adapterRun).not.toHaveBeenCalled();
   });
 
-  it("routes to qwen adapter when workspace provider is qwen", async () => {
+  it("records the committed governed route even when legacy routing suggests another model", async () => {
     mocks.getWorkspaceLLMConfig.mockResolvedValue({
       provider: "qwen",
       defaultModel: "qwen3.6-plus",
@@ -163,10 +193,11 @@ describe("provider registry logging guard", () => {
       modelRole: "REASONING",
       budgetTier: "pilot",
     });
-    mocks.adapterRun.mockResolvedValue({
+    mocks.bridgeRun.mockResolvedValue({
       output: { summary: "qwen-ok" },
       rawOutput: "{\"summary\":\"qwen-ok\"}",
       modelVersion: "qwen3.6-plus",
+      governedRoute: { provider: "openai", model: "governed-synthetic", modelVersion: "governed-synthetic-v1" },
       usage: { promptTokens: 9, completionTokens: 7 },
     });
 
@@ -191,12 +222,18 @@ describe("provider registry logging guard", () => {
 
     expect(result.success).toBe(true);
     expect(result.fallbackUsed).toBe(false);
-    expect(result.provider).toBe("qwen");
+    expect(result.provider).toBe("openai");
+    expect(result.model).toBe("governed-synthetic");
+    expect(result.modelVersion).toBe("governed-synthetic-v1");
+    expect(mocks.recordLLMCall).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "openai", model: "governed-synthetic", modelVersion: "governed-synthetic-v1",
+      success: true,
+    }));
     expect(result.output).toEqual({ summary: "qwen-ok" });
   });
 
   it("records strict output-schema failures as an explicit fallback reason", async () => {
-    mocks.adapterRun.mockRejectedValue(new LlmOutputSchemaError("unexpected field"));
+    mocks.bridgeRun.mockRejectedValue(new LlmOutputSchemaError("unexpected field"));
 
     const result = await executeLLMTask({
       taskType: "MULTI_PASS_REVIEW",
@@ -218,11 +255,23 @@ describe("provider registry logging guard", () => {
     );
   });
 
+  it("does not hand a business fallback to callers after an unknown charged attempt", async () => {
+    mocks.bridgeRun.mockRejectedValue(new OrdinaryPaidEgressError("paid_egress_in_doubt"));
+    await expect(executeLLMTask({
+      taskType: "BI_REPORT_ANALYSIS", workspaceId: "workspace_demo",
+      promptKey: "synthetic.bi", promptVersion: "v1",
+      systemPrompt: "system", userPrompt: "user",
+      parseOutput: (raw) => raw, fallbackOutput: "fallback",
+    })).rejects.toMatchObject({ code: "paid_egress_in_doubt" });
+    expect(mocks.recordLLMCall).not.toHaveBeenCalled();
+  });
+
   it("omits input and output content when metadata-only observability is requested", async () => {
-    mocks.adapterRun.mockResolvedValue({
+    mocks.bridgeRun.mockResolvedValue({
       output: { disposition: "review" },
       rawOutput: '{"disposition":"review","private":"do-not-log"}',
       modelVersion: "gpt-4.1-mini",
+      governedRoute: { provider: "openai", model: "gpt-4.1-mini", modelVersion: "gpt-4.1-mini" },
       usage: { promptTokens: 10, completionTokens: 4 },
     });
 
@@ -243,7 +292,7 @@ describe("provider registry logging guard", () => {
     expect(result.success).toBe(true);
     expect(result.output).toEqual({ disposition: "review" });
     expect(result.rawOutput).toBeNull();
-    expect(mocks.adapterRun).toHaveBeenCalledWith(
+    expect(mocks.bridgeRun).toHaveBeenCalledWith(
       expect.objectContaining({ inputSummary: null }),
     );
     const logged = JSON.stringify(mocks.recordLLMCall.mock.calls);
@@ -259,7 +308,7 @@ describe("provider registry logging guard", () => {
   });
 
   it("omits provider error details from metadata-only logs and results", async () => {
-    mocks.adapterRun.mockRejectedValue(new Error("provider-private-error-marker"));
+    mocks.bridgeRun.mockRejectedValue(new Error("provider-private-error-marker"));
 
     const result = await executeLLMTask({
       taskType: "MULTI_PASS_REVIEW",

@@ -1,5 +1,7 @@
 import "server-only";
 
+import type { PrismaClient } from "@prisma/client";
+
 import {
   canonicalJson,
   sha256,
@@ -88,6 +90,8 @@ export type GovernedModelGatewayInput<
   requestKey: string;
   taskClass: ModelRouteTaskClass;
   taskRef: string;
+  /** Server-bound ordinary workflow operation, rechecked inside dispatch Tx. */
+  ordinaryOperationId?: string;
   projectionReceiptRef: string;
   projectedPayload: TPayload;
   requestedMaxOutputTokens: number;
@@ -1027,6 +1031,7 @@ async function claimAttempt<
     workspaceId: input.request.workspaceId,
     decisionId: decision.decisionId,
     gatewayRef: input.request.gatewayRef,
+    ordinaryOperationId: input.request.ordinaryOperationId,
     runtime: preflight.runtime,
     now: input.dependencies.now(),
   });
@@ -1208,6 +1213,9 @@ async function executeAttempt<
       latencyMs,
       promptTokens: normalized.promptTokens,
       completionTokens: normalized.completionTokens,
+      ...(normalized.output === null ? {} : {
+        outputContentHash: sha256(canonicalJson(normalized.output)),
+      }),
       actualCostUsdMicros: normalized.actualCostUsdMicros,
       costCurrency: normalized.costCurrency,
       pricingVersion: normalized.pricingVersion,
@@ -1218,6 +1226,19 @@ async function executeAttempt<
       recordedAt: normalizedFinishedAt,
     });
   } catch {
+    // Terminal persistence may have committed before its acknowledgement was
+    // lost. A read/transition under the claim lock retains the reservation if
+    // no terminal exists; terminal_exists leaves an already settled row alone.
+    // A failed unknown transition must never turn this into a free result.
+    try {
+      await input.dependencies.markUnknownSpend({
+        authority: GOVERNED_GATEWAY_AUTHORITY,
+        workspaceId: input.request.workspaceId,
+        decisionId: decision.decisionId,
+        gatewayRef: input.request.gatewayRef,
+        dispatchClaimHash: claim.claimHash,
+      });
+    } catch { /* reservation remains held or its outcome is unverified */ }
     throw new GovernedModelGatewayError(
       "terminal_receipt_persistence_failed_output_withheld",
       decision.decisionId,
@@ -1336,6 +1357,33 @@ export function createGovernedModelGateway<
       allowFallback: request.allowFallback ?? false,
     });
   };
+}
+
+/** Reviewed server composition keeps every C3 read/write on one charge
+ * identity. Ordinary operation creation uses a separate application writer. */
+export function createGovernedModelGatewayForChargeClient<
+  TPayload extends GovernedJsonValue = GovernedJsonValue,
+  TOutput extends GovernedJsonValue = GovernedJsonValue,
+>(input: {
+  client: PrismaClient;
+  spendAuthority: GovernedSpendAuthority;
+  adapters?: readonly GovernedModelProviderAdapter<TPayload, TOutput>[];
+  registry?: GovernedModelAdapterRegistry<TPayload, TOutput>;
+}) {
+  const client = input.client;
+  return createGovernedModelGateway<TPayload, TOutput>({
+    adapters: input.adapters,
+    registry: input.registry,
+    dependencies: {
+      spendAuthority: input.spendAuthority,
+      prepareDecision: (request) => prepareModelRouteDecision({ ...request, client }),
+      readProjectionReceipt: (request) => readGovernedModelProjectionReceipt({ ...request, client }),
+      readDecision: (request) => readModelRouteDecision({ ...request, client }),
+      claimDispatch: (request) => claimModelRouteDispatch({ ...request, client }),
+      recordTerminal: (request) => recordModelEgressTerminalReceipt({ ...request, client }),
+      markUnknownSpend: (request) => markModelEgressSpendUnknown({ ...request, client }),
+    },
+  });
 }
 
 /**
@@ -1540,6 +1588,15 @@ export function createGovernedDeferredModelDispatch<
         recordedAt: now,
       });
     } catch {
+      try {
+        await dependencies.markUnknownSpend({
+          authority: GOVERNED_GATEWAY_AUTHORITY,
+          workspaceId: input.workspaceId,
+          decisionId: stored.decision.decisionId,
+          gatewayRef: dispatch.gatewayRef,
+          dispatchClaimHash: dispatch.claimHash,
+        });
+      } catch { /* reservation remains held or its outcome is unverified */ }
       throw new GovernedModelGatewayError(
         "terminal_receipt_persistence_failed_output_withheld",
         stored.decision.decisionId,

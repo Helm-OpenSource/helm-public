@@ -10,7 +10,7 @@ import {
 } from "@/lib/runtime/deployment-capabilities";
 import { sanitizeLlmTracePayload } from "@/lib/llm/trace-sanitizer";
 import { attachUsageObservation, observeUsage } from "@/lib/llm/usage-observation";
-import type { LLMProvider, LLMProviderAdapter, LLMResolvedTask, LLMTaskType } from "@/lib/llm/types";
+import type { LLMProvider, LLMProviderAdapter, LLMProviderRunResult, LLMResolvedTask, LLMTaskType } from "@/lib/llm/types";
 import { Agent, ProxyAgent, Socks5ProxyAgent, type Dispatcher } from "undici";
 
 type OpenAIChatCompletionResponse = {
@@ -405,8 +405,14 @@ export function createOpenAICompatibleAdapter(input: {
   };
 }
 
-export const openAIAdapter = createOpenAICompatibleAdapter({
-  provider: "openai",
-  label: "OpenAI Compatible",
-  audioTranscription: true,
-});
+/** Legacy task dispatch has no C3 claim or provider idempotency binding. */
+export async function closeUnguardedPaidAdapter<TOutput>(): Promise<LLMProviderRunResult<TOutput>> {
+  throw new Error("legacy_paid_adapter_requires_governed_claim");
+}
+
+export const openAIAdapter: LLMProviderAdapter = {
+  ...createOpenAICompatibleAdapter({
+    provider: "openai", label: "OpenAI Compatible", audioTranscription: true,
+  }),
+  run: closeUnguardedPaidAdapter,
+};

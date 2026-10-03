@@ -25,6 +25,7 @@ type BriefingWorkflowInput = {
   objectLabel: string;
   currentStage?: string | null;
   fallbackPayload: BriefingLikePayload;
+  ordinaryOperationId?: string;
 };
 
 export async function generateBriefingWithLLM(input: BriefingWorkflowInput) {
@@ -61,6 +62,7 @@ export async function generateBriefingWithLLM(input: BriefingWorkflowInput) {
       recommendedNextSteps: input.fallbackPayload.recommendedNextSteps,
       importantFactHighlights: input.fallbackPayload.recentFacts.map((item) => String(item.content ?? item.title ?? "")).slice(0, 3),
     },
+    ordinaryOperationId: input.ordinaryOperationId,
     parseOutput: (rawText) =>
       parseLlmJsonOrThrow<{
         summary: string;

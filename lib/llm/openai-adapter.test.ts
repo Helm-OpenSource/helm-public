@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createOpenAICompatibleAdapter } from "@/lib/llm/openai-adapter";
+import { createOpenAICompatibleAdapter, openAIAdapter } from "@/lib/llm/openai-adapter";
+import { qwenAdapter } from "@/lib/llm/qwen-adapter";
 import type { LLMProvider, LLMResolvedTask } from "@/lib/llm/types";
 
 const configMocks = vi.hoisted(() => ({
@@ -126,6 +127,14 @@ describe("OpenAI-compatible adapter provider options", () => {
       "llm_disabled",
     );
 
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("refuses the exported legacy paid adapters before transport without a governed claim", async () => {
+    await expect(openAIAdapter.run(createTask("openai", "json")))
+      .rejects.toThrow("legacy_paid_adapter_requires_governed_claim");
+    await expect(qwenAdapter.run(createTask("qwen", "json")))
+      .rejects.toThrow("legacy_paid_adapter_requires_governed_claim");
     expect(global.fetch).not.toHaveBeenCalled();
   });
 });

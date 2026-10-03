@@ -21,6 +21,7 @@ export async function reviewBiReportAnalysisWithLLM(input: {
   boundaries: string[];
   deterministicFindings: string[];
   candidate: BiReportAnalysisOutput;
+  ordinaryOperationId?: string;
 }) {
   const prompt = buildBiReportReviewPrompt({
     skillName: input.skillName,
@@ -58,6 +59,7 @@ export async function reviewBiReportAnalysisWithLLM(input: {
     outputMode: "json",
     jsonSchema: biReportReviewSchema,
     fallbackOutput: fallback,
+    ordinaryOperationId: input.ordinaryOperationId,
     parseOutput: (rawText) => parseLlmJsonOrThrow<BiReportAnalysisReviewOutput>(rawText),
   });
 }

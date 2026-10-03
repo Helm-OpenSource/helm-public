@@ -28,6 +28,8 @@ export async function analyzeBiReportWithLLM(input: {
   boundaries: string[];
   skillPromptTemplate?: string | null;
   fallback: BiReportAnalysisOutput;
+  ordinaryOperationId?: string;
+  reviewOperationId?: string;
 }) {
   const prompt = buildBiReportAnalysisPrompt({
     skillName: input.skillName,
@@ -56,6 +58,7 @@ export async function analyzeBiReportWithLLM(input: {
     outputMode: "json",
     jsonSchema: biReportAnalysisSchema,
     fallbackOutput: input.fallback,
+    ordinaryOperationId: input.ordinaryOperationId,
     parseOutput: (rawText) => parseLlmJsonOrThrow<BiReportAnalysisOutput>(rawText),
   });
 
@@ -71,6 +74,7 @@ export async function analyzeBiReportWithLLM(input: {
     boundaries: input.boundaries,
     deterministicFindings: input.deterministicFindings,
     candidate: normalized,
+    ordinaryOperationId: input.reviewOperationId,
   });
   const reviewed = applyBiReportReview(normalized, reviewResult.output);
 

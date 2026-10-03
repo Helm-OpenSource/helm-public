@@ -443,9 +443,11 @@ jobs:
           app_password="$(openssl rand -hex 24)"
           root_password="$(openssl rand -hex 24)"
           c4_password="$(openssl rand -hex 24)"
+          c5_writer_password="$(openssl rand -hex 24)"
           echo "::add-mask::${app_password}"
           echo "::add-mask::${root_password}"
           echo "::add-mask::${c4_password}"
+          echo "::add-mask::${c5_writer_password}"
           bootstrap_sql="$(mktemp)"
           chmod 600 "${bootstrap_sql}"
           {
@@ -454,6 +456,7 @@ jobs:
             printf "GRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
               "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
             printf "CREATE USER 'c4_runtime'@'%%' IDENTIFIED BY '%s';\n" "${c4_password}"
+            printf "CREATE USER 'c5_writer'@'%%' IDENTIFIED BY '%s';\n" "${c5_writer_password}"
             # Migrations create append-only triggers, which the server refuses
             # under binary logging from a user without SUPER (error 1419).
             # Measured on the pinned mysql:8.4 image: SET_USER_ID no longer
@@ -492,6 +495,12 @@ jobs:
           {
             printf 'MODEL_EGRESS_RUNTIME_DATABASE_URL=%s\n' "${url}"
           } >>"${GITHUB_ENV}"
+          credential="c5_writer:${c5_writer_password}"
+          url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
+          [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
+          {
+            printf 'ORDINARY_PAID_WRITER_DATABASE_URL=%s\n' "${url}"
+          } >>"${GITHUB_ENV}"
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
@@ -522,14 +531,40 @@ jobs:
           IFS= read -r root_password <"${root_file}"
           {
             printf "GRANT SELECT, UPDATE(updatedAt) ON \`%s\`.Workspace TO 'c4_runtime'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
-            for table in User Membership LLMSpendIssuerGrant LLMSpendAuthorityRecord ModelRouteDecision ModelEgressReceipt TenantModelRoutePolicyHead TenantModelRoutePolicy ModelRoutePolicyApprovalReceipt DataAssetCatalogEntry DataAssetStageReceipt GovernedModelProjectionReceipt ProviderAdapterReadinessReceipt AuditLog; do
+            for table in User Membership LLMSpendIssuerGrant LLMSpendAuthorityRecord ModelRouteDecision ModelEgressReceipt TenantModelRoutePolicyHead TenantModelRoutePolicy ModelRoutePolicyApprovalReceipt DataAssetCatalogEntry DataAssetStageReceipt GovernedModelProjectionReceipt ProviderAdapterReadinessReceipt AuditLog LLMWorkflowOperation; do
               printf "GRANT SELECT ON \`%s\`.\`%s\` TO 'c4_runtime'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}" "${table}"
             done
+            # The ordinary paid-operation verifier holds shared source-row
+            # locks but reads only these projected identity/version columns.
+            # Keep the C4 runtime from receiving whole-table business access.
+            printf "GRANT SELECT (id,workspaceId,updatedAt,subscriptionId,scheduledFor,status,querySummaryJson) ON \`%s\`.BiReportRun TO 'c4_runtime'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
+            printf "GRANT SELECT (id,workspaceId) ON \`%s\`.BiReportSubscription TO 'c4_runtime'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
+            printf "GRANT SELECT (id,workspaceId,updatedAt,name,relationshipStage) ON \`%s\`.Contact TO 'c4_runtime'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
+            printf "GRANT SELECT (id,workspaceId,updatedAt,name,cooperationMaturity) ON \`%s\`.Company TO 'c4_runtime'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
+            printf "GRANT SELECT (id,workspaceId,updatedAt,title,stage) ON \`%s\`.Opportunity TO 'c4_runtime'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
+            printf "GRANT SELECT (id,workspaceId,updatedAt,title,status,opportunityId) ON \`%s\`.Meeting TO 'c4_runtime'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
+            printf "GRANT SELECT (id,workspaceId,updatedAt,meetingId,noteKind,summary,liveTranscript,keyDecisions,confirmations) ON \`%s\`.MeetingNote TO 'c4_runtime'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
+            printf "GRANT SELECT (id,workspaceId,updatedAt,userId,objectType,objectId,actionType,recommendationPayload,explanation) ON \`%s\`.RecommendationLog TO 'c4_runtime'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
             for table in LLMSpendLedgerEntry LLMSpendPeriodCounter LLMSpendPeriodCompatibility ModelRouteDecision ModelEgressReceipt; do
               printf "GRANT SELECT, INSERT, UPDATE ON \`%s\`.\`%s\` TO 'c4_runtime'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}" "${table}"
             done
             printf "GRANT SELECT ON performance_schema.data_lock_waits TO '%s'@'%%';\n" "${HELM_CI_MYSQL_USER}"
             printf "GRANT INSERT ON \`%s\`.AuditLog TO 'c4_runtime'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
+            # The application operation writer has no authority over the C4
+            # spend ledger or route claim. Existing identity fields are immutable
+            # under this role; only the projection binding may be updated.
+            printf "GRANT SELECT, UPDATE(updatedAt) ON \`%s\`.Workspace TO 'c5_writer'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
+            printf "GRANT SELECT ON \`%s\`.Membership TO 'c5_writer'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
+            printf "GRANT SELECT ON \`%s\`.GovernedModelProjectionReceipt TO 'c5_writer'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
+            printf "GRANT SELECT, INSERT, UPDATE(projectionReceiptRef,projectedPayloadHash,updatedAt) ON \`%s\`.LLMWorkflowOperation TO 'c5_writer'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
+            printf "GRANT SELECT (id,workspaceId,updatedAt,subscriptionId,scheduledFor,status,querySummaryJson) ON \`%s\`.BiReportRun TO 'c5_writer'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
+            printf "GRANT SELECT (id,workspaceId) ON \`%s\`.BiReportSubscription TO 'c5_writer'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
+            printf "GRANT SELECT (id,workspaceId,updatedAt,name,relationshipStage) ON \`%s\`.Contact TO 'c5_writer'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
+            printf "GRANT SELECT (id,workspaceId,updatedAt,name,cooperationMaturity) ON \`%s\`.Company TO 'c5_writer'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
+            printf "GRANT SELECT (id,workspaceId,updatedAt,title,stage) ON \`%s\`.Opportunity TO 'c5_writer'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
+            printf "GRANT SELECT (id,workspaceId,updatedAt,title,status,opportunityId) ON \`%s\`.Meeting TO 'c5_writer'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
+            printf "GRANT SELECT (id,workspaceId,updatedAt,meetingId,noteKind,summary,liveTranscript,keyDecisions,confirmations) ON \`%s\`.MeetingNote TO 'c5_writer'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
+            printf "GRANT SELECT (id,workspaceId,updatedAt,userId,objectType,objectId,actionType,recommendationPayload,explanation) ON \`%s\`.RecommendationLog TO 'c5_writer'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
           } >"${acl_sql}"
           MYSQL_PWD="${root_password}" docker exec -e MYSQL_PWD -i "${HELM_CI_MYSQL_CONTAINER}" \
             mysql --host=127.0.0.1 --protocol=tcp --user=root --batch <"${acl_sql}"
@@ -543,6 +578,13 @@ jobs:
         env:
           HELM_CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
         run: npm run test:model-egress:mysql
+
+      - name: Verify persisted ordinary paid operation against MySQL
+        env:
+          ORDINARY_PAID_OPERATION_MYSQL_URL: ${{ env.DATABASE_URL }}
+          ORDINARY_PAID_OPERATION_DATABASE_NAME: helm_caio_p1d_ci
+          ORDINARY_PAID_OPERATION_CI_CONTAINER: ${{ job.services.mysql.id }}
+        run: npm run test:ordinary-paid-operation:mysql
 
       - name: Verify signed spend authority against MySQL
         env:

@@ -19,20 +19,13 @@ import {
   applyRateLimitPolicy,
 } from "@/lib/llm/rate-limiter";
 import {
-  SpendBudgetExceededError,
-  applySpendBudgetPolicyAsync,
-  recordActualSpend,
-  recordUnknownSpend,
-} from "@/lib/llm/spend-tracker";
-import { estimateSpendUSD } from "@/lib/llm/token-cost-table";
-import {
   observeUsage,
   readUsageObservation,
   usageForLedger,
-  type LLMUsageObservation,
 } from "@/lib/llm/usage-observation";
-import type { LLMProvider, LLMProviderAdapter, LLMTaskExecutionResult, LLMTaskInput } from "@/lib/llm/types";
+import type { LLMProviderAdapter, LLMTaskExecutionResult, LLMTaskInput } from "@/lib/llm/types";
 import { trimText } from "@/lib/utils";
+import { runOrdinaryPaidAdapter, OrdinaryPaidEgressError } from "@/lib/llm/ordinary-paid-adapter-bridge.service";
 
 const registry = new Map<string, LLMProviderAdapter>([
   ["openai", openAIAdapter],
@@ -263,65 +256,6 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
     throw policyError;
   }
 
-  // Guard 2 · Monthly spending budget (T019 P0 #2). Estimate the call's
-  // cost using token-cost-table; reject if month-to-date + estimate
-  // exceeds workspace budget. Lenient mode like guard 1.
-  let spendPolicyResult: Awaited<ReturnType<typeof applySpendBudgetPolicyAsync>> | null = null;
-  if (adapter) {
-    try {
-      spendPolicyResult = await applySpendBudgetPolicyAsync({
-        workspaceConfig,
-        workspaceId: input.workspaceId,
-        provider: adapter.provider,
-        model: routed.model,
-        taskType: input.taskType,
-        systemPrompt: input.systemPrompt,
-        userPrompt: input.userPrompt,
-        effectiveMaxOutputTokens,
-      });
-    } catch (policyError) {
-      if (policyError instanceof SpendBudgetExceededError) {
-        const latencyMs = Date.now() - start;
-        await recordLLMCallSafely({
-          workspaceId: input.workspaceId,
-          userId: input.userId,
-          provider: adapter.provider,
-          model: routed.model,
-          modelVersion: routed.model,
-          modelRole: routed.modelRole,
-          taskType: input.taskType,
-          promptKey: input.promptKey,
-          promptVersion,
-          budgetTier: routed.budgetTier ?? workspaceConfig.llmBudgetTier,
-          outputMode: input.outputMode ?? "text",
-          inputSummary,
-          outputSummary: "本次调用违反 spend-budget 策略，已回退到规则逻辑。",
-          latencyMs,
-          success: false,
-          fallbackReason: "policy_spend_budget_exceeded",
-          errorMessage: policyError.message,
-        });
-        return {
-          output: input.fallbackOutput,
-          provider: adapter.provider,
-          model: routed.model,
-          modelVersion: routed.model,
-          modelRole: routed.modelRole,
-          promptKey: input.promptKey,
-          promptVersion,
-          success: false,
-          fallbackUsed: true,
-          fallbackReason: "policy_spend_budget_exceeded",
-          errorMessage: policyError.message,
-          latencyMs,
-          rawOutput: null,
-          budgetTier: routed.budgetTier ?? workspaceConfig.llmBudgetTier,
-        };
-      }
-      throw policyError;
-    }
-  }
-
   if (!workspaceConfig.llmEnabled || !adapter || !adapter.isConfigured()) {
     const latencyMs = Date.now() - start;
     await recordLLMCallSafely({
@@ -362,16 +296,17 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
     };
   }
 
+  let committedRoute: { provider: string; model: string; modelVersion: string } | null = null;
   try {
-    const result = await adapter.run({
+    const result = await runOrdinaryPaidAdapter({
       ...input,
       inputSummary: metadataOnly ? null : input.inputSummary,
-      maxOutputTokens: effectiveMaxOutputTokens,
-      provider: adapter.provider,
-      model: routed.model,
-      modelRole: routed.modelRole,
-      budgetTier: routed.budgetTier ?? workspaceConfig.llmBudgetTier,
+      effectiveMaxOutputTokens,
     });
+    if (!result.governedRoute) {
+      throw new OrdinaryPaidEgressError("paid_egress_route_readback_missing");
+    }
+    committedRoute = result.governedRoute;
     const latencyMs = Date.now() - start;
 
     // Guard 4 · PII output scrub (T019 P1). If the LLM produced output
@@ -383,9 +318,9 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
       await recordLLMCallSafely({
         workspaceId: input.workspaceId,
         userId: input.userId,
-        provider: adapter.provider,
-        model: routed.model,
-        modelVersion: result.modelVersion ?? routed.model,
+        provider: committedRoute.provider,
+        model: committedRoute.model,
+        modelVersion: committedRoute.modelVersion,
         modelRole: routed.modelRole,
         taskType: input.taskType,
         promptKey: input.promptKey,
@@ -400,22 +335,11 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
         fallbackReason: "policy_pii_in_output",
         errorMessage: `PII detected: ${piiResult.hits.length} hits across ${[...new Set(piiResult.hits.map((h) => h.type))].join(", ")}`,
       });
-      // The provider ran and charged for this call; the rejection is ours. This
-      // path used to `return` before `recordActualSpend`, so a PII-rejected call
-      // consumed tokens that appeared in no total — and the log row even carries
-      // the counts, which is how we know they were known all along.
-      recordObservedConsumption({
-        workspaceId: input.workspaceId,
-        spendPolicyResult,
-        observation: observeUsage(result.usage),
-        provider: adapter.provider,
-        model: routed.model,
-      });
       return {
         output: input.fallbackOutput,
-        provider: adapter.provider,
-        model: routed.model,
-        modelVersion: result.modelVersion ?? routed.model,
+        provider: committedRoute.provider,
+        model: committedRoute.model,
+        modelVersion: committedRoute.modelVersion,
         modelRole: routed.modelRole,
         promptKey: input.promptKey,
         promptVersion,
@@ -430,24 +354,12 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
       };
     }
 
-    // Record post-call consumption. The adapter ALWAYS returns a `usage` object,
-    // so the old `result.usage ? … : estimate` check never selected the estimate
-    // branch — a provider that reported no usage was billed as
-    // `?? 0` + `?? 0` = ZERO. Branch on the observation instead, which
-    // distinguishes a measured zero from a missing count.
-    recordObservedConsumption({
-      workspaceId: input.workspaceId,
-      spendPolicyResult,
-      observation: observeUsage(result.usage),
-      provider: adapter.provider,
-      model: routed.model,
-    });
     await recordLLMCallSafely({
       workspaceId: input.workspaceId,
       userId: input.userId,
-      provider: adapter.provider,
-      model: routed.model,
-      modelVersion: result.modelVersion ?? routed.model,
+      provider: committedRoute.provider,
+      model: committedRoute.model,
+      modelVersion: committedRoute.modelVersion,
       modelRole: routed.modelRole,
       taskType: input.taskType,
       promptKey: input.promptKey,
@@ -465,9 +377,9 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
 
     return {
       output: result.output,
-      provider: adapter.provider,
-      model: routed.model,
-      modelVersion: result.modelVersion ?? routed.model,
+      provider: committedRoute.provider,
+      model: committedRoute.model,
+      modelVersion: committedRoute.modelVersion,
       modelRole: routed.modelRole,
       promptKey: input.promptKey,
       promptVersion,
@@ -479,11 +391,22 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
       budgetTier: routed.budgetTier ?? workspaceConfig.llmBudgetTier,
     };
   } catch (error) {
+    // A lost or unverified charged attempt is not an ordinary provider
+    // failure. Its reservation remains occupied; handing a business fallback
+    // to a workflow would disguise an unresolved paid operation as free.
+    if (error instanceof OrdinaryPaidEgressError &&
+        (error.code === "paid_egress_in_doubt" ||
+         error.code === "paid_egress_committed_readback_invalid" ||
+         error.code === "paid_egress_no_committed_output")) {
+      throw error;
+    }
     const message = error instanceof Error ? error.message : "未知 LLM 错误";
     const latencyMs = Date.now() - start;
     // Distinguish a malformed-JSON output from a genuine provider/transport
     // failure so the call ledger reflects what actually happened.
-    const fallbackReason = isLlmOutputParseError(error)
+    const fallbackReason = error instanceof OrdinaryPaidEgressError
+      ? error.code
+      : isLlmOutputParseError(error)
       ? "output_parse_failed"
       : isLlmOutputSchemaError(error)
         ? "output_schema_failed"
@@ -497,19 +420,12 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
     // depend on). A transport failure legitimately carries no observation and
     // reads back as `no_usage_observed` — unknown, not zero.
     const failureObservation = readUsageObservation(error);
-    recordObservedConsumption({
-      workspaceId: input.workspaceId,
-      spendPolicyResult,
-      observation: failureObservation,
-      provider: adapter.provider,
-      model: routed.model,
-    });
     await recordLLMCallSafely({
       workspaceId: input.workspaceId,
       userId: input.userId,
-      provider: adapter.provider,
-      model: routed.model,
-      modelVersion: routed.model,
+      provider: committedRoute?.provider ?? adapter.provider,
+      model: committedRoute?.model ?? routed.model,
+      modelVersion: committedRoute?.modelVersion ?? routed.model,
       modelRole: routed.modelRole,
       taskType: input.taskType,
       promptKey: input.promptKey,
@@ -527,9 +443,9 @@ export async function executeLLMTask<TOutput>(input: LLMTaskInput<TOutput>): Pro
 
     return {
       output: input.fallbackOutput,
-      provider: adapter.provider,
-      model: routed.model,
-      modelVersion: routed.model,
+      provider: committedRoute?.provider ?? adapter.provider,
+      model: committedRoute?.model ?? routed.model,
+      modelVersion: committedRoute?.modelVersion ?? routed.model,
       modelRole: routed.modelRole,
       promptKey: input.promptKey,
       promptVersion,
@@ -557,48 +473,4 @@ async function recordLLMCallSafely(input: Parameters<typeof recordLLMCall>[0]) {
     }
     console.warn(`[LLM observability] Failed to record LLM call log: ${trimText(message, 180)}`, error);
   }
-}
-
-
-/**
- * Record what this call consumed, whether or not it could be measured.
- *
- * Three call paths converge here — success, PII rejection and the catch — and
- * they used to disagree: only the success path recorded anything at all, and it
- * recorded ZERO when the provider omitted usage. A rejected or failed call still
- * consumed provider tokens; dropping it makes the ledger under-report by exactly
- * the amount nobody is watching.
- *
- * A known observation becomes measured spend. An unknown one goes to the
- * unknown bucket carrying the pre-call estimate as a conservative upper bound —
- * it is never written as measured spend, because an estimate that lands in the
- * measured total can never be told apart from a measurement afterwards.
- */
-function recordObservedConsumption(input: {
-  workspaceId: string;
-  spendPolicyResult: { monthKey: string; estimatedCallUSD: number } | null;
-  observation: LLMUsageObservation;
-  provider: LLMProvider;
-  model: string;
-}): void {
-  const policy = input.spendPolicyResult;
-  if (!policy) return;
-  if (input.observation.kind === "known") {
-    recordActualSpend({
-      workspaceId: input.workspaceId,
-      monthKey: policy.monthKey,
-      spendUSD: estimateSpendUSD({
-        provider: input.provider,
-        model: input.model,
-        inputTokens: input.observation.promptTokens,
-        outputTokens: input.observation.completionTokens,
-      }),
-    });
-    return;
-  }
-  recordUnknownSpend({
-    workspaceId: input.workspaceId,
-    monthKey: policy.monthKey,
-    upperBoundUSD: policy.estimatedCallUSD,
-  });
 }

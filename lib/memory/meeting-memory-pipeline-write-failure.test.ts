@@ -13,6 +13,7 @@ const {
   sharedMock,
   extractionMock,
   distillationCandidateStoreMock,
+  ordinaryOperationMock,
 } = vi.hoisted(() => ({
   serviceGovernanceMock: {
     assertWorkspaceMemoryServiceAccess: vi.fn(),
@@ -76,6 +77,7 @@ const {
   distillationCandidateStoreMock: {
     syncMemoryDistillationCandidatesForObject: vi.fn(),
   },
+  ordinaryOperationMock: { prepareOrdinaryPaidOperationOrFallback: vi.fn() },
 }));
 
 vi.mock("@/lib/auth/service-governance", () => ({
@@ -84,6 +86,10 @@ vi.mock("@/lib/auth/service-governance", () => ({
 
 vi.mock("@/lib/db", () => ({
   db: dbMock,
+}));
+
+vi.mock("@/lib/llm/ordinary-paid-operation.service", () => ({
+  prepareOrdinaryPaidOperationOrFallback: ordinaryOperationMock.prepareOrdinaryPaidOperationOrFallback,
 }));
 
 vi.mock("@/lib/llm-workflows/process-meeting-memory.workflow", () => ({
@@ -153,6 +159,7 @@ describe("meeting memory pipeline write failure boundary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     serviceGovernanceMock.assertWorkspaceMemoryServiceAccess.mockResolvedValue(undefined);
+    ordinaryOperationMock.prepareOrdinaryPaidOperationOrFallback.mockResolvedValue({ id: "synthetic-operation" });
     dbMock.meeting.findFirst.mockResolvedValue({
       id: "meeting-1",
       title: "Pipeline failure meeting",
@@ -162,6 +169,7 @@ describe("meeting memory pipeline write failure boundary", () => {
       ownerId: "user-1",
       contacts: [{ id: "contact-1", name: "Vivian" }],
       note: {
+        id: "note-1",
         summary: "Summary",
         keyDecisions: "Decision",
         confirmations: "Confirmation",

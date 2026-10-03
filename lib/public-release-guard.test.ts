@@ -749,7 +749,7 @@ describe("public release guard fixture coverage", () => {
       "check:caio-terminology":
         "node --import tsx scripts/check-caio-terminology.ts && vitest run scripts/check-caio-terminology.test.ts --config vitest.public.config.ts",
       "check:model-egress-governance":
-        "node --import tsx scripts/check-model-egress-governance.ts && vitest run lib/llm/model-route-contracts.test.ts lib/llm/model-egress-contracts.test.ts lib/llm/governed-model-gateway.service.test.ts features/dashboard/model-egress-readout.test.ts features/dashboard/model-egress-query.test.ts scripts/check-model-egress-governance.test.ts --config vitest.public.config.ts",
+        "node --import tsx scripts/check-model-egress-governance.ts && vitest run lib/llm/model-route-contracts.test.ts lib/llm/model-egress-contracts.test.ts lib/llm/governed-model-gateway.service.test.ts lib/llm/ordinary-paid-post-dispatch.test.ts lib/llm/ordinary-paid-composition.test.ts features/dashboard/model-egress-readout.test.ts features/dashboard/model-egress-query.test.ts scripts/check-model-egress-governance.test.ts --config vitest.public.config.ts",
       "check:conditional-update-cas":
         "node --import tsx scripts/check-conditional-update-cas.ts && vitest run scripts/check-conditional-update-cas.test.ts --config vitest.public.config.ts",
       "check:docker-smoke-coverage":
@@ -927,7 +927,7 @@ describe("public release guard fixture coverage", () => {
       "check:caio-terminology":
         "node --import tsx scripts/check-caio-terminology.ts && vitest run scripts/check-caio-terminology.test.ts --config vitest.public.config.ts",
       "check:model-egress-governance":
-        "node --import tsx scripts/check-model-egress-governance.ts && vitest run lib/llm/model-route-contracts.test.ts lib/llm/model-egress-contracts.test.ts lib/llm/governed-model-gateway.service.test.ts features/dashboard/model-egress-readout.test.ts features/dashboard/model-egress-query.test.ts scripts/check-model-egress-governance.test.ts --config vitest.public.config.ts",
+        "node --import tsx scripts/check-model-egress-governance.ts && vitest run lib/llm/model-route-contracts.test.ts lib/llm/model-egress-contracts.test.ts lib/llm/governed-model-gateway.service.test.ts lib/llm/ordinary-paid-post-dispatch.test.ts lib/llm/ordinary-paid-composition.test.ts features/dashboard/model-egress-readout.test.ts features/dashboard/model-egress-query.test.ts scripts/check-model-egress-governance.test.ts --config vitest.public.config.ts",
       "check:conditional-update-cas":
         "node --import tsx scripts/check-conditional-update-cas.ts && vitest run scripts/check-conditional-update-cas.test.ts --config vitest.public.config.ts",
       "check:docker-smoke-coverage":
