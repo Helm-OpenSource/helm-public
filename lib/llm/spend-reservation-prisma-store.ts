@@ -1,4 +1,4 @@
-/** Candidate MySQL adapter. Deliberately not connected to any provider entry point. */
+/** Candidate MySQL adapter. Deliberately not connected to a provider entry point. */
 import { randomUUID } from "node:crypto";
 
 import { Prisma, type PrismaClient } from "@prisma/client";
@@ -9,10 +9,11 @@ const MAX_MICROS = BigInt("9223372036854775807");
 const TX_OPTIONS = { maxWait: 10_000, timeout: 30_000 } as const;
 const RETRIES = 4;
 
+type RefusalReason = "conflict" | "budget_exhausted" | "period_policy_conflict" | "budget_config_conflict" |
+  "legacy_period_requires_reconciliation" | "spend_invariant_breach";
+
 class Refusal extends Error {
-  constructor(readonly reason: "budget_exhausted" | "period_policy_conflict") {
-    super(reason);
-  }
+  constructor(readonly reason: RefusalReason) { super(reason); }
 }
 
 function amount(value: bigint, name: string): bigint {
@@ -20,11 +21,16 @@ function amount(value: bigint, name: string): bigint {
   return value;
 }
 
-function identityMatches(row: {
-  periodKey: string; periodPolicyVersion: string; reservedMicros: bigint; provider: string; model: string;
-}, input: ReserveSpendRecord): boolean {
-  return row.periodKey === input.periodKey && row.periodPolicyVersion === input.periodPolicyVersion &&
-    row.reservedMicros === input.reservedMicros && row.provider === input.provider && row.model === input.model;
+const IDENTITY_FIELDS = [
+  "workspaceId", "attemptRef", "periodKey", "periodPolicyVersion", "budgetConfigVersion",
+  "contractVersion", "operationRef",
+  "maximumChargeMicros", "provider", "model", "budgetCurrency", "providerCurrency", "quoteRef",
+  "quoteHash", "priceBookRef", "priceBookVersion", "priceBookHash", "fxSnapshotRef", "fxSnapshotHash",
+  "policyApprovalRef", "budgetMode", "budgetLimitMicros", "provenanceState",
+] as const;
+
+function identityMatches(row: Record<string, unknown>, input: ReserveSpendRecord): boolean {
+  return IDENTITY_FIELDS.every((field) => row[field] === input[field]);
 }
 
 function retryable(error: unknown): boolean {
@@ -41,12 +47,11 @@ async function retryConflicts<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
-/** All writes are transaction-scoped. The caller owns both the Prisma client and schema deployment. */
 export function createPrismaSpendReservationStore(client: PrismaClient): SpendReservationStore {
   return {
     async reserve(input) {
-      amount(input.reservedMicros, "reserved_micros");
-      if (input.budgetMicros !== null) amount(input.budgetMicros, "budget_micros");
+      amount(input.maximumChargeMicros, "maximum_charge_micros");
+      if (input.budgetLimitMicros !== null) amount(input.budgetLimitMicros, "budget_limit_micros");
       if (!Number.isFinite(input.expiresAt.getTime())) throw new RangeError("expires_at_invalid");
       return retryConflicts(() => client.$transaction(async (tx) => {
         const existing = await tx.lLMSpendLedgerEntry.findUnique({
@@ -54,39 +59,97 @@ export function createPrismaSpendReservationStore(client: PrismaClient): SpendRe
         });
         if (existing) return identityMatches(existing, input) ? "duplicate" : "conflict";
 
-        // Insert first: the unique key serializes competing attempts even if the period is full.
-        // A later refusal throws, rolling this insert back with the counter operation.
         await tx.lLMSpendLedgerEntry.create({ data: {
           id: randomUUID(), workspaceId: input.workspaceId, periodKey: input.periodKey,
           periodPolicyVersion: input.periodPolicyVersion, attemptRef: input.attemptRef,
-          state: "reserved", reservedMicros: input.reservedMicros, provider: input.provider,
-          model: input.model, expiresAt: input.expiresAt,
+          contractVersion: input.contractVersion, operationRef: input.operationRef, state: "reserved",
+          reservedMicros: input.maximumChargeMicros, maximumChargeMicros: input.maximumChargeMicros,
+          provider: input.provider, model: input.model, budgetCurrency: input.budgetCurrency,
+          providerCurrency: input.providerCurrency, budgetConfigVersion: input.budgetConfigVersion,
+          budgetMode: input.budgetMode, budgetLimitMicros: input.budgetLimitMicros,
+          quoteRef: input.quoteRef, quoteHash: input.quoteHash, priceBookRef: input.priceBookRef,
+          priceBookVersion: input.priceBookVersion, priceBookHash: input.priceBookHash,
+          fxSnapshotRef: input.fxSnapshotRef, fxSnapshotHash: input.fxSnapshotHash,
+          policyApprovalRef: input.policyApprovalRef, provenanceState: input.provenanceState,
+          expiresAt: input.expiresAt,
         } });
+
+        // Serialize every v2 admission with the database trigger used by a
+        // rolled-back v1 writer. The unique row deliberately shares the old
+        // ledger/counter unicode_ci key semantics so old aliases reach the same
+        // fence; the locking SELECT below separately enforces exact v2 caller
+        // identity. All monetary state remains in the existing ledger and
+        // counter. ON DUPLICATE KEY takes the row lock without ever changing a
+        // legacy_unknown fence back to open.
+        await tx.$executeRaw`
+          INSERT INTO LLMSpendPeriodCompatibility
+            (id, workspaceId, periodKey, state, createdAt, updatedAt)
+          VALUES (${randomUUID()}, ${input.workspaceId}, ${input.periodKey}, 'open',
+            CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))
+          ON DUPLICATE KEY UPDATE id = id`;
+        // Use a locking/current read. Under MySQL REPEATABLE READ, a normal
+        // Prisma findUnique can retain an earlier snapshot and miss the row
+        // that a concurrent transaction just committed before our duplicate-
+        // key insert resumed.
+        const [compatibility] = await tx.$queryRaw<Array<{
+          workspaceId: string; periodKey: string; state: string;
+        }>>`
+          SELECT workspaceId, periodKey, state
+          FROM LLMSpendPeriodCompatibility
+          WHERE CAST(workspaceId AS BINARY) = CAST(${input.workspaceId} AS BINARY)
+            AND CAST(periodKey AS BINARY) = CAST(${input.periodKey} AS BINARY)
+          FOR UPDATE`;
+        if (!compatibility || compatibility.workspaceId !== input.workspaceId ||
+            compatibility.periodKey !== input.periodKey) {
+          throw new Refusal("conflict");
+        }
+        if (compatibility.state === "legacy_unknown") {
+          throw new Refusal("legacy_period_requires_reconciliation");
+        }
 
         await tx.lLMSpendPeriodCounter.upsert({
           where: { workspaceId_periodKey: { workspaceId: input.workspaceId, periodKey: input.periodKey } },
           create: { id: randomUUID(), workspaceId: input.workspaceId, periodKey: input.periodKey,
-            periodPolicyVersion: input.periodPolicyVersion },
+            periodPolicyVersion: input.periodPolicyVersion, contractVersion: 2,
+            budgetConfigVersion: input.budgetConfigVersion, budgetMode: input.budgetMode,
+            budgetLimitMicros: input.budgetLimitMicros, policyApprovalRef: input.policyApprovalRef,
+            admissionState: "open" },
           update: {},
         });
 
-        // DECIMAL arithmetic in the predicate avoids signed BIGINT overflow. The target
-        // reserved column is separately bounded, including for an unlimited policy.
         const changed = await tx.$executeRaw`
           UPDATE LLMSpendPeriodCounter
-          SET reservedMicros = reservedMicros + ${input.reservedMicros}, updatedAt = CURRENT_TIMESTAMP(3)
-          WHERE workspaceId = ${input.workspaceId} AND periodKey = ${input.periodKey}
-            AND periodPolicyVersion = ${input.periodPolicyVersion}
-            AND CAST(reservedMicros AS DECIMAL(65,0)) + ${input.reservedMicros} <= ${MAX_MICROS}
-            AND (${input.budgetMicros} IS NULL OR
+          SET reservedMicros = reservedMicros + ${input.maximumChargeMicros}, updatedAt = CURRENT_TIMESTAMP(3)
+          WHERE CAST(workspaceId AS BINARY) = CAST(${input.workspaceId} AS BINARY)
+            AND CAST(periodKey AS BINARY) = CAST(${input.periodKey} AS BINARY)
+            AND contractVersion = 2 AND admissionState = 'open'
+            AND CAST(periodPolicyVersion AS BINARY) = CAST(${input.periodPolicyVersion} AS BINARY)
+            AND budgetConfigVersion = ${input.budgetConfigVersion}
+            AND CAST(budgetMode AS BINARY) = CAST(${input.budgetMode} AS BINARY)
+            AND CAST(policyApprovalRef AS BINARY) = CAST(${input.policyApprovalRef} AS BINARY)
+            AND ((budgetLimitMicros IS NULL AND ${input.budgetLimitMicros} IS NULL) OR
+                 budgetLimitMicros = ${input.budgetLimitMicros})
+            AND CAST(reservedMicros AS DECIMAL(65,0)) + ${input.maximumChargeMicros} <= ${MAX_MICROS}
+            AND (budgetMode = 'unlimited' OR
               CAST(reservedMicros AS DECIMAL(65,0)) + CAST(settledMicros AS DECIMAL(65,0)) +
-              CAST(unknownBoundMicros AS DECIMAL(65,0)) + ${input.reservedMicros} <= ${input.budgetMicros})`;
+              CAST(unknownBoundMicros AS DECIMAL(65,0)) + CAST(invariantBreachBoundMicros AS DECIMAL(65,0)) +
+              ${input.maximumChargeMicros} <= budgetLimitMicros)`;
         if (changed === 1) return "reserved";
         const counter = await tx.lLMSpendPeriodCounter.findUniqueOrThrow({
           where: { workspaceId_periodKey: { workspaceId: input.workspaceId, periodKey: input.periodKey } },
         });
-        throw new Refusal(counter.periodPolicyVersion !== input.periodPolicyVersion
-          ? "period_policy_conflict" : "budget_exhausted");
+        if (counter.contractVersion !== 2 || counter.admissionState === "legacy_unknown") {
+          throw new Refusal("legacy_period_requires_reconciliation");
+        }
+        if (counter.workspaceId !== input.workspaceId || counter.periodKey !== input.periodKey) {
+          throw new Refusal("conflict");
+        }
+        if (counter.admissionState === "invariant_breach") throw new Refusal("spend_invariant_breach");
+        if (counter.periodPolicyVersion !== input.periodPolicyVersion) throw new Refusal("period_policy_conflict");
+        if (counter.budgetConfigVersion !== input.budgetConfigVersion) throw new Refusal("budget_config_conflict");
+        if (counter.budgetMode !== input.budgetMode || counter.budgetLimitMicros !== input.budgetLimitMicros ||
+            counter.policyApprovalRef !== input.policyApprovalRef) throw new Refusal("budget_config_conflict");
+        throw new Refusal("budget_exhausted");
       }, TX_OPTIONS).catch((error: unknown) => {
         if (error instanceof Refusal) return error.reason;
         throw error;
@@ -104,73 +167,140 @@ export function createPrismaSpendReservationStore(client: PrismaClient): SpendRe
       return transition(client, input.workspaceId, input.attemptRef, "released");
     },
     async readTotals({ workspaceId, periodKey }) {
-      const row = await client.lLMSpendPeriodCounter.findUnique({
-        where: { workspaceId_periodKey: { workspaceId, periodKey } },
-      });
-      return { reservedMicros: row?.reservedMicros ?? BigInt(0), settledMicros: row?.settledMicros ?? BigInt(0),
-        unknownBoundMicros: row?.unknownBoundMicros ?? BigInt(0), unknownCalls: row?.unknownCalls ?? 0 };
+      const [row, compatibility] = await Promise.all([
+        client.lLMSpendPeriodCounter.findUnique({
+          where: { workspaceId_periodKey: { workspaceId, periodKey } },
+        }),
+        client.lLMSpendPeriodCompatibility.findUnique({
+          where: { workspaceId_periodKey: { workspaceId, periodKey } },
+        }),
+      ]);
+      const exactRow = row?.workspaceId === workspaceId && row.periodKey === periodKey ? row : null;
+      const exactCompatibility = compatibility?.workspaceId === workspaceId && compatibility.periodKey === periodKey ?
+        compatibility : null;
+      const aliasedExistingPeriod = (row !== null && exactRow === null) ||
+        (compatibility !== null && exactCompatibility === null);
+      return {
+        reservedMicros: exactRow?.reservedMicros ?? BigInt(0),
+        settledMicros: exactRow?.settledMicros ?? BigInt(0),
+        unknownBoundMicros: exactRow?.unknownBoundMicros ?? BigInt(0),
+        unknownCalls: exactRow?.unknownCalls ?? 0,
+        invariantBreachBoundMicros: exactRow?.invariantBreachBoundMicros ?? BigInt(0),
+        invariantBreachCalls: exactRow?.invariantBreachCalls ?? 0,
+        admissionState: aliasedExistingPeriod || exactCompatibility?.state === "legacy_unknown" ? "legacy_unknown" :
+          exactRow?.admissionState === "legacy_unknown" || exactRow?.admissionState === "invariant_breach" ?
+            exactRow.admissionState : "open",
+      };
     },
     async listExpiredReservations({ now, limit }) {
       if (!Number.isSafeInteger(limit) || limit < 0) throw new RangeError("limit_invalid");
       return client.lLMSpendLedgerEntry.findMany({
-        where: { state: "reserved", expiresAt: { lte: now } }, orderBy: [{ expiresAt: "asc" }, { id: "asc" }],
-        take: limit, select: { workspaceId: true, attemptRef: true },
+        where: { state: "reserved", expiresAt: { lte: now } },
+        orderBy: [{ expiresAt: "asc" }, { id: "asc" }], take: limit,
+        select: { workspaceId: true, attemptRef: true },
       });
     },
   };
 }
 
+type TransitionResult<T extends "settled" | "unknown" | "released"> =
+  T | (T extends "settled" ? "invariant_breach" : never) | "not_reserved";
+
 async function transition<T extends "settled" | "unknown" | "released">(
-  client: PrismaClient, workspaceId: string, attemptRef: string,
-  state: T, measured = BigInt(0),
-): Promise<T | "not_reserved"> {
+  client: PrismaClient,
+  workspaceId: string,
+  attemptRef: string,
+  requestedState: T,
+  measured = BigInt(0),
+): Promise<TransitionResult<T>> {
   return retryConflicts(() => client.$transaction(async (tx) => {
     const locked = await tx.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM LLMSpendLedgerEntry
-      WHERE workspaceId = ${workspaceId} AND attemptRef = ${attemptRef} FOR UPDATE`;
+      WHERE CAST(workspaceId AS BINARY) = CAST(${workspaceId} AS BINARY)
+        AND CAST(attemptRef AS BINARY) = CAST(${attemptRef} AS BINARY) FOR UPDATE`;
     if (locked.length === 0) return "not_reserved";
     const row = await tx.lLMSpendLedgerEntry.findUniqueOrThrow({
       where: { workspaceId_attemptRef: { workspaceId, attemptRef } },
     });
     if (row.state !== "reserved") return "not_reserved";
+    const bound = row.maximumChargeMicros ?? row.reservedMicros;
+    // Resolve the physical counter identity through its existing unicode_ci
+    // unique key, then use the returned canonical bytes for the mutation. A
+    // rolled-back v1 writer can persist an aliased period/workspace spelling in
+    // its ledger row while advancing the pre-existing canonical counter. The
+    // locked ledger remains the transition authority; this lookup only locates
+    // the aggregate row that old code actually charged.
+    const counter = await tx.lLMSpendPeriodCounter.findUnique({
+      where: { workspaceId_periodKey: { workspaceId: row.workspaceId, periodKey: row.periodKey } },
+    });
+    if (!counter) throw new Error("spend_counter_transition_conflict");
+    if (row.contractVersion === 2 && (counter.workspaceId !== row.workspaceId ||
+        counter.periodKey !== row.periodKey || counter.periodPolicyVersion !== row.periodPolicyVersion)) {
+      throw new Error("spend_counter_transition_conflict");
+    }
 
+    if (requestedState === "settled" && row.contractVersion !== 2) {
+      throw new Error("legacy_spend_attempt_requires_reconciliation");
+    }
+    const isBreach = requestedState === "settled" && measured > bound;
     let changed: number;
-    if (state === "settled") {
+    if (isBreach) {
       changed = await tx.$executeRaw`
         UPDATE LLMSpendPeriodCounter
-        SET reservedMicros = reservedMicros - ${row.reservedMicros},
-            settledMicros = settledMicros + ${measured}, updatedAt = CURRENT_TIMESTAMP(3)
-        WHERE workspaceId = ${workspaceId} AND periodKey = ${row.periodKey}
-          AND periodPolicyVersion = ${row.periodPolicyVersion}
-          AND reservedMicros >= ${row.reservedMicros}
+        SET reservedMicros = reservedMicros - ${bound},
+            invariantBreachBoundMicros = invariantBreachBoundMicros + ${bound},
+            invariantBreachCalls = invariantBreachCalls + 1,
+            admissionState = 'invariant_breach', updatedAt = CURRENT_TIMESTAMP(3)
+        WHERE CAST(workspaceId AS BINARY) = CAST(${counter.workspaceId} AS BINARY)
+          AND CAST(periodKey AS BINARY) = CAST(${counter.periodKey} AS BINARY)
+          AND CAST(periodPolicyVersion AS BINARY) = CAST(${counter.periodPolicyVersion} AS BINARY)
+          AND reservedMicros >= ${bound}
+          AND CAST(invariantBreachBoundMicros AS DECIMAL(65,0)) + ${bound} <= ${MAX_MICROS}
+          AND invariantBreachCalls < 2147483647`;
+    } else if (requestedState === "settled") {
+      changed = await tx.$executeRaw`
+        UPDATE LLMSpendPeriodCounter
+        SET reservedMicros = reservedMicros - ${bound}, settledMicros = settledMicros + ${measured},
+            updatedAt = CURRENT_TIMESTAMP(3)
+        WHERE CAST(workspaceId AS BINARY) = CAST(${counter.workspaceId} AS BINARY)
+          AND CAST(periodKey AS BINARY) = CAST(${counter.periodKey} AS BINARY)
+          AND CAST(periodPolicyVersion AS BINARY) = CAST(${counter.periodPolicyVersion} AS BINARY)
+          AND reservedMicros >= ${bound}
           AND CAST(settledMicros AS DECIMAL(65,0)) + ${measured} <= ${MAX_MICROS}`;
-    } else if (state === "unknown") {
+    } else if (requestedState === "unknown") {
       changed = await tx.$executeRaw`
         UPDATE LLMSpendPeriodCounter
-        SET reservedMicros = reservedMicros - ${row.reservedMicros},
-            unknownBoundMicros = unknownBoundMicros + ${row.reservedMicros},
+        SET reservedMicros = reservedMicros - ${bound}, unknownBoundMicros = unknownBoundMicros + ${bound},
             unknownCalls = unknownCalls + 1, updatedAt = CURRENT_TIMESTAMP(3)
-        WHERE workspaceId = ${workspaceId} AND periodKey = ${row.periodKey}
-          AND periodPolicyVersion = ${row.periodPolicyVersion}
-          AND reservedMicros >= ${row.reservedMicros}
-          AND CAST(unknownBoundMicros AS DECIMAL(65,0)) + ${row.reservedMicros} <= ${MAX_MICROS}
+        WHERE CAST(workspaceId AS BINARY) = CAST(${counter.workspaceId} AS BINARY)
+          AND CAST(periodKey AS BINARY) = CAST(${counter.periodKey} AS BINARY)
+          AND CAST(periodPolicyVersion AS BINARY) = CAST(${counter.periodPolicyVersion} AS BINARY)
+          AND reservedMicros >= ${bound}
+          AND CAST(unknownBoundMicros AS DECIMAL(65,0)) + ${bound} <= ${MAX_MICROS}
           AND unknownCalls < 2147483647`;
     } else {
       changed = await tx.$executeRaw`
         UPDATE LLMSpendPeriodCounter
-        SET reservedMicros = reservedMicros - ${row.reservedMicros}, updatedAt = CURRENT_TIMESTAMP(3)
-        WHERE workspaceId = ${workspaceId} AND periodKey = ${row.periodKey}
-          AND periodPolicyVersion = ${row.periodPolicyVersion}
-          AND reservedMicros >= ${row.reservedMicros}`;
+        SET reservedMicros = reservedMicros - ${bound}, updatedAt = CURRENT_TIMESTAMP(3)
+        WHERE CAST(workspaceId AS BINARY) = CAST(${counter.workspaceId} AS BINARY)
+          AND CAST(periodKey AS BINARY) = CAST(${counter.periodKey} AS BINARY)
+          AND CAST(periodPolicyVersion AS BINARY) = CAST(${counter.periodPolicyVersion} AS BINARY)
+          AND reservedMicros >= ${bound}`;
     }
     if (changed !== 1) throw new Error("spend_counter_transition_conflict");
-    // The SELECT FOR UPDATE above holds this attempt row until commit. Its
-    // state was checked under that lock, so a unique-id update is sufficient.
+
+    const state = isBreach ? "invariant_breach" : requestedState;
     await tx.lLMSpendLedgerEntry.update({
       where: { id: row.id },
-      data: { state, usageState: state === "settled" ? "known" : state === "unknown" ? "unknown" : "not_consumed",
-        ...(state === "settled" ? { settledMicros: measured, settledAt: new Date() } : {}) },
+      data: {
+        state,
+        usageState: state === "settled" || state === "invariant_breach" ? "known" :
+          state === "unknown" ? "unknown" : "not_consumed",
+        ...(state === "settled" ? { settledMicros: measured, observedActualMicros: measured, settledAt: new Date() } : {}),
+        ...(state === "invariant_breach" ? { observedActualMicros: measured,
+          invariantBreachReason: "actual_exceeds_maximum", settledAt: new Date() } : {}),
+      },
     });
-    return state;
-  }, TX_OPTIONS));
+    return state as TransitionResult<T>;
+  }, TX_OPTIONS)) as Promise<TransitionResult<T>>;
 }

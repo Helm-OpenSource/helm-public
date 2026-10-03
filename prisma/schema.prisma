@@ -1475,6 +1475,11 @@ model Workspace {
   llmBudgetApprovalRef                     String?
   llmBudgetUpdatedBy                       String?
   llmBudgetUpdatedAt                       DateTime?
+  /// Candidate C2 authority references. Presence is provenance only; it does not
+  /// authenticate a price book, FX policy or provider execution authority.
+  llmBudgetCurrency                        String?                                   @db.VarChar(3)
+  llmBudgetPriceBookRef                    String?
+  llmBudgetFxPolicyRef                     String?
   llmPromptVersionOverrides                String?                                   @db.LongText
   createdAt                                DateTime                                  @default(now())
   updatedAt                                DateTime                                  @updatedAt
@@ -7352,12 +7357,36 @@ model LLMSpendLedgerEntry {
   periodPolicyVersion String
   /// One row per call attempt; a retry of the same attempt must not reserve twice.
   attemptRef          String
-  /// reserved | settled | released | unknown
+  /// 1 = legacy candidate with unknown provenance; 2 = maximum-charge contract.
+  contractVersion     Int      @default(1)
+  operationRef        String?
+  /// reserved | settled | released | unknown | invariant_breach
   state               String
   reservedMicros      BigInt
+  /// Explicit pre-call upper bound. V2 requires equality with reservedMicros.
+  maximumChargeMicros BigInt?
   settledMicros       BigInt?
+  /// Provider-observed actual amount, retained on an invariant breach without
+  /// moving it into the settled counter past the admitted maximum.
+  observedActualMicros BigInt?
   /// known | unknown | not_consumed — mirrors the in-process usage observation.
   usageState          String?
+  budgetCurrency      String?   @db.VarChar(3)
+  providerCurrency    String?   @db.VarChar(3)
+  budgetConfigVersion Int?
+  budgetMode           String?   @db.VarChar(16)
+  budgetLimitMicros    BigInt?
+  quoteRef             String?
+  quoteHash            String?   @db.VarChar(71)
+  priceBookRef         String?
+  priceBookVersion     String?   @db.VarChar(64)
+  priceBookHash        String?   @db.VarChar(71)
+  fxSnapshotRef        String?
+  fxSnapshotHash       String?   @db.VarChar(71)
+  policyApprovalRef    String?
+  /// legacy_unknown | complete
+  provenanceState      String   @default("legacy_unknown") @db.VarChar(32)
+  invariantBreachReason String?  @db.VarChar(64)
   provider            String
   model               String
   reservedAt          DateTime  @default(now())
@@ -7369,6 +7398,7 @@ model LLMSpendLedgerEntry {
 
   @@unique([workspaceId, attemptRef])
   @@index([workspaceId, periodKey, state])
+  @@index([workspaceId, periodKey, contractVersion, provenanceState], map: "LLMSpendLedgerEntry_workspace_period_contract_provenance_idx")
   @@index([state, expiresAt])
 }
 
@@ -7385,6 +7415,14 @@ model LLMSpendPeriodCounter {
   workspaceId         String
   periodKey           String
   periodPolicyVersion String
+  /// 1 = legacy unknown counter; 2 = C2 maximum-charge contract.
+  contractVersion     Int      @default(1)
+  budgetConfigVersion Int?
+  budgetMode          String?  @db.VarChar(16)
+  budgetLimitMicros   BigInt?
+  policyApprovalRef   String?
+  /// open | legacy_unknown | invariant_breach
+  admissionState      String   @default("legacy_unknown") @db.VarChar(32)
   /// Reserved but not yet settled, in micros.
   reservedMicros      BigInt   @default(0)
   /// Settled, in micros.
@@ -7394,9 +7432,33 @@ model LLMSpendPeriodCounter {
   /// that is neither.
   unknownBoundMicros  BigInt   @default(0)
   unknownCalls        Int      @default(0)
+  /// A breached attempt retains its admitted maximum here and closes this
+  /// period to new reservations until a later governed reconciliation flow.
+  invariantBreachBoundMicros BigInt @default(0)
+  invariantBreachCalls       Int    @default(0)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
   @@unique([workspaceId, periodKey])
   @@index([periodKey])
+  @@index([workspaceId, periodKey, admissionState], map: "LLMSpendPeriodCounter_workspace_period_admission_idx")
+}
+
+/// Transactional compatibility fence for one workspace billing period.
+///
+/// The v2 writer locks this row before advancing the counter. A database trigger
+/// changes it to legacy_unknown when a rolled-back v1 writer inserts a legacy
+/// ledger row, so mixed-version admission is serialized without deriving money
+/// from a second ledger.
+model LLMSpendPeriodCompatibility {
+  id          String   @id @default(cuid())
+  workspaceId String
+  periodKey   String
+  /// open | legacy_unknown
+  state       String   @default("legacy_unknown") @db.VarChar(32)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([workspaceId, periodKey])
+  @@index([workspaceId, periodKey, state], map: "LLMSpendPeriodCompatibility_workspace_period_state_idx")
 }

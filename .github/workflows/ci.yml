@@ -498,10 +498,13 @@ jobs:
       - name: Replay migrations on an empty database
         run: npx tsx prisma/setup-db.ts prepare
 
+      - name: Verify spend charge contract and migration guards
+        run: npx vitest run lib/llm/spend-reservation.test.ts lib/llm/spend-charge-contract-migration.test.ts --config vitest.public.config.ts
+
       - name: Verify governed model egress against MySQL
         run: npm run test:model-egress:mysql
 
-      - name: Verify candidate spend reservation transactions against MySQL
+      - name: Verify spend charge contract transactions against MySQL
         env:
           SPEND_RESERVATION_MYSQL_REQUIRED: '1'
           SPEND_RESERVATION_MYSQL_EXPECTED_DATABASE: helm_caio_p1d_ci
