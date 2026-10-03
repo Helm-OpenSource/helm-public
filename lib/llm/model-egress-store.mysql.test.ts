@@ -3,10 +3,12 @@ import {
   type Prisma,
   WorkspaceRole,
 } from "@prisma/client";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { getWorkspaceModelEgressOwnerReadout } from "@/features/dashboard/model-egress-query";
 import { db } from "@/lib/db";
+import { createGovernedModelGateway } from "@/lib/llm/governed-model-gateway.service";
+import { createGovernedModelAdapterRegistry } from "@/lib/llm/governed-model-adapter-registry.service";
 import {
   canonicalJson,
   sha256,
@@ -14,14 +16,17 @@ import {
 import {
   GOVERNED_GATEWAY_AUTHORITY,
   GOVERNED_MODEL_PROJECTION_AUTHORITY,
-  claimModelRouteDispatch,
+  claimModelRouteDispatch as actualClaimModelRouteDispatch,
+  markModelEgressSpendUnknown,
   prepareModelRouteDecision,
   readModelRouteDecision,
   recordGovernedModelProjectionReceipt,
-  recordModelEgressTerminalReceipt,
+  recordModelEgressTerminalReceipt as actualRecordModelEgressTerminalReceipt,
+  type GovernedSpendAuthority,
 } from "@/lib/llm/model-egress-store.service";
 import {
   computeModelRoutePolicyApprovalReceiptRef,
+  computeGovernedModelAdapterRegistrationHash,
   computeProviderAdapterReadinessHash,
   computeTenantModelRoutePolicyHash,
   type ProviderAdapterReadinessReceipt,
@@ -54,6 +59,18 @@ const ISOLATED_DATABASE_PREFIX = "helm_caio_p1d_";
 const HASH_A = `sha256:${"a".repeat(64)}`;
 const HASH_B = `sha256:${"b".repeat(64)}`;
 const HASH_C = `sha256:${"c".repeat(64)}`;
+const SYNTHETIC_REGISTRATION = (() => {
+  const candidate = {
+    schemaVersion: "helm.governed-model-adapter-registration/v1" as const,
+    registrationRef: "adapter-registration:synthetic-adapter",
+    adapterKey: "synthetic-adapter", adapterVersion: "synthetic-adapter-v1",
+    provider: "synthetic-provider", implementationHash: HASH_A,
+    supportedDeploymentForms: ["domestic_cloud"] as const,
+    authorityEffect: "adapter_registry_only" as const,
+    contentHash: HASH_A,
+  };
+  return { ...candidate, contentHash: computeGovernedModelAdapterRegistrationHash(candidate) };
+})();
 const REQUESTED_MAX_OUTPUT_TOKENS = 200;
 const PRICING_VERSION = "synthetic-pricing-202607";
 const ZERO_COST_EVIDENCE = {
@@ -66,6 +83,29 @@ const LOW_COST_EVIDENCE = {
   costCurrency: "USD" as const,
   pricingVersion: PRICING_VERSION,
 };
+const SPEND_PERIOD_VERSION = "synthetic-period-policy-v1";
+const syntheticSpendAuthority: GovernedSpendAuthority = {
+  async resolveDispatch({ decision }) {
+    if (!decision.routeSnapshot) throw new Error("synthetic_route_missing");
+    return {
+      periodKey: "synthetic-period-2026-10", periodPolicyVersion: SPEND_PERIOD_VERSION,
+      quote: {
+        contractVersion: 2, operationRef: decision.decisionId,
+        quoteRef: `quote:${decision.decisionId}`, quoteHash: HASH_A,
+        maximumChargeMicros: BigInt(decision.routeSnapshot.maxCostUsdMicros),
+        budgetCurrency: "USD", providerCurrency: "USD",
+        priceBookRef: "synthetic-price-book", priceBookVersion: decision.routeSnapshot.pricingVersion,
+        priceBookHash: HASH_B, fxSnapshotRef: null, fxSnapshotHash: null,
+        policyApprovalRef: "synthetic-spend-approval",
+      },
+    };
+  },
+  async verifyTerminal({ actualCostUsdMicros }) { return BigInt(actualCostUsdMicros); },
+};
+const claimModelRouteDispatch = (input: Parameters<typeof actualClaimModelRouteDispatch>[0]) =>
+  actualClaimModelRouteDispatch({ ...input, spendAuthority: syntheticSpendAuthority });
+const recordModelEgressTerminalReceipt = (input: Parameters<typeof actualRecordModelEgressTerminalReceipt>[0]) =>
+  actualRecordModelEgressTerminalReceipt({ ...input, spendAuthority: syntheticSpendAuthority });
 
 function assertIsolatedDatabaseTarget(): void {
   if (
@@ -204,7 +244,7 @@ function readiness(input: {
     adapterVersion: "synthetic-adapter-v1",
     adapterRegistrationRef:
       "adapter-registration:synthetic-adapter",
-    adapterRegistrationHash: HASH_B,
+    adapterRegistrationHash: SYNTHETIC_REGISTRATION.contentHash,
     deploymentForm: input.target.deploymentForm,
     jurisdiction: input.target.jurisdiction,
     region: input.target.region,
@@ -294,6 +334,10 @@ describeMysql("model egress store with an isolated MySQL database", () => {
       data: {
         name: `Model egress integration ${suffix}`,
         slug: `model-egress-integration-${suffix}`,
+        llmBudgetMode: "unlimited", llmMonthlyBudgetMicros: null,
+        llmBudgetEnforcementMode: "enforce", llmBudgetPeriodPolicyVersion: SPEND_PERIOD_VERSION,
+        llmBudgetConfigVersion: 1, llmBudgetApprovalRef: "synthetic-spend-approval",
+        llmBudgetUpdatedBy: "synthetic-test", llmBudgetUpdatedAt: new Date(),
       },
     });
     workspaceId = workspace.id;
@@ -532,7 +576,7 @@ describeMysql("model egress store with an isolated MySQL database", () => {
       adapterVersion: "synthetic-adapter-v1",
       adapterRegistrationRef:
         "adapter-registration:synthetic-adapter",
-      adapterRegistrationHash: HASH_B,
+      adapterRegistrationHash: SYNTHETIC_REGISTRATION.contentHash,
       deploymentForm: primaryRoute.deploymentForm,
       jurisdiction: primaryRoute.jurisdiction,
       region: primaryRoute.region,
@@ -2204,6 +2248,218 @@ describeMysql("model egress store with an isolated MySQL database", () => {
     });
 
     expect(readout).toBeNull();
+  });
+
+  it("uses the real gateway, one atomic claim/reservation and terminal/settlement for one provider invoke", async () => {
+    const projectedPayload = { synthetic: `gateway-spend-${suffix}` };
+    const serialized = canonicalJson(projectedPayload);
+    const evidenceRef = `evidence:gateway-spend-${suffix}`;
+    const projectionReceiptRef = await projection(evidenceRef,
+      `projection:gateway-spend-${suffix}`, undefined, assetId, new Date(),
+      sha256(serialized), Buffer.byteLength(serialized, "utf8"));
+    const invoke = vi.fn(async () => ({
+      outcome: "success" as const, output: { synthetic: "complete" },
+      requestDisposition: "accepted" as const,
+      providerRequestRef: "synthetic-provider-request", promptTokens: 10,
+      completionTokens: 10, actualCostUsdMicros: 12_500,
+      costCurrency: "USD" as const, pricingVersion: PRICING_VERSION,
+      costBand: "low" as const, errorCode: null,
+    }));
+    const registry = createGovernedModelAdapterRegistry<typeof projectedPayload, { synthetic: string }>([{
+        registration: SYNTHETIC_REGISTRATION,
+        probeReadiness: async () => ({ endpointFingerprint: HASH_C, credentialConfigured: true,
+          modelProbeStatus: "ready", capabilityRefs: [], evidenceRefs: [],
+          checkedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000).toISOString() }),
+        preflight: async () => ({ endpointFingerprint: HASH_C, credentialConfigured: true,
+          observedAt: new Date().toISOString(), estimatedInputTokens: 10,
+          estimatedMaxCostUsdMicros: 12_500 }),
+        invoke,
+      }]);
+    const execute = createGovernedModelGateway({ registry,
+      dependencies: { spendAuthority: syntheticSpendAuthority } });
+    const request = {
+      workspaceId, gatewayRef: "gateway:synthetic-spend", policyKey: "caio-pro-default",
+      requestKey: `request:gateway-spend-${suffix}`, taskClass: "summary_briefing" as const,
+      taskRef: `briefing:gateway-spend-${suffix}`, projectionReceiptRef, projectedPayload,
+      requestedMaxOutputTokens: REQUESTED_MAX_OUTPUT_TOKENS,
+    };
+    const competing = await Promise.allSettled([execute(request), execute(request)]);
+    const winner = competing.find((result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof execute>>> =>
+      result.status === "fulfilled" && result.value.status === "success");
+    expect(winner).toBeDefined();
+    const first = winner!.value;
+    expect(first.status).toBe("success");
+    expect(first.output).toEqual({ synthetic: "complete" });
+    const second = await execute(request);
+    expect(second.output).toBeNull();
+    expect(invoke).toHaveBeenCalledTimes(1);
+    const decisionRef = first.selectedDecisionRef;
+    const decisionRow = await db.modelRouteDecision.findUniqueOrThrow({ where: { id: decisionRef } });
+    const ledger = await db.lLMSpendLedgerEntry.findUniqueOrThrow({ where: {
+      workspaceId_attemptRef: { workspaceId, attemptRef: decisionRow.dispatchProviderIdempotencyKey! },
+    } });
+    expect(ledger.state).toBe("settled");
+    expect(ledger.settledMicros).toBe(BigInt(12_500));
+    expect(ledger.quoteHash).toBe(HASH_A);
+    expect(ledger.budgetConfigVersion).toBe(1);
+    const counter = await db.lLMSpendPeriodCounter.findUniqueOrThrow({ where: {
+      workspaceId_periodKey: { workspaceId, periodKey: ledger.periodKey },
+    } });
+    expect(counter.reservedMicros).toBe(BigInt(0));
+    expect(counter.settledMicros).toBeGreaterThanOrEqual(BigInt(12_500));
+    expect(await db.modelEgressReceipt.count({ where: { decisionId: decisionRef, sequence: 2 } })).toBe(1);
+  });
+
+  it("rolls the reservation back when the dispatch claim write fails", async () => {
+    const prepared = await prepareAllowed(`claim-spend-rollback-${suffix}`);
+    const before = await db.lLMSpendLedgerEntry.count({ where: { workspaceId } });
+    const faultAuthority: GovernedSpendAuthority = {
+      ...syntheticSpendAuthority,
+      resolveDispatch: async (input) => {
+        const quote = await syntheticSpendAuthority.resolveDispatch(input);
+        // This synthetic in-transaction write defeats the later claim CAS.
+        // The reservation must be rolled back with it.
+        await input.tx.modelRouteDecision.update({
+          where: { id: input.decision.decisionId },
+          data: { validUntil: input.now },
+        });
+        return quote;
+      },
+    };
+    const claimAt = new Date(Date.now() + 10_000);
+    await expect(actualClaimModelRouteDispatch({
+      authority: GOVERNED_GATEWAY_AUTHORITY, spendAuthority: faultAuthority,
+      workspaceId, decisionId: prepared.decision.decisionId,
+      gatewayRef: "gateway:synthetic-rollback", runtime: runtimeDescriptor(claimAt), now: claimAt,
+    })).rejects.toThrow("model_route_dispatch_claim_lost");
+    expect(await db.lLMSpendLedgerEntry.count({ where: { workspaceId } })).toBe(before);
+    const row = await db.modelRouteDecision.findUniqueOrThrow({
+      where: { id: prepared.decision.decisionId },
+    });
+    expect(row.dispatchClaimedAt).toBeNull();
+    expect(row.validUntil.getTime()).toBeGreaterThan(claimAt.getTime());
+  });
+
+  it("rolls the terminal receipt back when spend settlement fails", async () => {
+    const prepared = await prepareAllowed(`terminal-spend-rollback-${suffix}`);
+    const claimedAt = new Date();
+    const periodKey = "c3-fault";
+    const faultAuthority: GovernedSpendAuthority = {
+      ...syntheticSpendAuthority,
+      resolveDispatch: async (input) => ({
+        ...await syntheticSpendAuthority.resolveDispatch(input), periodKey,
+      }),
+    };
+    const claim = await actualClaimModelRouteDispatch({
+      authority: GOVERNED_GATEWAY_AUTHORITY, spendAuthority: faultAuthority, workspaceId,
+      decisionId: prepared.decision.decisionId, gatewayRef: "gateway:synthetic-terminal-rollback",
+      runtime: runtimeDescriptor(claimedAt), now: claimedAt,
+    });
+    const finishedAt = new Date(claimedAt.getTime() + 1_000);
+    const counterKey = { workspaceId_periodKey: { workspaceId, periodKey } };
+    const counter = await db.lLMSpendPeriodCounter.findUniqueOrThrow({ where: counterKey });
+    const terminalInput = {
+      authority: GOVERNED_GATEWAY_AUTHORITY, spendAuthority: faultAuthority, workspaceId,
+      decisionId: prepared.decision.decisionId, gatewayRef: "gateway:synthetic-terminal-rollback",
+      dispatchClaimHash: claim.claimHash, idempotencyKey: `terminal:spend-rollback-${suffix}`,
+      outcome: "success" as const, resolutionSource: "invoke" as const,
+      requestDisposition: "accepted" as const,
+      providerRequestRefHash: HASH_A, finishedAt, latencyMs: 1_000,
+      promptTokens: 10, completionTokens: 10, ...LOW_COST_EVIDENCE,
+      costBand: "low" as const, errorCode: null, recordedAt: finishedAt,
+    };
+    await db.lLMSpendPeriodCounter.update({ where: counterKey, data: { reservedMicros: BigInt(0) } });
+    try {
+      await expect(actualRecordModelEgressTerminalReceipt(terminalInput)).rejects.toThrow();
+    } finally {
+      await db.lLMSpendPeriodCounter.update({ where: counterKey,
+        data: { reservedMicros: counter.reservedMicros } });
+    }
+    expect(await db.modelEgressReceipt.count({ where: {
+      decisionId: prepared.decision.decisionId, sequence: 2,
+    } })).toBe(0);
+    const ledger = await db.lLMSpendLedgerEntry.findUniqueOrThrow({ where: {
+      workspaceId_attemptRef: { workspaceId, attemptRef: claim.providerIdempotencyKey },
+    } });
+    expect(ledger.state).toBe("reserved");
+    expect((await actualRecordModelEgressTerminalReceipt(terminalInput)).spendOutcome).toBe("settled");
+  });
+
+  it("re-reads the workspace spend policy under the claim lock and refuses a disabled policy", async () => {
+    const prepared = await prepareAllowed(`spend-policy-drift-${suffix}`);
+    const before = await db.lLMSpendLedgerEntry.count({ where: { workspaceId } });
+    await db.workspace.update({ where: { id: workspaceId }, data: {
+      llmBudgetMode: "unconfigured", llmBudgetEnforcementMode: null,
+    } });
+    try {
+      await expect(claimModelRouteDispatch({
+        authority: GOVERNED_GATEWAY_AUTHORITY, workspaceId,
+        decisionId: prepared.decision.decisionId, gatewayRef: "gateway:policy-drift",
+        runtime: runtimeDescriptor(new Date()),
+      })).rejects.toThrow("spend_budget_policy_not_enforceable");
+    } finally {
+      await db.workspace.update({ where: { id: workspaceId }, data: {
+        llmBudgetMode: "unlimited", llmBudgetEnforcementMode: "enforce",
+      } });
+    }
+    expect(await db.lLMSpendLedgerEntry.count({ where: { workspaceId } })).toBe(before);
+  });
+
+  it("refuses a quote version outside the selected route before reserving", async () => {
+    const prepared = await prepareAllowed(`spend-quote-drift-${suffix}`);
+    const before = await db.lLMSpendLedgerEntry.count({ where: { workspaceId } });
+    const drifted: GovernedSpendAuthority = {
+      ...syntheticSpendAuthority,
+      resolveDispatch: async (input) => {
+        const resolved = await syntheticSpendAuthority.resolveDispatch(input);
+        return { ...resolved, quote: { ...resolved.quote, priceBookVersion: "synthetic-other" } };
+      },
+    };
+    await expect(actualClaimModelRouteDispatch({
+      authority: GOVERNED_GATEWAY_AUTHORITY, spendAuthority: drifted, workspaceId,
+      decisionId: prepared.decision.decisionId, gatewayRef: "gateway:quote-drift",
+      runtime: runtimeDescriptor(new Date()),
+    })).rejects.toThrow("spend_quote_route_or_policy_mismatch");
+    expect(await db.lLMSpendLedgerEntry.count({ where: { workspaceId } })).toBe(before);
+  });
+
+  it("persists an unknown provider outcome as a bound without inventing terminal cost", async () => {
+    const prepared = await prepareAllowed(`spend-unknown-${suffix}`);
+    const now = new Date();
+    const claim = await claimModelRouteDispatch({
+      authority: GOVERNED_GATEWAY_AUTHORITY, workspaceId,
+      decisionId: prepared.decision.decisionId, gatewayRef: "gateway:spend-unknown",
+      runtime: runtimeDescriptor(now), now,
+    });
+    const unknownLedgerBefore = await db.lLMSpendLedgerEntry.findUniqueOrThrow({ where: {
+      workspaceId_attemptRef: { workspaceId, attemptRef: claim.providerIdempotencyKey },
+    } });
+    const unknownCounterKey = { workspaceId_periodKey: {
+      workspaceId, periodKey: unknownLedgerBefore.periodKey,
+    } };
+    const unknownBoundBefore = (await db.lLMSpendPeriodCounter.findUniqueOrThrow({
+      where: unknownCounterKey,
+    })).unknownBoundMicros;
+    expect(await markModelEgressSpendUnknown({
+      authority: GOVERNED_GATEWAY_AUTHORITY, workspaceId,
+      decisionId: prepared.decision.decisionId, gatewayRef: "gateway:spend-unknown",
+      dispatchClaimHash: claim.claimHash,
+    })).toBe("unknown");
+    expect(await markModelEgressSpendUnknown({
+      authority: GOVERNED_GATEWAY_AUTHORITY, workspaceId,
+      decisionId: prepared.decision.decisionId, gatewayRef: "gateway:spend-unknown",
+      dispatchClaimHash: claim.claimHash,
+    })).toBe("unknown");
+    const ledger = await db.lLMSpendLedgerEntry.findUniqueOrThrow({ where: {
+      workspaceId_attemptRef: { workspaceId, attemptRef: claim.providerIdempotencyKey },
+    } });
+    expect(ledger.state).toBe("unknown");
+    expect((await db.lLMSpendPeriodCounter.findUniqueOrThrow({
+      where: unknownCounterKey,
+    })).unknownBoundMicros - unknownBoundBefore).toBe(ledger.maximumChargeMicros);
+    expect(await db.modelEgressReceipt.count({ where: {
+      decisionId: prepared.decision.decisionId, sequence: 2,
+    } })).toBe(0);
   });
 
   it("revocation wins before a not-yet-claimed dispatch", async () => {
