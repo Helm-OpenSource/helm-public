@@ -73,3 +73,52 @@ Activation still requires both remaining layers:
 2. Every chargeable HTTP, worker, retry/provider-attempt, and CAIO path must use an atomic charged gateway. This slice covers the governed sync/deferred gateway only; other call paths have not been migrated. Unknown outcomes stay occupied and do not create zero-cost terminal receipts.
 
 Until both layers and site-specific DDL/ACL approval are proven, this code is not a monthly hard limit. Adding environment keys or recording cost after a call does not close the gate.
+
+
+## Protected signed authority registry candidate
+
+`LLMSpendIssuerGrant` and `LLMSpendAuthorityRecord` are an empty-by-default,
+same-database readback seam. A separately authenticated governance operator
+must provision the workspace/key binding and independent reviewed grant pins.
+Core supplies no key/grant/approval issuer API, automatic bootstrap or live
+pricing authority. A reference, self-signed arbitrary key, content hash or
+OWNER membership alone is not a credential. Runtime must have SELECT only on
+both registry tables; issuance is a separate protected identity, and governance
+revocation receives only UPDATE(revokedAt). Content fields are immutable and
+revocation cannot be reversed. Database owners retain DDL authority and remain
+part of the deployment trust boundary.
+
+Signed canonical Ed25519 envelopes bind purpose, workspace, issuer, reviewer,
+source receipt digest, version, payload and time. Noncanonical/duplicate JSON,
+unknown keys, inactive reviewer, missing records, revoked/expired grants and
+record/config/route/hash mismatches refuse. Workspace locking and current-lock
+registry reads use the exact C2 reservation transaction. Time is read from the
+DB after lock waits and must cover the actual C3 dispatch deadline. C3 derives
+claim time/hash/lease from its transaction DB clock, then checks decision, policy,
+projection, source authorization, readiness, runtime and lease again after
+reservation and after audit waits. Caller `now` can only tighten rejection,
+not supply future runtime authority; any expiry rolls the whole transaction back. Billing
+period is an explicitly issued calendar-month policy and IANA zone; no default
+period is inferred. Terminal transitions retain the original ledger period.
+
+Only an issued `input-output-only-v1` SKU asserting that all charges are covered
+by its two token rates is supported. Unknown cache/reasoning/tool/tier/tax
+charges refuse. Rates and CNY-to-USD FX are bounded integer rationals; rounding
+is upward. This metadata does not verify external provider pricing or usage.
+`createRegisteredGovernedSpendAuthority` implements the existing C3 port as an
+opt-in consumer, but all terminal verification refuses without a separate
+trusted usage authority. An adapter-reported amount cannot settle/release;
+unknown handling conservatively retains the original reservation. The default
+gateway remains `spendAuthority:null`; ordinary executeLLMTask, direct provider
+calls and other paid exits are not activated or covered by this candidate.
+
+Run `npm run test:trusted-spend-authority` for canonical contracts. The explicit
+`test:trusted-spend-authority:mysql` requires an owned disposable network-disabled
+Unix socket, confirmed `helm_c4_budget_<digits>` database and synthetic issuer,
+Workspace and users. It refuses absent targets rather than silently claiming a
+DB pass. Existing C3 MySQL regression contains an opt-in registered-authority
+chain that uses a real restricted Prisma transaction (only transport is
+redirected; business and C2 implementations run unchanged). Its terminal refusal
+is not proof of a provider-free outcome or a settled amount. Production schema,
+ACL, issuance identity, actual price/FX/usage evidence and all-exit coverage
+remain separate deployment gates.

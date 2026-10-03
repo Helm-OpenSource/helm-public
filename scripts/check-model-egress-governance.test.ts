@@ -1,5 +1,6 @@
 import {
   mkdirSync,
+  readFileSync,
   mkdtempSync,
   rmSync,
   writeFileSync,
@@ -36,6 +37,14 @@ function withFixture(
 describe("model egress governance boundary guard", () => {
   it("passes on the real repository", () => {
     expect(checkModelEgressGovernance(process.cwd())).toEqual([]);
+  });
+
+  it("rejects reverting dispatch CAS to the pre-wait timestamp", () => {
+    const source=readFileSync(path.join(process.cwd(),"lib/llm/model-egress-store.service.ts"),"utf8");
+    expect(source).toContain("validUntil: { gt: casNow }");
+    withFixture({"lib/llm/model-egress-store.service.ts":source.replace("validUntil: { gt: casNow }","validUntil: { gt: now }")},(root)=>{
+      expect(checkModelEgressGovernance(root)).toContainEqual(expect.objectContaining({rule:"MEG-CLAIM-CAS",detail:expect.stringContaining("validUntil: { gt: casNow }")}));
+    });
   });
 
   it("rejects holding or invoking a governed provider adapter outside the gateway", () => {
@@ -192,14 +201,38 @@ describe("model egress governance boundary guard", () => {
           "      - run: |",
           "          printf 'DATABASE_URL=%s\\n' \"${url}\" >>\"${GITHUB_ENV}\"",
           "          printf 'MODEL_EGRESS_STORE_DATABASE_URL=%s\\n' \"${url}\" >>\"${GITHUB_ENV}\"",
+          "          printf 'MODEL_EGRESS_RUNTIME_DATABASE_URL=%s\\n' \"${runtime_url}\" >>\"${GITHUB_ENV}\"",
+          "      - name: Bind a restricted C4 read and reservation identity",
+          "        run: |",
+          "          GRANT SELECT, UPDATE(updatedAt)",
+          "          helm-c4-root-password",
           "      - run: npx tsx prisma/setup-db.ts prepare",
           "      - run: npm run test:model-egress:mysql",
+          "      - name: Verify signed spend authority against MySQL",
+          "        env:",
+          "          TRUSTED_SPEND_MYSQL_CI_CONTAINER: synthetic-owned-container",
+          "        run: npm run test:trusted-spend-authority:mysql",
         ].join("\n"),
       },
       (root) => {
         expect(checkModelEgressMysqlCiWiring(root)).toEqual([]);
       },
     );
+  });
+
+  it("rejects removing the real restricted transaction identity from CI",()=>{
+    const ci=readFileSync(path.join(process.cwd(),".github/workflows/ci.yml"),"utf8");
+    const pkg=readFileSync(path.join(process.cwd(),"package.json"),"utf8");
+    withFixture({"package.json":pkg,".github/workflows/ci.yml":ci.replace("MODEL_EGRESS_RUNTIME_DATABASE_URL=","REMOVED_RUNTIME_DATABASE_URL=")},(root)=>{
+      expect(checkModelEgressMysqlCiWiring(root)).toContainEqual(expect.objectContaining({rule:"MEG-MYSQL-CI",detail:expect.stringContaining("MODEL_EGRESS_RUNTIME_DATABASE_URL=")}));
+    });
+  });
+
+  it("rejects declaring the C4 command without executing it in CI",()=>{
+    const ci=readFileSync(path.join(process.cwd(),".github/workflows/ci.yml"),"utf8");
+    withFixture({"package.json":readFileSync(path.join(process.cwd(),"package.json"),"utf8"),".github/workflows/ci.yml":ci.replace("run: npm run test:trusted-spend-authority:mysql","run: echo intentionally-removed")},(root)=>{
+      expect(checkModelEgressMysqlCiWiring(root)).toContainEqual(expect.objectContaining({rule:"MEG-MYSQL-CI",detail:expect.stringContaining("npm run test:trusted-spend-authority:mysql")}));
+    });
   });
 
   it("rejects a skippable or incomplete MySQL CI job", () => {

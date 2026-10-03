@@ -1,3 +1,10 @@
+import { execFileSync } from "node:child_process";
+import { lstatSync, statSync } from "node:fs";
+import { dirname, isAbsolute } from "node:path";
+import { generateKeyPairSync, sign } from "node:crypto";
+import { PrismaClient } from "@prisma/client";
+import { authorityHash, canonicalAuthorityJson } from "./trusted-spend-authority";
+import { createRegisteredGovernedSpendAuthority, issuerGrantHash } from "./trusted-spend-authority-prisma";
 import {
   MembershipStatus,
   type Prisma,
@@ -327,13 +334,13 @@ describeMysql("model egress store with an isolated MySQL database", () => {
     return recorded.receipt.receiptId;
   }
 
-  beforeAll(async () => {
+  async function initializeFixture(fixtureSuffix = suffix) {
     assertIsolatedDatabaseTarget();
     const now = new Date();
     const workspace = await db.workspace.create({
       data: {
-        name: `Model egress integration ${suffix}`,
-        slug: `model-egress-integration-${suffix}`,
+        name: `Model egress integration ${fixtureSuffix}`,
+        slug: `model-egress-integration-${fixtureSuffix}`,
         llmBudgetMode: "unlimited", llmMonthlyBudgetMicros: null,
         llmBudgetEnforcementMode: "enforce", llmBudgetPeriodPolicyVersion: SPEND_PERIOD_VERSION,
         llmBudgetConfigVersion: 1, llmBudgetApprovalRef: "synthetic-spend-approval",
@@ -344,7 +351,7 @@ describeMysql("model egress store with an isolated MySQL database", () => {
     const owner = await db.user.create({
       data: {
         name: "Model egress owner",
-        email: `model-egress-owner-${suffix}@example.test`,
+        email: `model-egress-owner-${fixtureSuffix}@example.test`,
       },
     });
     ownerUserId = owner.id;
@@ -359,7 +366,7 @@ describeMysql("model egress store with an isolated MySQL database", () => {
     const invited = await db.user.create({
       data: {
         name: "Invited model egress owner",
-        email: `model-egress-invited-${suffix}@example.test`,
+        email: `model-egress-invited-${fixtureSuffix}@example.test`,
       },
     });
     invitedUserId = invited.id;
@@ -374,7 +381,7 @@ describeMysql("model egress store with an isolated MySQL database", () => {
 
     const catalogEntry = await createDataAssetCatalogEntry({
       workspaceId,
-      assetKey: `synthetic-crm-${suffix}`,
+      assetKey: `synthetic-crm-${fixtureSuffix}`,
       sourceSystemRef: "system:synthetic-crm",
       displayName: "Synthetic CRM",
       sourceKind: "crm",
@@ -403,8 +410,8 @@ describeMysql("model egress store with an isolated MySQL database", () => {
     await recordDataAssetClassificationReceipt({
       workspaceId,
       assetId,
-      receiptId: `classification-${suffix}`,
-      idempotencyKey: `classification:${suffix}`,
+      receiptId: `classification-${fixtureSuffix}`,
+      idempotencyKey: `classification:${fixtureSuffix}`,
       expectedVersion: 1,
       dataShape: "structured",
       sensitivity: "confidential",
@@ -418,8 +425,8 @@ describeMysql("model egress store with an isolated MySQL database", () => {
     await recordDataAssetAuthorizationReceipt({
       workspaceId,
       assetId,
-      receiptId: `authorization-${suffix}`,
-      idempotencyKey: `authorization:${suffix}`,
+      receiptId: `authorization-${fixtureSuffix}`,
+      idempotencyKey: `authorization:${fixtureSuffix}`,
       expectedVersion: 2,
       authorizationStatus: "authorized",
       authorizationRef: "authorization:synthetic-crm",
@@ -434,8 +441,8 @@ describeMysql("model egress store with an isolated MySQL database", () => {
       now,
     });
 
-    const primaryRouteId = `synthetic-primary-${suffix}`;
-    const fallbackRouteId = `synthetic-fallback-${suffix}`;
+    const primaryRouteId = `synthetic-primary-${fixtureSuffix}`;
+    const fallbackRouteId = `synthetic-fallback-${fixtureSuffix}`;
     const primaryReadinessBase = route(primaryRouteId, HASH_A, {
       fallbackRouteIds: [fallbackRouteId],
     });
@@ -474,19 +481,19 @@ describeMysql("model egress store with an isolated MySQL database", () => {
       authority: GOVERNED_MODEL_READINESS_AUTHORITY,
       workspaceId,
       actorUserId: ownerUserId,
-      idempotencyKey: `readiness:${suffix}:primary`,
+      idempotencyKey: `readiness:${fixtureSuffix}:primary`,
       receipt: primaryReadiness,
     });
     await recordProviderAdapterReadinessReceipt({
       authority: GOVERNED_MODEL_READINESS_AUTHORITY,
       workspaceId,
       actorUserId: ownerUserId,
-      idempotencyKey: `readiness:${suffix}:fallback`,
+      idempotencyKey: `readiness:${fixtureSuffix}:fallback`,
       receipt: fallbackReadiness,
     });
     const candidate: TenantModelRoutePolicy = {
       schemaVersion: "helm.tenant-model-route-policy/v1",
-      policyId: `policy:model-egress-${suffix}`,
+      policyId: `policy:model-egress-${fixtureSuffix}`,
       workspaceRef: `workspace:${workspaceId}`,
       policyKey: "caio-pro-default",
       revision: 1,
@@ -502,7 +509,7 @@ describeMysql("model egress store with an isolated MySQL database", () => {
       approvalRef:
         computeModelRoutePolicyApprovalReceiptRef({
           workspaceRef: `workspace:${workspaceId}`,
-          policyId: `policy:model-egress-${suffix}`,
+          policyId: `policy:model-egress-${fixtureSuffix}`,
           policyKey: "caio-pro-default",
           revision: 1,
           approvedByRef: `user:${ownerUserId}`,
@@ -531,7 +538,9 @@ describeMysql("model egress store with an isolated MySQL database", () => {
       now,
     });
     activeHeadVersion = activated.head.version;
-  });
+  }
+
+  beforeAll(() => initializeFixture());
 
   afterAll(async () => {
     // This suite targets a disposable, prefix-guarded database. Immutable
@@ -541,7 +550,7 @@ describeMysql("model egress store with an isolated MySQL database", () => {
 
   async function prepareAllowed(
     requestSuffix: string,
-    options: { allowFallback?: boolean } = {},
+    options: { allowFallback?: boolean; decisionTtlMs?: number } = {},
   ) {
     const evidenceRef = `evidence:model-egress-${requestSuffix}`;
     const projectionReceiptRef = await projection(
@@ -564,6 +573,7 @@ describeMysql("model egress store with an isolated MySQL database", () => {
       promptInjectionScanStatus: "passed",
       requestedMaxOutputTokens: REQUESTED_MAX_OUTPUT_TOKENS,
       allowFallback: options.allowFallback ?? false,
+      decisionTtlMs: options.decisionTtlMs,
     });
   }
 
@@ -1108,8 +1118,9 @@ describeMysql("model egress store with an isolated MySQL database", () => {
       workspaceId,
       decisionId: second.decision.decisionId,
       gatewayRef: "gateway:caio-concurrency-b",
-      runtime: runtimeDescriptor(new Date(now.getTime() + 2_000)),
-      now: new Date(now.getTime() + 2_000),
+      // Slot release is the behavior under test; runtime evidence is fresh DB-time evidence.
+      runtime: runtimeDescriptor(new Date()),
+      now: new Date(),
     });
     expect(secondClaim.replayed).toBe(false);
     const secondFinishedAt = new Date(now.getTime() + 3_000);
@@ -2326,7 +2337,8 @@ describeMysql("model egress store with an isolated MySQL database", () => {
         return quote;
       },
     };
-    const claimAt = new Date(Date.now() + 10_000);
+    // This fixture exercises a lost CAS and rollback, not future runtime admission.
+    const claimAt = new Date();
     await expect(actualClaimModelRouteDispatch({
       authority: GOVERNED_GATEWAY_AUTHORITY, spendAuthority: faultAuthority,
       workspaceId, decisionId: prepared.decision.decisionId,
@@ -2460,6 +2472,171 @@ describeMysql("model egress store with an isolated MySQL database", () => {
     expect(await db.modelEgressReceipt.count({ where: {
       decisionId: prepared.decision.decisionId, sequence: 2,
     } })).toBe(0);
+  });
+
+  function syntheticAuditText(sql:string) {
+    const target=new URL(integrationDatabaseUrl!);const socket=target.searchParams.get("socket");
+    const database=decodeURIComponent(target.pathname.slice(1));
+    if(socket) {
+      if(!isAbsolute(socket)||!lstatSync(socket).isSocket()||(statSync(dirname(socket)).mode&0o077)!==0||target.username!=="root"||target.password!=="") throw new Error("synthetic_audit_target_invalid");
+      execFileSync("mysql",["--no-defaults","--protocol=SOCKET","--socket="+socket,"-u","root",database],{input:sql,stdio:["pipe","pipe","pipe"]});
+    } else {
+      const container=process.env.HELM_CI_MYSQL_CONTAINER??"";
+      if(process.env.GITHUB_ACTIONS!=="true"||target.hostname!=="127.0.0.1"||target.port!=="3306"||database!=="helm_caio_p1d_ci"||process.env.HELM_CI_MYSQL_DATABASE!==database||target.username!==process.env.HELM_CI_MYSQL_USER||!/^[a-f0-9]{64}$/u.test(container)) throw new Error("synthetic_audit_ci_target_invalid");
+      execFileSync("docker",["exec","-e","MYSQL_PWD","-i",container,"mysql","--no-defaults","--host=127.0.0.1","--protocol=TCP","--user="+target.username,database],{input:sql,env:{...process.env,MYSQL_PWD:decodeURIComponent(target.password)},stdio:["pipe","pipe","pipe"]});
+    }
+  }
+
+  function runtimeDatabaseUrl() {
+    const source=new URL(integrationDatabaseUrl!);
+    const target=new URL(process.env.MODEL_EGRESS_RUNTIME_DATABASE_URL ?? integrationDatabaseUrl!);
+    if (!process.env.MODEL_EGRESS_RUNTIME_DATABASE_URL) {target.username="c4_runtime";target.password="";}
+    if (target.protocol!==source.protocol || target.hostname!==source.hostname || target.port!==source.port ||
+        target.pathname!==source.pathname || target.search!==source.search || target.username===source.username) {
+      throw new Error("synthetic_runtime_identity_target_invalid");
+    }
+    return target;
+  }
+
+  async function provisionC4(label: string) {
+    const now=new Date(), before=new Date(now.getTime()-60_000), until=new Date(now.getTime()+3_600_000);
+    const keys=generateKeyPairSync("ed25519"), grantId=`issuer:${label}`;
+    const grant={id:grantId,workspaceId,issuerUserId:ownerUserId,publicKeyPem:keys.publicKey.export({type:"spki",format:"pem"}).toString(),allowedKindsJson:canonicalAuthorityJson(["budget","period","price"]),sourceReceiptHash:HASH_A,validFrom:before,validUntil:until,revokedAt:null,contentHash:""};
+    grant.contentHash=issuerGrantHash(grant);
+    await db.$executeRaw`INSERT INTO LLMSpendIssuerGrant(id,workspaceId,issuerUserId,publicKeyPem,allowedKindsJson,sourceReceiptHash,contentHash,validFrom,validUntil)
+      VALUES (${grant.id},${workspaceId},${ownerUserId},${grant.publicKeyPem},${grant.allowedKindsJson},${grant.sourceReceiptHash},${grant.contentHash},${before},${until})`;
+    const issue=async(kind:string,ref:string,version:string,payload:unknown)=>{
+      const envelope={schema:"helm.spend-authority/v1",workspaceId,ref,kind,version,issuerGrantId:grantId,approverId:ownerUserId,status:"approved",sourceReceiptHash:HASH_B,issuedAt:before.toISOString(),validFrom:before.toISOString(),validUntil:until.toISOString(),payload};
+      const json=canonicalAuthorityJson(envelope), hash=authorityHash(envelope), signature=sign(null,Buffer.from(json),keys.privateKey).toString("base64");
+      await db.$executeRaw`INSERT INTO LLMSpendAuthorityRecord(id,workspaceId,ref,kind,version,issuerGrantId,envelopeJson,signatureBase64,contentHash)
+        VALUES (${ref},${workspaceId},${ref},${kind},${version},${grantId},${json},${signature},${hash})`;
+      return {ref,hash};
+    };
+    const period=await issue("period",`period:${label}`,SPEND_PERIOD_VERSION,{algorithm:"calendar-month-v1",timezone:"Asia/Shanghai"});
+    const price=await issue("price",`price:${label}`,PRICING_VERSION,{billing:"input-output-only-v1",provider:primaryRoute.provider,model:primaryRoute.modelId,sku:"text-only",currency:"USD",input:{numerator:"0",denominator:"1",ceiling:String(primaryRoute.maxInputTokens)},output:{numerator:"1",denominator:"1",ceiling:String(primaryRoute.maxOutputTokens)}});
+    await issue("budget",`approval:${label}`,"v1",{configVersion:1,mode:"unlimited",limitMicros:null,currency:"USD",updatedBy:ownerUserId,updatedAt:now.toISOString(),periodRef:period.ref,periodHash:period.hash,priceRef:price.ref,priceHash:price.hash,fxRef:null,fxHash:null});
+    await db.workspace.update({where:{id:workspaceId},data:{llmBudgetApprovalRef:`approval:${label}`,llmBudgetCurrency:"USD",llmBudgetUpdatedBy:ownerUserId,llmBudgetUpdatedAt:now,llmBudgetPriceBookRef:price.ref,llmBudgetFxPolicyRef:null}});
+    const registered=createRegisteredGovernedSpendAuthority({expectedPeriodPolicyVersion:SPEND_PERIOD_VERSION,trustedIssuerGrants:{[grantId]:grant.contentHash}});
+    const authority: GovernedSpendAuthority={...registered,resolveDispatch:async(input)=>{
+      // Assert the actual C3 transaction identity, not an unrelated negative
+      // connection. Then consume the unchanged registered C4 implementation.
+      const [identity]=await input.tx.$queryRaw<Array<{user:string}>>`SELECT CURRENT_USER() AS user`;
+      expect(identity?.user.split("@")[0]===runtimeDatabaseUrl().username).toBe(true);
+      return registered.resolveDispatch(input);
+    }};
+    return { authority, grantId };
+  }
+
+  it("registered C4 authority joins real C3 claim and retains unknown on unverified terminal", async () => {
+    await initializeFixture(`c4-chain-${suffix}`);
+    const { authority } = await provisionC4("c4-chain");
+    const prepared=await prepareAllowed(`c4-chain-${suffix}`);
+    const runtimeUrl=runtimeDatabaseUrl();
+    const restricted=new PrismaClient({datasources:{db:{url:runtimeUrl.toString()}}});
+    // Redirect only transport to the real restricted Prisma transaction. The
+    // actual claim/authority/C2/terminal business implementations remain intact.
+    const transaction=vi.spyOn(db,"$transaction").mockImplementation(restricted.$transaction.bind(restricted));
+    try {
+      const claimed=await actualClaimModelRouteDispatch({authority:GOVERNED_GATEWAY_AUTHORITY,spendAuthority:authority,workspaceId,decisionId:prepared.decision.decisionId,gatewayRef:"gateway:c4-chain",runtime:runtimeDescriptor(new Date())});
+      const ledger=await restricted.lLMSpendLedgerEntry.findFirstOrThrow({where:{workspaceId,operationRef:prepared.decision.decisionId}});
+      expect(ledger.state).toBe("reserved");expect(ledger.maximumChargeMicros).toBe(BigInt(REQUESTED_MAX_OUTPUT_TOKENS));
+      const finished=new Date();
+      await expect(actualRecordModelEgressTerminalReceipt({authority:GOVERNED_GATEWAY_AUTHORITY,spendAuthority:authority,workspaceId,decisionId:prepared.decision.decisionId,gatewayRef:"gateway:c4-chain",dispatchClaimHash:claimed.claimHash,idempotencyKey:"terminal:c4-chain",outcome:"failure",resolutionSource:"invoke",requestDisposition:"not_accepted",providerRequestRefHash:null,finishedAt:finished,latencyMs:1,promptTokens:null,completionTokens:null,...ZERO_COST_EVIDENCE,costBand:"zero",errorCode:"synthetic-no-usage",recordedAt:finished})).rejects.toThrow("trusted_usage_evidence_unavailable");
+      expect(await restricted.modelEgressReceipt.count({where:{decisionId:prepared.decision.decisionId,sequence:2}})).toBe(0);
+      expect(await markModelEgressSpendUnknown({authority:GOVERNED_GATEWAY_AUTHORITY,workspaceId,decisionId:prepared.decision.decisionId,gatewayRef:"gateway:c4-chain",dispatchClaimHash:claimed.claimHash})).toBe("unknown");
+      const original=await restricted.lLMSpendLedgerEntry.findUniqueOrThrow({where:{id:ledger.id}});
+      expect(original.periodKey).toBe(ledger.periodKey);expect(original.state).toBe("unknown");
+      const counter=await restricted.lLMSpendPeriodCounter.findUniqueOrThrow({where:{workspaceId_periodKey:{workspaceId,periodKey:ledger.periodKey}}});
+      expect(counter.unknownBoundMicros).toBe(BigInt(REQUESTED_MAX_OUTPUT_TOKENS));
+    } finally { transaction.mockRestore();await restricted.$disconnect(); }
+  });
+
+  it("registered C4 rejects decision expiry during an actual issuer lock wait", async () => {
+    await initializeFixture(`c4-expiry-${suffix}`);
+    const { authority, grantId } = await provisionC4("c4-expiry");
+    const prepared = await prepareAllowed(`c4-expiry-${suffix}`, { decisionTtlMs: 400 });
+    const lockClient = new PrismaClient({ datasources: { db: { url: integrationDatabaseUrl! } } });
+    let release!: () => void;
+    let acquired!: () => void;
+    const acquiredSignal = new Promise<void>((resolve) => { acquired = resolve; });
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const blocker = lockClient.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM LLMSpendIssuerGrant WHERE id=${grantId} FOR UPDATE`;
+      acquired(); await gate;
+    }, { timeout: 10_000 });
+    await acquiredSignal;
+    const runtimeUrl = runtimeDatabaseUrl();
+    const restricted = new PrismaClient({ datasources: { db: { url: runtimeUrl.toString() } } });
+    const transaction = vi.spyOn(db, "$transaction").mockImplementation(restricted.$transaction.bind(restricted));
+    let settled = false;
+    const attempt = actualClaimModelRouteDispatch({ authority:GOVERNED_GATEWAY_AUTHORITY, spendAuthority:authority, workspaceId,
+      decisionId:prepared.decision.decisionId, gatewayRef:"gateway:c4-expiry", runtime:runtimeDescriptor(new Date())
+    }).then((result) => { settled=true;return result; }, (error: unknown) => { settled=true;throw error; });
+    // Attach a handler before waiting, so an unexpected early rejection remains
+    // the actual test result rather than an unhandled promise.
+    const observed = attempt.then((result)=>({result,error:null}), (error: unknown)=>({result:null,error}));
+    try {
+      let lockObserved = false;
+      for (let i=0;i<100;i++) {
+        const rows = await lockClient.$queryRaw<{waits:bigint}[]>`SELECT COUNT(*) AS waits FROM performance_schema.data_lock_waits`;
+        if (Number(rows[0]?.waits)>0) { lockObserved=true;break; }
+        await new Promise((resolve)=>setTimeout(resolve,5));
+      }
+      expect(lockObserved).toBe(true); expect(settled).toBe(false);
+      await new Promise((resolve)=>setTimeout(resolve,500));
+      release(); await blocker;
+      const outcome = await observed;
+      expect(outcome.error).toBeInstanceOf(Error);
+      expect((outcome.error as Error).message).toBe("model_route_decision_expired");
+      expect(await restricted.lLMSpendLedgerEntry.count({where:{workspaceId}})).toBe(0);
+      expect((await restricted.modelRouteDecision.findUniqueOrThrow({where:{id:prepared.decision.decisionId}})).dispatchClaimHash).toBeNull();
+    } finally { release(); await blocker; await observed; transaction.mockRestore(); await restricted.$disconnect(); await lockClient.$disconnect(); }
+  });
+
+  it("registered C4 rolls claim reservation and audit back when expiry occurs during audit lock", async () => {
+    await initializeFixture(`c4-audit-${suffix}`);
+    const { authority }=await provisionC4("c4-audit");
+    const prepared=await prepareAllowed(`c4-audit-${suffix}`,{decisionTtlMs:400});
+    await db.$executeRawUnsafe("CREATE TABLE C4SyntheticAuditGate(id INT PRIMARY KEY, value INT NOT NULL)");
+    await db.$executeRawUnsafe("INSERT INTO C4SyntheticAuditGate VALUES (1,1)");
+    // Actual private DB trigger delays the real audit writer AFTER claim CAS;
+    // no product function, quote, clock or audit implementation is mocked.
+    syntheticAuditText("DELIMITER $$\nCREATE TRIGGER C4SyntheticAuditWait BEFORE INSERT ON AuditLog FOR EACH ROW BEGIN DECLARE gate_value INT; SELECT value INTO gate_value FROM C4SyntheticAuditGate WHERE id=1 FOR UPDATE; END$$\nDELIMITER ;\n");
+    const blockerClient=new PrismaClient({datasources:{db:{url:integrationDatabaseUrl!}}});
+    let release!:()=>void, acquired!:()=>void;
+    const ready=new Promise<void>((r)=>{acquired=r;});const gate=new Promise<void>((r)=>{release=r;});
+    const blocker=blockerClient.$transaction(async(tx)=>{await tx.$queryRaw`SELECT id FROM C4SyntheticAuditGate WHERE id=1 FOR UPDATE`;acquired();await gate;},{timeout:10_000});
+    await ready;
+    const runtimeUrl=runtimeDatabaseUrl();
+    const restricted=new PrismaClient({datasources:{db:{url:runtimeUrl.toString()}}});
+    const transaction=vi.spyOn(db,"$transaction").mockImplementation(restricted.$transaction.bind(restricted));
+    const observed=actualClaimModelRouteDispatch({authority:GOVERNED_GATEWAY_AUTHORITY,spendAuthority:authority,workspaceId,
+      decisionId:prepared.decision.decisionId,gatewayRef:"gateway:c4-audit",runtime:runtimeDescriptor(new Date())
+    }).then((result)=>({result,error:null}),(error:unknown)=>({result:null,error}));
+    try {
+      let lockObserved=false;
+      for(let i=0;i<100;i++) { const rows=await blockerClient.$queryRaw<{waits:bigint}[]>`SELECT COUNT(*) AS waits FROM performance_schema.data_lock_waits`;
+        if(Number(rows[0]?.waits)>0) {lockObserved=true;break;}await new Promise((r)=>setTimeout(r,5)); }
+      expect(lockObserved).toBe(true);await new Promise((r)=>setTimeout(r,500));release();await blocker;
+      const outcome=await observed;expect((outcome.error as Error)?.message).toBe("model_route_decision_expired");
+      expect(await restricted.lLMSpendLedgerEntry.count({where:{workspaceId}})).toBe(0);
+      expect(await restricted.lLMSpendPeriodCounter.count({where:{workspaceId}})).toBe(0);
+      expect((await restricted.modelRouteDecision.findUniqueOrThrow({where:{id:prepared.decision.decisionId}})).dispatchClaimHash).toBeNull();
+      expect(await restricted.auditLog.count({where:{workspaceId,actionType:"MODEL_EGRESS_DISPATCH_CLAIMED"}})).toBe(0);
+    } finally {release();await blocker;await observed;transaction.mockRestore();await restricted.$disconnect();await blockerClient.$disconnect();
+      syntheticAuditText("DROP TRIGGER C4SyntheticAuditWait; DROP TABLE C4SyntheticAuditGate;");}
+  });
+
+  it("registered C4 cannot use caller future now as runtime authorization", async () => {
+    await initializeFixture(`c4-future-${suffix}`);
+    const { authority } = await provisionC4("c4-future");
+    const prepared=await prepareAllowed(`c4-future-${suffix}`);
+    const future=new Date(Date.now()+10_000);
+    await expect(actualClaimModelRouteDispatch({ authority:GOVERNED_GATEWAY_AUTHORITY, spendAuthority:authority,
+      workspaceId, decisionId:prepared.decision.decisionId, gatewayRef:"gateway:c4-future",
+      runtime:runtimeDescriptor(future), now:future })).rejects.toThrow("provider_runtime_not_ready");
+    expect(await db.lLMSpendLedgerEntry.count({where:{workspaceId}})).toBe(0);
+    expect((await db.modelRouteDecision.findUniqueOrThrow({where:{id:prepared.decision.decisionId}})).dispatchClaimHash).toBeNull();
   });
 
   it("revocation wins before a not-yet-claimed dispatch", async () => {

@@ -99,7 +99,9 @@
     "check:conditional-update-cas": "node --import tsx scripts/check-conditional-update-cas.ts && vitest run scripts/check-conditional-update-cas.test.ts --config vitest.public.config.ts",
     "check:docker-smoke-coverage": "node --import tsx scripts/check-docker-smoke-coverage.ts && vitest run scripts/check-docker-smoke-coverage.test.ts --config vitest.public.config.ts",
     "check:frozen-duplicates": "node --import tsx scripts/check-frozen-duplicates.ts && vitest run scripts/check-frozen-duplicates.test.ts --config vitest.public.config.ts",
-    "check:decision-loop-gaps": "node --import tsx scripts/check-decision-loop-gaps.ts && vitest run scripts/check-decision-loop-gaps.test.ts --config vitest.public.config.ts"
+    "check:decision-loop-gaps": "node --import tsx scripts/check-decision-loop-gaps.ts && vitest run scripts/check-decision-loop-gaps.test.ts --config vitest.public.config.ts",
+    "test:trusted-spend-authority": "vitest run lib/llm/trusted-spend-authority.test.ts --config vitest.public.config.ts",
+    "test:trusted-spend-authority:mysql": "TRUSTED_SPEND_MYSQL_REQUIRED=1 vitest run lib/llm/trusted-spend-authority.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false"
   },
   "prisma": {
     "seed": "env LLM_ENABLED=false node --import tsx prisma/seed.ts"
