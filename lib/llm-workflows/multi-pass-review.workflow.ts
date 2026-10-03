@@ -1,9 +1,13 @@
+import { ordinaryPaidWriterClient } from "@/lib/llm/ordinary-paid-composition.service";
 import {
   buildMultiPassReviewPrompt,
   llmPromptVersions,
   multiPassReviewSchema,
 } from "@/lib/llm/prompt-registry";
 import { executeLLMTask } from "@/lib/llm/provider-registry";
+import { prepareOrdinaryReviewOperation } from "@/lib/llm/ordinary-paid-operation.service";
+import { OrdinaryPaidEgressError } from "@/lib/llm/ordinary-paid-adapter-bridge.service";
+import { isLLMEnabledByEnv } from "@/lib/llm/config";
 import {
   LlmOutputSchemaError,
   parseLlmJsonOrThrow,
@@ -456,6 +460,21 @@ export async function executeMultiPassReview(
       evidenceRefs: [],
       notes: ["Provider call failed closed; human review is required."],
     };
+    // Each role is a distinct bounded attempt against the same locked source.
+    // The preceding role outputs enter this role's projected prompt hash; a
+    // different replay payload cannot reuse an already bound operation.
+    let ordinaryOperationId: string | undefined;
+    if (!input.testOnlyRemoteExecutor && isLLMEnabledByEnv()) {
+      try {
+        ordinaryOperationId = (await prepareOrdinaryReviewOperation({ client: ordinaryPaidWriterClient(),
+          workspaceId: input.workspaceId, actorUserId: input.userId,
+          kind: "multi_pass_review", objectType: egress.safeStub.objectRef.objectType,
+          objectId: egress.safeStub.objectRef.objectId, slot: role }))?.id;
+      } catch {
+        return finish(arbitrateMultiPassReview({ profile, roleOutputs,
+          failure: { reason: "provider_failure" } }));
+      }
+    }
     let execution: LLMTaskExecutionResult<MultiPassRoleOutput>;
     try {
       execution = await remoteExecutor({
@@ -471,6 +490,7 @@ export async function executeMultiPassReview(
         jsonSchema: multiPassReviewSchema,
         maxOutputTokens,
         fallbackOutput,
+        ordinaryOperationId,
         parseOutput(rawText) {
           const parsedJson = parseLlmJsonOrThrow<unknown>(rawText);
           const parsedOutput = multiPassRoleOutputSchema.safeParse(parsedJson);
@@ -480,7 +500,10 @@ export async function executeMultiPassReview(
           return parsedOutput.data;
         },
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof OrdinaryPaidEgressError &&
+          ["paid_egress_in_doubt", "paid_egress_committed_readback_invalid",
+            "paid_egress_no_committed_output"].includes(error.code)) throw error;
       return finish(
         arbitrateMultiPassReview({
           profile,

@@ -1,6 +1,9 @@
+import { ordinaryPaidWriterClient } from "@/lib/llm/ordinary-paid-composition.service";
 import { buildRecommendationExplanationPrompt, llmPromptVersions, recommendationExplanationSchema } from "@/lib/llm/prompt-registry";
 import { executeLLMTask } from "@/lib/llm/provider-registry";
 import { parseLlmJsonOrThrow } from "@/lib/llm/output-parse-error";
+import { prepareOrdinaryPaidOperationOrFallback } from "@/lib/llm/ordinary-paid-operation.service";
+import { isLLMEnabledByEnv } from "@/lib/llm/config";
 
 type RecommendationExplanationFallback = {
   explanation: string;
@@ -25,7 +28,15 @@ export async function enhanceRecommendationExplanationWithLLM(input: {
   policyResultLabel: string;
   fallback: RecommendationExplanationFallback;
   briefingSummary?: string | null;
+  /** Existing persisted log; first-generation candidates have no paid source. */
+  recommendationLogId?: string | null;
 }) {
+  const ordinaryOperation = isLLMEnabledByEnv() && input.recommendationLogId && input.userId
+    ? await prepareOrdinaryPaidOperationOrFallback({ client: ordinaryPaidWriterClient(), workspaceId: input.workspaceId,
+        actorUserId: input.userId, kind: "recommendation_explanation",
+        sourceType: "recommendation_log", sourceId: input.recommendationLogId,
+        slot: "explanation" })
+    : null;
   const prompt = buildRecommendationExplanationPrompt({
     objectLabel: input.objectLabel,
     recommendationTitle: input.recommendationTitle,
@@ -51,6 +62,7 @@ export async function enhanceRecommendationExplanationWithLLM(input: {
     outputMode: "json",
     jsonSchema: recommendationExplanationSchema,
     fallbackOutput: input.fallback,
+    ordinaryOperationId: ordinaryOperation?.id,
     parseOutput: (rawText) => parseLlmJsonOrThrow<RecommendationExplanationFallback>(rawText),
   });
 

@@ -1,4 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { OrdinaryPaidEgressError } from "@/lib/llm/ordinary-paid-adapter-bridge.service";
+
+vi.mock("@/lib/llm/provider-registry", () => ({ executeLLMTask: vi.fn() }));
+vi.mock("@/lib/llm/ordinary-paid-operation.service", () => ({
+  prepareOrdinaryReviewOperation: vi.fn(),
+}));
+vi.mock("@/lib/llm/config", () => ({ isLLMEnabledByEnv: () => true }));
+
+const { executeLLMTask } = await import("@/lib/llm/provider-registry");
+const { prepareOrdinaryReviewOperation } = await import("@/lib/llm/ordinary-paid-operation.service");
 
 import {
   arbitrateMultiPassReview,
@@ -156,6 +166,50 @@ describe("multi-pass review arbiter", () => {
 });
 
 describe("executeMultiPassReview", () => {
+  beforeEach(() => {
+    vi.mocked(executeLLMTask).mockReset();
+    vi.mocked(prepareOrdinaryReviewOperation).mockReset();
+  });
+
+  it("binds three real remote roles to distinct persisted operation slots", async () => {
+    const roles = ["generator", "critic", "adversary"] as const;
+    vi.mocked(prepareOrdinaryReviewOperation).mockImplementation(async ({ slot }) =>
+      ({ id: `synthetic-operation-${slot}` } as Awaited<ReturnType<typeof prepareOrdinaryReviewOperation>>));
+    vi.mocked(executeLLMTask).mockImplementation(async (task) => {
+      const roleName = roles[vi.mocked(executeLLMTask).mock.calls.length - 1] ?? "adversary";
+      return { output: role(roleName), provider: "openai", model: "synthetic-model",
+        modelVersion: "synthetic-model", modelRole: "REASONING",
+        promptKey: task.promptKey, promptVersion: task.promptVersion,
+        success: true, fallbackUsed: false, latencyMs: 1 };
+    });
+    const result = await executeMultiPassReview({
+      workspaceId: "workspace-synthetic", userId: "synthetic-active-user",
+      profileKey: remoteProfile.profileKey, profileRegistry: remoteRegistry,
+      contextStub: { ...contextStub,
+        objectRef: { objectType: "bi_run", objectId: "synthetic-persisted-run" } },
+      proposalSummary: "Synthetic source review", businessValue: "high",
+      uncertainty: "high", riskClass: "read", evidenceCompleteness: "partial",
+      egressPolicy: { consentGranted: true, promptPreviewAccepted: true,
+        auditRef: "synthetic-egress-audit" },
+    });
+    expect(result.roleOutputs.map((entry) => entry.role)).toEqual(roles);
+    expect(vi.mocked(prepareOrdinaryReviewOperation).mock.calls.map(([request]) => request.slot))
+      .toEqual(roles);
+    expect(vi.mocked(executeLLMTask).mock.calls.map(([task]) => task.ordinaryOperationId))
+      .toEqual(roles.map((slot) => `synthetic-operation-${slot}`));
+  });
+
+  it("does not complete a review when a remote role has unknown charged outcome", async () => {
+    vi.mocked(executeLLMTask).mockRejectedValue(new OrdinaryPaidEgressError("paid_egress_in_doubt"));
+    await expect(executeMultiPassReview({
+      workspaceId: "workspace-synthetic", profileKey: remoteProfile.profileKey,
+      profileRegistry: remoteRegistry, contextStub, proposalSummary: "Synthetic review",
+      businessValue: "high", uncertainty: "high", riskClass: "read",
+      evidenceCompleteness: "partial", egressPolicy: { consentGranted: true,
+        promptPreviewAccepted: true, auditRef: "synthetic-egress-audit" },
+    })).rejects.toThrow("paid_egress_in_doubt");
+  });
+
   it("runs generator, critic, and adversary through the registered LLM chain", async () => {
     const roles = ["generator", "critic", "adversary"] as const;
     const testOnlyRemoteExecutor = vi.fn(async (task) => {

@@ -198,7 +198,7 @@ describe("public mirror tree builder", () => {
         "check:caio-pro-v1":
           "node --import tsx scripts/check-caio-pro-v1.ts && vitest run scripts/check-caio-pro-v1.test.ts --config vitest.public.config.ts",
         "check:model-egress-governance":
-          "node --import tsx scripts/check-model-egress-governance.ts && vitest run lib/llm/model-route-contracts.test.ts lib/llm/model-egress-contracts.test.ts lib/llm/governed-model-gateway.service.test.ts features/dashboard/model-egress-readout.test.ts features/dashboard/model-egress-query.test.ts scripts/check-model-egress-governance.test.ts --config vitest.public.config.ts",
+          "node --import tsx scripts/check-model-egress-governance.ts && vitest run lib/llm/model-route-contracts.test.ts lib/llm/model-egress-contracts.test.ts lib/llm/governed-model-gateway.service.test.ts lib/llm/ordinary-paid-post-dispatch.test.ts lib/llm/ordinary-paid-composition.test.ts features/dashboard/model-egress-readout.test.ts features/dashboard/model-egress-query.test.ts scripts/check-model-egress-governance.test.ts --config vitest.public.config.ts",
         "check:conditional-update-cas":
           "node --import tsx scripts/check-conditional-update-cas.ts && vitest run scripts/check-conditional-update-cas.test.ts --config vitest.public.config.ts",
         "check:docker-smoke-coverage":
@@ -368,7 +368,7 @@ describe("public mirror tree builder", () => {
       "node --import tsx scripts/check-stage1-owner-loop.ts && vitest run lib/stage1-owner-loop features/dashboard/stage1-owner-loop-readout.test.ts features/dashboard/stage1-owner-loop-console-accessibility.test.ts --config vitest.public.config.ts",
     );
     expect(scripts["check:model-egress-governance"]).toBe(
-      "node --import tsx scripts/check-model-egress-governance.ts && vitest run lib/llm/model-route-contracts.test.ts lib/llm/model-egress-contracts.test.ts lib/llm/governed-model-gateway.service.test.ts features/dashboard/model-egress-readout.test.ts features/dashboard/model-egress-query.test.ts scripts/check-model-egress-governance.test.ts --config vitest.public.config.ts",
+      "node --import tsx scripts/check-model-egress-governance.ts && vitest run lib/llm/model-route-contracts.test.ts lib/llm/model-egress-contracts.test.ts lib/llm/governed-model-gateway.service.test.ts lib/llm/ordinary-paid-post-dispatch.test.ts lib/llm/ordinary-paid-composition.test.ts features/dashboard/model-egress-readout.test.ts features/dashboard/model-egress-query.test.ts scripts/check-model-egress-governance.test.ts --config vitest.public.config.ts",
     );
     expect(scripts["test:model-egress:mysql"]).toBe(
       "vitest run lib/llm/model-egress-store.mysql.test.ts --config vitest.public.config.ts",

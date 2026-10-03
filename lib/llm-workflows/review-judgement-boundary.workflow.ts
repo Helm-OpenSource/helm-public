@@ -1,3 +1,4 @@
+import { ordinaryPaidWriterClient } from "@/lib/llm/ordinary-paid-composition.service";
 import {
   buildJudgementBoundaryReviewPrompt,
   judgementBoundaryReviewSchema,
@@ -5,6 +6,8 @@ import {
 } from "@/lib/llm/prompt-registry";
 import { safeParseJson } from "@/lib/utils";
 import { executeLLMTask } from "@/lib/llm/provider-registry";
+import { prepareOrdinaryPaidOperation } from "@/lib/llm/ordinary-paid-operation.service";
+import { isLLMEnabledByEnv } from "@/lib/llm/config";
 import {
   buildFailClosedLLMCriticResult,
   judgementCandidateSchema,
@@ -29,6 +32,7 @@ export interface JudgementBoundaryReviewInput {
   userId?: string | null;
   contextPacket: LLMContextPacket;
   candidate: JudgementCandidate;
+  recommendationLogId?: string;
   egressPolicy?: JudgementBoundaryEgressPolicy;
   traceId?: string;
 }
@@ -78,6 +82,20 @@ export async function reviewJudgementBoundaryWithLLM(
     candidate: safeCandidate,
   });
 
+  let ordinaryOperationId: string | undefined;
+  if (isLLMEnabledByEnv() && ordinaryPaidWriterClient() && input.recommendationLogId && input.userId &&
+      candidate.targetObjectRef.objectType === "recommendation" &&
+      candidate.targetObjectRef.objectId === input.recommendationLogId) {
+    try {
+      ordinaryOperationId = (await prepareOrdinaryPaidOperation({ client: ordinaryPaidWriterClient()!,
+        workspaceId: input.workspaceId, actorUserId: input.userId,
+        kind: "judgement_review", sourceType: "recommendation_log",
+        sourceId: input.recommendationLogId, slot: "critique" })).id;
+    } catch {
+      return buildFallback(input, "provider_or_parse_failure");
+    }
+  }
+
   const result = await executeLLMTask<LLMCriticResult>({
     taskType: "JUDGEMENT_BOUNDARY_REVIEW",
     workspaceId: input.workspaceId,
@@ -91,6 +109,7 @@ export async function reviewJudgementBoundaryWithLLM(
     jsonSchema: judgementBoundaryReviewSchema,
     maxOutputTokens: safeContextPacket.tokenBudget.maxOutputTokens,
     fallbackOutput: fallback,
+    ordinaryOperationId,
     parseOutput(rawText) {
       const parsed = safeParseJson(rawText, fallback);
       const candidateResult = llmCriticResultSchema.safeParse(parsed);

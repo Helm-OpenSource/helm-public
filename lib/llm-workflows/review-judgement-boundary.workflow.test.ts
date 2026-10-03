@@ -7,8 +7,16 @@ import { reviewJudgementBoundaryWithLLM } from "@/lib/llm-workflows/review-judge
 vi.mock("@/lib/llm/provider-registry", () => ({
   executeLLMTask: vi.fn(),
 }));
+vi.mock("@/lib/llm/ordinary-paid-operation.service", () => ({
+  prepareOrdinaryPaidOperation: vi.fn(),
+}));
+vi.mock("@/lib/llm/config", () => ({ isLLMEnabledByEnv: () => true }));
+vi.mock("@/lib/llm/ordinary-paid-composition.service", () => ({
+  ordinaryPaidWriterClient: () => ({ syntheticWriter: true }),
+}));
 
 const { executeLLMTask } = await import("@/lib/llm/provider-registry");
+const { prepareOrdinaryPaidOperation } = await import("@/lib/llm/ordinary-paid-operation.service");
 
 const contextPacket = {
   packetId: "packet_synthetic_critic_1",
@@ -77,6 +85,22 @@ const privateCandidate = {
 describe("reviewJudgementBoundaryWithLLM", () => {
   beforeEach(() => {
     vi.mocked(executeLLMTask).mockReset();
+    vi.mocked(prepareOrdinaryPaidOperation).mockReset();
+  });
+
+  it("uses the persisted recommendation log for its paid review operation", async () => {
+    vi.mocked(prepareOrdinaryPaidOperation).mockResolvedValue({ id: "synthetic-critic-operation" } as Awaited<ReturnType<typeof prepareOrdinaryPaidOperation>>);
+    vi.mocked(executeLLMTask).mockImplementation(async (options) =>
+      buildExecutionResult(options.fallbackOutput));
+    await reviewJudgementBoundaryWithLLM({ workspaceId: "workspace_public_safe",
+      userId: "synthetic-active-user", recommendationLogId: "rec_1",
+      contextPacket, candidate });
+    expect(vi.mocked(prepareOrdinaryPaidOperation)).toHaveBeenCalledWith(expect.objectContaining({
+      kind: "judgement_review", sourceType: "recommendation_log",
+      sourceId: "rec_1", slot: "critique",
+    }));
+    expect(vi.mocked(executeLLMTask).mock.calls[0]?.[0].ordinaryOperationId)
+      .toBe("synthetic-critic-operation");
   });
 
   it("uses the registered prompt and task type", async () => {

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { LLMTaskExecutionResult, LLMTaskInput } from "@/lib/llm/types";
 import type { CounterfactualReviewerOutput } from "@/lib/llm/intelligence-contracts-v2";
+import { OrdinaryPaidEgressError } from "@/lib/llm/ordinary-paid-adapter-bridge.service";
 import {
   COUNTERFACTUAL_MAX_LATENCY_CEILING_MS,
   reviewCounterfactualWithLLM,
@@ -10,8 +11,13 @@ import {
 vi.mock("@/lib/llm/provider-registry", () => ({
   executeLLMTask: vi.fn(),
 }));
+vi.mock("@/lib/llm/ordinary-paid-operation.service", () => ({
+  prepareOrdinaryReviewOperation: vi.fn(),
+}));
+vi.mock("@/lib/llm/config", () => ({ isLLMEnabledByEnv: () => true }));
 
 const { executeLLMTask } = await import("@/lib/llm/provider-registry");
+const { prepareOrdinaryReviewOperation } = await import("@/lib/llm/ordinary-paid-operation.service");
 
 const contextStub = {
   objectRef: { objectType: "recommendation", objectId: "rec_1" },
@@ -51,6 +57,28 @@ function buildExecutionResult(
 describe("reviewCounterfactualWithLLM", () => {
   beforeEach(() => {
     vi.mocked(executeLLMTask).mockReset();
+    vi.mocked(prepareOrdinaryReviewOperation).mockReset();
+  });
+
+  it("passes a database-resolved counterfactual operation to the paid boundary", async () => {
+    vi.mocked(prepareOrdinaryReviewOperation).mockResolvedValue({ id: "synthetic-bound-operation" } as Awaited<ReturnType<typeof prepareOrdinaryReviewOperation>>);
+    vi.mocked(executeLLMTask).mockImplementation(async (options) =>
+      buildExecutionResult(options.fallbackOutput));
+    await reviewCounterfactualWithLLM({ ...baseInput, userId: "synthetic-active-user",
+      contextStub: { ...contextStub,
+        objectRef: { objectType: "bi_run", objectId: "synthetic-persisted-run" } } });
+    expect(vi.mocked(prepareOrdinaryReviewOperation)).toHaveBeenCalledWith(expect.objectContaining({
+      kind: "counterfactual_review", objectType: "bi_run",
+      objectId: "synthetic-persisted-run", slot: "counterfactual",
+    }));
+    expect(vi.mocked(executeLLMTask).mock.calls[0]?.[0].ordinaryOperationId)
+      .toBe("synthetic-bound-operation");
+  });
+
+  it("does not turn an unresolved charged call into a free review result", async () => {
+    vi.mocked(executeLLMTask).mockRejectedValue(new OrdinaryPaidEgressError("paid_egress_in_doubt"));
+    await expect(reviewCounterfactualWithLLM(baseInput))
+      .rejects.toThrow("paid_egress_in_doubt");
   });
 
   it("fails closed with missing_permission when no capability requested", async () => {
@@ -183,6 +211,18 @@ describe("reviewCounterfactualWithLLM", () => {
     expect(result.reviewState).toBe("needs_review");
     expect(result.requiredHumanReview).toBe(true);
     expect(result.reason).toBe("timeout");
+  });
+
+  it("does not return a business timeout while a bound paid attempt is still in flight", async () => {
+    vi.mocked(prepareOrdinaryReviewOperation).mockResolvedValue({
+      id: "synthetic-bound-operation",
+    } as Awaited<ReturnType<typeof prepareOrdinaryReviewOperation>>);
+    vi.mocked(executeLLMTask).mockImplementation(() => new Promise(() => {}));
+    await expect(reviewCounterfactualWithLLM({ ...baseInput,
+      userId: "synthetic-active-user", maxLatencyMs: 20,
+      contextStub: { ...contextStub,
+        objectRef: { objectType: "bi_run", objectId: "synthetic-persisted-run" } },
+    })).rejects.toThrow("paid_egress_in_doubt");
   });
 
   it("clamps an over-ceiling latency budget", () => {

@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Metering acceptance: every call that consumed provider tokens must appear
- * somewhere — as a measurement when it could be measured, and as an explicit
- * unknown when it could not. Never as zero, and never as an estimate written
- * into the measured total.
+ * Diagnostic metering after the paid bridge has returned a committed result.
+ * The authoritative charge/unknown bound is asserted by the C3/C4 MySQL
+ * tests; this file checks that call-log observations are not written as zero
+ * or silently discarded by the registry's fallback branches.
  *
  * Covers the three paths that used to disagree:
  *   - success with usage omitted by the provider (was billed as 0)
@@ -51,15 +51,27 @@ vi.mock("@/lib/llm/qwen-adapter", () => ({
     run: mocks.adapterRun,
   },
 }));
+// The paid bridge is proven against committed C3/C4 facts by the MySQL suite.
+// Here its result is a synthetic post-commit handoff so these tests isolate
+// registry metering, prompt-version binding, PII handling and parse failures.
+// This mock is not an alternate way to authorize an outbound call.
+vi.mock("@/lib/llm/ordinary-paid-adapter-bridge.service", () => ({
+  OrdinaryPaidEgressError: class OrdinaryPaidEgressError extends Error {
+    constructor(readonly code: string) { super(code); }
+  },
+  runOrdinaryPaidAdapter: async () => {
+    const result = await mocks.adapterRun();
+    return {
+      ...result,
+      governedRoute: {
+        provider: "openai", model: "gpt-4.1-mini", modelVersion: "gpt-4.1-mini",
+      },
+    };
+  },
+}));
 
 import { LlmOutputParseError } from "@/lib/llm/output-parse-error";
 import { executeLLMTask } from "@/lib/llm/provider-registry";
-import {
-  __resetAccumulatorForTests,
-  getMonthToDateSpendUSD,
-  getMonthToDateUnknownCallCount,
-  getMonthToDateUnknownUpperBoundUSD,
-} from "@/lib/llm/spend-tracker";
 import { attachUsageObservation } from "@/lib/llm/usage-observation";
 
 const WORKSPACE = "workspace_metering";
@@ -81,6 +93,7 @@ function runTask() {
     parseOutput: (rawText) => JSON.parse(rawText) as { summary: string },
     fallbackOutput: { summary: "fallback" },
     outputMode: "json",
+    ordinaryOperationId: "synthetic-committed-operation",
   });
 }
 
@@ -92,7 +105,6 @@ function loggedRow() {
 describe("LLM usage metering", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    __resetAccumulatorForTests();
     mocks.adapterIsConfigured.mockReturnValue(true);
     mocks.recordLLMCall.mockResolvedValue(undefined);
     mocks.detectPIIInOutput.mockReturnValue({ detected: false, hits: [] });
@@ -114,7 +126,6 @@ describe("LLM usage metering", () => {
   });
 
   afterEach(() => {
-    __resetAccumulatorForTests();
     vi.restoreAllMocks();
   });
 
@@ -129,8 +140,6 @@ describe("LLM usage metering", () => {
     const result = await runTask();
 
     expect(result.success).toBe(true);
-    expect(getMonthToDateSpendUSD(WORKSPACE)).toBeGreaterThan(0);
-    expect(getMonthToDateUnknownCallCount(WORKSPACE)).toBe(0);
     expect(loggedRow()).toMatchObject({ tokenUsagePrompt: 1200, tokenUsageCompletion: 800 });
   });
 
@@ -147,11 +156,8 @@ describe("LLM usage metering", () => {
     const result = await runTask();
 
     expect(result.success).toBe(true);
-    // Not folded into the measured total — an estimate there could never be
-    // told apart from a measurement afterwards.
-    expect(getMonthToDateSpendUSD(WORKSPACE)).toBe(0);
-    // But it is no longer invisible.
-    expect(getMonthToDateUnknownCallCount(WORKSPACE)).toBe(1);
+    // The diagnostic row remains unknown. The real paid bridge rejects this
+    // incomplete terminal usage and keeps its reservation occupied.
     expect(loggedRow()).toMatchObject({ tokenUsagePrompt: null, tokenUsageCompletion: null });
   });
 
@@ -165,8 +171,7 @@ describe("LLM usage metering", () => {
 
     await runTask();
 
-    expect(getMonthToDateSpendUSD(WORKSPACE)).toBe(0);
-    expect(getMonthToDateUnknownCallCount(WORKSPACE)).toBe(1);
+    expect(loggedRow()).toMatchObject({ tokenUsagePrompt: null, tokenUsageCompletion: null });
   });
 
   it("A02: a measured zero stays a measurement", async () => {
@@ -179,7 +184,6 @@ describe("LLM usage metering", () => {
 
     await runTask();
 
-    expect(getMonthToDateUnknownCallCount(WORKSPACE)).toBe(0);
     expect(loggedRow()).toMatchObject({ tokenUsagePrompt: 0, tokenUsageCompletion: 0 });
   });
 
@@ -198,7 +202,6 @@ describe("LLM usage metering", () => {
     expect(result.fallbackReason).toBe("policy_pii_in_output");
     // The provider ran and charged; the rejection is ours. This used to return
     // before any spend was recorded.
-    expect(getMonthToDateSpendUSD(WORKSPACE)).toBeGreaterThan(0);
     expect(loggedRow()).toMatchObject({ tokenUsagePrompt: 1500, tokenUsageCompletion: 900 });
   });
 
@@ -220,7 +223,6 @@ describe("LLM usage metering", () => {
     // The error type still drives the fallback reason — the attachment did not
     // wrap or replace the error.
     expect(result.fallbackReason).toBe("output_parse_failed");
-    expect(getMonthToDateSpendUSD(WORKSPACE)).toBeGreaterThan(0);
     expect(loggedRow()).toMatchObject({ tokenUsagePrompt: 700, tokenUsageCompletion: 300 });
   });
 
@@ -231,15 +233,12 @@ describe("LLM usage metering", () => {
 
     expect(result.success).toBe(false);
     expect(result.fallbackReason).toBe("provider_error");
-    expect(getMonthToDateSpendUSD(WORKSPACE)).toBe(0);
-    // "We never observed a usage" is itself a fact worth counting: a failed call
-    // may still have been charged upstream, and pretending it consumed nothing
-    // is the same mistake as A02 in a different path.
-    expect(getMonthToDateUnknownCallCount(WORKSPACE)).toBe(1);
+    // A lost paid attempt throws an in-doubt error instead of reaching this
+    // ordinary fallback. This synthetic transport error tests diagnostics only.
     expect(loggedRow()).toMatchObject({ tokenUsagePrompt: null, tokenUsageCompletion: null });
   });
 
-  it("unknown amounts accumulate separately from measured spend across calls", async () => {
+  it("keeps measured and unknown diagnostic rows separate across calls", async () => {
     mocks.adapterRun.mockResolvedValue({
       output: { summary: "ok" },
       rawOutput: '{"summary":"ok"}',
@@ -247,7 +246,7 @@ describe("LLM usage metering", () => {
       usage: { promptTokens: 1200, completionTokens: 800 },
     });
     await runTask();
-    const measuredAfterFirst = getMonthToDateSpendUSD(WORKSPACE);
+    expect(loggedRow()).toMatchObject({ tokenUsagePrompt: 1200, tokenUsageCompletion: 800 });
 
     mocks.recordLLMCall.mockClear();
     mocks.adapterRun.mockResolvedValue({
@@ -258,17 +257,13 @@ describe("LLM usage metering", () => {
     });
     await runTask();
 
-    // The unknown call did not move the measured total by a single unit.
-    expect(getMonthToDateSpendUSD(WORKSPACE)).toBe(measuredAfterFirst);
-    expect(getMonthToDateUnknownCallCount(WORKSPACE)).toBe(1);
-    expect(getMonthToDateUnknownUpperBoundUSD(WORKSPACE)).toBeGreaterThanOrEqual(0);
+    expect(loggedRow()).toMatchObject({ tokenUsagePrompt: null, tokenUsageCompletion: null });
   });
 });
 
 describe("prompt version override binding", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    __resetAccumulatorForTests();
     mocks.adapterIsConfigured.mockReturnValue(true);
     mocks.recordLLMCall.mockResolvedValue(undefined);
     mocks.detectPIIInOutput.mockReturnValue({ detected: false, hits: [] });
@@ -311,8 +306,8 @@ describe("prompt version override binding", () => {
     expect(result.fallbackReason).toBe("policy_prompt_version_unbindable");
     // Zero charged calls: the provider was never contacted.
     expect(mocks.adapterRun).not.toHaveBeenCalled();
-    expect(getMonthToDateSpendUSD(WORKSPACE)).toBe(0);
-    expect(getMonthToDateUnknownCallCount(WORKSPACE)).toBe(0);
+    expect(mocks.recordLLMCall).toHaveBeenCalledTimes(1);
+    expect(loggedRow()).not.toHaveProperty("tokenUsagePrompt");
   });
 
   it("A07: the ledger records the EFFECTIVE version, with the requested one named in the error", async () => {

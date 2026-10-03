@@ -7402,6 +7402,34 @@ model LLMSpendLedgerEntry {
   @@index([state, expiresAt])
 }
 
+/// Server-owned source binding for an ordinary LLM workflow attempt. This row
+/// contains only identifiers and hashes; it never persists prompt or output.
+/// A matching request may replay, while a changed source requires a new
+/// database-authorized generation before it can claim another provider call.
+model LLMWorkflowOperation {
+  id                   String   @id @default(cuid())
+  workspaceId          String
+  operationKey         String   @db.VarChar(71)
+  requestKey           String   @db.VarChar(191)
+  kind                 String   @db.VarChar(64)
+  sourceType           String   @db.VarChar(64)
+  sourceId             String   @db.VarChar(191)
+  sourceVersion        String   @db.VarChar(191)
+  sourceDigest         String   @db.VarChar(71)
+  actorUserId          String?
+  generation           Int
+  slot                 String   @db.VarChar(64)
+  projectedPayloadHash String?  @db.VarChar(71)
+  projectionReceiptRef String?  @db.VarChar(191)
+  status               String   @default("prepared") @db.VarChar(32)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@unique([workspaceId, operationKey])
+  @@unique([workspaceId, requestKey])
+  @@index([workspaceId, kind, sourceType, sourceId, generation])
+}
+
 /// Candidate per-(workspace, period) reserved+settled+unknown admission counter.
 ///
 /// Candidate aggregate for admission, not a deployed enforcement claim. A persistent

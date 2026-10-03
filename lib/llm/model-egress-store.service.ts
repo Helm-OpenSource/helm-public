@@ -1,6 +1,6 @@
 import "server-only";
 
-import { ActorType, Prisma } from "@prisma/client";
+import { ActorType, Prisma, type PrismaClient } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { canonicalJson, sha256 } from "@/lib/expert-capability/hashing";
 import { db } from "@/lib/db";
@@ -53,6 +53,7 @@ import type {
   ObservationSensitivity,
 } from "@/lib/stage1-owner-loop/types";
 import { jsonStringify, safeParseJson } from "@/lib/utils";
+import { verifyOrdinaryPaidOperationInTransaction } from "@/lib/llm/ordinary-paid-operation.service";
 
 type Tx = Prisma.TransactionClient;
 
@@ -145,6 +146,7 @@ export type GovernedProviderRuntimeDescriptor = {
 };
 
 export type PrepareModelRouteDecisionInput = {
+  client?: PrismaClient;
   authority: GovernedModelEgressAuthority;
   workspaceId: string;
   policyKey: string;
@@ -1233,10 +1235,11 @@ export async function recordGovernedModelProjectionReceipt(
 }
 
 export async function readGovernedModelProjectionReceipt(input: {
+  client?: PrismaClient;
   workspaceId: string;
   receiptId: string;
 }): Promise<GovernedModelProjectionReceipt | null> {
-  const row = await db.governedModelProjectionReceipt.findFirst({
+  const row = await (input.client ?? db).governedModelProjectionReceipt.findFirst({
     where: {
       id: input.receiptId,
       workspaceId: input.workspaceId,
@@ -1731,7 +1734,7 @@ export async function prepareModelRouteDecision(
 
   return runWithWriteConflictRetry(
     () =>
-      db.$transaction(async (tx) => {
+      (input.client ?? db).$transaction(async (tx) => {
         await lockModelEgressWorkspace(tx, input.workspaceId);
         const projectionRow = input.projectionReceiptRef
           ? await tx.governedModelProjectionReceipt.findFirst({
@@ -2237,11 +2240,13 @@ function assertRuntimeDescriptorMatches(input: {
 }
 
 export async function claimModelRouteDispatch(input: {
+  client?: PrismaClient;
   authority: GovernedModelEgressAuthority;
   spendAuthority?: GovernedSpendAuthority | null;
   workspaceId: string;
   decisionId: string;
   gatewayRef: string;
+  ordinaryOperationId?: string;
   runtime: GovernedProviderRuntimeDescriptor;
   now?: Date;
 }) {
@@ -2253,7 +2258,7 @@ export async function claimModelRouteDispatch(input: {
   }
   return runWithWriteConflictRetry(
     () =>
-      db.$transaction(async (tx) => {
+      (input.client ?? db).$transaction(async (tx) => {
         await lockModelEgressWorkspace(tx, input.workspaceId);
         const databaseNow = async () => {
           const [clock] = await tx.$queryRaw<Array<{ now: Date }>>`SELECT UTC_TIMESTAMP(3) AS now`;
@@ -2275,6 +2280,16 @@ export async function claimModelRouteDispatch(input: {
           throw new ModelEgressStoreError("model_route_decision_not_found");
         }
         const decision = parseStoredModelRouteDecision(row);
+        if (decision.taskRef.startsWith("ordinary:") && !input.ordinaryOperationId) {
+          throw new ModelEgressStoreError("ordinary_operation_required");
+        }
+        if (input.ordinaryOperationId) {
+          await verifyOrdinaryPaidOperationInTransaction(tx, {
+            workspaceId: input.workspaceId,
+            operationId: input.ordinaryOperationId,
+            decision,
+          });
+        }
         if (decision.decision !== "allowed" || !decision.routeSnapshot) {
           throw new ModelEgressStoreError(
             "blocked_model_route_decision_not_dispatchable",
@@ -2730,6 +2745,7 @@ function terminalInputMatches(input: {
   latencyMs: number | null;
   promptTokens: number | null;
   completionTokens: number | null;
+  outputContentHash?: string;
   actualCostUsdMicros: number;
   costCurrency: "USD";
   pricingVersion: string;
@@ -2752,6 +2768,7 @@ function terminalInputMatches(input: {
     input.receipt.latencyMs === input.latencyMs &&
     input.receipt.promptTokens === input.promptTokens &&
     input.receipt.completionTokens === input.completionTokens &&
+    input.receipt.outputContentHash === input.outputContentHash &&
     input.receipt.actualCostUsdMicros ===
       input.actualCostUsdMicros &&
     input.receipt.costCurrency === input.costCurrency &&
@@ -2765,6 +2782,7 @@ function terminalInputMatches(input: {
 }
 
 export async function recordModelEgressTerminalReceipt(input: {
+  client?: PrismaClient;
   authority: GovernedModelEgressAuthority;
   spendAuthority?: GovernedSpendAuthority | null;
   workspaceId: string;
@@ -2785,6 +2803,7 @@ export async function recordModelEgressTerminalReceipt(input: {
   latencyMs: number | null;
   promptTokens: number | null;
   completionTokens: number | null;
+  outputContentHash?: string;
   actualCostUsdMicros: number;
   costCurrency: "USD";
   pricingVersion: string;
@@ -2826,6 +2845,10 @@ export async function recordModelEgressTerminalReceipt(input: {
     throw new ModelEgressStoreError(
       "actual_cost_usd_micros_invalid",
     );
+  }
+  if (input.outputContentHash !== undefined &&
+      !/^sha256:[a-f0-9]{64}$/.test(input.outputContentHash)) {
+    throw new ModelEgressStoreError("terminal_output_content_hash_invalid");
   }
   if (input.costCurrency !== "USD") {
     throw new ModelEgressStoreError("cost_currency_must_be_usd");
@@ -2891,7 +2914,7 @@ export async function recordModelEgressTerminalReceipt(input: {
 
   return runWithWriteConflictRetry(
     () =>
-      db.$transaction(async (tx) => {
+      (input.client ?? db).$transaction(async (tx) => {
         await lockModelEgressWorkspace(tx, input.workspaceId);
         const row = await tx.modelRouteDecision.findFirst({
           where: {
@@ -2989,6 +3012,7 @@ export async function recordModelEgressTerminalReceipt(input: {
               latencyMs: input.latencyMs,
               promptTokens: input.promptTokens,
               completionTokens: input.completionTokens,
+              outputContentHash: input.outputContentHash,
               actualCostUsdMicros:
                 input.actualCostUsdMicros,
               costCurrency: input.costCurrency,
@@ -3164,6 +3188,7 @@ export async function recordModelEgressTerminalReceipt(input: {
           latencyMs: input.latencyMs,
           promptTokens: input.promptTokens,
           completionTokens: input.completionTokens,
+          ...(input.outputContentHash === undefined ? {} : { outputContentHash: input.outputContentHash }),
           actualCostUsdMicros: input.actualCostUsdMicros,
           costCurrency: input.costCurrency,
           pricingVersion: input.pricingVersion,
@@ -3209,12 +3234,13 @@ export async function recordModelEgressTerminalReceipt(input: {
 /** A lost/unknown provider outcome consumes its maximum bound without
  * inventing a zero-cost terminal receipt. The claim and ledger share a lock. */
 export async function markModelEgressSpendUnknown(input: {
+  client?: PrismaClient;
   authority: GovernedModelEgressAuthority;
   workspaceId: string; decisionId: string; gatewayRef: string;
   dispatchClaimHash: string;
 }) {
   assertAuthority(input.authority);
-  return runWithWriteConflictRetry(() => db.$transaction(async (tx) => {
+  return runWithWriteConflictRetry(() => (input.client ?? db).$transaction(async (tx) => {
     await lockModelEgressWorkspace(tx, input.workspaceId);
     const row = await tx.modelRouteDecision.findFirst({
       where: { id: input.decisionId, workspaceId: input.workspaceId },
@@ -3249,10 +3275,11 @@ export async function markModelEgressSpendUnknown(input: {
 }
 
 export async function readModelRouteDecision(input: {
+  client?: PrismaClient;
   workspaceId: string;
   decisionId: string;
 }) {
-  const row = await db.modelRouteDecision.findFirst({
+  const row = await (input.client ?? db).modelRouteDecision.findFirst({
     where: {
       id: input.decisionId,
       workspaceId: input.workspaceId,
@@ -3260,7 +3287,7 @@ export async function readModelRouteDecision(input: {
   });
   if (!row) return null;
   const decision = parseStoredModelRouteDecision(row);
-  const receipts = await db.modelEgressReceipt.findMany({
+  const receipts = await (input.client ?? db).modelEgressReceipt.findMany({
     where: {
       workspaceId: input.workspaceId,
       decisionId: input.decisionId,

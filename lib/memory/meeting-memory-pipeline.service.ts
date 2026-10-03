@@ -1,7 +1,10 @@
+import { ordinaryPaidWriterClient } from "@/lib/llm/ordinary-paid-composition.service";
 import { ActionExecutionMode, ActionStatus, ActionType, ActorType, MemoryEntityType, MemoryRelationType, MemoryType, type ObjectType, RiskLevel, SourceType } from "@prisma/client";
 import { assertWorkspaceMemoryServiceAccess } from "@/lib/auth/service-governance";
 import { generatePostMeetingActionSuggestions } from "@/lib/ai";
 import { db } from "@/lib/db";
+import { prepareOrdinaryPaidOperationOrFallback } from "@/lib/llm/ordinary-paid-operation.service";
+import { isLLMEnabledByEnv } from "@/lib/llm/config";
 import { processMeetingMemoryWithLLM } from "@/lib/llm-workflows/process-meeting-memory.workflow";
 import { generateMeetingBriefingSnapshot } from "@/lib/memory/briefing.service";
 import { createBlocker } from "@/lib/memory/blocker.service";
@@ -213,9 +216,15 @@ export async function processMeetingMemory(input: MemoryActorContext & { meeting
         })
       : [];
 
+  const ordinaryOperation = isLLMEnabledByEnv() && input.actorUserId
+    ? await prepareOrdinaryPaidOperationOrFallback({ client: ordinaryPaidWriterClient(), workspaceId: input.workspaceId,
+        actorUserId: input.actorUserId, sourceType: "meeting_note",
+        sourceId: meeting.note.id, kind: "meeting_extraction", slot: "extraction" })
+    : null;
   const llmExtraction = await processMeetingMemoryWithLLM({
     workspaceId: input.workspaceId,
     userId: input.actorUserId,
+    ordinaryOperationId: ordinaryOperation?.id,
     meeting: {
       id: meeting.id,
       title: meeting.title,

@@ -70,6 +70,16 @@ describe("model egress governance boundary guard", () => {
     );
   });
 
+  it("rejects minting a raw legacy provider adapter outside its closed singleton", () => {
+    withFixture({
+      "lib/rogue/raw-paid.ts": 'import { createOpenAICompatibleAdapter } from "@/lib/llm/openai-adapter";\nexport const raw = createOpenAICompatibleAdapter({provider:"openai",label:"raw",audioTranscription:false});',
+    }, (root) => {
+      expect(scanModelEgressDirectWrites(root)).toContainEqual(expect.objectContaining({
+        rule: "MEG-GATEWAY-BYPASS", file: "lib/rogue/raw-paid.ts",
+      }));
+    });
+  });
+
   it("rejects receipt mutation and raw decision deletion", () => {
     withFixture(
       {

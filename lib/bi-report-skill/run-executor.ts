@@ -212,6 +212,7 @@ export async function executeBiReportPush(input: ExecuteBiReportPushInput): Prom
       resolvedSqlParams: query.sqlParams,
       rows,
       useLLM: input.useLLM ?? false,
+      persistedRunId: persistedRun?.runId ?? null,
       recentRuns,
       recentFeedbacks,
     });

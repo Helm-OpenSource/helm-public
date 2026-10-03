@@ -409,7 +409,10 @@ export async function generateRecommendationsForObject(input: GenerateRecommenda
       rankIndex,
       topCandidate: topCandidate ?? item,
     });
-    const llmEnhanced = shouldEnhanceWithLLM
+    // A first-generation candidate has no persisted source identity yet.
+    // Charge-bearing enhancement is attempted only after the deterministic
+    // RecommendationLog has committed and can be rechecked by C3.
+    const llmEnhanced = shouldEnhanceWithLLM && input.persist === false
       ? await enhanceRecommendationExplanationWithLLM({
           workspaceId: input.workspaceId,
           userId: input.actorUserId,
@@ -499,6 +502,28 @@ export async function generateRecommendationsForObject(input: GenerateRecommenda
       objectId: input.objectId,
       recommendations: withExplanation,
     });
+
+    if (shouldEnhanceWithLLM && input.actorUserId) {
+      const refreshedIds: string[] = [];
+      for (const log of logs) {
+        const refreshed = await refreshRecommendationExplanationWithLLM({
+          workspaceId: input.workspaceId,
+          recommendationId: log.id,
+          userId: input.actorUserId,
+          english: input.english,
+        });
+        refreshedIds.push(refreshed.recommendation.recommendationId);
+      }
+      const updated = await db.recommendationLog.findMany({ where: {
+        workspaceId: input.workspaceId, id: { in: refreshedIds },
+      } });
+      const byId = new Map(updated.map((log) => [log.id, log]));
+      logs = refreshedIds.map((id) => {
+        const log = byId.get(id);
+        if (!log) throw new Error("recommendation_paid_readback_missing");
+        return log;
+      });
+    }
 
     if (input.captureTelemetry !== false) {
       await writeAuditLog({
@@ -644,6 +669,7 @@ export async function refreshRecommendationExplanationWithLLM(input: {
   const enhanced = await enhanceRecommendationExplanationWithLLM({
     workspaceId: input.workspaceId,
     userId: input.userId,
+    recommendationLogId: details.recommendation.recommendationId,
     objectLabel: (details.recommendation.recommendationPayload?.objectLabel as string | undefined) ?? details.recommendation.title,
     recommendationTitle: details.recommendation.title,
     recommendationDescription: details.recommendation.description,

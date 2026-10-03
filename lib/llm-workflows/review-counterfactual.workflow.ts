@@ -1,3 +1,4 @@
+import { ordinaryPaidWriterClient } from "@/lib/llm/ordinary-paid-composition.service";
 /**
  * Counterfactual Reviewer — fail-closed workflow (LLM Intelligence v2).
  *
@@ -22,6 +23,9 @@ import {
   llmPromptVersions,
 } from "@/lib/llm/prompt-registry";
 import { executeLLMTask } from "@/lib/llm/provider-registry";
+import { prepareOrdinaryReviewOperation } from "@/lib/llm/ordinary-paid-operation.service";
+import { OrdinaryPaidEgressError } from "@/lib/llm/ordinary-paid-adapter-bridge.service";
+import { isLLMEnabledByEnv } from "@/lib/llm/config";
 import {
   buildFailClosedCounterfactualResult,
   counterfactualReviewerOutputSchema,
@@ -178,6 +182,21 @@ export async function reviewCounterfactualWithLLM(
   const safeStub = egress.safeStub;
   const safeJudgementSummary = egress.safeJudgementSummary;
 
+  // A context stub is not a spend identity. The paid path requires a real
+  // workspace source and active actor, resolved and locked by the operation
+  // service; unsupported source types retain the deterministic review result.
+  let ordinaryOperationId: string | undefined;
+  try {
+    ordinaryOperationId = isLLMEnabledByEnv() ? (await prepareOrdinaryReviewOperation({ client: ordinaryPaidWriterClient(),
+      workspaceId: input.workspaceId, actorUserId: input.userId,
+      kind: "counterfactual_review", objectType: safeStub.objectRef.objectType,
+      objectId: safeStub.objectRef.objectId, slot: "counterfactual" }))?.id : undefined;
+  } catch {
+    return emit(buildFailClosedCounterfactualResult("provider_failure"), {
+      timedOut: false, objectRef,
+    });
+  }
+
   const fallback = buildFailClosedCounterfactualResult("provider_failure");
   const prompt = buildCounterfactualReviewPrompt({
     contextStub: safeStub,
@@ -211,6 +230,7 @@ export async function reviewCounterfactualWithLLM(
         jsonSchema: counterfactualReviewSchema,
         maxOutputTokens: safeStub.tokenBudget.maxOutputTokens,
         fallbackOutput: fallback,
+        ordinaryOperationId,
         parseOutput(rawText) {
           const trimmed = (rawText ?? "").trim();
           if (trimmed.length === 0) {
@@ -231,7 +251,10 @@ export async function reviewCounterfactualWithLLM(
         },
       });
       return { output: result.output, timedOut: false };
-    } catch {
+    } catch (error) {
+      if (error instanceof OrdinaryPaidEgressError &&
+          ["paid_egress_in_doubt", "paid_egress_committed_readback_invalid",
+            "paid_egress_no_committed_output"].includes(error.code)) throw error;
       return { output: buildFailClosedCounterfactualResult("provider_failure"), timedOut: false };
     }
   })();
@@ -239,6 +262,12 @@ export async function reviewCounterfactualWithLLM(
   const raced = await Promise.race([run, timeout]);
   if (timer) {
     clearTimeout(timer);
+  }
+  // The latency timer does not cancel the provider call. Once an operation
+  // was bound, a timeout may race a charged attempt and cannot be presented
+  // to the caller as a completed, free business fallback.
+  if (raced.timedOut && ordinaryOperationId) {
+    throw new OrdinaryPaidEgressError("paid_egress_in_doubt");
   }
   const output = counterfactualReviewerOutputSchema.parse(raced.output);
   return emit(output, { timedOut: raced.timedOut, objectRef });

@@ -1,7 +1,9 @@
-import { createOpenAICompatibleAdapter } from "@/lib/llm/openai-adapter";
+import { closeUnguardedPaidAdapter, createOpenAICompatibleAdapter } from "@/lib/llm/openai-adapter";
+import type { LLMProviderAdapter } from "@/lib/llm/types";
 
-export const qwenAdapter = createOpenAICompatibleAdapter({
-  provider: "qwen",
-  label: "Qwen (DashScope OpenAI Compatible)",
-  audioTranscription: false,
-});
+export const qwenAdapter: LLMProviderAdapter = {
+  ...createOpenAICompatibleAdapter({
+    provider: "qwen", label: "Qwen (DashScope OpenAI Compatible)", audioTranscription: false,
+  }),
+  run: closeUnguardedPaidAdapter,
+};

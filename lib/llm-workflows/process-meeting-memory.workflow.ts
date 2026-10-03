@@ -66,6 +66,7 @@ type MeetingBlockerDraftShape = Array<{
 type MeetingMemoryWorkflowInput = {
   workspaceId: string;
   userId?: string | null;
+  ordinaryOperationId?: string;
   meeting: MeetingFactExtractionInput["meeting"] &
     Pick<MeetingCommitmentExtractionInput["meeting"], "ownerId"> & {
       companyName?: string | null;
@@ -122,6 +123,7 @@ export async function processMeetingMemoryWithLLM(input: MeetingMemoryWorkflowIn
     outputMode: "json",
     jsonSchema: meetingMemoryExtractionSchema,
     fallbackOutput: input.fallback,
+    ordinaryOperationId: input.ordinaryOperationId,
     parseOutput: (rawText) => parseMeetingMemoryOutput(rawText, input.workspaceId, input.meeting, input.fallback),
   });
 
