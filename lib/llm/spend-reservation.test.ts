@@ -14,7 +14,10 @@ import {
 function createStore(initial?: Partial<{ reserved: bigint; settled: bigint }>) {
   const counters = new Map<
     string,
-    { reservedMicros: bigint; settledMicros: bigint; unknownBoundMicros: bigint; unknownCalls: number; periodPolicyVersion: string }
+    { reservedMicros: bigint; settledMicros: bigint; unknownBoundMicros: bigint; unknownCalls: number;
+      invariantBreachBoundMicros: bigint; invariantBreachCalls: number; admissionState: "open" | "invariant_breach";
+      periodPolicyVersion: string; budgetConfigVersion: number; budgetMode: "limited" | "unlimited";
+      budgetLimitMicros: bigint | null; policyApprovalRef: string }
   >();
   const entries = new Map<
     string,
@@ -27,11 +30,14 @@ function createStore(initial?: Partial<{ reserved: bigint; settled: bigint }>) {
     counters,
     entries,
     async reserve(input) {
-      const { workspaceId, periodKey, reservedMicros: amountMicros, budgetMicros } = input;
+      const { workspaceId, periodKey, maximumChargeMicros: amountMicros, budgetLimitMicros } = input;
       const attemptKey = entryKey(workspaceId, input.attemptRef);
       const existing = entries.get(attemptKey);
       if (existing) {
-        const fields = ["periodKey", "periodPolicyVersion", "reservedMicros", "provider", "model"] as const;
+        const fields = ["periodKey", "periodPolicyVersion", "budgetConfigVersion", "maximumChargeMicros",
+          "provider", "model", "operationRef", "quoteRef", "quoteHash", "budgetCurrency", "providerCurrency",
+          "priceBookRef", "priceBookVersion", "priceBookHash", "fxSnapshotRef", "fxSnapshotHash",
+          "policyApprovalRef", "budgetMode", "budgetLimitMicros", "contractVersion", "provenanceState"] as const;
         return fields.every((key) => existing[key] === input[key]) ? "duplicate" : "conflict";
       }
       const key = counterKey(workspaceId, periodKey);
@@ -40,10 +46,22 @@ function createStore(initial?: Partial<{ reserved: bigint; settled: bigint }>) {
         settledMicros: initial?.settled ?? BigInt(0),
         unknownBoundMicros: BigInt(0),
         unknownCalls: 0,
+        invariantBreachBoundMicros: BigInt(0),
+        invariantBreachCalls: 0,
+        admissionState: "open" as const,
         periodPolicyVersion: input.periodPolicyVersion,
+        budgetConfigVersion: input.budgetConfigVersion,
+        budgetMode: input.budgetMode,
+        budgetLimitMicros: input.budgetLimitMicros,
+        policyApprovalRef: input.policyApprovalRef,
       };
+      if (row.admissionState === "invariant_breach") return "spend_invariant_breach";
       if (row.periodPolicyVersion !== input.periodPolicyVersion) return "period_policy_conflict";
-      if (budgetMicros !== null && row.reservedMicros + row.settledMicros + row.unknownBoundMicros + amountMicros > budgetMicros) {
+      if (row.budgetConfigVersion !== input.budgetConfigVersion) return "budget_config_conflict";
+      if (row.budgetMode !== input.budgetMode || row.budgetLimitMicros !== input.budgetLimitMicros ||
+          row.policyApprovalRef !== input.policyApprovalRef) return "budget_config_conflict";
+      if (budgetLimitMicros !== null && row.reservedMicros + row.settledMicros + row.unknownBoundMicros +
+          row.invariantBreachBoundMicros + amountMicros > budgetLimitMicros) {
         return "budget_exhausted";
       }
       // No await between these writes: one simulated commit, not two service calls.
@@ -55,11 +73,20 @@ function createStore(initial?: Partial<{ reserved: bigint; settled: bigint }>) {
       const entry = entries.get(entryKey(workspaceId, attemptRef));
       if (!entry || entry.state !== "reserved") return "not_reserved";
       const counter = counters.get(counterKey(workspaceId, entry.periodKey))!;
-      counters.set(counterKey(workspaceId, entry.periodKey), {
-        ...counter,
-        reservedMicros: counter.reservedMicros - entry.reservedMicros,
-        settledMicros: counter.settledMicros + settledMicros,
-      });
+      if (settledMicros > entry.maximumChargeMicros) {
+        counters.set(counterKey(workspaceId, entry.periodKey), {
+          ...counter,
+          reservedMicros: counter.reservedMicros - entry.maximumChargeMicros,
+          invariantBreachBoundMicros: counter.invariantBreachBoundMicros + entry.maximumChargeMicros,
+          invariantBreachCalls: counter.invariantBreachCalls + 1,
+          admissionState: "invariant_breach",
+        });
+        entry.state = "invariant_breach";
+        return "invariant_breach";
+      }
+      counters.set(counterKey(workspaceId, entry.periodKey), { ...counter,
+        reservedMicros: counter.reservedMicros - entry.maximumChargeMicros,
+        settledMicros: counter.settledMicros + settledMicros });
       entry.state = "settled";
       return "settled";
     },
@@ -69,8 +96,8 @@ function createStore(initial?: Partial<{ reserved: bigint; settled: bigint }>) {
       const counter = counters.get(counterKey(workspaceId, entry.periodKey))!;
       counters.set(counterKey(workspaceId, entry.periodKey), {
         ...counter,
-        reservedMicros: counter.reservedMicros - entry.reservedMicros,
-        unknownBoundMicros: counter.unknownBoundMicros + entry.reservedMicros,
+        reservedMicros: counter.reservedMicros - entry.maximumChargeMicros,
+        unknownBoundMicros: counter.unknownBoundMicros + entry.maximumChargeMicros,
         unknownCalls: counter.unknownCalls + 1,
       });
       entry.state = "unknown";
@@ -82,7 +109,7 @@ function createStore(initial?: Partial<{ reserved: bigint; settled: bigint }>) {
       const counter = counters.get(counterKey(workspaceId, entry.periodKey))!;
       counters.set(counterKey(workspaceId, entry.periodKey), {
         ...counter,
-        reservedMicros: counter.reservedMicros - entry.reservedMicros,
+        reservedMicros: counter.reservedMicros - entry.maximumChargeMicros,
       });
       entry.state = "released";
       return "released";
@@ -94,6 +121,9 @@ function createStore(initial?: Partial<{ reserved: bigint; settled: bigint }>) {
           settledMicros: BigInt(0),
           unknownBoundMicros: BigInt(0),
           unknownCalls: 0,
+          invariantBreachBoundMicros: BigInt(0),
+          invariantBreachCalls: 0,
+          admissionState: "open" as const,
         }
       );
     },
@@ -108,9 +138,28 @@ function createStore(initial?: Partial<{ reserved: bigint; settled: bigint }>) {
 }
 
 const NOW = new Date("2026-09-17T10:00:00.000Z");
-const LIMITED: SpendBudgetPolicy = { mode: "limited", budgetMicros: BigInt(1_000) };
+const LIMITED: SpendBudgetPolicy = { mode: "limited", budgetMicros: BigInt(1_000),
+  configVersion: 7, approvalRef: "approval:synthetic" };
 
-function reserve(store: SpendReservationStore, attemptRef: string, estimatedMicros: bigint, policy = LIMITED) {
+function quote(attemptRef: string, maximumChargeMicros: bigint) {
+  return {
+    contractVersion: 2 as const,
+    operationRef: `operation:${attemptRef}`,
+    quoteRef: `quote:${attemptRef}`,
+    quoteHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    maximumChargeMicros,
+    budgetCurrency: "USD" as const,
+    providerCurrency: "USD" as const,
+    priceBookRef: "price-book:approved",
+    priceBookVersion: "2026-10-03",
+    priceBookHash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    fxSnapshotRef: null,
+    fxSnapshotHash: null,
+    policyApprovalRef: "approval:synthetic",
+  };
+}
+
+function reserve(store: SpendReservationStore, attemptRef: string, maximumChargeMicros: bigint, policy = LIMITED) {
   return reserveSpend({
     store,
     policy,
@@ -118,7 +167,7 @@ function reserve(store: SpendReservationStore, attemptRef: string, estimatedMicr
     periodKey: "2026-09",
     periodPolicyVersion: "asia-shanghai-month.v1",
     attemptRef,
-    estimatedMicros,
+    quote: quote(attemptRef, maximumChargeMicros),
     provider: "openai",
     model: "gpt-4.1-mini",
     leaseMs: 60_000,
@@ -131,7 +180,7 @@ describe("reserveSpend", () => {
     const store = createStore();
     const outcome = await reserve(store, "attempt-1", BigInt(400));
 
-    expect(outcome).toEqual({ admitted: true, attemptRef: "attempt-1", reservedMicros: BigInt(400) });
+    expect(outcome).toEqual({ admitted: true, attemptRef: "attempt-1", maximumChargeMicros: BigInt(400) });
     expect(await store.readTotals({ workspaceId: "ws", periodKey: "2026-09" })).toMatchObject({
       reservedMicros: BigInt(400),
       settledMicros: BigInt(0),
@@ -180,19 +229,55 @@ describe("reserveSpend", () => {
 
   it("admits without a ceiling under unlimited, but still records the reservation", async () => {
     const store = createStore();
-    const outcome = await reserve(store, "attempt-1", BigInt(10_000_000), { mode: "unlimited" });
+    const outcome = await reserve(store, "attempt-1", BigInt(10_000_000), {
+      mode: "unlimited", configVersion: 7, approvalRef: "approval:synthetic",
+    });
 
     expect(outcome.admitted).toBe(true);
     // unlimited is not "untracked": the amount is still visible.
     expect((await store.readTotals({ workspaceId: "ws", periodKey: "2026-09" })).reservedMicros).toBe(BigInt(10_000_000));
   });
 
-  it("treats a negative estimate as zero rather than crediting budget", async () => {
+  it("refuses a negative maximum charge without writing a zero reservation", async () => {
     const store = createStore();
     const outcome = await reserve(store, "attempt-1", -BigInt(500));
 
-    expect(outcome).toEqual({ admitted: true, attemptRef: "attempt-1", reservedMicros: BigInt(0) });
+    expect(outcome).toEqual({ admitted: false, reason: "maximum_charge_invalid" });
     expect((await store.readTotals({ workspaceId: "ws", periodKey: "2026-09" })).reservedMicros).toBe(BigInt(0));
+    expect(store.entries.size).toBe(0);
+  });
+
+  it("refuses a CNY quote without a complete immutable FX snapshot", async () => {
+    const store = createStore();
+    const invalid = { ...quote("cny-no-fx", BigInt(400)), providerCurrency: "CNY" as const };
+    const outcome = await reserveSpend({
+      store, policy: LIMITED, workspaceId: "ws", periodKey: "2026-09",
+      periodPolicyVersion: "asia-shanghai-month.v1", attemptRef: "cny-no-fx", quote: invalid,
+      provider: "synthetic-provider", model: "synthetic-model", leaseMs: 60_000, now: NOW,
+    });
+
+    expect(outcome).toEqual({ admitted: false, reason: "charge_quote_invalid" });
+    expect(store.entries.size).toBe(0);
+  });
+
+  it("records a CNY quote only when a complete FX snapshot is present", async () => {
+    const store = createStore();
+    const valid = {
+      ...quote("cny-with-fx", BigInt(400)), providerCurrency: "CNY" as const,
+      fxSnapshotRef: "fx-snapshot:synthetic",
+      fxSnapshotHash: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    };
+    const outcome = await reserveSpend({
+      store, policy: LIMITED, workspaceId: "ws", periodKey: "2026-09",
+      periodPolicyVersion: "asia-shanghai-month.v1", attemptRef: "cny-with-fx", quote: valid,
+      provider: "synthetic-provider", model: "synthetic-model", leaseMs: 60_000, now: NOW,
+    });
+
+    expect(outcome.admitted).toBe(true);
+    expect(store.entries.get("ws:cny-with-fx")).toMatchObject({
+      budgetCurrency: "USD", providerCurrency: "CNY",
+      fxSnapshotRef: "fx-snapshot:synthetic", fxSnapshotHash: valid.fxSnapshotHash,
+    });
   });
 
   it("counts already-settled spend against the ceiling, not just live reservations", async () => {
@@ -225,7 +310,7 @@ describe("reservation integrity regressions", () => {
 
   it.each([
     { periodKey: "2026-10" }, { periodPolicyVersion: "utc-month.v2" },
-    { reservedMicros: BigInt(300) }, { provider: "other" }, { model: "other" },
+    { maximumChargeMicros: BigInt(300) }, { provider: "other" }, { model: "other" },
   ])("refuses changed identity on the same attempt: %s", async (change) => {
     const store = createStore();
     await reserve(store, "a", BigInt(400));
@@ -241,7 +326,8 @@ describe("reservation integrity regressions", () => {
     await reserve(store, "a", BigInt(1000));
     expect(await reserve(store, "a", BigInt(1000))).toEqual({ admitted: false, reason: "attempt_already_reserved" });
     const original = store.entries.get("ws:a")!;
-    expect(await store.reserve({ ...original, expiresAt: new Date(NOW.getTime() + 120_000), budgetMicros: BigInt(1) })).toBe("duplicate");
+    expect(await store.reserve({ ...original, expiresAt: new Date(NOW.getTime() + 120_000),
+      budgetLimitMicros: BigInt(1) })).toBe("conflict");
     expect(store.entries.get("ws:a")?.expiresAt).toEqual(original.expiresAt);
   });
 
@@ -251,6 +337,57 @@ describe("reservation integrity regressions", () => {
     expect(await store.reserve({ ...store.entries.get("ws:a")!, attemptRef: "b", periodPolicyVersion: "changed" })).toBe("period_policy_conflict");
     expect(store.entries.size).toBe(1);
     expect((await store.readTotals({ workspaceId: "ws", periodKey: "2026-09" })).reservedMicros).toBe(BigInt(400));
+  });
+
+  it("rejects a changed budget limit under the same config version", async () => {
+    const store = createStore();
+    await reserve(store, "a", BigInt(400));
+    const original = store.entries.get("ws:a")!;
+    expect(await store.reserve({ ...original, attemptRef: "b", operationRef: "operation:b",
+      quoteRef: "quote:b", budgetLimitMicros: BigInt(10_000) })).toBe("budget_config_conflict");
+    expect(store.entries.has("ws:b")).toBe(false);
+  });
+
+  it("treats quote, price, FX and policy provenance as immutable attempt identity", async () => {
+    const store = createStore();
+    await reserve(store, "a", BigInt(400));
+    const original = store.entries.get("ws:a")!;
+    const withProvenance = {
+      ...original,
+      quoteRef: "quote:a",
+      quoteHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      priceBookRef: "price-book:approved",
+      priceBookVersion: "2026-10-03",
+      priceBookHash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      fxSnapshotRef: null,
+      fxSnapshotHash: null,
+      policyApprovalRef: "approval:synthetic",
+      budgetConfigVersion: 7,
+      budgetCurrency: "USD",
+      providerCurrency: "USD",
+      operationRef: "operation:a",
+      maximumChargeMicros: BigInt(400),
+      contractVersion: 2,
+      provenanceState: "complete",
+    };
+    store.entries.set("ws:a", { ...withProvenance, state: "reserved" } as never);
+
+    expect(await store.reserve({ ...withProvenance, priceBookVersion: "changed" } as never)).toBe("conflict");
+  });
+
+  it("refuses a new attempt when the period counter budget config version changed", async () => {
+    const store = createStore();
+    const first = {
+      ...store.entries.get("never"),
+      workspaceId: "ws", periodKey: "2026-09", periodPolicyVersion: "asia-shanghai-month.v1",
+      attemptRef: "a", maximumChargeMicros: BigInt(100),
+      budgetMode: "limited", budgetLimitMicros: BigInt(1_000), budgetConfigVersion: 7,
+      provider: "openai", model: "gpt-4.1-mini",
+      expiresAt: new Date(NOW.getTime() + 60_000),
+    } as never;
+    expect(await store.reserve(first)).toBe("reserved");
+    expect(await store.reserve({ ...first, attemptRef: "b", budgetConfigVersion: 8 } as never))
+      .toBe("budget_config_conflict");
   });
 
   it("propagates an atomic store failure without releasing any attempt", async () => {
@@ -364,16 +501,42 @@ describe("settleReservation", () => {
     expect((await store.readTotals({ workspaceId: "ws", periodKey: "2026-09" })).settledMicros).toBe(BigInt(250));
   });
 
-  it("clamps a negative measurement to zero instead of crediting budget", async () => {
+  it("turns a known amount above the maximum charge into a blocking invariant breach", async () => {
     const store = createStore();
     await reserve(store, "attempt-1", BigInt(400));
-    await settleReservation({
+
+    const outcome = await settleReservation({
+      store,
+      workspaceId: "ws",
+      attemptRef: "attempt-1",
+      usage: { kind: "known", measuredMicros: BigInt(401) },
+    });
+
+    expect(outcome).toBe("invariant_breach");
+    expect(await store.readTotals({ workspaceId: "ws", periodKey: "2026-09" })).toMatchObject({
+      reservedMicros: BigInt(0),
+      settledMicros: BigInt(0),
+      invariantBreachBoundMicros: BigInt(400),
+      invariantBreachCalls: 1,
+      admissionState: "invariant_breach",
+    });
+    expect(await reserve(store, "attempt-2", BigInt(1))).toEqual({
+      admitted: false,
+      reason: "spend_invariant_breach",
+    });
+  });
+
+  it("refuses a negative measurement and leaves the reservation intact", async () => {
+    const store = createStore();
+    await reserve(store, "attempt-1", BigInt(400));
+    expect(await settleReservation({
       store,
       workspaceId: "ws",
       attemptRef: "attempt-1",
       usage: { kind: "known", measuredMicros: -BigInt(100) },
-    });
+    })).toBe("measurement_invalid");
     expect((await store.readTotals({ workspaceId: "ws", periodKey: "2026-09" })).settledMicros).toBe(BigInt(0));
+    expect((await store.readTotals({ workspaceId: "ws", periodKey: "2026-09" })).reservedMicros).toBe(BigInt(400));
   });
 });
 

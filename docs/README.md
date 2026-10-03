@@ -79,7 +79,7 @@ connector 授权、写回、外发或审批证明。
 - [智能体化实施工程治理需求 / Agentic implementation engineering governance requirements](product/HELM_AGENTIC_GOVERNANCE_REQUIREMENTS.md)
 - [工作包与主线治理需求 / Work Unit and mainline governance requirements](product/HELM_WORK_UNIT_MERGE_GOVERNANCE_REQUIREMENTS.md)
 - [外部智能体输入 PRD / External agent intake PRD](product/HELM_EXTERNAL_AGENT_INTAKE_PRD.md)
-- [LLM spend reservation atomic store contract](operations/LLM_SPEND_RESERVATION_CONTRACT.md) — candidate MySQL transaction adapter; provider activation and full spending coverage remain separate prerequisites.
+- [LLM spend charge contract v2](operations/LLM_SPEND_RESERVATION_CONTRACT.md) — maximum-charge/provenance state machine and candidate MySQL transaction adapter; authoritative pricing, gateway dispatch coupling, full charge-path coverage, and production activation remain separate prerequisites.
 - [LLM 智能深化 v1 / LLM intelligence deepening v1](product/HELM_LLM_INTELLIGENCE_DEEPENING_V1.md)
 - [LLM 智能深化 v2 / LLM intelligence deepening v2](product/HELM_LLM_INTELLIGENCE_DEEPENING_V2.md)
 - [LLM 智能深化 v3 / LLM intelligence deepening v3](product/HELM_LLM_INTELLIGENCE_DEEPENING_V3.md)
