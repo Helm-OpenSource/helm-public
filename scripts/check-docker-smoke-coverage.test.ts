@@ -1,4 +1,8 @@
-import { readFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { createRequire } from "node:module";
+import { spawnSync } from "node:child_process";
 
 import { describe, expect, it } from "vitest";
 
@@ -14,6 +18,33 @@ const workflow = (): string => readFileSync(WORKFLOW_PATH, "utf8");
 const dockerfile = (): string => readFileSync(DOCKERFILE_PATH, "utf8");
 
 describe("docker smoke coverage guard", () => {
+  it("the seed CLI hook resolves server-only without a test mock in the runtime image", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "helm-docker-server-only-"));
+    try {
+      const hookDir = path.join(root, "scripts", "node-hooks");
+      mkdirSync(hookDir, { recursive: true });
+      const hook = path.join(hookDir, "allow-server-only.mjs");
+      copyFileSync(path.resolve("scripts/node-hooks/allow-server-only.mjs"), hook);
+      const packageDir = path.dirname(createRequire(import.meta.url).resolve("server-only"));
+      mkdirSync(path.join(root, "node_modules"));
+      symlinkSync(packageDir, path.join(root, "node_modules", "server-only"), "dir");
+      const tsxDir = path.dirname(createRequire(import.meta.url).resolve("tsx/package.json"));
+      symlinkSync(tsxDir, path.join(root, "node_modules", "tsx"), "dir");
+      const compositionDir = path.join(root, "lib", "llm");
+      mkdirSync(compositionDir, { recursive: true });
+      copyFileSync(path.resolve("lib/llm/ordinary-paid-composition.service.ts"),
+        path.join(compositionDir, "ordinary-paid-composition.service.ts"));
+      const run = spawnSync(process.execPath, ["--import", "tsx", "--import", hook,
+        "-e", "require('./lib/llm/ordinary-paid-composition.service.ts')"], {
+        cwd: root, encoding: "utf8", env: { PATH: process.env.PATH ?? "" }, timeout: 10_000,
+      });
+      expect(run.status, run.stderr).toBe(0);
+      expect(run.stderr).not.toContain("tests/__mocks__/server-only.ts");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("reports no gap for the workflow as it stands", () => {
     expect(findCoverageGaps(workflow(), dockerfile())).toEqual([]);
   });
