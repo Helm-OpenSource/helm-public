@@ -5,6 +5,7 @@ import {
   realpathSync,
   statSync,
   symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -86,6 +87,33 @@ async function fixture() {
 }
 
 describe("CAIO inference worker owner-private runtime", () => {
+  it("refuses owner-private FIFOs before a blocking read of config or referenced material", async () => {
+    for (const target of ["config", "access"] as const) {
+      const { paths } = await fixture();
+      unlinkSync(paths[target]);
+      const created = spawnSync("mkfifo", ["-m", "600", paths[target]], {
+        encoding: "utf8",
+      });
+      expect(created.status).toBe(0);
+      const source = [
+        `const { loadCaioInferenceWorkerRuntimeConfig } = require(${JSON.stringify(join(process.cwd(), "tools/caio-inference-worker/runtime.ts"))});`,
+        'process.stdout.write("actual_module_reached\\n");',
+        `try { loadCaioInferenceWorkerRuntimeConfig(${JSON.stringify(paths.config)}); process.exit(9); }`,
+        'catch (error) { if (error?.message !== "caio_inference_worker_private_file_invalid") process.exit(8); process.stdout.write("fifo_refused\\n"); }',
+      ].join("\n");
+      const result = spawnSync(process.execPath, ["--import", "tsx", "-e", source], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        timeout: 4_000,
+        env: { HOME: paths.root, TMPDIR: paths.root, PATH: "/usr/bin:/bin" },
+      });
+      expect(result.stdout).toContain("actual_module_reached\n");
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("fifo_refused\n");
+    }
+  }, 12_000);
+
   it("loads only referenced private material and returns the frozen runtime shape", async () => {
     const { paths } = await fixture();
     const loaded = loadCaioInferenceWorkerRuntimeConfig(paths.config);
