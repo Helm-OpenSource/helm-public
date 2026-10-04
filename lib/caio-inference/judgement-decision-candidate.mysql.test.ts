@@ -197,6 +197,18 @@ describeMysql("CAIO judgement to assigned task on an isolated MySQL database", (
     // The bridge alone never produces work.
     expect(await db.actionItem.count({ where: { workspaceId } })).toBe(0);
     expect(await db.decisionWorkPacketClaim.count({ where: { workspaceId } })).toBe(0);
+    const command = commandFor(created.decisionRecordId, assigneeId, `command-${suffix}`);
+    await expect(
+      dispatchStage1DecisionWorkPacket({
+        workspaceId,
+        decisionRecordId: created.decisionRecordId,
+        command,
+        actorName: "CAIO owner",
+        actorUserId: ownerId,
+      }),
+    ).rejects.toMatchObject({ reasons: ["owner_identity_mismatch"] });
+    expect(await db.actionItem.count({ where: { workspaceId } })).toBe(0);
+    expect(await db.decisionWorkPacketClaim.count({ where: { workspaceId } })).toBe(0);
 
     // Neither an ordinary member nor an OPERATOR (who may confirm other Stage 1 decisions) can confirm a
     // model-originated candidate on the founder's behalf.
@@ -229,26 +241,6 @@ describeMysql("CAIO judgement to assigned task on an isolated MySQL database", (
       actorName: "CAIO owner",
       actorUserId: ownerId,
     });
-    const command: OwnerCommandDraft = {
-      commandId: `command-${suffix}`,
-      workspaceRef: `workspace:${workspaceId}`,
-      decisionRef: created.decisionRecordId,
-      ownerRef: ownerId,
-      executionTargetRef: `user:${assigneeId}`,
-      portfolioRef,
-      goal: "Validate the revised reminder script without contacting anyone.",
-      action: "Prepare a dry-run plan for owner review.",
-      dueAt: new Date(Date.now() + 24 * 3_600_000).toISOString(),
-      acceptanceCriteria: ["Dry-run plan reviewed by the owner"],
-      evidenceRequirements: ["evidence:dry-run-plan"],
-      invalidationConditions: ["Cohort recovers before the due date"],
-      escalationOwnerRef: ownerId,
-      automationLevel: "assist",
-      allowedToolRefs: ["tool:task-draft"],
-      externalSideEffects: [],
-      policyEnvelopeRef: null,
-      status: "owner_confirmed",
-    };
     const dispatch = await dispatchStage1DecisionWorkPacket({
       workspaceId,
       decisionRecordId: created.decisionRecordId,
@@ -257,6 +249,25 @@ describeMysql("CAIO judgement to assigned task on an isolated MySQL database", (
       actorUserId: ownerId,
     });
     const action = await db.actionItem.findUniqueOrThrow({ where: { id: dispatch.actionItemId } });
+    const claim = await db.decisionWorkPacketClaim.findUniqueOrThrow({
+      where: { decisionRecordId: created.decisionRecordId },
+    });
+    expect(claim.actionItemId).toBe(action.id);
+    expect(JSON.parse(claim.ownerCommandJson)).toEqual(command);
+    expect(
+      (await db.decisionRecord.findUniqueOrThrow({ where: { id: created.decisionRecordId } })).status,
+    ).toBe("DISPATCHED");
+    // If the response is lost after commit, the same service request reads the durable claim.
+    expect(
+      await dispatchStage1DecisionWorkPacket({
+        workspaceId,
+        decisionRecordId: created.decisionRecordId,
+        command,
+        actorName: "CAIO owner",
+        actorUserId: ownerId,
+      }),
+    ).toEqual({ ...dispatch, created: false });
+    expect(await db.decisionWorkPacketClaim.count({ where: { decisionRecordId: created.decisionRecordId } })).toBe(1);
     // Owner-gated: nothing executes until the separate approval.
     expect(action.status).toBe(ActionStatus.PENDING_APPROVAL);
 
