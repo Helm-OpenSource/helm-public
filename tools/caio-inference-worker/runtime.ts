@@ -312,7 +312,10 @@ function readPrivateFile(
   }
   let descriptor: number | null = null;
   try {
-    descriptor = openSync(normalized, constants.O_RDONLY | constants.O_NOFOLLOW);
+    descriptor = openSync(
+      normalized,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
     const before = fstatSync(descriptor);
     if (
       !before.isFile() ||
