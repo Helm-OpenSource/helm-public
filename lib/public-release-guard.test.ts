@@ -1021,3 +1021,16 @@ describe("public release guard fixture coverage", () => {
     });
   });
 });
+
+
+describe("WorkBuddy route admission public test target", () => {
+  it("retains the required loopback target but still removes arbitrary targets", () => {
+    const command = "node --test scripts/test-caio-route-admission-http.test.mjs && vitest run lib/caio-collaboration/route-admission.test.ts lib/caio-collaboration/edge-ingress-route.test.ts lib/caio-collaboration/edge-ingress.test.ts tools/caio-workbuddy-gateway/prisma-readonly-runtime.test.ts --config vitest.public.config.ts && node scripts/test-caio-route-admission-http.mjs";
+    const projection = projectPublicPackageManifest({scripts: {
+      "test:caio-workbuddy-route": command,
+      "test:arbitrary-private": "node arbitrary-private.js",
+    }});
+    expect(projection.manifest.scripts["test:caio-workbuddy-route"]).toBe(command);
+    expect(projection.removedScripts).toContain("test:arbitrary-private");
+  });
+});

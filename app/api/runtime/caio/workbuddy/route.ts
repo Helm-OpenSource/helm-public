@@ -4,13 +4,8 @@ import {
   createWorkBuddyEdgeIngressHandler,
 } from "@/lib/caio-collaboration/edge-ingress";
 import { readBoundedRequestBody } from "@/lib/caio-collaboration/edge-ingress-route-body";
-import {
-  createWorkBuddyWorkspaceIdResolver,
-} from "@/lib/caio-collaboration-runtime/workbuddy-workspace-resolver.service";
-import { db } from "@/lib/db";
-import {
-  createPrismaWorkBuddyReadOnlyDispatcher,
-} from "@/tools/caio-workbuddy-gateway/prisma-readonly-runtime";
+import { admitWorkBuddyRoute } from "@/lib/caio-collaboration/route-admission";
+import { WORKBUDDY_RUNTIME_BINDING } from "@/lib/caio-collaboration/runtime-binding";
 
 const MAX_EDGE_BODY_BYTES = 1_048_576;
 
@@ -23,6 +18,12 @@ export async function GET(): Promise<Response> {
   );
 }
 export async function POST(request: Request): Promise<Response> {
+  if (!admitWorkBuddyRoute(WORKBUDDY_RUNTIME_BINDING)) {
+    return NextResponse.json(
+      { ok: false, error: "workbuddy_edge_not_configured" },
+      { status: 503 },
+    );
+  }
   const expectedSecret =
     process.env.CAIO_WORKBUDDY_EDGE_SHARED_SECRET?.trim() ?? "";
   const expectedWorkspaceSystemKey =
@@ -70,6 +71,14 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
+  // Do not load the transitive Prisma graph until fixed admission, deployment
+  // config and bounded JSON parsing have all succeeded.
+  const [{ db }, { createWorkBuddyWorkspaceIdResolver },
+    { createPrismaWorkBuddyReadOnlyDispatcher }] = await Promise.all([
+    import("@/lib/db"),
+    import("@/lib/caio-collaboration-runtime/workbuddy-workspace-resolver.service"),
+    import("@/tools/caio-workbuddy-gateway/prisma-readonly-runtime"),
+  ]);
   const handler = createWorkBuddyEdgeIngressHandler({
     expectedSecret,
     expectedWorkspaceSystemKey,

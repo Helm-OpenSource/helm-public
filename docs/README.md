@@ -63,6 +63,7 @@ connector 授权、写回、外发或审批证明。
 - [CAIO 模型代理复用受治理出站评估 / CAIO model proxy governed-reuse assessment](_planning/CAIO_MODEL_PROXY_GOVERNED_REUSE_DESIGN.md) — 逐条列出受治理链对调用方的要求与 LAN 直通请求今天无法满足之处；含可用性差异与需 owner 裁定的问题；不代表任何接线或激活
 - [Helm CAIO 模型准入与数据出域治理 / Helm CAIO model admission and data egress governance](product/HELM_CAIO_MODEL_ADMISSION_AND_EGRESS.md) — 租户策略、adapter readiness、调用前决定、单次 claim、append-only 回执与受限 fallback；Public Core 默认无生产 adapter
 - [Helm CAIO 模型准入与数据出域 Runbook / Helm CAIO model admission and data egress runbook](operations/HELM_CAIO_MODEL_EGRESS_RUNBOOK.md) — 空库重放、隔离 MySQL、事故处置与回滚；不把合成或本地证据提升为生产事实
+- [WorkBuddy 固定路由准入 / WorkBuddy fixed route admission](operations/CAIO_WORKBUDDY_ROUTE_ADMISSION.md) — 源码固定关闭/未知绑定在凭据、请求和数据库加载前拒绝；Core 默认保留旧入口，不代表已安装或生产授权。
 - [腾讯 WorkBuddy 与 Helm CAIO Pro 内网协作设计 / Tencent WorkBuddy and Helm CAIO Pro LAN collaboration design](superpowers/specs/2026-07-23-workbuddy-caio-lan-collaboration-design.md) — CEO macOS 通过 LAN-only MCP Gateway 主动提问、读取 P1C canonical Portfolio、接收 typed prompt 并复核建议；设计已确认、实现未开始，不构成生产可用或外部执行授权
 - [Helm CAIO Pro P1C 入口图 / Helm CAIO Pro P1C entry map](superpowers/specs/2026-07-23-caio-pro-p1c-entry-map.md) — 记录 canonical 10 题 Portfolio、CEO 选 0-3 题、现有 DecisionRecord 绑定与 OWNER-only 只读入口；本地参考实现已验证，WorkBuddy/Gateway、远程 mutation、部署与生产回执仍需下一层
 - [QoderWork 一把手经营闭环 / QoderWork owner operating loop](product/HELM_QODERWORK_OWNER_LOOP.md) — Public Core 契约与默认关闭实现；不是设备凭证、runtime 激活或生产部署证明
