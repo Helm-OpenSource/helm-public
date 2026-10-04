@@ -10,6 +10,8 @@
 
 交付预算接入前请核对 [LLM spend charge contract v2](docs/operations/LLM_SPEND_RESERVATION_CONTRACT.md)：当前只有最大费用、不可变价格/汇率/策略来源快照及原子账本候选，新增空注册表的签名元数据读回候选及 opt-in C3 接口；发行者身份、真实计价/用量、普通付费出口和生产限额仍未闭合，默认 authority 保持关闭。
 
+WorkBuddy 部署准入见 [固定路由合同](docs/operations/CAIO_WORKBUDDY_ROUTE_ADMISSION.md)：关闭或未知固定绑定先于入口配置和数据库依赖加载拒绝，Core 默认保留旧行为；源码验证不代表现场激活。
+
 **License**：Apache-2.0 · **仓库姿态**：open-source Core，已在 owner Go/No-Go 后公开 · **Helm Cloud / Enterprise**：商业版可选，不替代开源
 
 > **最快理解路径**：企业管理者先看下方"为什么关心"与"方法论"；交付工程师直接跑 `docker compose up` 和 Golden Path；合作伙伴可先用公开样例判断咨询 / 交付场景，不需要客户数据。
