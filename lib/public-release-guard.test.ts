@@ -66,6 +66,15 @@ function runGuardWithLocalBuildArtifacts() {
 }
 
 describe("public release guard fixture coverage", () => {
+  it("keeps the governed CAIO HTTP MySQL target in the public package without admitting arbitrary scripts", () => {
+    const command = "node --test scripts/test-caio-http-mysql.test.mjs scripts/caio-http-child-lifecycle.test.mjs && node scripts/test-caio-http-mysql.mjs";
+    const projection = projectPublicPackageManifest({ license: "Apache-2.0", scripts: {
+      "test:caio-stage1:http:mysql": command, "test:arbitrary-private": "node arbitrary-private.js",
+    } });
+    expect(projection.manifest.scripts["test:caio-stage1:http:mysql"]).toBe(command);
+    expect(projection.manifest.scripts["test:arbitrary-private"]).toBeUndefined();
+  });
+
   beforeEach(() => {
     fixtureRoot = mkdtempSync(path.join(tmpdir(), "helm-public-release-guard-"));
     writeFixture(

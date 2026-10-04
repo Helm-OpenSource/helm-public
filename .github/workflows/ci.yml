@@ -314,6 +314,11 @@ jobs:
       - name: Verify Stage1 + CAIO G0 governance against MySQL
         run: npm run test:caio-stage1:mysql
 
+      - name: Verify real CAIO HTTP owner closure on loopback
+        env:
+          HELM_CAIO_HTTP_MYSQL_ISOLATED: '1'
+        run: npm run test:caio-stage1:http:mysql
+
   caio-pro-v1-mysql:
     name: CAIO Pro V1 Synthetic Loop MySQL
     runs-on: ubuntu-latest
