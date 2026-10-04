@@ -76,7 +76,7 @@
     "test:caio-stage1:http:mysql": "node --test scripts/test-caio-http-mysql.test.mjs scripts/caio-http-child-lifecycle.test.mjs && node scripts/test-caio-http-mysql.mjs",
     "test:caio-stage1:mysql": "vitest run lib/stage1-owner-loop/stage1-owner-loop.mysql.test.ts lib/stage1-owner-loop/caio-initialization-gate-store.mysql.test.ts lib/caio-inference/judgement-decision-candidate.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
     "test:caio-pro-v1:mysql": "vitest run lib/stage1-owner-loop/caio-pro-v1-synthetic-loop.mysql.test.ts lib/stage1-owner-loop/caio-pro-completion-store.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
-    "test:caio-inference:mysql": "vitest run lib/caio-inference/job-store.service.mysql.test.ts lib/caio-inference/review-loop.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
+    "test:caio-inference:mysql": "vitest run lib/caio-inference/job-store.service.test.ts lib/caio-inference/job-store.service.mysql.test.ts lib/caio-inference/review-loop.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
     "test:spend-reservation:mysql": "vitest run lib/llm/spend-reservation-prisma-store.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
     "test:caio-access-gateway:mysql": "vitest run lib/caio-access-gateway/token-store.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
     "test:auth-verification-code:mysql": "vitest run features/auth/auth-verification-code-cas.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",

@@ -15,6 +15,7 @@ export const CAIO_INFERENCE_REJECTION_CODES = [
   "lease_expired",
   "claim_token_mismatch",
   "input_hash_mismatch",
+  "output_hash_mismatch",
   "malformed_output",
   "evidence_outside_input",
   "suggestion_kind_not_allowed",
