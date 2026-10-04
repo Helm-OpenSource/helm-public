@@ -243,7 +243,29 @@ export async function submitCaioInferenceJudgement(input: {
   });
   if (!job) return { status: "rejected", code: "claim_token_mismatch" };
   if (job.status === "completed") {
-    return { status: "replayed", judgementHash: job.layeredJudgementHash ?? "" };
+    if (!job.claimToken || job.claimToken !== input.claimToken) {
+      return { status: "rejected", code: "claim_token_mismatch" };
+    }
+    if (job.inputHash !== input.inputHash) {
+      return { status: "rejected", code: "input_hash_mismatch" };
+    }
+    const frozenInput = safeParseJson<CaioInferenceInput | null>(job.inputJson, null);
+    let frozenHash: string | null = null;
+    try {
+      if (frozenInput) frozenHash = computeCaioInferenceInputHash(frozenInput);
+    } catch {
+      // A damaged persisted input cannot authorize a completed replay.
+    }
+    if (!frozenInput || frozenHash !== job.inputHash || !Array.isArray(frozenInput.evidenceRefs)) {
+      return { status: "rejected", code: "input_hash_mismatch" };
+    }
+    const validation = validateCaioLayeredJudgement(input.output, new Set(frozenInput.evidenceRefs));
+    if (!validation.ok) return { status: "rejected", code: validation.code };
+    if (!/^sha256:[a-f0-9]{64}$/u.test(job.layeredJudgementHash ?? "") ||
+        validation.contentHash !== job.layeredJudgementHash) {
+      return { status: "rejected", code: "output_hash_mismatch" };
+    }
+    return { status: "replayed", judgementHash: validation.contentHash };
   }
   if (
     job.status !== "claimed" ||
