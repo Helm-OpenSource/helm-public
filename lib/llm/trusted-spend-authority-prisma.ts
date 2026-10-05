@@ -8,12 +8,16 @@ import type { SpendChargeQuote, ReserveSpendRecord } from "./spend-reservation";
 import { authorityDate, authorityHash, authorityRef, canonicalAuthorityJson, computeMaximumCharge,
   exactObject, monthAt, readSignedAuthority, refuse, type AuthorityEnvelope, type AuthorityKind } from "./trusted-spend-authority";
 
+import { verifyTrustedUsageInTransaction, type UsageRegistryConfig } from "./trusted-usage-evidence-prisma";
+
 type Tx = Prisma.TransactionClient;
 export type TrustedSpendRegistryConfig = {
   expectedPeriodPolicyVersion: string;
   /** Independently governed key-grant pins, NEVER accepted from a task/request.
    * Empty defaults refuse. Pins alone do not authenticate external provisioning. */
   trustedIssuerGrants: Readonly<Record<string, string>>;
+  /** No default attestor, task-supplied evidence or production root. */
+  usage?: UsageRegistryConfig;
 };
 type Workspace = WorkspaceSpendBudgetPolicyRow & { id: string; llmBudgetCurrency: string | null;
   llmBudgetPriceBookRef: string | null; llmBudgetFxPolicyRef: string | null };
@@ -30,6 +34,39 @@ export function issuerGrantHash(row: IssuerGrantRow): string {
 export type TrustedDispatchInput = { workspaceId: string; operationRef: string; attemptRef: string;
   provider: string; model: string; pricingVersion: string; maxInputTokens: number;
   maxOutputTokens: number; requestedMaxOutputTokens: number; leaseMs: number; dispatchLeaseExpiresAt?: Date };
+
+/** Same protected-record verifier for dispatch and terminal settlement. */
+export async function readTrustedSpendRecordInTransaction(tx: Tx, workspaceId: string,
+  ref: unknown, kind: AuthorityKind, config: TrustedSpendRegistryConfig, expectedHash?: unknown) {
+    const target = authorityRef(ref);
+    const [row] = await tx.$queryRaw<RecordRow[]>`
+      SELECT workspaceId, ref, kind, version, issuerGrantId, envelopeJson, signatureBase64, contentHash, revokedAt
+      FROM LLMSpendAuthorityRecord WHERE CAST(workspaceId AS BINARY)=CAST(${workspaceId} AS BINARY)
+       AND CAST(ref AS BINARY)=CAST(${target} AS BINARY) FOR SHARE`;
+    if (!row || row.workspaceId !== workspaceId || row.ref !== target || row.kind !== kind || row.revokedAt !== null) refuse("record_missing_or_revoked");
+    const [grant] = await tx.$queryRaw<IssuerGrantRow[]>`
+      SELECT id, workspaceId, issuerUserId, publicKeyPem, allowedKindsJson, sourceReceiptHash,
+        contentHash, validFrom, validUntil, revokedAt
+      FROM LLMSpendIssuerGrant WHERE CAST(id AS BINARY)=CAST(${row.issuerGrantId} AS BINARY) FOR SHARE`;
+    if (!grant || grant.id !== row.issuerGrantId || grant.workspaceId !== workspaceId || grant.revokedAt !== null ||
+        !/^sha256:[a-f0-9]{64}$/u.test(grant.sourceReceiptHash) ||
+        config.trustedIssuerGrants[grant.id] !== grant.contentHash || issuerGrantHash(grant) !== grant.contentHash) refuse("issuer_untrusted");
+    let kinds: unknown; try { kinds = JSON.parse(grant.allowedKindsJson); } catch { return refuse("issuer_purpose_invalid"); }
+    if (!Array.isArray(kinds) || canonicalAuthorityJson(kinds) !== grant.allowedKindsJson ||
+        kinds.length === 0 || new Set(kinds).size !== kinds.length ||
+        kinds.some((k) => !["period", "price", "fx", "budget"].includes(k)) || !kinds.includes(kind)) refuse("issuer_purpose_invalid");
+    const [actor] = await tx.$queryRaw<Array<{ userId: string }>>`
+      SELECT u.id AS userId FROM Membership m INNER JOIN User u ON CAST(u.id AS BINARY)=CAST(m.userId AS BINARY)
+      WHERE CAST(m.workspaceId AS BINARY)=CAST(${workspaceId} AS BINARY)
+      AND CAST(m.userId AS BINARY)=CAST(${grant.issuerUserId} AS BINARY)
+      AND CAST(m.role AS BINARY)=CAST('OWNER' AS BINARY) AND CAST(m.status AS BINARY)=CAST('ACTIVE' AS BINARY) FOR SHARE`;
+    if (!actor || actor.userId !== grant.issuerUserId) refuse("reviewer_inactive");
+    const envelope = readSignedAuthority(row.envelopeJson, row.signatureBase64, grant.publicKeyPem);
+    if (envelope.workspaceId !== workspaceId || envelope.ref !== target || envelope.kind !== kind ||
+        envelope.version !== row.version || envelope.issuerGrantId !== grant.id || envelope.approverId !== grant.issuerUserId ||
+        authorityHash(envelope) !== row.contentHash || (expectedHash !== undefined && expectedHash !== row.contentHash)) refuse("record_binding_invalid");
+    return { envelope, grant, hash: row.contentHash };
+}
 
 export async function resolveTrustedSpendInTransaction(tx: Tx, input: TrustedDispatchInput,
   config: TrustedSpendRegistryConfig): Promise<{ periodKey: string; periodPolicyVersion: string;
@@ -52,35 +89,9 @@ export async function resolveTrustedSpendInTransaction(tx: Tx, input: TrustedDis
   const policy = parsed.declaration;
   const checked: Array<{ envelope: AuthorityEnvelope; grant: IssuerGrantRow }> = [];
   const read = async (ref: unknown, kind: AuthorityKind, expectedHash?: unknown) => {
-    const target = authorityRef(ref);
-    const [row] = await tx.$queryRaw<RecordRow[]>`
-      SELECT workspaceId, ref, kind, version, issuerGrantId, envelopeJson, signatureBase64, contentHash, revokedAt
-      FROM LLMSpendAuthorityRecord WHERE CAST(workspaceId AS BINARY)=CAST(${input.workspaceId} AS BINARY)
-       AND CAST(ref AS BINARY)=CAST(${target} AS BINARY) FOR SHARE`;
-    if (!row || row.workspaceId !== input.workspaceId || row.ref !== target || row.kind !== kind || row.revokedAt !== null) refuse("record_missing_or_revoked");
-    const [grant] = await tx.$queryRaw<IssuerGrantRow[]>`
-      SELECT id, workspaceId, issuerUserId, publicKeyPem, allowedKindsJson, sourceReceiptHash,
-        contentHash, validFrom, validUntil, revokedAt
-      FROM LLMSpendIssuerGrant WHERE CAST(id AS BINARY)=CAST(${row.issuerGrantId} AS BINARY) FOR SHARE`;
-    if (!grant || grant.id !== row.issuerGrantId || grant.workspaceId !== input.workspaceId || grant.revokedAt !== null ||
-        !/^sha256:[a-f0-9]{64}$/u.test(grant.sourceReceiptHash) ||
-        config.trustedIssuerGrants[grant.id] !== grant.contentHash || issuerGrantHash(grant) !== grant.contentHash) refuse("issuer_untrusted");
-    let kinds: unknown; try { kinds = JSON.parse(grant.allowedKindsJson); } catch { return refuse("issuer_purpose_invalid"); }
-    if (!Array.isArray(kinds) || canonicalAuthorityJson(kinds) !== grant.allowedKindsJson ||
-        kinds.length === 0 || new Set(kinds).size !== kinds.length ||
-        kinds.some((k) => !["period", "price", "fx", "budget"].includes(k)) || !kinds.includes(kind)) refuse("issuer_purpose_invalid");
-    const [actor] = await tx.$queryRaw<Array<{ userId: string }>>`
-      SELECT u.id AS userId FROM Membership m INNER JOIN User u ON CAST(u.id AS BINARY)=CAST(m.userId AS BINARY)
-      WHERE CAST(m.workspaceId AS BINARY)=CAST(${input.workspaceId} AS BINARY)
-      AND CAST(m.userId AS BINARY)=CAST(${grant.issuerUserId} AS BINARY)
-      AND CAST(m.role AS BINARY)=CAST('OWNER' AS BINARY) AND CAST(m.status AS BINARY)=CAST('ACTIVE' AS BINARY) FOR SHARE`;
-    if (!actor || actor.userId !== grant.issuerUserId) refuse("reviewer_inactive");
-    const envelope = readSignedAuthority(row.envelopeJson, row.signatureBase64, grant.publicKeyPem);
-    if (envelope.workspaceId !== input.workspaceId || envelope.ref !== target || envelope.kind !== kind ||
-        envelope.version !== row.version || envelope.issuerGrantId !== grant.id || envelope.approverId !== grant.issuerUserId ||
-        authorityHash(envelope) !== row.contentHash || (expectedHash !== undefined && expectedHash !== row.contentHash)) refuse("record_binding_invalid");
-    checked.push({ envelope, grant });
-    return { envelope, hash: row.contentHash };
+    const result = await readTrustedSpendRecordInTransaction(tx, input.workspaceId, ref, kind, config, expectedHash);
+    checked.push({ envelope: result.envelope, grant: result.grant });
+    return result;
   };
   const approval = await read(policy.approvalRef, "budget");
   const budget = exactObject(approval.envelope.payload, ["configVersion", "mode", "limitMicros", "currency",
@@ -134,7 +145,8 @@ export async function reserveTrustedSpendInTransaction(tx: Tx, input: TrustedDis
  * a distinct provider/usage evidence authority exists. No adapter amount is trusted. */
 export function createRegisteredGovernedSpendAuthority(config: TrustedSpendRegistryConfig): GovernedSpendAuthority {
   const pinned: TrustedSpendRegistryConfig = { expectedPeriodPolicyVersion: config.expectedPeriodPolicyVersion,
-    trustedIssuerGrants: Object.freeze({ ...config.trustedIssuerGrants }) };
+    trustedIssuerGrants: Object.freeze({ ...config.trustedIssuerGrants }),
+    usage: config.usage ? { trustedAttestorGrants: Object.freeze({ ...config.usage.trustedAttestorGrants }) } : undefined };
   return {
     async resolveDispatch({ tx, workspaceId, decision, runtime, dispatchLeaseExpiresAt }) {
       const route = decision.routeSnapshot;
@@ -147,6 +159,40 @@ export function createRegisteredGovernedSpendAuthority(config: TrustedSpendRegis
         maxOutputTokens: route.maxOutputTokens, requestedMaxOutputTokens: decision.requestedMaxOutputTokens,
         leaseMs: 60_000, dispatchLeaseExpiresAt }, pinned);
     },
-    async verifyTerminal() { return refuse("trusted_usage_evidence_unavailable"); },
+    async verifyTerminal(input) {
+      if (!pinned.usage) return refuse("trusted_usage_evidence_unavailable");
+      const { evidence, grant } = await verifyTrustedUsageInTransaction(input, pinned.usage);
+      const price = await readTrustedSpendRecordInTransaction(input.tx, input.workspaceId,
+        input.reserved.priceBookRef, "price", pinned, input.reserved.priceBookHash);
+      const fx = input.reserved.fxSnapshotRef === null ? null : await readTrustedSpendRecordInTransaction(
+        input.tx, input.workspaceId, input.reserved.fxSnapshotRef, "fx", pinned, input.reserved.fxSnapshotHash);
+      const approval = await readTrustedSpendRecordInTransaction(input.tx, input.workspaceId,
+        input.reserved.policyApprovalRef, "budget", pinned);
+      const budget = exactObject(approval.envelope.payload, ["configVersion", "mode", "limitMicros", "currency", "updatedBy", "updatedAt", "periodRef", "periodHash", "priceRef", "priceHash", "fxRef", "fxHash"]);
+      const period = await readTrustedSpendRecordInTransaction(input.tx, input.workspaceId, budget.periodRef, "period", pinned, budget.periodHash);
+      const periodRule = exactObject(period.envelope.payload, ["algorithm", "timezone"]);
+      // Refresh the database clock after every authority row lock wait.
+      const [clock] = await input.tx.$queryRaw<Array<{ now: Date }>>`SELECT UTC_TIMESTAMP(3) AS now`;
+      const now = clock.now;
+      if (authorityDate(grant.validUntil) <= now || authorityDate(grant.validFrom) > now) refuse("usage_attestor_expired");
+      for (const r of [price, ...(fx ? [fx] : []), approval, period]) {
+        if (r.grant.validFrom > now || r.grant.validUntil <= now || authorityDate(r.envelope.validFrom) > now ||
+            authorityDate(r.envelope.validUntil) <= now) refuse("authority_expired_or_future");
+      }
+      const route = input.decision.routeSnapshot!;
+      const maximum = computeMaximumCharge(price.envelope.payload, fx?.envelope.payload ?? null,
+        BigInt(route.maxInputTokens), BigInt(input.decision.requestedMaxOutputTokens));
+      if (price.envelope.version !== input.pricingVersion || price.envelope.payload.provider !== grant.provider ||
+          price.envelope.payload.model !== grant.model || price.envelope.payload.sku !== grant.sku ||
+          budget.priceRef !== input.reserved.priceBookRef || budget.priceHash !== input.reserved.priceBookHash ||
+          budget.fxRef !== input.reserved.fxSnapshotRef || budget.fxHash !== input.reserved.fxSnapshotHash || budget.currency !== "USD" ||
+          period.envelope.version !== input.reserved.periodPolicyVersion || periodRule.algorithm !== "calendar-month-v1" ||
+          typeof periodRule.timezone !== "string" || maximum !== input.reserved.maximumChargeMicros ||
+          input.reserved.quoteHash !== authorityHash({ operationRef: input.decision.decisionId, attemptRef: input.decision.decisionId,
+            maximumChargeMicros: String(maximum), periodKey: input.reserved.periodKey, approvalHash: approval.hash,
+            priceHash: price.hash, fxHash: fx?.hash ?? null })) refuse("usage_price_binding_invalid");
+      return computeMaximumCharge(price.envelope.payload, fx?.envelope.payload ?? null,
+        BigInt(evidence.promptTokens), BigInt(evidence.completionTokens));
+    },
   };
 }

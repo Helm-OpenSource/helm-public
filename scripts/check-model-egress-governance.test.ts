@@ -98,6 +98,12 @@ describe("model egress governance boundary guard", () => {
     );
   });
 
+  it("rejects task-side usage invoices and protected grant mutations", () => {
+    withFixture({ "lib/rogue/invoice.ts": "await db.lLMTrustedUsageEvidence.create({data});\nawait db.$executeRaw`INSERT INTO LLMUsageAttestorGrant(id) VALUES ('forged')`;" }, (root) => {
+      expect(scanModelEgressDirectWrites(root).filter((v) => v.rule === "MEG-USAGE-IMMUTABLE")).toHaveLength(2);
+    });
+  });
+
   it("rejects direct creates, createMany and raw inserts", () => {
     withFixture(
       {
@@ -193,6 +199,7 @@ describe("model egress governance boundary guard", () => {
           scripts: {
             "test:model-egress:mysql":
               "vitest run lib/llm/model-egress-store.mysql.test.ts",
+            "test:trusted-usage-evidence:mysql": "TRUSTED_USAGE_MYSQL_REQUIRED=1 vitest run lib/llm/trusted-usage-evidence.test.ts lib/llm/model-egress-store.mysql.test.ts",
           },
         }),
         ".github/workflows/ci.yml": [
@@ -217,7 +224,8 @@ describe("model egress governance boundary guard", () => {
           "          GRANT SELECT, UPDATE(updatedAt)",
           "          helm-c4-root-password",
           "      - run: npx tsx prisma/setup-db.ts prepare",
-          "      - run: npm run test:model-egress:mysql",
+          "      - run: npm run test:trusted-usage-evidence:mysql",
+          "      - run: echo LLM_USAGE_COLLECTOR_DATABASE_URL= usage_collector LLMTrustedUsageEvidence",
           "      - name: Verify signed spend authority against MySQL",
           "        env:",
           "          TRUSTED_SPEND_MYSQL_CI_CONTAINER: synthetic-owned-container",

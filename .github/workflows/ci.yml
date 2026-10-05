@@ -452,10 +452,12 @@ jobs:
           root_password="$(openssl rand -hex 24)"
           c4_password="$(openssl rand -hex 24)"
           c5_writer_password="$(openssl rand -hex 24)"
+          usage_password="$(openssl rand -hex 24)"
           echo "::add-mask::${app_password}"
           echo "::add-mask::${root_password}"
           echo "::add-mask::${c4_password}"
           echo "::add-mask::${c5_writer_password}"
+          echo "::add-mask::${usage_password}"
           bootstrap_sql="$(mktemp)"
           chmod 600 "${bootstrap_sql}"
           {
@@ -465,6 +467,7 @@ jobs:
               "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
             printf "CREATE USER 'c4_runtime'@'%%' IDENTIFIED BY '%s';\n" "${c4_password}"
             printf "CREATE USER 'c5_writer'@'%%' IDENTIFIED BY '%s';\n" "${c5_writer_password}"
+            printf "CREATE USER 'usage_collector'@'%%' IDENTIFIED BY '%s';\n" "${usage_password}"
             # Migrations create append-only triggers, which the server refuses
             # under binary logging from a user without SUPER (error 1419).
             # Measured on the pinned mysql:8.4 image: SET_USER_ID no longer
@@ -509,6 +512,11 @@ jobs:
           {
             printf 'ORDINARY_PAID_WRITER_DATABASE_URL=%s\n' "${url}"
           } >>"${GITHUB_ENV}"
+
+          credential="usage_collector:${usage_password}"
+          url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
+          [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
+          printf 'LLM_USAGE_COLLECTOR_DATABASE_URL=%s\n' "${url}" >>"${GITHUB_ENV}"
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
@@ -573,6 +581,17 @@ jobs:
             printf "GRANT SELECT (id,workspaceId,updatedAt,title,status,opportunityId) ON \`%s\`.Meeting TO 'c5_writer'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
             printf "GRANT SELECT (id,workspaceId,updatedAt,meetingId,noteKind,summary,liveTranscript,keyDecisions,confirmations) ON \`%s\`.MeetingNote TO 'c5_writer'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
             printf "GRANT SELECT (id,workspaceId,updatedAt,userId,objectType,objectId,actionType,recommendationPayload,explanation) ON \`%s\`.RecommendationLog TO 'c5_writer'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
+            # Independent collector can observe metadata and INSERT evidence,
+            # never mutate claim/ledger or provision any grant/price.
+            for table in ModelRouteDecision LLMSpendLedgerEntry LLMUsageAttestorGrant LLMSpendAuthorityRecord LLMSpendIssuerGrant; do
+              printf "GRANT SELECT ON \`%s\`.\`%s\` TO 'usage_collector'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}" "${table}"
+            done
+            printf "GRANT SELECT(id) ON \`%s\`.User TO 'usage_collector'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
+            printf "GRANT SELECT(workspaceId,userId,role,status) ON \`%s\`.Membership TO 'usage_collector'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
+            printf "GRANT SELECT, INSERT ON \`%s\`.LLMTrustedUsageEvidence TO 'usage_collector'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
+            for table in LLMUsageAttestorGrant LLMTrustedUsageEvidence; do
+              printf "GRANT SELECT ON \`%s\`.\`%s\` TO 'c4_runtime'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}" "${table}"
+            done
           } >"${acl_sql}"
           MYSQL_PWD="${root_password}" docker exec -e MYSQL_PWD -i "${HELM_CI_MYSQL_CONTAINER}" \
             mysql --host=127.0.0.1 --protocol=tcp --user=root --batch <"${acl_sql}"
@@ -585,7 +604,7 @@ jobs:
       - name: Verify governed model egress against MySQL
         env:
           HELM_CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
-        run: npm run test:model-egress:mysql
+        run: npm run test:trusted-usage-evidence:mysql
 
       - name: Verify persisted ordinary paid operation against MySQL
         env:

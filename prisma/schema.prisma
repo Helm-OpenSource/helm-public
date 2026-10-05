@@ -1566,6 +1566,8 @@ model Workspace {
   tenantModelRoutePolicies                 TenantModelRoutePolicy[]
   tenantModelRoutePolicyHeads              TenantModelRoutePolicyHead[]
   modelRouteDecisions                      ModelRouteDecision[]
+  usageAttestorGrants                       LLMUsageAttestorGrant[]
+  trustedUsageEvidence                     LLMTrustedUsageEvidence[]
   modelEgressReceipts                      ModelEgressReceipt[]
   auditLogs                                AuditLog[]
   emailThreads                             EmailThread[]
@@ -4377,6 +4379,7 @@ model ModelRouteDecision {
   parentDecision                 ModelRouteDecision?              @relation("ModelRouteDecisionFallbackChain", fields: [parentDecisionId, workspaceId], references: [id, workspaceId], onDelete: NoAction, onUpdate: NoAction)
   fallbackDecisions              ModelRouteDecision[]             @relation("ModelRouteDecisionFallbackChain")
   egressReceipts                 ModelEgressReceipt[]
+  trustedUsageEvidence           LLMTrustedUsageEvidence[]
 
   @@unique([id, workspaceId])
   @@unique([workspaceId, requestKey], map: "ModelRouteDecision_workspace_request_key")
@@ -7525,4 +7528,35 @@ model LLMSpendAuthorityRecord {
   createdAt        DateTime  @default(now()) @db.DateTime(3)
   @@unique([workspaceId, ref])
   @@index([issuerGrantId])
+}
+
+// Metadata-only, separately provisioned roots; no default issuance endpoint.
+model LLMUsageAttestorGrant {
+  id String @id @db.VarChar(191)
+  workspaceId String @db.VarChar(191)
+  envelopeJson String @db.Text
+  contentHash String @db.VarChar(71)
+  revokedAt DateTime? @db.DateTime(3)
+  createdAt DateTime @default(now()) @db.DateTime(3)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "LLMUsageAttestorGrant_workspace_fk")
+  evidence LLMTrustedUsageEvidence[]
+  @@unique([workspaceId, id], map: "LLMUsageAttestorGrant_scope_key")
+}
+model LLMTrustedUsageEvidence {
+  id String @id @db.VarChar(191)
+  workspaceId String @db.VarChar(191)
+  decisionId String @db.VarChar(191)
+  providerIdempotencyKey String @db.VarChar(191)
+  grantId String @db.VarChar(191)
+  envelopeJson String @db.Text
+  contentHash String @db.VarChar(71)
+  signatureBase64 String @db.VarChar(88)
+  promptTokens BigInt
+  completionTokens BigInt
+  createdAt DateTime @default(now()) @db.DateTime(3)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "LLMTrustedUsageEvidence_workspace_fk")
+  decision ModelRouteDecision @relation(fields: [decisionId, workspaceId], references: [id, workspaceId], onDelete: Restrict, onUpdate: Restrict, map: "LLMTrustedUsageEvidence_decision_fk")
+  grant LLMUsageAttestorGrant @relation(fields: [workspaceId, grantId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict, map: "LLMTrustedUsageEvidence_grant_fk")
+  @@unique([workspaceId, providerIdempotencyKey], map: "LLMTrustedUsageEvidence_attempt_key")
+  @@unique([workspaceId, decisionId], map: "LLMTrustedUsageEvidence_decision_key")
 }
