@@ -1,5 +1,7 @@
 "use server";
 
+import { resolveTrustedPublicOrigin } from "@/lib/auth/trusted-public-origin";
+
 import { ActorType, ParticipantPortalAccessStatus } from "@prisma/client";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
@@ -78,14 +80,8 @@ const participantProfileSchema = z.object({
   locale: z.enum(supportedUiLocales).optional(),
 });
 
-async function buildAbsolutePortalUrl(pathname: string) {
-  const headerStore = await headers();
-  const host = headerStore.get("x-forwarded-host") ?? headerStore.get("host") ?? "localhost:3000";
-  const protocol = headerStore.get("x-forwarded-proto") ?? (host.includes("localhost") ? "http" : "https");
-  return `${protocol}://${host}${pathname}`;
-}
-
 export async function issueParticipantPortalAccessAction(input: z.infer<typeof participantInviteSchema>) {
+  const publicOrigin = resolveTrustedPublicOrigin(process.env, await headers());
   const user = await requireCurrentUser();
   const workspace = await getCurrentWorkspace();
   const membership = await getCurrentMembership();
@@ -191,7 +187,7 @@ export async function issueParticipantPortalAccessAction(input: z.infer<typeof p
     return {
       ok: true,
       accessId: access.id,
-      inviteUrl: await buildAbsolutePortalUrl(`/portal/access/${inviteToken}`),
+      inviteUrl: new URL(`/portal/access/${inviteToken}`, publicOrigin).toString(),
       issuanceState,
       capabilityDecisionTrace,
     };

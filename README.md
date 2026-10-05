@@ -522,3 +522,5 @@ npm run release:check
 | **☁️ Helm Cloud（托管版）** | 可选，不替代开源；适合不想自部署的交付商 / 客户 |
 
 > **目标：帮交付工程师把客户业务落地里的判断、证据、复核、边界、交付包做成可 fork 的工程结构。**
+
+生产环境的邀请、成员登录链接与 demo 跳转要求有效 HTTPS `APP_URL`；配置错误会在写入前拒绝。参见 [可信公共入口 / Trusted public origin](docs/security/TRUSTED_PUBLIC_ORIGIN.md)。 Production invitation, member-login and demo links require a valid HTTPS `APP_URL` and fail before writes when it is invalid.

@@ -1,5 +1,7 @@
 "use server";
 
+import { resolveTrustedPublicOrigin } from "@/lib/auth/trusted-public-origin";
+
 import {
   ActorType,
   CustomEngagementType,
@@ -129,13 +131,6 @@ function buildApplicationRegistryNotes(input: {
   ]
     .filter(Boolean)
     .join("\n");
-}
-
-async function buildAbsolutePortalUrl(pathname: string) {
-  const headerStore = await headers();
-  const host = headerStore.get("x-forwarded-host") ?? headerStore.get("host") ?? "localhost:3000";
-  const protocol = headerStore.get("x-forwarded-proto") ?? (host.includes("localhost") ? "http" : "https");
-  return `${protocol}://${host}${pathname}`;
 }
 
 async function ensureProgramApplicationBeneficiary(input: {
@@ -541,6 +536,7 @@ export async function reviewProgramApplicationAction(
 export async function issueProgramApplicationInviteAction(
   input: z.infer<typeof issueProgramApplicationInviteSchema>,
 ) {
+  const publicOrigin = resolveTrustedPublicOrigin(process.env, await headers());
   const user = await requireCurrentUser();
   const workspace = await getCurrentWorkspace();
   const membership = await getCurrentMembership();
@@ -760,7 +756,7 @@ export async function issueProgramApplicationInviteAction(
   return {
     ok: true,
     accessId: access.id,
-    inviteUrl: await buildAbsolutePortalUrl(`/portal/access/${inviteToken}`),
+    inviteUrl: new URL(`/portal/access/${inviteToken}`, publicOrigin).toString(),
     issuanceState,
     capabilityDecisionTrace,
   };
