@@ -1,5 +1,7 @@
 "use server";
 
+import { resolveTrustedPublicOrigin } from "@/lib/auth/trusted-public-origin";
+
 import {
   ActorType,
   ConnectorProvider,
@@ -567,29 +569,6 @@ function slugifyRegistryKey(value: string, fallback: string) {
   );
 }
 
-async function resolveWorkspaceLoginEntryUrl() {
-  const appUrl = process.env.APP_URL?.trim();
-  if (appUrl) {
-    try {
-      return new URL("/login", appUrl).toString();
-    } catch {
-      // Fall through to header-derived origin.
-    }
-  }
-
-  const headerStore = await headers();
-  const host = headerStore.get("x-forwarded-host") ?? headerStore.get("host");
-  if (!host) {
-    return "http://localhost:3000/login";
-  }
-
-  const protocol =
-    headerStore.get("x-forwarded-proto") ??
-    (host.includes("localhost") || host.startsWith("127.0.0.1") ? "http" : "https");
-
-  return `${protocol}://${host}/login`;
-}
-
 function buildDingTalkMemberInviteUrl(input: {
   loginUrl: string;
   workspaceId: string;
@@ -1072,6 +1051,7 @@ export async function createOrganizationAction(input: z.infer<typeof organizatio
 }
 
 export async function addOrganizationMemberAction(input: z.infer<typeof membershipSchema>) {
+  const publicOrigin = resolveTrustedPublicOrigin(process.env, await headers());
   const user = await requireCurrentUser();
   const workspace = await getCurrentWorkspace();
   const membership = await getCurrentMembership();
@@ -1255,7 +1235,7 @@ export async function addOrganizationMemberAction(input: z.infer<typeof membersh
     | undefined;
 
   if (savedMembership.status === MembershipStatus.INVITED) {
-    const loginUrl = await resolveWorkspaceLoginEntryUrl();
+    const loginUrl = new URL("/login", publicOrigin).toString();
     const inviteUrl = buildDingTalkMemberInviteUrl({
       loginUrl,
       workspaceId: workspace.id,

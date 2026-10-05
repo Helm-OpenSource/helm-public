@@ -157,3 +157,5 @@ not in `helm-public`.
 - [CAIO governed read extension](product/CAIO_GOVERNED_READ_EXTENSION.md) — explicit, default-off read composition; deployment identity and source ports required.
 
 LLM 预算交付请核对 [签名金额元数据注册与原子预约边界](operations/LLM_SPEND_RESERVATION_CONTRACT.md)：默认无发行记录且收费权威未启用；本地合成验证不证明真实定价、用量或生产限额。
+
+- [可信公共入口 / Trusted public origin](security/TRUSTED_PUBLIC_ORIGIN.md) — 邀请与 demo 链接的 canonical `APP_URL` 配置及失败关闭行为 / Canonical origin configuration and fail-closed invitation/demo links.

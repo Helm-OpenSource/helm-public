@@ -1,3 +1,4 @@
+import { resolveTrustedPublicOrigin } from "@/lib/auth/trusted-public-origin";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { MembershipStatus } from "@prisma/client";
@@ -28,53 +29,29 @@ function resolveDemoMode(value: FormDataEntryValue | string | null) {
   return null;
 }
 
-function demoEntryUrl(request: NextRequest, mode: DemoMode | null) {
+function demoEntryUrl(origin: string, mode: DemoMode | null) {
   const targetMode = mode ?? "sales";
 
   return new URL(
     `/demo?mode=${targetMode}#demo-workspace-${targetMode}`,
-    request.url,
+    origin,
   );
 }
 
-function resolveRedirectOrigin(request: NextRequest) {
-  const directHost = request.headers.get("host");
-  const forwardedHost = request.headers.get("x-forwarded-host");
-  const localDirectHost =
-    directHost?.startsWith("localhost") ||
-    directHost?.startsWith("127.") ||
-    directHost?.startsWith("[::1]");
-  const host = localDirectHost
-    ? directHost
-    : (forwardedHost ?? directHost);
-
-  if (!host) {
-    return request.url;
-  }
-
-  const protocol =
-    request.headers.get("x-forwarded-proto") ??
-    (host.startsWith("localhost") ||
-    host.startsWith("127.") ||
-    host.startsWith("[::1]")
-      ? "http"
-      : "https");
-
-  return `${protocol}://${host}`;
-}
-
 export async function GET(request: NextRequest) {
+  const publicOrigin = resolveTrustedPublicOrigin(process.env, request.headers);
   const mode = resolveDemoMode(request.nextUrl.searchParams.get("mode"));
 
-  return NextResponse.redirect(demoEntryUrl(request, mode));
+  return NextResponse.redirect(demoEntryUrl(publicOrigin, mode));
 }
 
 export async function POST(request: NextRequest) {
+  const publicOrigin = resolveTrustedPublicOrigin(process.env, request.headers);
   const formData = await request.formData();
   const mode = resolveDemoMode(formData.get("mode"));
 
   if (!mode) {
-    return NextResponse.redirect(demoEntryUrl(request, null));
+    return NextResponse.redirect(demoEntryUrl(publicOrigin, null));
   }
 
   const cookieStore = await cookies();
@@ -100,7 +77,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (!user || user.memberships.length === 0) {
-    return NextResponse.redirect(demoEntryUrl(request, mode));
+    return NextResponse.redirect(demoEntryUrl(publicOrigin, mode));
   }
 
   const activeWorkspaceId = cookieStore.get(ACTIVE_WORKSPACE_COOKIE)?.value;
@@ -110,7 +87,7 @@ export async function POST(request: NextRequest) {
   );
 
   if (!activeMembership) {
-    return NextResponse.redirect(demoEntryUrl(request, mode));
+    return NextResponse.redirect(demoEntryUrl(publicOrigin, mode));
   }
 
   await recordUserLastLogin(user.id);
@@ -142,7 +119,7 @@ export async function POST(request: NextRequest) {
   );
 
   return NextResponse.redirect(
-    new URL(targetPath, resolveRedirectOrigin(request)),
+    new URL(targetPath, publicOrigin),
     303,
   );
 }

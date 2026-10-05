@@ -80,10 +80,9 @@ describe("demo entry shell", () => {
     expect(demoStartSource).toContain("export async function POST");
     expect(demoStartSource).toContain("resolveDemoMode(formData.get(\"mode\"))");
     expect(demoStartSource).toContain("createSession({");
-    expect(demoStartSource).toContain("function resolveRedirectOrigin");
-    expect(demoStartSource).toContain('request.headers.get("host")');
+    expect(demoStartSource).toContain("resolveTrustedPublicOrigin(process.env, request.headers)");
     expect(demoStartSource).toContain(
-      "new URL(targetPath, resolveRedirectOrigin(request))",
+      "new URL(targetPath, publicOrigin)",
     );
     expect(demoStartSource).toContain("sourcePage: \"/demo/start\"");
   });
