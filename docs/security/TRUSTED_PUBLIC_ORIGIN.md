@@ -1,3 +1,10 @@
+---
+status: active
+owner: Core maintainers
+created: 2026-10-05
+review_after: 2027-01-05
+---
+
 # 可信公共入口 / Trusted public origin
 
 门户邀请、成员登录链接和 demo 重定向使用 `APP_URL` 的 canonical origin。生产环境必须显式配置 HTTPS origin；不得带用户名、口令、路径（末尾 `/` 除外）、查询或片段。配置缺失或无效会返回固定 `public_origin_invalid` 错误，在创建令牌、写成员或创建 demo 会话前停止，不回退到 Host / X-Forwarded-* 请求头。
