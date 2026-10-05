@@ -42,6 +42,26 @@
         "resolveExtensionApiRoute",
         "listRegisteredExtensionApiRoutes"
       ]
+    },
+    {
+      "interfaceKey": "resource-reservation-contract",
+      "sourceRef": "lib/resource-reservation/contract.ts",
+      "symbols": [
+        "RESOURCE_RESERVATION_VERSION",
+        "ResourceRequirement",
+        "ReserveRequest",
+        "ReleaseRequest",
+        "ReservationRefusal",
+        "ReserveOutcome",
+        "ReleaseOutcome",
+        "AtomicResourceReservationPort",
+        "normalizeResourceVector",
+        "resourceVectorDigest",
+        "normalizeReserveRequest",
+        "normalizeReleaseRequest",
+        "ReserveRequestInput",
+        "validateReserveRequest"
+      ]
     }
   ],
   "guardrails": [
