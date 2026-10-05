@@ -524,3 +524,7 @@ npm run release:check
 > **目标：帮交付工程师把客户业务落地里的判断、证据、复核、边界、交付包做成可 fork 的工程结构。**
 
 生产环境的邀请、成员登录链接与 demo 跳转要求有效 HTTPS `APP_URL`；配置错误会在写入前拒绝。参见 [可信公共入口 / Trusted public origin](docs/security/TRUSTED_PUBLIC_ORIGIN.md)。 Production invitation, member-login and demo links require a valid HTTPS `APP_URL` and fail before writes when it is invalid.
+
+通用资源预留协议见 [Core SDK 合同](docs/contracts/helm-core-sdk.contract.json)：当前提供严格向量规范化与原子存储端口定义，存储、认证和生产接入另行实现。
+
+The resource reservation SDK contract supplies strict vector normalization and atomic store interfaces; persistence, authentication and production integration remain separate.

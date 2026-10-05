@@ -159,3 +159,7 @@ not in `helm-public`.
 LLM 预算交付请核对 [签名金额元数据注册与原子预约边界](operations/LLM_SPEND_RESERVATION_CONTRACT.md)：默认无发行记录且收费权威未启用；本地合成验证不证明真实定价、用量或生产限额。
 
 - [可信公共入口 / Trusted public origin](security/TRUSTED_PUBLIC_ORIGIN.md) — 邀请与 demo 链接的 canonical `APP_URL` 配置及失败关闭行为 / Canonical origin configuration and fail-closed invitation/demo links.
+
+通用资源预留的纯协议见 [Core SDK 合同](contracts/helm-core-sdk.contract.json) 中 `resource-reservation-contract`；仅规范化与存储端口义务，不提供数据库原子性、身份认证或生产准入。
+
+The resource reservation SDK contract defines canonical demand and atomic store obligations only; it supplies no database atomicity, identity authentication or runtime admission.
