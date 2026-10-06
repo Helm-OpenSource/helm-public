@@ -30,3 +30,13 @@ npm run check:model-egress-governance
 required `Model Egress MySQL` job 使用空库完整迁移、不同合成账号及真实 loopback HTTP，执行全部原 MySQL cases 和新的纯验证；缺 required 配置失败，不用 skip 证明阳性。本机只准自有 Unix socket 私有库或该 CI service；禁止生产 DSN/客户值。没有真实 provider/SKU/部署/密钥/安装证据，生产资格始终 unknown。
 
 迁移 `20261006090000_llm_trusted_usage_evidence` 追加两个空表，签名单位为 signed BIGINT 并有显式范围/JSON witness CHECK；UPDATE/DELETE 被触发器拒绝。收回此 opt-in 组合可恢复旧关闭路径；不能 DROP 非空证据、补零、移除旧账本或修改审计历史。
+
+## 版本化启动屏障 / Versioned startup barrier
+
+`instrumentation.register()` 通过固定 Core `server-bootstrap-binding.ts` 准入 slot 调用通用私有 aggregator。旧 `registerAllPacks():void` 注册保持同步；新 `helm.server-bootstrap/v1` ABI 分别声明 `serverBootstrapVersion`、`serverBootstrapMode` 和 `registerServerBootstrap():Promise<void>`。当前公开 slot 为 `legacy-optional`，旧缺失 aggregator 仍可 Core-only。版本化 optional 只接受 disabled；required 不能由模板、env 或请求自行选择。源树、部署身份、支付 authority 必须独立验证。
+
+启动缓存跨 Next server bundles 在同一进程共享：成功或失败都不重试；slot policy 不同则拒绝。required 失败在原 crons/DB-derived spend observer 导入前抛出，不降级 Core-only。10秒超时只拒绝启动，不取消已经调用的异步 initializer；晚完成仍可能产生自身副作用，但不能把缓存拒绝转成成功。未来真实 required 安装需独立的取消/安装承诺合同和收费来源根，本片不发行它们。Next 宿主可保留进程并对请求返回500，进程存活不等于 readiness。
+
+`npm run test:server-bootstrap` 是 required Linux `Test` job 的真实 Next build/start 目标，使用 reserved 合成贡献、实际 registry/instrumentation/transitive source，以及实际 Prisma 构造计数与禁止连接的测试观察器。它不证明整个应用无 Prisma，不安装收费组合、不调用 provider 或数据库。生产价格、SKU、用途、预算及凭据仍 unknown。
+
+The fixed Core slot controls source admission only. Legacy registration remains compatible; versioned initialization is awaited once per process. Required refusal is sticky and precedes downstream startup. Timeout cannot cancel an initializer already invoked; future paid installation needs an independent cancellation/commit contract. Synthetic Next evidence is neither payment approval nor production readiness.

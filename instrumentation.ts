@@ -1,4 +1,29 @@
 import { isDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
+import { serverBootstrapBinding } from "@/lib/runtime/server-bootstrap-binding";
+import { createServerBootstrapInitializer } from "@/lib/runtime/server-bootstrap";
+
+const packBootstrapPath = ["@/extensions", "pack-bootstrap"].join("/");
+// Next may evaluate instrumentation in more than one server bundle. Share the
+// initializer within this process, as the contribution registry already does.
+// Deployment must independently verify the installed source root; this
+// fingerprint identifies the source admission policy, not file authenticity.
+declare global {
+  var __helmServerBootstrapAdmission: Readonly<{
+    policy: string;
+    initialize: ReturnType<typeof createServerBootstrapInitializer>;
+  }> | undefined;
+}
+const policy = JSON.stringify(serverBootstrapBinding);
+if (globalThis.__helmServerBootstrapAdmission?.policy !== undefined &&
+    globalThis.__helmServerBootstrapAdmission.policy !== policy) {
+  throw new Error("server_bootstrap_binding_refused");
+}
+const admission = globalThis.__helmServerBootstrapAdmission ??= Object.freeze({
+  policy,
+  initialize: createServerBootstrapInitializer(serverBootstrapBinding,
+    () => import(packBootstrapPath)),
+});
+const initializeServerBootstrap = admission.initialize;
 
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") {
@@ -14,18 +39,11 @@ export async function register() {
   // omits it. Keep the import path non-literal so public typecheck/build does
   // not require the private bootstrap file; runtime absence still degrades to
   // Core-only behavior. That degradation is intentional.
-  try {
-    const packBootstrapPath = ["@/extensions", "pack-bootstrap"].join("/");
-    const { registerAllPacks } = (await import(packBootstrapPath)) as {
-      registerAllPacks: () => void;
-    };
-    registerAllPacks();
-    logInstrumentationInfo("registered pack contributions");
-  } catch (err) {
-    logInstrumentationInfo("no pack bootstrap present; running Core-only", {
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
+  // Versioned initialization is awaited before downstream startup. Required
+  // failure propagates; it must never become a Core-only success. The fixed
+  // source slot cannot be selected by request data or environment variables.
+  const bootstrap = await initializeServerBootstrap();
+  logInstrumentationInfo("server bootstrap admission", bootstrap);
 
   const { startEngineeringDeliveryReviewCron } = await import(
     "@/lib/reports/engineering-delivery-review-cron"
