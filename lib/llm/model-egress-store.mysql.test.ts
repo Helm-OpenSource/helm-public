@@ -1,8 +1,11 @@
+import { createServer } from "node:http";
 import { execFileSync } from "node:child_process";
 import { lstatSync, statSync } from "node:fs";
 import { dirname, isAbsolute } from "node:path";
 import { generateKeyPairSync, sign } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
+import { createGovernedOrdinaryHttpAdapter } from "./governed-ordinary-http-adapter.service";
+import { USAGE_SOURCE } from "./trusted-usage-evidence";
 import { authorityHash, canonicalAuthorityJson } from "./trusted-spend-authority";
 import { createRegisteredGovernedSpendAuthority, issuerGrantHash } from "./trusted-spend-authority-prisma";
 import {
@@ -71,6 +74,26 @@ const integrationDatabaseUrl =
   process.env.MODEL_EGRESS_STORE_DATABASE_URL;
 const confirmedIntegrationDatabaseName =
   process.env.MODEL_EGRESS_STORE_TEST_DATABASE_NAME;
+function assertTrustedUsageTestTargets(): void {
+  if (!confirmedIntegrationDatabaseName?.startsWith("helm_caio_p1d_") || process.env.DATABASE_URL !== integrationDatabaseUrl) throw new Error("trusted_usage_mysql_target_refused");
+  for (const name of ["DATABASE_URL", "ORDINARY_PAID_WRITER_DATABASE_URL", "MODEL_EGRESS_RUNTIME_DATABASE_URL", "LLM_USAGE_COLLECTOR_DATABASE_URL"]) {
+    const value = process.env[name]; if (!value) throw new Error("trusted_usage_split_roles_required");
+    let url: URL; try { url = new URL(value); } catch { throw new Error("trusted_usage_mysql_target_refused"); }
+    const socket = url.searchParams.get("socket");
+    if (url.protocol !== "mysql:" || decodeURIComponent(url.pathname.slice(1)) !== confirmedIntegrationDatabaseName ||
+        !["127.0.0.1", "localhost"].includes(url.hostname)) throw new Error("trusted_usage_mysql_target_refused");
+    if (socket) {
+      if (!isAbsolute(socket) || !lstatSync(socket).isSocket() || lstatSync(socket).uid !== process.getuid?.() ||
+          statSync(dirname(socket)).uid !== process.getuid?.() || (statSync(dirname(socket)).mode & 0o077) !== 0) throw new Error("trusted_usage_socket_refused");
+    } else if (process.env.GITHUB_ACTIONS !== "true" || process.env.HELM_CI_MYSQL_DATABASE !== "helm_caio_p1d_ci" ||
+        confirmedIntegrationDatabaseName !== "helm_caio_p1d_ci" || url.hostname !== "127.0.0.1" || url.port !== "3306" ||
+        !/^[a-f0-9]{12,64}$/u.test(process.env.HELM_CI_MYSQL_CONTAINER ?? "")) throw new Error("trusted_usage_ci_container_required");
+  }
+}
+if (process.env.TRUSTED_USAGE_MYSQL_REQUIRED === "1") {
+  if (!integrationDatabaseUrl) throw new Error("trusted_usage_isolated_mysql_required");
+  assertTrustedUsageTestTargets(); // Before fixtures construct a client or run SQL.
+}
 const describeMysql = integrationDatabaseUrl
   ? describe.sequential
   : describe.skip;
@@ -253,6 +276,7 @@ function readiness(input: {
   target: TenantModelRoute;
   checkedAt: Date;
   expiresAt: Date;
+  endpointFingerprint?: string;
 }): ProviderAdapterReadinessReceipt {
   const candidate: ProviderAdapterReadinessReceipt = {
     schemaVersion: "helm.provider-adapter-readiness-receipt/v1",
@@ -269,7 +293,7 @@ function readiness(input: {
     deploymentForm: input.target.deploymentForm,
     jurisdiction: input.target.jurisdiction,
     region: input.target.region,
-    endpointFingerprint: HASH_C,
+    endpointFingerprint: input.endpointFingerprint ?? HASH_C,
     credentialRef: input.target.credentialRef,
     adapterRegistered: true,
     credentialConfigured: true,
@@ -352,6 +376,8 @@ describeMysql("model egress store with an isolated MySQL database", () => {
 
   async function initializeFixture(fixtureSuffix = suffix, options: {
     primaryMaxOutputTokens?: number;
+    primaryMaxConcurrency?: number;
+    endpointFingerprint?: string;
   } = {}) {
     assertIsolatedDatabaseTarget();
     const now = new Date();
@@ -465,12 +491,14 @@ describeMysql("model egress store with an isolated MySQL database", () => {
       fallbackRouteIds: [fallbackRouteId],
       ...(options.primaryMaxOutputTokens
         ? { maxOutputTokens: options.primaryMaxOutputTokens } : {}),
+      ...(options.primaryMaxConcurrency ? { maxConcurrency: options.primaryMaxConcurrency } : {}),
     });
     const primaryReadiness = readiness({
       workspaceId,
       target: primaryReadinessBase,
       checkedAt: new Date(now.getTime() - 60_000),
       expiresAt: new Date(now.getTime() + 86_400_000),
+      endpointFingerprint: options.endpointFingerprint,
     });
     primaryRoute = {
       ...primaryReadinessBase,
@@ -492,6 +520,7 @@ describeMysql("model egress store with an isolated MySQL database", () => {
       target: fallbackReadinessBase,
       checkedAt: new Date(now.getTime() - 60_000),
       expiresAt: new Date(now.getTime() + 86_400_000),
+      endpointFingerprint: options.endpointFingerprint,
     });
     fallbackRoute = {
       ...fallbackReadinessBase,
@@ -2522,7 +2551,7 @@ describeMysql("model egress store with an isolated MySQL database", () => {
     return target;
   }
 
-  async function provisionC4(label: string) {
+  async function provisionC4(label: string, finiteLimit: bigint | null = null) {
     const now=new Date(), before=new Date(now.getTime()-60_000), until=new Date(now.getTime()+3_600_000);
     const scopedLabel = `${label}:${suffix}`;
     const keys=generateKeyPairSync("ed25519"), grantId=`issuer:${scopedLabel}`;
@@ -2539,8 +2568,8 @@ describeMysql("model egress store with an isolated MySQL database", () => {
     };
     const period=await issue("period",`period:${scopedLabel}`,SPEND_PERIOD_VERSION,{algorithm:"calendar-month-v1",timezone:"Asia/Shanghai"});
     const price=await issue("price",`price:${scopedLabel}`,PRICING_VERSION,{billing:"input-output-only-v1",provider:primaryRoute.provider,model:primaryRoute.modelId,sku:"text-only",currency:"USD",input:{numerator:"0",denominator:"1",ceiling:String(primaryRoute.maxInputTokens)},output:{numerator:"1",denominator:"1",ceiling:String(primaryRoute.maxOutputTokens)}});
-    await issue("budget",`approval:${scopedLabel}`,"v1",{configVersion:1,mode:"unlimited",limitMicros:null,currency:"USD",updatedBy:ownerUserId,updatedAt:now.toISOString(),periodRef:period.ref,periodHash:period.hash,priceRef:price.ref,priceHash:price.hash,fxRef:null,fxHash:null});
-    await db.workspace.update({where:{id:workspaceId},data:{llmBudgetApprovalRef:`approval:${scopedLabel}`,llmBudgetCurrency:"USD",llmBudgetUpdatedBy:ownerUserId,llmBudgetUpdatedAt:now,llmBudgetPriceBookRef:price.ref,llmBudgetFxPolicyRef:null}});
+    await issue("budget",`approval:${scopedLabel}`,"v1",{configVersion:1,mode:finiteLimit === null ? "unlimited" : "limited",limitMicros:finiteLimit === null ? null : String(finiteLimit),currency:"USD",updatedBy:ownerUserId,updatedAt:now.toISOString(),periodRef:period.ref,periodHash:period.hash,priceRef:price.ref,priceHash:price.hash,fxRef:null,fxHash:null});
+    await db.workspace.update({where:{id:workspaceId},data:{llmBudgetMode:finiteLimit === null ? "unlimited" : "limited",llmMonthlyBudgetMicros:finiteLimit,llmBudgetApprovalRef:`approval:${scopedLabel}`,llmBudgetCurrency:"USD",llmBudgetUpdatedBy:ownerUserId,llmBudgetUpdatedAt:now,llmBudgetPriceBookRef:price.ref,llmBudgetFxPolicyRef:null}});
     const registered=createRegisteredGovernedSpendAuthority({expectedPeriodPolicyVersion:SPEND_PERIOD_VERSION,trustedIssuerGrants:{[grantId]:grant.contentHash}});
     const authority: GovernedSpendAuthority={...registered,resolveDispatch:async(input)=>{
       // Assert the actual C3 transaction identity, not an unrelated negative
@@ -2549,7 +2578,7 @@ describeMysql("model egress store with an isolated MySQL database", () => {
       expect(identity?.user.split("@")[0]===runtimeDatabaseUrl().username).toBe(true);
       return registered.resolveDispatch(input);
     }};
-    return { authority, grantId };
+    return { authority, grantId, registryConfig: { expectedPeriodPolicyVersion: SPEND_PERIOD_VERSION, trustedIssuerGrants: { [grantId]: grant.contentHash } } };
   }
 
   it("registered C4 authority joins real C3 claim and retains unknown on unverified terminal", async () => {
@@ -3316,5 +3345,266 @@ describeMysql("model egress store with an isolated MySQL database", () => {
       await Promise.all([writer.$disconnect(), charge.$disconnect()]);
     }
   });
+
+  it.each(["valid", "missing-usage", "duplicate-key", "too-large", "http-error", "timeout", "revoked-during-call", "wrong-output", "wrong-cost", "lost-terminal-ack", "collector-insert-failure", "collector-ack-loss", "attestor-expired-lockwait", "untrusted-root", "wrong-key", "wrong-endpoint", "same-principal", "finite-concurrent", "finite-unknown"])(
+    "runs trusted HTTP usage through actual bootstrap and committed readback: %s", async (mode) => {
+    assertTrustedUsageTestTargets();
+    vi.resetModules();
+    const writer = new PrismaClient({ datasources: { db: { url: process.env.ORDINARY_PAID_WRITER_DATABASE_URL! } } });
+    const charge = new PrismaClient({ datasources: { db: { url: process.env.MODEL_EGRESS_RUNTIME_DATABASE_URL! } } });
+    const collector = new PrismaClient({ datasources: { db: { url: process.env.LLM_USAGE_COLLECTOR_DATABASE_URL! } } });
+    const oldEnabled = process.env.LLM_ENABLED, oldKey = process.env.DASHSCOPE_API_KEY;
+    const fallback = { explanation: "synthetic fallback", whyNow: "now", expectedImpact: "impact",
+      ifNoAction: "no action", currentBlocker: null, currentCommitment: null, personalizationHint: null,
+      supportingHighlights: ["synthetic"], evidenceSummary: "synthetic evidence" };
+    let output: OrdinaryPaidOutput;
+    let calls = 0, collectorAckLost = false;
+    let releaseHttp!: () => void;
+    const httpBarrier = new Promise<void>((resolve) => { releaseHttp = resolve; });
+    const additionalClients: PrismaClient[] = [];
+    let authorityLock: Promise<unknown> | null = null;
+    const server = createServer((request, response) => {
+      calls++; let body = ""; request.setEncoding("utf8"); request.on("data", (chunk) => { body += chunk; });
+      request.on("end", async () => {
+        const parsed = JSON.parse(body); response.setHeader("Content-Type", "application/json");
+        const value: Record<string, unknown> = { schema: "helm.controlled-model-response/v1", requestId: parsed.requestId,
+          requestRef: `synthetic:usage-${suffix}`, output, usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 } };
+        if (mode === "missing-usage" || mode === "finite-unknown") delete value.usage;
+        if (mode === "revoked-during-call") await db.$executeRaw`UPDATE LLMUsageAttestorGrant SET revokedAt=UTC_TIMESTAMP(3) WHERE id=${`usage-grant:${mode}:${suffix}`}`;
+        if (mode === "http-error") response.statusCode = 500;
+        const bytes = mode === "too-large" ? " ".repeat(65_537) : mode === "duplicate-key" ? '{"schema":"ignored",' + canonicalAuthorityJson(value).slice(1) : canonicalAuthorityJson(value);
+        if (mode === "finite-concurrent") await httpBarrier;
+        if (mode === "timeout") setTimeout(() => response.end(bytes), 120); else response.end(bytes);
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("synthetic_loopback_unbound");
+    try {
+    const endpointFingerprint = authorityHash({ schema: "helm.controlled-http-endpoint/v1", origin: `http://127.0.0.1:${address.port}`, path: "/synthetic" });
+    await initializeFixture(`trusted-http-${mode}-${suffix}`, { primaryMaxOutputTokens: 8_192, primaryMaxConcurrency: mode.startsWith("finite-") ? 2 : undefined, endpointFingerprint });
+    const { registryConfig } = await provisionC4(`trusted-http-${mode}-${suffix}`, mode.startsWith("finite-") ? BigInt(1_536) : null);
+    output = { rawOutput: JSON.stringify({ ...fallback, explanation: "charged synthetic" }),
+      modelVersion: primaryRoute.modelVersion, promptTokens: 10, completionTokens: 10 };
+    const usageKeys = generateKeyPairSync("ed25519");
+    const grant = { schema: "helm.usage-attestor-grant/v1" as const, id: `usage-grant:${mode}:${suffix}`, workspaceId,
+      source: USAGE_SOURCE, sourceHash: HASH_A, adapterKey: SYNTHETIC_REGISTRATION.adapterKey,
+      registrationHash: SYNTHETIC_REGISTRATION.contentHash, provider: primaryRoute.provider, model: primaryRoute.modelId,
+      modelVersion: primaryRoute.modelVersion, sku: "text-only", endpointFingerprint,
+      publicKeyPem: usageKeys.publicKey.export({ type: "spki", format: "pem" }).toString(),
+      validFrom: new Date(Date.now() - 60_000).toISOString(), validUntil: new Date(Date.now() + (mode === "attestor-expired-lockwait" ? 2_000 : 3_600_000)).toISOString() };
+    const usage = { trustedAttestorGrants: { [grant.id]: authorityHash(grant) } };
+    await db.$executeRaw`INSERT INTO LLMUsageAttestorGrant(id,workspaceId,envelopeJson,contentHash) VALUES (${grant.id},${workspaceId},${canonicalAuthorityJson(grant)},${authorityHash(grant)})`;
+    const authority = createRegisteredGovernedSpendAuthority({ ...registryConfig, usage });
+    const installedCollector = mode.startsWith("collector-") ? new Proxy(collector, { get(target, property) {
+      if (property === "$transaction") return async (...args: unknown[]) => {
+        const [callback, ...options] = args as [(tx: Prisma.TransactionClient) => Promise<unknown>, ...unknown[]];
+        // Inject an actual DB permission failure at the collector INSERT. This
+        // uses the real charge principal (SELECT-only for evidence), not a mock
+        // authority or a CI admin GRANT OPTION that the fixture does not have.
+        const realCallback = mode === "collector-insert-failure" ? (tx: Prisma.TransactionClient) => callback(new Proxy(tx, { get(actual, key) {
+          if (key === "$executeRaw") return charge.$executeRaw.bind(charge);
+          const value = Reflect.get(actual, key); return typeof value === "function" ? value.bind(actual) : value;
+        } })) : callback;
+        const result = await (target.$transaction as (...args: unknown[]) => Promise<unknown>)(realCallback, ...options);
+        if (mode === "collector-ack-loss" && !collectorAckLost && (result as { schema?: string })?.schema === "helm.trusted-usage/v1") {
+          collectorAckLost = true; throw new Error("synthetic_committed_collector_ack_lost");
+        }
+        return result;
+      };
+      const value = Reflect.get(target, property); return typeof value === "function" ? value.bind(target) : value;
+    } }) : collector;
+    const factoryInput = { collectorClient: installedCollector, chargeClient: charge,
+      operationWriterClient: writer, registration: SYNTHETIC_REGISTRATION, grantId: grant.id, usage, spend: registryConfig,
+      privateKey: usageKeys.privateKey, endpoint: `http://127.0.0.1:${address.port}/synthetic`, endpointFingerprint,
+      timeoutMs: mode === "timeout" ? 40 : 5_000, maximumResponseBytes: 65_536 };
+    if (["untrusted-root", "wrong-key", "wrong-endpoint", "same-principal"].includes(mode)) {
+      const rejected = mode === "untrusted-root" ? { ...factoryInput, usage: { trustedAttestorGrants: {} } } :
+        mode === "wrong-key" ? { ...factoryInput, privateKey: generateKeyPairSync("ed25519").privateKey } :
+        mode === "wrong-endpoint" ? { ...factoryInput, endpoint: `http://127.0.0.1:${address.port}/different` } :
+        { ...factoryInput, collectorClient: writer };
+      await expect(createGovernedOrdinaryHttpAdapter(rejected)).rejects.toThrow(); expect(calls).toBe(0);
+      return;
+    }
+    const adapter = await createGovernedOrdinaryHttpAdapter(factoryInput);
+    const actualInvoke = adapter.invoke;
+    if (mode === "attestor-expired-lockwait") adapter.invoke = async (call) => {
+      const result = await actualInvoke(call);
+      let locked!: () => void; const acquired = new Promise<void>((resolve) => { locked = resolve; });
+      authorityLock = db.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM LLMSpendAuthorityRecord WHERE workspaceId=${workspaceId} AND kind='price' FOR UPDATE`;
+        locked(); await new Promise((resolve) => setTimeout(resolve, 2_200));
+      });
+      await acquired; return result;
+    };
+    if (mode === "wrong-output" || mode === "wrong-cost") adapter.invoke = async (call) => {
+      const result = await actualInvoke(call);
+      return mode === "wrong-cost" ? { ...result, actualCostUsdMicros: result.actualCostUsdMicros! + 1 } :
+        { ...result, output: { ...result.output!, rawOutput: "synthetic altered" } };
+    };
+    let lostAck = false;
+    const installedCharge = mode === "lost-terminal-ack" ? new Proxy(charge, { get(target, property) {
+      if (property === "$transaction") return async (...args: unknown[]) => {
+        const result = await (target.$transaction as (...args: unknown[]) => Promise<unknown>)(...args);
+        if (!lostAck && (result as { receipt?: { sequence?: number } })?.receipt?.sequence === 2) {
+          lostAck = true; throw new Error("synthetic_committed_ack_lost");
+        }
+        return result;
+      };
+      const value = Reflect.get(target, property); return typeof value === "function" ? value.bind(target) : value;
+    } }) : charge;
+    const source = await db.recommendationLog.create({ data: { workspaceId, userId: ownerUserId,
+      objectType: "COMPANY", objectId: "synthetic:usage-object", actionType: "CREATE_TASK",
+      title: "Synthetic", description: "Synthetic", policyResult: "SUGGEST_ONLY", explanation: "Synthetic" } });
+    process.env.LLM_ENABLED = "true"; process.env.DASHSCOPE_API_KEY = "synthetic-not-a-provider-credential";
+    const { installOrdinaryPaidServerBootstrap: install } = await import("./ordinary-paid-server-bootstrap.service");
+    const { enhanceRecommendationExplanationWithLLM: host } = await import("../llm-workflows/enhance-recommendation-explanation.workflow");
+      const issueProjection = ({ operationId, projectedPayload, projectedPayloadHash }: {
+        operationId: string; projectedPayload: OrdinaryPaidPayload; projectedPayloadHash: string;
+      }) => projection(`evidence:usage-${operationId}`, `projection:usage-${operationId}`,
+        { maxInputTokens: 8_000, maxOutputTokens: 8_192 }, assetId, new Date(),
+        projectedPayloadHash, Buffer.byteLength(canonicalJson(projectedPayload), "utf8"));
+      await install({ operationWriterClient: writer, chargeClient: installedCharge, policyKey: "caio-pro-default",
+        spendAuthority: authority, adapters: [adapter], issueProjection });
+      if (mode.startsWith("finite-")) {
+        const secondWriter = new PrismaClient({ datasources: { db: { url: process.env.ORDINARY_PAID_WRITER_DATABASE_URL! } } });
+        const secondCharge = new PrismaClient({ datasources: { db: { url: process.env.MODEL_EGRESS_RUNTIME_DATABASE_URL! } } });
+        const secondCollector = new PrismaClient({ datasources: { db: { url: process.env.LLM_USAGE_COLLECTOR_DATABASE_URL! } } });
+        additionalClients.push(secondWriter, secondCharge, secondCollector);
+        // Independent process-equivalent module state and DB clients. Both
+        // execute the real public host/bootstrap/gateway, not a fake reserve.
+        const secondAdapter = await createGovernedOrdinaryHttpAdapter({ ...factoryInput,
+          collectorClient: secondCollector, chargeClient: secondCharge, operationWriterClient: secondWriter });
+        vi.resetModules();
+        const { installOrdinaryPaidServerBootstrap: secondInstall } = await import("./ordinary-paid-server-bootstrap.service");
+        const { enhanceRecommendationExplanationWithLLM: secondHost } = await import("../llm-workflows/enhance-recommendation-explanation.workflow");
+        await secondInstall({ operationWriterClient: secondWriter, chargeClient: secondCharge,
+          policyKey: "caio-pro-default", spendAuthority: authority, adapters: [secondAdapter], issueProjection });
+        const secondSource = await db.recommendationLog.create({ data: { workspaceId, userId: ownerUserId,
+          objectType: "COMPANY", objectId: "synthetic:second-usage-object", actionType: "CREATE_TASK",
+          title: "Synthetic", description: "Synthetic", policyResult: "SUGGEST_ONLY", explanation: "Synthetic" } });
+        const firstInput = { workspaceId, userId: ownerUserId, objectLabel: "Synthetic", recommendationTitle: "Synthetic",
+          recommendationDescription: "Synthetic", deterministicExplanation: "Synthetic", policyResultLabel: "Suggest only",
+          fallback, recommendationLogId: source.id };
+        const secondInput = { ...firstInput, recommendationLogId: secondSource.id };
+        let results: Array<Awaited<ReturnType<typeof host>> | null>;
+        if (mode === "finite-concurrent") {
+          const pending = [host(firstInput).catch(() => null), secondHost(secondInput).catch(() => null)];
+          let timer!: ReturnType<typeof setTimeout>;
+          try {
+            // Keep the winning HTTP response held until the losing full host
+            // has returned, so actual settlement cannot free its reservation.
+            const loser = await Promise.race([...pending, new Promise<never>((_, reject) => {
+              timer = setTimeout(() => reject(new Error("synthetic_finite_race_unresolved")), 4_000);
+            })]);
+            expect(loser?.success ?? false).toBe(false); expect(calls).toBe(1);
+            const held = await charge.lLMSpendPeriodCounter.findFirstOrThrow({ where: { workspaceId } });
+            expect(held.reservedMicros).toBe(BigInt(1_536)); expect(held.settledMicros).toBe(BigInt(0));
+            expect(held.unknownBoundMicros).toBe(BigInt(0));
+          } finally { clearTimeout(timer); releaseHttp(); await Promise.all(pending); }
+          results = await Promise.all(pending);
+          expect(results.filter((result) => result?.success)).toHaveLength(1);
+        } else {
+          results = [await host(firstInput).catch(() => null), await secondHost(secondInput).catch(() => null)];
+          expect(results.every((result) => !result?.success)).toBe(true);
+        }
+        const decisions = await charge.modelRouteDecision.findMany({ where: { workspaceId } });
+        expect(decisions).toHaveLength(2); expect(new Set(decisions.map((decision) => decision.id)).size).toBe(2);
+        const ledgers = await charge.lLMSpendLedgerEntry.findMany({ where: { workspaceId } });
+        expect(ledgers).toHaveLength(1); expect(ledgers[0].maximumChargeMicros).toBe(BigInt(1_536));
+        expect(ledgers[0].budgetMode).toBe("limited"); expect(ledgers[0].budgetLimitMicros).toBe(BigInt(1_536));
+        const blocked = decisions.find((decision) => !decision.dispatchProviderIdempotencyKey);
+        expect(blocked).toBeDefined();
+        expect(decisions.filter((decision) => decision.dispatchProviderIdempotencyKey)).toHaveLength(1);
+        expect(decisions.every((decision) => decision.requestedMaxOutputTokens === 1_536)).toBe(true);
+        const counter = await charge.lLMSpendPeriodCounter.findFirstOrThrow({ where: { workspaceId } });
+        expect(counter.budgetMode).toBe("limited"); expect(counter.budgetLimitMicros).toBe(BigInt(1_536));
+        expect(counter.reservedMicros).toBe(BigInt(0));
+        expect(counter.settledMicros).toBe(BigInt(mode === "finite-concurrent" ? 10 : 0));
+        expect(counter.unknownBoundMicros).toBe(BigInt(mode === "finite-unknown" ? 1_536 : 0));
+        expect(counter.unknownCalls).toBe(mode === "finite-unknown" ? 1 : 0);
+        expect(ledgers[0].state).toBe(mode === "finite-concurrent" ? "settled" : "unknown");
+        expect(ledgers[0].observedActualMicros).toBe(mode === "finite-concurrent" ? BigInt(10) : null);
+        expect(calls).toBe(1);
+        expect(await db.lLMTrustedUsageEvidence.count({ where: { workspaceId } })).toBe(mode === "finite-concurrent" ? 1 : 0);
+        expect(await charge.modelEgressReceipt.count({ where: { workspaceId, sequence: 2 } })).toBe(mode === "finite-concurrent" ? 1 : 0);
+        console.info("synthetic finite usage", { mode, calls, independentClients: 2, decisions: decisions.length,
+          budgetLimitMicros: String(counter.budgetLimitMicros), reservedMicros: String(counter.reservedMicros),
+          settledMicros: String(counter.settledMicros), unknownBoundMicros: String(counter.unknownBoundMicros),
+          evidence: mode === "finite-concurrent" ? 1 : 0, terminalSequence2: mode === "finite-concurrent" ? 1 : 0 });
+        return;
+      }
+      let result: Awaited<ReturnType<typeof host>> | null = null;
+      let failure = "none";
+      try { result = await host({ workspaceId, userId: ownerUserId, objectLabel: "Synthetic", recommendationTitle: "Synthetic",
+        recommendationDescription: "Synthetic", deterministicExplanation: "Synthetic", policyResultLabel: "Suggest only",
+        fallback, recommendationLogId: source.id }); } catch (error) { failure = error instanceof Error ? error.message : "unknown"; }
+      const decision = await charge.modelRouteDecision.findFirstOrThrow({ where: { workspaceId } });
+      expect(decision.dispatchProviderIdempotencyKey, `synthetic_dispatch:${failure}:${decision.reasonCodes}`).not.toBeNull();
+      const ledger = await charge.lLMSpendLedgerEntry.findUniqueOrThrow({ where: { workspaceId_attemptRef: {
+        workspaceId, attemptRef: decision.dispatchProviderIdempotencyKey! } } });
+      console.info("synthetic usage baseline", { calls, failure, ledgerState: ledger.state,
+        terminals: await charge.modelEgressReceipt.count({ where: { workspaceId, sequence: 2 } }) });
+      expect(calls).toBe(1);
+      const evidenceCount = await db.lLMTrustedUsageEvidence.count({ where: { workspaceId } });
+      const terminalCount = await charge.modelEgressReceipt.count({ where: { workspaceId, sequence: 2 } });
+      if (mode === "valid" || mode === "lost-terminal-ack") {
+        expect(ledger.state).toBe("settled"); expect(ledger.observedActualMicros).toBe(BigInt(10));
+        expect(evidenceCount).toBe(1); expect(terminalCount).toBe(1);
+        if (mode === "valid") { expect(result?.success).toBe(true); expect(result?.output.explanation).toBe("charged synthetic"); }
+        else {
+          expect(lostAck).toBe(true);
+          // Replaying the same ordinary source never sends a second transport.
+          await host({ workspaceId, userId: ownerUserId, objectLabel: "Synthetic", recommendationTitle: "Synthetic",
+            recommendationDescription: "Synthetic", deterministicExplanation: "Synthetic", policyResultLabel: "Suggest only", fallback, recommendationLogId: source.id }).catch(() => null);
+          expect(calls).toBe(1); expect(await charge.modelEgressReceipt.count({ where: { workspaceId, sequence: 2 } })).toBe(1);
+        }
+      } else {
+        expect(ledger.state).toBe("unknown"); expect(terminalCount).toBe(0); expect(result?.success ?? false).toBe(false);
+        expect(ledger.observedActualMicros).toBeNull(); expect(evidenceCount).toBe(mode.startsWith("wrong-") || mode === "collector-ack-loss" || mode === "attestor-expired-lockwait" ? 1 : 0);
+        if (mode.startsWith("collector-")) {
+          expect(collectorAckLost).toBe(mode === "collector-ack-loss");
+          await host({ workspaceId, userId: ownerUserId, objectLabel: "Synthetic", recommendationTitle: "Synthetic", recommendationDescription: "Synthetic", deterministicExplanation: "Synthetic", policyResultLabel: "Suggest only", fallback, recommendationLogId: source.id }).catch(() => null);
+          expect(calls).toBe(1); expect(await charge.modelEgressReceipt.count({ where: { workspaceId, sequence: 2 } })).toBe(0);
+        }
+        const counter = await charge.lLMSpendPeriodCounter.findFirstOrThrow({ where: { workspaceId } });
+        expect(counter.unknownBoundMicros).toBe(ledger.reservedMicros);
+      }
+      if (mode === "valid") {
+        await expect(writer.$queryRaw`SELECT id FROM LLMTrustedUsageEvidence WHERE workspaceId=${workspaceId}`).rejects.toThrow();
+        await expect(charge.$executeRaw`DELETE FROM LLMTrustedUsageEvidence WHERE workspaceId=${workspaceId}`).rejects.toThrow();
+        await expect(collector.$executeRaw`UPDATE LLMSpendLedgerEntry SET observedActualMicros=0 WHERE workspaceId=${workspaceId}`).rejects.toThrow();
+        await expect(collector.$executeRaw`UPDATE LLMUsageAttestorGrant SET revokedAt=UTC_TIMESTAMP(3) WHERE id=${grant.id}`).rejects.toThrow();
+        await expect(db.$executeRaw`UPDATE LLMTrustedUsageEvidence SET promptTokens=0 WHERE workspaceId=${workspaceId}`).rejects.toThrow("usage_evidence_immutable");
+        await expect(db.$executeRaw`DELETE FROM LLMTrustedUsageEvidence WHERE workspaceId=${workspaceId}`).rejects.toThrow("usage_evidence_no_delete");
+        await expect(charge.$executeRaw`INSERT INTO LLMTrustedUsageEvidence(id,workspaceId,decisionId,providerIdempotencyKey,grantId,envelopeJson,contentHash,signatureBase64,promptTokens,completionTokens)
+          SELECT 'synthetic:denied',workspaceId,decisionId,providerIdempotencyKey,grantId,envelopeJson,contentHash,signatureBase64,promptTokens,completionTokens FROM LLMTrustedUsageEvidence WHERE workspaceId=${workspaceId}`).rejects.toThrow();
+        await expect(collector.$executeRaw`INSERT INTO LLMUsageAttestorGrant(id,workspaceId,envelopeJson,contentHash) VALUES ('synthetic:denied',${workspaceId},${canonicalAuthorityJson(grant)},${authorityHash(grant)})`).rejects.toThrow();
+        const foreignDecision = await db.modelRouteDecision.findFirstOrThrow({ where: { workspaceId: { not: workspaceId } }, select: { id: true } });
+        await expect(db.$executeRaw`INSERT INTO LLMTrustedUsageEvidence(id,workspaceId,decisionId,providerIdempotencyKey,grantId,envelopeJson,contentHash,signatureBase64,promptTokens,completionTokens)
+          SELECT 'synthetic:cross-scope',workspaceId,${foreignDecision.id},'synthetic:cross-scope',grantId,envelopeJson,contentHash,signatureBase64,promptTokens,completionTokens FROM LLMTrustedUsageEvidence WHERE workspaceId=${workspaceId}`).rejects.toThrow("LLMTrustedUsageEvidence_decision_fk");
+        await db.$transaction(async (tx) => {
+          const [prior] = await tx.$queryRaw<Array<{ mode: string }>>`SELECT @@sql_mode AS mode`;
+          try {
+            await tx.$executeRawUnsafe("SET SESSION sql_mode=''");
+            for (const invalid of [BigInt(-1), BigInt(2_147_483_648), BigInt("9223372036854775808")]) {
+              await expect(tx.$executeRaw`INSERT INTO LLMTrustedUsageEvidence(id,workspaceId,decisionId,providerIdempotencyKey,grantId,envelopeJson,contentHash,signatureBase64,promptTokens,completionTokens)
+                SELECT 'synthetic:bounds',workspaceId,decisionId,providerIdempotencyKey,grantId,envelopeJson,contentHash,signatureBase64,CAST(${String(invalid)} AS DECIMAL(65,0)),completionTokens FROM LLMTrustedUsageEvidence WHERE workspaceId=${workspaceId}`).rejects.toThrow("LLMTrustedUsageEvidence_units");
+            }
+          await expect(tx.$executeRaw`INSERT INTO LLMTrustedUsageEvidence(id,workspaceId,decisionId,providerIdempotencyKey,grantId,envelopeJson,contentHash,signatureBase64,promptTokens,completionTokens)
+              SELECT 'synthetic:null-units',workspaceId,decisionId,providerIdempotencyKey,grantId,envelopeJson,contentHash,signatureBase64,NULL,completionTokens FROM LLMTrustedUsageEvidence WHERE workspaceId=${workspaceId}`).rejects.toThrow("LLMTrustedUsageEvidence_units_json");
+          } finally { await tx.$executeRaw`SET SESSION sql_mode=${prior.mode}`; }
+        });
+      }
+    } finally {
+      if (oldEnabled === undefined) delete process.env.LLM_ENABLED; else process.env.LLM_ENABLED = oldEnabled;
+      if (oldKey === undefined) delete process.env.DASHSCOPE_API_KEY; else process.env.DASHSCOPE_API_KEY = oldKey;
+      releaseHttp();
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      if (authorityLock) await authorityLock;
+      await Promise.all([writer.$disconnect(), charge.$disconnect(), collector.$disconnect(), ...additionalClients.map((client) => client.$disconnect())]);
+    }
+  });
+
 
 });

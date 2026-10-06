@@ -75,6 +75,7 @@ export type GovernedSpendAuthority = {
     actualCostUsdMicros: number; promptTokens: number | null;
     completionTokens: number | null; pricingVersion: string;
     providerRequestRefHash: string | null;
+    outputContentHash: string | null;
     dispatchClaimHash: string;
     requestDisposition: "accepted" | "not_accepted";
     outcome: Exclude<ModelEgressOutcome, "unknown">;
@@ -3059,6 +3060,7 @@ export async function recordModelEgressTerminalReceipt(input: {
           completionTokens: input.completionTokens,
           pricingVersion: input.pricingVersion,
           providerRequestRefHash: input.providerRequestRefHash,
+          outputContentHash: input.outputContentHash ?? null,
           dispatchClaimHash: input.dispatchClaimHash,
           requestDisposition: input.requestDisposition,
           outcome: input.outcome,

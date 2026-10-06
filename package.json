@@ -52,6 +52,7 @@
     "check:caio-terminology": "node --import tsx scripts/check-caio-terminology.ts && vitest run scripts/check-caio-terminology.test.ts --config vitest.public.config.ts",
     "check:model-egress-governance": "node --import tsx scripts/check-model-egress-governance.ts && vitest run lib/llm/model-route-contracts.test.ts lib/llm/model-egress-contracts.test.ts lib/llm/governed-model-gateway.service.test.ts lib/llm/ordinary-paid-post-dispatch.test.ts lib/llm/ordinary-paid-composition.test.ts features/dashboard/model-egress-readout.test.ts features/dashboard/model-egress-query.test.ts scripts/check-model-egress-governance.test.ts --config vitest.public.config.ts",
     "check:caio-pro-v1": "node --import tsx scripts/check-caio-pro-v1.ts && vitest run scripts/check-caio-pro-v1.test.ts --config vitest.public.config.ts",
+    "test:trusted-usage-evidence:mysql": "TRUSTED_USAGE_MYSQL_REQUIRED=1 vitest run lib/llm/trusted-usage-evidence.test.ts lib/llm/model-egress-store.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
     "test:model-egress:mysql": "vitest run lib/llm/model-egress-store.mysql.test.ts --config vitest.public.config.ts",
     "test:ordinary-paid-operation:mysql": "ORDINARY_PAID_OPERATION_MYSQL_REQUIRED=1 vitest run lib/llm/ordinary-paid-operation.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
     "sarp:proof": "node --import tsx scripts/sarp-proof.ts",

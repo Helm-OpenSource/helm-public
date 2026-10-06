@@ -174,7 +174,7 @@ const INTERNAL_AUTHORITY_BOUNDARIES = [
     // defense-in-depth against a caller wiring dispatch around the
     // decision/claim/receipt chain.
     tokens: ["GovernedModelProviderAdapter"],
-    allowedFiles: [ADAPTER_REGISTRY, GOVERNED_GATEWAY],
+    allowedFiles: [ADAPTER_REGISTRY, GOVERNED_GATEWAY, "lib/llm/governed-ordinary-http-adapter.service.ts"],
   },
   {
     // The historical transport factory still exists for its transport
@@ -221,7 +221,10 @@ const REQUIRED_MYSQL_CI_TOKENS = [
   "helm-c4-root-password",
   "MODEL_EGRESS_STORE_TEST_DATABASE_NAME: helm_caio_p1d_ci",
   "npx tsx prisma/setup-db.ts prepare",
-  "npm run test:model-egress:mysql",
+  "npm run test:trusted-usage-evidence:mysql",
+  "LLM_USAGE_COLLECTOR_DATABASE_URL=",
+  "usage_collector",
+  "LLMTrustedUsageEvidence",
   "npm run test:trusted-spend-authority:mysql",
   "TRUSTED_SPEND_MYSQL_CI_CONTAINER:",
 ] as const;
@@ -336,6 +339,14 @@ export function scanModelEgressDirectWrites(
       }
     }
 
+    const usageMutation = /\b(?:UPDATE|DELETE\s+FROM|INSERT\s+INTO)\s+[`"']?(LLMTrustedUsageEvidence|LLMUsageAttestorGrant)\b/giu;
+    for (const match of content.matchAll(usageMutation)) {
+      if (relative === "lib/llm/governed-ordinary-http-adapter.service.ts" && /^INSERT\s+INTO LLMTrustedUsageEvidence$/iu.test(match[0])) continue;
+      violations.push({ rule: "MEG-USAGE-IMMUTABLE", file: relative, line: lineNumberAt(content, match.index ?? 0), detail: "usage evidence writes require the controlled collector; grant issuance is external" });
+    }
+    for (const delegate of ["lLMUsageAttestorGrant", "lLMTrustedUsageEvidence"]) for (const operation of ["create", "createMany", "update", "updateMany", "upsert", "delete", "deleteMany"]) {
+      for (const match of content.matchAll(delegateWritePattern(delegate, operation))) violations.push({ rule: "MEG-USAGE-IMMUTABLE", file: relative, line: lineNumberAt(content, match.index ?? 0), detail: "usage registry and evidence cannot be mutated by task callers" });
+    }
     const rawMutation =
       /\b(?:UPDATE|DELETE\s+FROM|INSERT\s+INTO)\s+[`"']?(ModelEgressReceipt|ModelRouteDecision)\b/giu;
     for (const match of content.matchAll(rawMutation)) {
@@ -381,6 +392,10 @@ export function checkModelEgressMysqlCiWiring(
           detail:
             "test:model-egress:mysql does not execute the isolated MySQL store test",
         });
+      }
+      const usageScript = packageJson.scripts?.["test:trusted-usage-evidence:mysql"] ?? "";
+      for (const token of ["TRUSTED_USAGE_MYSQL_REQUIRED=1", "lib/llm/trusted-usage-evidence.test.ts", "lib/llm/model-egress-store.mysql.test.ts"]) {
+        if (!usageScript.includes(token)) violations.push({ rule: "MEG-MYSQL-CI", file: "package.json", line: 1, detail: `trusted usage required target is missing: ${token}` });
       }
     } catch {
       violations.push({
