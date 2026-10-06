@@ -1321,6 +1321,7 @@ describe("caio-pro-v1 aggregate gate", () => {
   });
 
   it.each([
+    "printf 'LLM_USAGE_COLLECTOR_DATABASE_URL=%s\\n' \"${url}\" >> \"$GITHUB_ENV\"",
     `printf '%s=%s\\n' BASH_ENV ops/env.sh >> "$GITHUB_ENV"`,
     `cat ops/environment >> "$GITHUB_ENV"`,
     `echo 'BASH_ENV'='ops/env.sh' >> "$GITHUB_ENV"`,
@@ -1391,6 +1392,7 @@ describe("caio-pro-v1 aggregate gate", () => {
           "          {",
           "            printf 'DATABASE_URL=%s\\n' \"${url}\"",
           "            printf 'CAIO_PRO_V1_DATABASE_URL=%s\\n' \"${url}\"",
+          "            printf 'LLM_USAGE_COLLECTOR_DATABASE_URL=%s\\n' \"${url}\"",
           '          } >>"${GITHUB_ENV}"',
           "",
         ].join("\n"),

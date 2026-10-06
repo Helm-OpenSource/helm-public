@@ -516,7 +516,9 @@ jobs:
           credential="usage_collector:${usage_password}"
           url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
           [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
-          printf 'LLM_USAGE_COLLECTOR_DATABASE_URL=%s\n' "${url}" >>"${GITHUB_ENV}"
+          {
+            printf 'LLM_USAGE_COLLECTOR_DATABASE_URL=%s\n' "${url}"
+          } >>"${GITHUB_ENV}"
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
