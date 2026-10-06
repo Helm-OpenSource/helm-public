@@ -199,7 +199,7 @@ describe("model egress governance boundary guard", () => {
           scripts: {
             "test:model-egress:mysql":
               "vitest run lib/llm/model-egress-store.mysql.test.ts",
-            "test:trusted-usage-evidence:mysql": "TRUSTED_USAGE_MYSQL_REQUIRED=1 vitest run lib/llm/trusted-usage-evidence.test.ts lib/llm/model-egress-store.mysql.test.ts",
+            "test:trusted-usage-evidence:mysql": "TRUSTED_USAGE_MYSQL_REQUIRED=1 vitest run lib/llm/trusted-usage-evidence.test.ts lib/llm/model-egress-store.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
           },
         }),
         ".github/workflows/ci.yml": [
