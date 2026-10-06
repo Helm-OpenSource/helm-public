@@ -3456,7 +3456,7 @@ describeMysql("model egress store with an isolated MySQL database", () => {
     const source = await db.recommendationLog.create({ data: { workspaceId, userId: ownerUserId,
       objectType: "COMPANY", objectId: "synthetic:usage-object", actionType: "CREATE_TASK",
       title: "Synthetic", description: "Synthetic", policyResult: "SUGGEST_ONLY", explanation: "Synthetic" } });
-    process.env.LLM_ENABLED = "true"; process.env.DASHSCOPE_API_KEY = "synthetic-not-a-provider-credential";
+    process.env.LLM_ENABLED = "true"; process.env.DASHSCOPE_API_KEY = "HELM_SYNTHETIC_PROVIDER_CREDENTIAL";
     const { installOrdinaryPaidServerBootstrap: install } = await import("./ordinary-paid-server-bootstrap.service");
     const { enhanceRecommendationExplanationWithLLM: host } = await import("../llm-workflows/enhance-recommendation-explanation.workflow");
       const issueProjection = ({ operationId, projectedPayload, projectedPayloadHash }: {
