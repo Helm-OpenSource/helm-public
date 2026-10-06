@@ -164,3 +164,5 @@ LLM 预算交付请核对 [签名金额元数据注册与原子预约边界](ope
 通用资源预留的纯协议见 [Core SDK 合同](contracts/helm-core-sdk.contract.json) 中 `resource-reservation-contract`；仅规范化与存储端口义务，不提供数据库原子性、身份认证或生产准入。
 
 The resource reservation SDK contract defines canonical demand and atomic store obligations only; it supplies no database atomicity, identity authentication or runtime admission.
+
+版本化 server startup 的固定准入、等待屏障与超时边界见[可信用量组合](operations/LLM_TRUSTED_USAGE_EVIDENCE.md)；公开默认保留 legacy，未发行收费安装许可。 Versioned server startup supplies source admission and an awaited barrier, not payment authority.

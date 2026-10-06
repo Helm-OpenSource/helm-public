@@ -206,6 +206,9 @@ jobs:
       - name: Verify WorkBuddy fixed admission on real Next loopback
         run: npm run test:caio-workbuddy-route
 
+      - name: Verify versioned server startup on real Next loopback
+        run: npm run test:server-bootstrap
+
       - name: Upload coverage reports
         uses: actions/upload-artifact@v6
         if: always()

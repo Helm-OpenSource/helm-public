@@ -529,3 +529,5 @@ npm run release:check
 通用资源预留协议见 [Core SDK 合同](docs/contracts/helm-core-sdk.contract.json)：当前提供严格向量规范化与原子存储端口定义，存储、认证和生产接入另行实现。
 
 The resource reservation SDK contract supplies strict vector normalization and atomic store interfaces; persistence, authentication and production integration remain separate.
+
+版本化 server startup 的固定准入、等待屏障与超时边界见[可信用量组合](docs/operations/LLM_TRUSTED_USAGE_EVIDENCE.md)；公开默认保留 legacy，未发行收费安装许可。 Versioned server startup supplies source admission and an awaited barrier, not payment authority.

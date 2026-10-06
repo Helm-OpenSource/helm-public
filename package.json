@@ -105,6 +105,7 @@
     "check:decision-loop-gaps": "node --import tsx scripts/check-decision-loop-gaps.ts && vitest run scripts/check-decision-loop-gaps.test.ts --config vitest.public.config.ts",
     "test:trusted-spend-authority": "vitest run lib/llm/trusted-spend-authority.test.ts --config vitest.public.config.ts",
     "test:trusted-spend-authority:mysql": "TRUSTED_SPEND_MYSQL_REQUIRED=1 vitest run lib/llm/trusted-spend-authority.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
+    "test:server-bootstrap": "node --test scripts/test-server-bootstrap-http.test.mjs && vitest run lib/runtime/server-bootstrap.test.ts --config vitest.public.config.ts && node scripts/test-server-bootstrap-http.mjs",
     "test:caio-workbuddy-route": "node --test scripts/test-caio-route-admission-http.test.mjs && vitest run lib/caio-collaboration/route-admission.test.ts lib/caio-collaboration/edge-ingress-route.test.ts lib/caio-collaboration/edge-ingress.test.ts tools/caio-workbuddy-gateway/prisma-readonly-runtime.test.ts --config vitest.public.config.ts && node scripts/test-caio-route-admission-http.mjs"
   },
   "prisma": {

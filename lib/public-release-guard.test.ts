@@ -1041,3 +1041,25 @@ describe("WorkBuddy route admission public test target", () => {
     expect(projection.removedScripts).toContain("test:arbitrary-private");
   });
 });
+
+describe("versioned server bootstrap public test projection", () => {
+  const command = "node --test scripts/test-server-bootstrap-http.test.mjs && vitest run lib/runtime/server-bootstrap.test.ts --config vitest.public.config.ts && node scripts/test-server-bootstrap-http.mjs";
+  it("retains the exact required command without admitting similar unknown targets", () => {
+    const projection = projectPublicPackageManifest({scripts: {
+      "test:server-bootstrap": command,
+      "test:server-bootstrap-extra": command,
+      "test:server-bootstrap:http": command,
+    }});
+    expect(projection.manifest.scripts["test:server-bootstrap"]).toBe(command);
+    expect(projection.manifest.scripts["test:server-bootstrap-extra"]).toBeUndefined();
+    expect(projection.manifest.scripts["test:server-bootstrap:http"]).toBeUndefined();
+    expect(projection.removedScripts).toEqual(["test:server-bootstrap-extra", "test:server-bootstrap:http"]);
+  });
+  it("still removes an exact target with a private command reference", () => {
+    const projection = projectPublicPackageManifest({scripts: {
+      "test:server-bootstrap": `node ${tenantPrivateRoot}/private-runner.js`,
+    }});
+    expect(projection.manifest.scripts["test:server-bootstrap"]).toBeUndefined();
+    expect(projection.removedScripts).toEqual(["test:server-bootstrap"]);
+  });
+});
