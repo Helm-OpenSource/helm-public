@@ -11,13 +11,13 @@ import { validateGovernedModelAdapterRegistration } from "./model-route-contract
 import { authorityDate, authorityHash, canonicalAuthorityJson, computeMaximumCharge, refuse } from "./trusted-spend-authority";
 import { readTrustedSpendRecordInTransaction, type TrustedSpendRegistryConfig } from "./trusted-spend-authority-prisma";
 import { readUsageClaimInTransaction, readUsageGrantInTransaction, type UsageRegistryConfig } from "./trusted-usage-evidence-prisma";
-import { bytesHash, decodeControlledResponse, readUsageEvidence, USAGE_SCHEMA, type UsageEvidence } from "./trusted-usage-evidence";
+import { bytesHash, decodeControlledResponse, readUsageEvidence, readMysqlTableNameMode, USAGE_SCHEMA, type UsageEvidence } from "./trusted-usage-evidence";
 
 type Identity = { databaseName: string; principal: string; serverUuid: string; lowerCaseNames: number };
 async function identity(client: PrismaClient) {
-  const [row] = await client.$queryRaw<Identity[]>`SELECT DATABASE() AS databaseName, CURRENT_USER() AS principal, @@server_uuid AS serverUuid, @@lower_case_table_names AS lowerCaseNames`;
+  const [row] = await client.$queryRaw<Array<Omit<Identity, "lowerCaseNames"> & { lowerCaseNames: unknown }>>`SELECT DATABASE() AS databaseName, CURRENT_USER() AS principal, @@server_uuid AS serverUuid, @@lower_case_table_names AS lowerCaseNames`;
   if (!row?.databaseName || !row.principal || !row.serverUuid) refuse("usage_realm_invalid");
-  return row;
+  return { ...row, lowerCaseNames: readMysqlTableNameMode(row.lowerCaseNames) };
 }
 /** Only explicitly reviewed server composition can construct this adapter. No
  * public record(JSON), URL task field, default key, retry or env authority. The

@@ -3,6 +3,14 @@ import { createHash, createPublicKey, verify } from "node:crypto";
 import { authorityDate, authorityHash, authorityRef, canonicalAuthorityJson, exactObject, refuse } from "./trusted-spend-authority";
 export const USAGE_SCHEMA = "helm.trusted-usage/v1" as const;
 export const USAGE_SOURCE = "helm.controlled-http-usage/v1" as const;
+/** Prisma returns unsigned MySQL metadata as bigint. Preserve case-sensitive
+ * mode zero without accepting string coercion or unsupported server modes. */
+export function readMysqlTableNameMode(value: unknown): 0 | 1 | 2 {
+  if (value === 0 || value === BigInt(0)) return 0;
+  if (value === 1 || value === BigInt(1)) return 1;
+  if (value === 2 || value === BigInt(2)) return 2;
+  return refuse("usage_mysql_table_name_mode_invalid");
+}
 export function bytesHash(bytes: Uint8Array): string { return `sha256:${createHash("sha256").update(bytes).digest("hex")}`; }
 export function hash(value: unknown): string {
   if (typeof value !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(value)) refuse("usage_hash_invalid");

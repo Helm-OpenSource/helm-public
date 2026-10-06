@@ -1,7 +1,7 @@
 import { generateKeyPairSync, sign } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { authorityHash, canonicalAuthorityJson } from "./trusted-spend-authority";
-import { boundedCanonical, decodeControlledResponse, readUsageEvidence, readUsageGrant, USAGE_SCHEMA, USAGE_SOURCE, type UsageEvidence } from "./trusted-usage-evidence";
+import { boundedCanonical, decodeControlledResponse, readUsageEvidence, readUsageGrant, readMysqlTableNameMode, USAGE_SCHEMA, USAGE_SOURCE, type UsageEvidence } from "./trusted-usage-evidence";
 const H = `sha256:${"a".repeat(64)}`;
 const keys = generateKeyPairSync("ed25519");
 const grant = { schema: "helm.usage-attestor-grant/v1" as const, id: "grant:synthetic", workspaceId: "workspace:synthetic",
@@ -19,6 +19,14 @@ const response = { schema: "helm.controlled-model-response/v1", requestId: "key:
 const decode = (value: unknown) => decodeControlledResponse(Buffer.from(canonicalAuthorityJson(value)), "key:synthetic", "v1");
 const read = (e: unknown) => { const json = canonicalAuthorityJson(e); return readUsageEvidence(json, sign(null, Buffer.from(json), keys.privateKey).toString("base64"), grant); };
 describe("finite controlled usage protocol", () => {
+  it.each([0, BigInt(0), 1, BigInt(1), 2, BigInt(2)])("preserves exact MySQL table-name metadata %s", (mode) => {
+    const normalized = readMysqlTableNameMode(mode);
+    expect(normalized).toBe(Number(mode));
+    expect(normalized === 0 ? "Membership" : "Membership".toLowerCase()).toBe(Number(mode) === 0 ? "Membership" : "membership");
+  });
+  it.each(["0", "2", true, null, undefined, -1, 3, BigInt(-1), BigInt(3), 0.5, NaN, Infinity])("refuses malformed MySQL table-name metadata %s", (mode) => {
+    expect(() => readMysqlTableNameMode(mode)).toThrow();
+  });
   it("reads a canonical immutable observation without supplying price or approval", () => {
     expect(readUsageGrant(canonicalAuthorityJson(grant))).toEqual(grant);
     expect(read(evidence)).toEqual(evidence); expect(decode(response).completionTokens).toBe(20);
