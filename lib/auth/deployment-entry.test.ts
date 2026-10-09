@@ -156,3 +156,36 @@ describe("deployment entry configuration", () => {
     );
   });
 });
+
+describe("deployment entry ICP / PSB filing", () => {
+  it("exposes filing numbers from env and keeps configuration valid", () => {
+    const config = resolveDeploymentEntryConfig({
+      HELM_DEPLOYMENT_ENTRY_PROFILE: "tenant",
+      HELM_DEPLOYMENT_ENTRY_HOME_PATH: "/workspace/anson",
+      HELM_DEPLOYMENT_ALLOWED_WORKSPACE_SLUGS: "anson",
+      HELM_DEPLOYMENT_ENTRY_ICP_FILING: " 沪ICP备00000000号-1 ",
+      HELM_DEPLOYMENT_ENTRY_PSB_FILING: "沪公网安备 00000000000000号",
+    });
+    expect(config.icpFiling).toBe("沪ICP备00000000号-1");
+    expect(config.psbFiling).toBe("沪公网安备 00000000000000号");
+    expect(config.configurationValid).toBe(true);
+  });
+
+  it("defaults both filings to null when unset", () => {
+    const config = resolveDeploymentEntryConfig({});
+    expect(config.icpFiling).toBeNull();
+    expect(config.psbFiling).toBeNull();
+    expect(config.configurationValid).toBe(true);
+  });
+
+  it("rejects filing text with markup or control characters and marks configuration invalid", () => {
+    const config = resolveDeploymentEntryConfig({
+      HELM_DEPLOYMENT_ENTRY_ICP_FILING: "<script>x</script>",
+    });
+    expect(config.icpFiling).toBeNull();
+    expect(config.configurationValid).toBe(false);
+    const long = resolveDeploymentEntryConfig({ HELM_DEPLOYMENT_ENTRY_PSB_FILING: "x".repeat(81) });
+    expect(long.psbFiling).toBeNull();
+    expect(long.configurationValid).toBe(false);
+  });
+});
