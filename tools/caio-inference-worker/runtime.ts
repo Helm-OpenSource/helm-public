@@ -32,6 +32,13 @@ import {
   type CaioWorkerLocalModelConfig,
 } from "./local-model-port";
 import {
+  CAIO_WORKER_ANTHROPIC_EFFORTS,
+  CAIO_WORKER_REMOTE_PROVIDERS,
+  createCaioWorkerRemoteModelPort,
+  isRemoteProviderBaseUrl,
+  type CaioWorkerRemoteModelConfig,
+} from "./remote-model-port";
+import {
   CAIO_WORKER_DEFAULT_OUTPUT_LANGUAGE,
   CAIO_WORKER_OUTPUT_LANGUAGES,
   type CaioWorkerOutputLanguage,
@@ -57,6 +64,7 @@ const LOOPBACK_HOSTS = new Set([
 ]);
 
 const privatePathSchema = z.string().min(1).max(1_024);
+const LOCAL_MODEL_PROVIDER = "local-openai-compatible" as const;
 const timeoutSchema = z.number().int().min(100).max(600_000);
 const runtimeSchema = z
   .object({
@@ -78,9 +86,13 @@ const runtimeSchema = z
       .strict(),
     model: z
       .object({
+        /** Omitted = the on-premises OpenAI-compatible endpoint (loopback only). Remote providers are explicit. */
+        provider: z.enum([LOCAL_MODEL_PROVIDER, ...CAIO_WORKER_REMOTE_PROVIDERS]).optional(),
         baseUrl: z.string().url().max(1_024),
         model: z.string().min(1).max(200),
         accessTokenPath: privatePathSchema,
+        /** Anthropic only: bounds thinking spend (thinking cannot be disabled on current Opus models). */
+        effort: z.enum(CAIO_WORKER_ANTHROPIC_EFFORTS).optional(),
         probeTimeoutMs: timeoutSchema,
         completeTimeoutMs: timeoutSchema,
       })
@@ -90,9 +102,22 @@ const runtimeSchema = z
   })
   .strict();
 
+/** The model the worker calls: the loopback endpoint (default) or an explicitly configured remote provider. */
+export type CaioWorkerModelRuntimeConfig =
+  | (CaioWorkerLocalModelConfig & Readonly<{ provider?: typeof LOCAL_MODEL_PROVIDER }>)
+  | CaioWorkerRemoteModelConfig;
+
+/** Default model factory: the provider field selects the port; the loopback port's lock is untouched. */
+export function createCaioWorkerModelPort(config: CaioWorkerModelRuntimeConfig): CaioWorkerLocalModelPort {
+  if (config.provider === undefined || config.provider === LOCAL_MODEL_PROVIDER) {
+    return createCaioWorkerLocalModelPort(config as CaioWorkerLocalModelConfig);
+  }
+  return createCaioWorkerRemoteModelPort(config as CaioWorkerRemoteModelConfig);
+}
+
 export type CaioInferenceWorkerRuntimeConfig = Readonly<{
   gateway: CaioWorkerGatewayClientConfig;
-  model: CaioWorkerLocalModelConfig;
+  model: CaioWorkerModelRuntimeConfig;
   loopPasses: number;
   outputLanguage: CaioWorkerOutputLanguage;
 }>;
@@ -104,7 +129,7 @@ type RuntimeDependencies = Readonly<{
     config: CaioWorkerGatewayClientConfig,
   ) => CaioWorkerGatewayPort;
   modelFactory?: (
-    config: CaioWorkerLocalModelConfig,
+    config: CaioWorkerModelRuntimeConfig,
   ) => CaioWorkerLocalModelPort;
   gatewayReadinessProbe?: (
     config: CaioWorkerGatewayClientConfig,
@@ -138,7 +163,14 @@ export function loadCaioInferenceWorkerRuntimeConfig(
     throw new Error("caio_inference_worker_runtime_invalid");
   }
   const parsed = runtimeSchema.safeParse(decoded);
-  if (!parsed.success || !isLoopbackModelUrl(parsed.data.model.baseUrl)) {
+  const provider = parsed.success ? parsed.data.model.provider ?? LOCAL_MODEL_PROVIDER : LOCAL_MODEL_PROVIDER;
+  if (
+    !parsed.success ||
+    (provider === LOCAL_MODEL_PROVIDER
+      ? !isLoopbackModelUrl(parsed.data.model.baseUrl) || parsed.data.model.effort !== undefined
+      : !isRemoteProviderBaseUrl(provider, parsed.data.model.baseUrl) ||
+        (parsed.data.model.effort !== undefined && provider !== "anthropic-messages"))
+  ) {
     throw new Error("caio_inference_worker_runtime_invalid");
   }
 
@@ -184,13 +216,24 @@ export function loadCaioInferenceWorkerRuntimeConfig(
   ) {
     throw new Error("caio_inference_worker_local_model_access_invalid");
   }
-  const model = Object.freeze({
-    baseUrl: parsed.data.model.baseUrl,
-    model: parsed.data.model.model,
-    accessToken: modelAccessToken,
-    probeTimeoutMs: parsed.data.model.probeTimeoutMs,
-    completeTimeoutMs: parsed.data.model.completeTimeoutMs,
-  });
+  const model: CaioWorkerModelRuntimeConfig =
+    provider === LOCAL_MODEL_PROVIDER
+      ? Object.freeze({
+          baseUrl: parsed.data.model.baseUrl,
+          model: parsed.data.model.model,
+          accessToken: modelAccessToken,
+          probeTimeoutMs: parsed.data.model.probeTimeoutMs,
+          completeTimeoutMs: parsed.data.model.completeTimeoutMs,
+        })
+      : Object.freeze({
+          provider,
+          baseUrl: parsed.data.model.baseUrl,
+          model: parsed.data.model.model,
+          apiKey: modelAccessToken,
+          ...(parsed.data.model.effort ? { effort: parsed.data.model.effort } : {}),
+          probeTimeoutMs: parsed.data.model.probeTimeoutMs,
+          completeTimeoutMs: parsed.data.model.completeTimeoutMs,
+        });
   return Object.freeze({
     gateway,
     model,
@@ -216,7 +259,7 @@ export async function runCaioInferenceWorkerRuntime(
   const gatewayFactory =
     dependencies.gatewayFactory ?? createCaioWorkerGatewayClient;
   const modelFactory =
-    dependencies.modelFactory ?? createCaioWorkerLocalModelPort;
+    dependencies.modelFactory ?? createCaioWorkerModelPort;
   const stdout =
     dependencies.stdout ?? ((text: string) => process.stdout.write(`${text}\n`));
   if (argv[0] === "readiness-attest") {

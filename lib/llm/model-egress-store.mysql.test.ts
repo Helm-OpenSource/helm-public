@@ -2225,4 +2225,117 @@ describeMysql("model egress store with an isolated MySQL database", () => {
       }),
     ).rejects.toThrow(/model_route_policy_head_changed/u);
   });
+  it("blocks a decision whose worst-case cost would carry the policy key's month past its monthly ceiling", async () => {
+    const now = new Date();
+    const capPolicyKey = "caio-monthly-cap";
+    const capRouteBase = route(`synthetic-monthly-cap-${suffix}`, HASH_A, {
+      maxCostUsdMicros: 12_500,
+      maxMonthlyCostUsdMicros: 20_000,
+    });
+    const capReadiness = readiness({
+      workspaceId,
+      target: capRouteBase,
+      checkedAt: new Date(now.getTime() - 60_000),
+      expiresAt: new Date(now.getTime() + 86_400_000),
+    });
+    const capRoute = { ...capRouteBase, readinessReceiptHash: capReadiness.contentHash };
+    await recordProviderAdapterReadinessReceipt({
+      authority: GOVERNED_MODEL_READINESS_AUTHORITY,
+      workspaceId,
+      actorUserId: ownerUserId,
+      idempotencyKey: `readiness:${suffix}:monthly-cap`,
+      receipt: capReadiness,
+    });
+    const capPolicyId = `policy:model-egress-monthly-cap-${suffix}`;
+    const capCandidate: TenantModelRoutePolicy = {
+      schemaVersion: "helm.tenant-model-route-policy/v1",
+      policyId: capPolicyId,
+      workspaceRef: `workspace:${workspaceId}`,
+      policyKey: capPolicyKey,
+      revision: 1,
+      routes: [capRoute],
+      primaryRoutes: [{ taskClass: "summary_briefing", routeRef: capRoute.routeId }],
+      validFrom: new Date(now.getTime() - 60_000).toISOString(),
+      validUntil: new Date(now.getTime() + 86_400_000).toISOString(),
+      approvalRef: computeModelRoutePolicyApprovalReceiptRef({
+        workspaceRef: `workspace:${workspaceId}`,
+        policyId: capPolicyId,
+        policyKey: capPolicyKey,
+        revision: 1,
+        approvedByRef: `user:${ownerUserId}`,
+      }),
+      approvedByRef: `user:${ownerUserId}`,
+      createdAt: now.toISOString(),
+      policyHash: HASH_A,
+      status: "draft",
+      authorityEffect: "model_egress_only",
+    };
+    await createTenantModelRoutePolicyDraft({
+      workspaceId,
+      actorUserId: ownerUserId,
+      policy: { ...capCandidate, policyHash: computeTenantModelRoutePolicyHash(capCandidate) },
+    });
+    await activateTenantModelRoutePolicy({ workspaceId, actorUserId: ownerUserId, policyId: capPolicyId, expectedHeadVersion: null, now });
+
+    const prepareUnderCap = async (label: string) => {
+      const evidenceRef = `evidence:monthly-cap-${label}-${suffix}`;
+      const projectionReceiptRef = await projection(evidenceRef, `projection:monthly-cap-${label}-${suffix}`);
+      return prepareModelRouteDecision({
+        authority: GOVERNED_GATEWAY_AUTHORITY,
+        workspaceId,
+        policyKey: capPolicyKey,
+        requestKey: `request:monthly-cap-${label}-${suffix}`,
+        taskClass: "summary_briefing",
+        taskRef: `briefing:monthly-cap-${label}-${suffix}`,
+        sourceAssetRefs: [assetId],
+        candidateEvidenceRefs: [evidenceRef],
+        selectedEvidenceRefs: [evidenceRef],
+        droppedEvidenceRefs: [],
+        projectionReceiptRef,
+        projectedPayloadHash: HASH_C,
+        promptInjectionScanStatus: "passed",
+        requestedMaxOutputTokens: REQUESTED_MAX_OUTPUT_TOKENS,
+        allowFallback: false,
+      });
+    };
+
+    // Spend recorded under OTHER policy keys earlier in this suite does not count against this key.
+    const first = await prepareUnderCap("a");
+    expect(first.decision.decision).toBe("allowed");
+    const claimedAt = new Date();
+    const claim = await claimModelRouteDispatch({
+      authority: GOVERNED_GATEWAY_AUTHORITY,
+      workspaceId,
+      decisionId: first.decision.decisionId,
+      gatewayRef: "gateway:caio-monthly-cap",
+      runtime: { ...runtimeDescriptor(claimedAt), credentialRef: capRoute.credentialRef },
+      now: claimedAt,
+    });
+    const finishedAt = new Date(claimedAt.getTime() + 1_000);
+    await recordModelEgressTerminalReceipt({
+      authority: GOVERNED_GATEWAY_AUTHORITY,
+      workspaceId,
+      decisionId: first.decision.decisionId,
+      gatewayRef: "gateway:caio-monthly-cap",
+      dispatchClaimHash: claim.claimHash,
+      idempotencyKey: `terminal:monthly-cap-a-${suffix}`,
+      outcome: "success",
+      resolutionSource: "invoke",
+      requestDisposition: "accepted",
+      providerRequestRefHash: HASH_B,
+      finishedAt,
+      latencyMs: 1_000,
+      promptTokens: 100,
+      completionTokens: 10,
+      ...LOW_COST_EVIDENCE,
+      costBand: "low",
+      errorCode: null,
+      recordedAt: finishedAt,
+    });
+
+    // 12,500 already spent + 12,500 worst case for this call > 20,000 monthly ceiling.
+    const second = await prepareUnderCap("b");
+    expect(second.decision.decision).not.toBe("allowed");
+    expect(second.decision.reasonCodes).toContain("route_monthly_cost_budget_exceeded");
+  });
 });

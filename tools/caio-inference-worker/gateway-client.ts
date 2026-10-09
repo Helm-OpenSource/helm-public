@@ -182,10 +182,17 @@ export function createCaioWorkerGatewayClient(
       }
       return parseClaim(body);
     },
-    submit: async ({ jobId, claimToken, inputHash, output, signal }) => {
+    submit: async ({ jobId, claimToken, inputHash, output, usage, providerRequestRef, signal }) => {
       const { status, body } = await call(
         "/v1/inference-jobs/submit",
-        { jobId, claimToken, inputHash, output },
+        {
+          jobId,
+          claimToken,
+          inputHash,
+          output,
+          ...(usage ? { usage } : {}),
+          ...(providerRequestRef ? { providerRequestRef } : {}),
+        },
         signal,
       );
       if (status < 200 || status >= 300) {

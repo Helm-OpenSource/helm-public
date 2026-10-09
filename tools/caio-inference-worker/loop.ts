@@ -48,9 +48,9 @@ export async function runCaioInferenceWorkerPass(input: {
   }
   log({ event: "claimed", jobId: claim.jobId });
 
-  let raw: string;
+  let completion: Awaited<ReturnType<CaioWorkerLocalModelPort["complete"]>>;
   try {
-    raw = await input.model.complete({
+    completion = await input.model.complete({
       prompt: buildCaioWorkerPrompt(claim.input, input.outputLanguage),
       maxOutputTokens: CAIO_WORKER_MAX_OUTPUT_TOKENS,
       ...signal,
@@ -62,7 +62,7 @@ export async function runCaioInferenceWorkerPass(input: {
     return { status: "model_failed", jobId: claim.jobId, reason };
   }
 
-  const output = parseJson(raw);
+  const output = parseJson(completion.content);
   const validation = validateCaioLayeredJudgement(output, new Set(claim.input.evidenceRefs));
   if (!validation.ok) {
     log({ event: "local_validation_failed", jobId: claim.jobId, detail: validation.code });
@@ -79,6 +79,9 @@ export async function runCaioInferenceWorkerPass(input: {
     claimToken: claim.claimToken,
     inputHash: claim.inputHash,
     output,
+    // Usage is forwarded as-is so the server can price the call; the worker never computes a cost.
+    ...(completion.usage ? { usage: completion.usage } : {}),
+    ...(completion.providerRequestRef ? { providerRequestRef: completion.providerRequestRef } : {}),
     ...signal,
   });
   log({ event: "submitted", jobId: claim.jobId, detail: submitted.status });

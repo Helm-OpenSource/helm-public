@@ -197,6 +197,43 @@ describe("CAIO inference worker owner-private runtime", () => {
     }
   });
 
+  it("loads an explicit remote provider only at its exact https root, keeping the key out of the config", async () => {
+    const { paths, config } = await fixture();
+    const remote = structuredClone(config) as typeof config & { model: Record<string, unknown> };
+    Object.assign(remote.model, { provider: "anthropic-messages", baseUrl: "https://api.anthropic.com/v1", model: "claude-opus-5-5", effort: "low" });
+    writeFileSync(paths.config, `${JSON.stringify(remote)}\n`, { mode: 0o600 });
+    const loaded = loadCaioInferenceWorkerRuntimeConfig(paths.config);
+    expect(loaded.model).toEqual({
+      provider: "anthropic-messages",
+      baseUrl: "https://api.anthropic.com/v1",
+      model: "claude-opus-5-5",
+      apiKey: MODEL_ACCESS,
+      effort: "low",
+      probeTimeoutMs: 5_000,
+      completeTimeoutMs: 300_000,
+    });
+
+    const openai = structuredClone(config) as typeof config & { model: Record<string, unknown> };
+    Object.assign(openai.model, { provider: "openai-chat-completions", baseUrl: "https://api.openai.com/v1", model: "sol6-placeholder-model-id" });
+    writeFileSync(paths.config, `${JSON.stringify(openai)}\n`, { mode: 0o600 });
+    expect(loadCaioInferenceWorkerRuntimeConfig(paths.config).model).toMatchObject({ provider: "openai-chat-completions" });
+
+    const invalid: Array<Record<string, unknown>> = [
+      { provider: "anthropic-messages", baseUrl: "http://127.0.0.1:8080/v1" },
+      { provider: "anthropic-messages", baseUrl: "https://api.openai.com/v1" },
+      { provider: "openai-chat-completions", baseUrl: "https://api.openai.com/v1", effort: "low" },
+      { baseUrl: "http://127.0.0.1:8080/v1", effort: "low" },
+      { provider: "local-openai-compatible", baseUrl: "https://api.anthropic.com/v1" },
+      { provider: "somewhere-else", baseUrl: "https://api.anthropic.com/v1" },
+    ];
+    for (const patch of invalid) {
+      const candidate = structuredClone(config) as typeof config & { model: Record<string, unknown> };
+      Object.assign(candidate.model, patch);
+      writeFileSync(paths.config, `${JSON.stringify(candidate)}\n`, { mode: 0o600 });
+      expect(() => loadCaioInferenceWorkerRuntimeConfig(paths.config)).toThrow(/caio_inference_worker_runtime_invalid/);
+    }
+  });
+
   it("rejects inline credentials, database fields, remote models and unknown keys", async () => {
     const { paths, config } = await fixture();
     type MutableConfig = typeof config & Record<string, unknown>;

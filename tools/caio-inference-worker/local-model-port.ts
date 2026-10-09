@@ -1,4 +1,4 @@
-import type { CaioWorkerLocalModelPort } from "./contracts";
+import type { CaioWorkerLocalModelPort, CaioWorkerModelCompletion } from "./contracts";
 
 /**
  * 本地模型端口：对着设备上的 OpenAI 兼容端点（现场是 oMLX）。
@@ -165,8 +165,8 @@ function listsModel(body: unknown, model: string): boolean {
   return data.some((entry) => typeof entry === "object" && entry !== null && (entry as { id?: unknown }).id === model);
 }
 
-/** 只认 OpenAI 兼容的那一个位置；内容为空即抛，不把空串当成一次判断。 */
-function extractContent(text: string): string {
+/** 只认 OpenAI 兼容的那一个位置；内容为空即抛，不把空串当成一次判断。用量缺失或不合形状时记为 null。 */
+function extractContent(text: string): CaioWorkerModelCompletion {
   let body: unknown;
   try {
     body = JSON.parse(text) as unknown;
@@ -181,5 +181,17 @@ function extractContent(text: string): string {
   if (typeof content !== "string" || content.trim().length === 0) {
     throw new Error("caio_worker_local_model_response_empty");
   }
-  return content;
+  return { content, usage: readOpenAiUsage(body), providerRequestRef: null };
+}
+
+/** OpenAI-compatible `usage.{prompt_tokens, completion_tokens}` when both are non-negative safe integers. */
+export function readOpenAiUsage(body: unknown): CaioWorkerModelCompletion["usage"] {
+  const usage = (body as { usage?: { prompt_tokens?: unknown; completion_tokens?: unknown } }).usage;
+  const input = usage?.prompt_tokens;
+  const output = usage?.completion_tokens;
+  return isTokenCount(input) && isTokenCount(output) ? { inputTokens: input, outputTokens: output } : null;
+}
+
+export function isTokenCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }

@@ -85,7 +85,11 @@ describe("设备侧本地模型端口", () => {
         return jsonResponse({ choices: [{ message: { content: "判断正文" } }] });
       }) as never,
     });
-    expect(await port.complete({ prompt: "问题", maxOutputTokens: 1200 })).toBe("判断正文");
+    expect(await port.complete({ prompt: "问题", maxOutputTokens: 1200 })).toEqual({
+      content: "判断正文",
+      usage: null,
+      providerRequestRef: null,
+    });
     expect(calls[0].url).toBe("http://127.0.0.1:8080/v1/chat/completions");
     // 判断要可复核：同一输入尽量给同一输出，温度不留给端点默认值。
     expect(calls[0].body).toMatchObject({ temperature: 0, max_tokens: 1200, stream: false });
