@@ -63,6 +63,7 @@ describe("isIgnorableExtensionSetupSqlError", () => {
       true,
     );
     expect(isIgnorableExtensionSetupSqlError("Duplicate key name 'idx_existing'")).toBe(true);
+    expect(isIgnorableExtensionSetupSqlError("Raw query failed. Code: `3822`. Duplicate check constraint name 'existing_check'.")).toBe(true);
   });
 
   it("does not ignore syntax or permission errors", () => {

@@ -50,7 +50,9 @@ export function isIgnorableExtensionSetupSqlError(error: unknown) {
   return (
     msg.includes("Code: `1060`") ||
     msg.includes("Code: `1061`") ||
+    msg.includes("Code: `3822`") ||
     msg.includes("Duplicate column name") ||
-    msg.includes("Duplicate key name")
+    msg.includes("Duplicate key name") ||
+    msg.includes("Duplicate check constraint name")
   );
 }
