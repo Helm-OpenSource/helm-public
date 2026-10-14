@@ -248,6 +248,11 @@ npm run db:migrate     # 应用迁移
 npm run db:seed        # 灌入开发示例数据
 ```
 
+`db:migrate` 会执行标准扩展建表 / 升级 SQL。测试与回滚文件，以及含有
+`DELIMITER`、存储过程或 prepared-statement 控制指令的脚本由各自的测试或
+扩展迁移 runner 执行，不会交给 Core 的单语句启动器。遇到缺失表/列错误时，
+先检查扩展 SQL 的建表与升级顺序及对应 runner，不要重复重置已有数据。
+
 如果迁移失败提示 extension SQL 相关，单独跑：
 
 ```bash

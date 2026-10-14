@@ -13,6 +13,7 @@ import { readEnvVarFromRootFiles } from "../lib/root-env";
 import {
   isIgnorableExtensionSetupSqlError,
   listExtensionSetupSqlFiles,
+  splitSqlStatements,
   walkSqlFiles,
 } from "./setup-db-sql-files";
 
@@ -149,10 +150,7 @@ async function runExtensionSqlFiles(databaseUrl: string) {
   try {
     for (const file of files) {
       const content = readFileSync(file, "utf8");
-      const statements = content
-        .split(/;[\t ]*(?:\r?\n|$)/)
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0 && !s.startsWith("--"));
+      const statements = splitSqlStatements(content);
       for (const stmt of statements) {
         try {
           await client.$executeRawUnsafe(stmt);
@@ -192,10 +190,7 @@ async function runProjectManualSqlFiles(databaseUrl: string) {
   try {
     for (const file of files) {
       const content = readFileSync(file, "utf8");
-      const statements = content
-        .split(/;[\t ]*(?:\r?\n|$)/)
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0 && !s.startsWith("--"));
+      const statements = splitSqlStatements(content);
       for (const stmt of statements) {
         try {
           await client.$executeRawUnsafe(stmt);
