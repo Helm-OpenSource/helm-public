@@ -24,15 +24,20 @@ export default async function ContactDetailPage({
   });
   const contactRouteIdentity = { sourcePage: `/contacts/${contact.id}` as const };
 
+  // Object first: the contact client owns the page header and renders the
+  // chain shell inside its single closing system judgement block.
   return (
     <div className="space-y-6" data-source-page={contactRouteIdentity.sourcePage}>
-      <ConversationChainExtensionDetailView model={chainModel} english={english} />
       <div data-conversation-chain-object-detail="contact-detail">
         <ContactDetailClient
           contact={contact}
           opportunities={opportunities}
           contacts={contacts}
           recommendations={recommendations}
+          relatedLinks={chainModel.actions}
+          supplementary={
+            <ConversationChainExtensionDetailView model={chainModel} english={english} />
+          }
         />
       </div>
     </div>

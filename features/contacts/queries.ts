@@ -1,8 +1,13 @@
 import { ActorType } from "@prisma/client";
 import { db } from "@/lib/db";
 import { generateContactBriefingSnapshot } from "@/lib/memory/briefing.service";
+import { buildInboxThreadWhere } from "@/features/inbox/queries";
 
-export async function getContactDetailData(workspaceId: string, contactId: string) {
+export async function getContactDetailData(
+  workspaceId: string,
+  contactId: string,
+  options?: { viewerEmail?: string | null },
+) {
   const contact = await db.contact.findFirst({
     where: {
       workspaceId,
@@ -10,7 +15,7 @@ export async function getContactDetailData(workspaceId: string, contactId: strin
     },
     include: {
       company: true,
-      owner: true,
+      owner: { select: { id: true, name: true } },
       opportunities: {
         include: {
           company: true,
@@ -33,6 +38,9 @@ export async function getContactDetailData(workspaceId: string, contactId: strin
         orderBy: { createdAt: "desc" },
       },
       emailThreads: {
+        // Same visibility rule as the inbox: mailbox threads only for the
+        // participant who connected that mailbox.
+        where: buildInboxThreadWhere(workspaceId, options?.viewerEmail),
         orderBy: { updatedAt: "desc" },
         include: {
           messages: {
