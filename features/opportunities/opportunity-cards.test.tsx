@@ -8,6 +8,7 @@ import { OpportunityCustomerCard } from "@/features/opportunities/opportunity-cu
 import { OpportunityHandlingCard } from "@/features/opportunities/opportunity-handling-card";
 import { OpportunityListCard } from "@/features/opportunities/opportunity-list-card";
 import { OpportunityOriginalDemand } from "@/features/opportunities/opportunity-original-demand";
+import { getWorkspaceStory } from "@/lib/presentation/workspace-story";
 
 const contact = {
   id: "contact_1",
@@ -44,8 +45,19 @@ function handlingProps(overrides: Partial<Parameters<typeof OpportunityHandlingC
     saveLabel: "保存",
     replyTarget: { kind: "thread" as const, threadId: "thread_1", href: "/inbox/thread_1" },
     onScheduleMeeting: () => undefined,
-    judgementAnchorId: "opportunity-judgement-workspace",
-    judgementLines: ["排序依据：优先级 P2（72）", "风险：中。未关联公司。"],
+    recordSection: (
+      <details id="opportunity-record-settings">
+        <summary>记录与附件</summary>
+      </details>
+    ),
+    systemJudgement: (
+      <details data-system-judgement id="opportunity-judgement-workspace">
+        <summary>系统判断</summary>
+        <ul>
+          <li>排序依据：优先级 P2（72）</li>
+        </ul>
+      </details>
+    ),
     ...overrides,
   };
 }
@@ -210,11 +222,15 @@ describe("OpportunityHandlingCard", () => {
     expect(html).toContain('href="/inbox/thread_1"');
     expect(html).toContain("去回复邮件");
     expect(html).toContain("安排会议");
-    expect(html).toMatch(/<details id="opportunity-judgement-workspace"[^>]*>/);
     expect(html).not.toMatch(/<details[^>]*open/);
-    expect(html).toContain("<summary");
     expect(html).toContain("系统判断");
-    expect(html.lastIndexOf("</details>")).toBeGreaterThan(html.indexOf("安排会议"));
+    const judgementStart = html.indexOf("<details data-system-judgement");
+    expect(judgementStart).toBeGreaterThan(html.indexOf("安排会议"));
+    expect(judgementStart).toBeGreaterThan(html.indexOf('id="opportunity-record-settings"'));
+    expect(html.lastIndexOf("<details")).toBe(judgementStart);
+    expect(html.indexOf("</details>", judgementStart)).toBe(
+      html.lastIndexOf("</details>"),
+    );
   });
 
   it("renders the reply address as plain text when there is no thread", () => {
@@ -232,7 +248,6 @@ describe("OpportunityHandlingCard", () => {
     expect(html).toContain(">alex@example.com</a>");
     expect(html).not.toContain("Reply by email");
     expect(html).toContain("Link a contact to keep notes");
-    expect(html).toContain("System judgement");
   });
 
   it("hides reply and meeting actions in create mode", () => {
@@ -241,7 +256,8 @@ describe("OpportunityHandlingCard", () => {
         {...handlingProps({
           replyTarget: undefined,
           onScheduleMeeting: undefined,
-          judgementLines: undefined,
+          recordSection: undefined,
+          systemJudgement: undefined,
           saveLabel: "创建机会",
         })}
       />,
@@ -325,6 +341,36 @@ describe("opportunities page source", () => {
       "const businessLoopGapReadout = buildBusinessLoopGapReadout",
     ]) {
       expect(client, marker).toContain(marker);
+    }
+  });
+
+  it("keeps one collapsed system judgement block, after the object cards and as the last block", () => {
+    const blocks = client.match(/data-system-judgement/g) ?? [];
+    expect(blocks).toHaveLength(1);
+    const judgementStart = client.lastIndexOf("<details", client.indexOf("data-system-judgement"));
+    const openingTag = client.slice(judgementStart, client.indexOf(">", judgementStart) + 1);
+    expect(openingTag).not.toMatch(/\sopen(?=[\s=>/])/);
+
+    const customer = client.indexOf("<OpportunityCustomerCard");
+    const demand = client.indexOf("<OpportunityOriginalDemand");
+    const handling = client.indexOf("<OpportunityHandlingCard");
+    const record = client.indexOf("id={OPPORTUNITY_PAGE_ANCHORS.recordSettings}");
+    expect(customer).toBeGreaterThan(0);
+    expect(customer).toBeLessThan(demand);
+    expect(demand).toBeLessThan(handling);
+    expect(handling).toBeLessThan(record);
+    expect(record).toBeLessThan(judgementStart);
+    expect(client.lastIndexOf("<details")).toBe(judgementStart);
+  });
+
+  it("renders no header description sentence in any locale or demo mode", () => {
+    for (const locale of ["zh-CN", "en-US"] as const) {
+      for (const demoMode of [null, "founder", "sales", "recruiter"] as const) {
+        expect(
+          getWorkspaceStory("opportunities", locale, demoMode).description,
+          `${locale} ${demoMode ?? "default"}`,
+        ).toBe("");
+      }
     }
   });
 });

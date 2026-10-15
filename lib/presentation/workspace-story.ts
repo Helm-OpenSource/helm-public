@@ -39,9 +39,7 @@ export function getWorkspaceStory(
     },
     opportunities: {
       eyebrow: english ? "Pipeline" : "销售管线",
-      description: english
-        ? "Heating up, slipping, dead. With the next move named for each."
-        : "升温的、掉速的、已死的。每条都标好下一步该做什么。",
+      description: "",
     },
     meetings: {
       eyebrow: english ? "Meetings" : "会议",
@@ -125,9 +123,7 @@ export function getWorkspaceStory(
       },
       opportunities: {
         eyebrow: english ? "Sales demo · pipeline" : "销售模式 · 管线",
-        description: english
-          ? "Heating up, slipping, dead — sorted by which one most needs you, not by close date."
-          : "升温的 / 掉速的 / 已死的——按「现在最需要你」排序，不是按预计成交日。",
+        description: "",
       },
       contacts: {
         eyebrow: english ? "Sales demo · relationships" : "销售模式 · 关系",

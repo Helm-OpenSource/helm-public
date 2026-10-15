@@ -1730,65 +1730,78 @@ export function OpportunitiesClient({
                     activeCard.replyTarget?.kind !== "thread" &&
                     !activeOpportunity.contacts[0]
                   }
-                  judgementAnchorId={OPPORTUNITY_PAGE_ANCHORS.judgementWorkspace}
-                  judgementLines={buildJudgementLines(activeOpportunity)}
-                  judgementExtra={
-                    activeOpportunity.dingtalkSignalSummary?.totalSignals ? (
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-[color:var(--muted-foreground)]">
-                        <span>
-                          {english
-                            ? `DingTalk signals (7d): ${activeOpportunity.dingtalkSignalSummary.totalSignals} · converted ${activeOpportunity.dingtalkSignalSummary.convertedActionCount} · pending approval ${activeOpportunity.dingtalkSignalSummary.pendingApprovalCount}`
-                            : `钉钉执行信号（近7天）：${activeOpportunity.dingtalkSignalSummary.totalSignals} 条 · 已转动作 ${activeOpportunity.dingtalkSignalSummary.convertedActionCount} 条 · 待审批 ${activeOpportunity.dingtalkSignalSummary.pendingApprovalCount} 条`}
-                        </span>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() =>
-                            handleConvertDingTalkSignal(activeOpportunity.id)
-                          }
-                        >
-                          {english ? "Convert DingTalk signal" : "转换钉钉信号"}
-                        </Button>
+                  recordSection={
+                    <details
+                      id={OPPORTUNITY_PAGE_ANCHORS.recordSettings}
+                      className="border-t border-[color:var(--border)] pt-3"
+                    >
+                      <summary className="cursor-pointer text-xs text-[color:var(--muted-foreground)]">
+                        {english ? "Record and attachments" : "记录与附件"}
+                      </summary>
+                      <div className="mt-4 space-y-4">
+                        {renderRecordFields(false)}
+                        <div className="flex flex-wrap gap-2">
+                          <Button asChild size="sm" variant="secondary">
+                            <Link
+                              href={buildOpportunityAssetHref(
+                                activeOpportunity.id,
+                                "opportunity-sheet",
+                              )}
+                            >
+                              {english ? "Open asset view" : "打开经营资产视图"}
+                              <ArrowRight className="h-4 w-4" />
+                            </Link>
+                          </Button>
+                          <StartRecordingButton
+                            variant="secondary"
+                            objectType="OPPORTUNITY"
+                            objectId={activeOpportunity.id}
+                            objectLabel={activeOpportunity.title}
+                            defaultTitle={
+                              english
+                                ? `${activeOpportunity.title} live capture`
+                                : `${activeOpportunity.title} 现场记录`
+                            }
+                          />
+                        </div>
                       </div>
-                    ) : null
+                    </details>
+                  }
+                  systemJudgement={
+                    <details
+                      data-system-judgement
+                      id={OPPORTUNITY_PAGE_ANCHORS.judgementWorkspace}
+                      className="border-t border-dashed border-[color:var(--border)] pt-3"
+                    >
+                      <summary className="cursor-pointer text-xs text-[color:var(--muted-foreground)]">
+                        {english ? "System judgement" : "系统判断"}
+                      </summary>
+                      <ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-6 text-[color:var(--muted-foreground)]">
+                        {buildJudgementLines(activeOpportunity).map((line) => (
+                          <li key={line}>{line}</li>
+                        ))}
+                      </ul>
+                      {activeOpportunity.dingtalkSignalSummary?.totalSignals ? (
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[color:var(--muted-foreground)]">
+                          <span>
+                            {english
+                              ? `DingTalk signals (7d): ${activeOpportunity.dingtalkSignalSummary.totalSignals} · converted ${activeOpportunity.dingtalkSignalSummary.convertedActionCount} · pending approval ${activeOpportunity.dingtalkSignalSummary.pendingApprovalCount}`
+                              : `钉钉执行信号（近7天）：${activeOpportunity.dingtalkSignalSummary.totalSignals} 条 · 已转动作 ${activeOpportunity.dingtalkSignalSummary.convertedActionCount} 条 · 待审批 ${activeOpportunity.dingtalkSignalSummary.pendingApprovalCount} 条`}
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() =>
+                              handleConvertDingTalkSignal(activeOpportunity.id)
+                            }
+                          >
+                            {english ? "Convert DingTalk signal" : "转换钉钉信号"}
+                          </Button>
+                        </div>
+                      ) : null}
+                    </details>
                   }
                 />
-
-                <details
-                  id={OPPORTUNITY_PAGE_ANCHORS.recordSettings}
-                  className="rounded-[20px] border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3"
-                >
-                  <summary className="cursor-pointer text-xs text-[color:var(--muted-foreground)]">
-                    {english ? "Record and attachments" : "记录与附件"}
-                  </summary>
-                  <div className="mt-4 space-y-4">
-                    {renderRecordFields(false)}
-                    <div className="flex flex-wrap gap-2">
-                      <Button asChild size="sm" variant="secondary">
-                        <Link
-                          href={buildOpportunityAssetHref(
-                            activeOpportunity.id,
-                            "opportunity-sheet",
-                          )}
-                        >
-                          {english ? "Open asset view" : "打开经营资产视图"}
-                          <ArrowRight className="h-4 w-4" />
-                        </Link>
-                      </Button>
-                      <StartRecordingButton
-                        variant="secondary"
-                        objectType="OPPORTUNITY"
-                        objectId={activeOpportunity.id}
-                        objectLabel={activeOpportunity.title}
-                        defaultTitle={
-                          english
-                            ? `${activeOpportunity.title} live capture`
-                            : `${activeOpportunity.title} 现场记录`
-                        }
-                      />
-                    </div>
-                  </div>
-                </details>
               </>
             ) : (
               <>

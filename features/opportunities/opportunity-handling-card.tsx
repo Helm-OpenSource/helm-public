@@ -41,10 +41,13 @@ export type OpportunityHandlingCardProps = {
   replyTarget?: OpportunityReplyTarget;
   onScheduleMeeting?: () => void;
   meetingDisabled?: boolean;
-  /** 系统判断: collapsed, always last in the card. */
-  judgementAnchorId?: string;
-  judgementLines?: string[];
-  judgementExtra?: ReactNode;
+  /** Secondary record fields (collapsed), shown after the actions. */
+  recordSection?: ReactNode;
+  /**
+   * The page's single collapsed `<details data-system-judgement>` block,
+   * authored by the view; always the last block of the card.
+   */
+  systemJudgement?: ReactNode;
 };
 
 const labelClassName =
@@ -68,9 +71,8 @@ export function OpportunityHandlingCard({
   replyTarget,
   onScheduleMeeting,
   meetingDisabled = false,
-  judgementAnchorId,
-  judgementLines,
-  judgementExtra,
+  recordSection,
+  systemJudgement,
 }: OpportunityHandlingCardProps) {
   const showActions = replyTarget !== undefined;
 
@@ -215,22 +217,8 @@ export function OpportunityHandlingCard({
         ) : null}
       </div>
 
-      {judgementLines?.length ? (
-        <details
-          id={judgementAnchorId}
-          className="border-t border-dashed border-[color:var(--border)] pt-3"
-        >
-          <summary className="cursor-pointer text-xs text-[color:var(--muted-foreground)]">
-            {english ? "System judgement" : "系统判断"}
-          </summary>
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-6 text-[color:var(--muted-foreground)]">
-            {judgementLines.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-          {judgementExtra ? <div className="mt-2">{judgementExtra}</div> : null}
-        </details>
-      ) : null}
+      {recordSection}
+      {systemJudgement}
     </section>
   );
 }
