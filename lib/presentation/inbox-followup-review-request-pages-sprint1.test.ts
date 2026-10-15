@@ -55,9 +55,17 @@ describe("inbox / follow-up / review request detail chain sprint 1", () => {
     for (const snippet of [
       "InboxFollowupReviewRequestDetailView",
       "buildInboxDetailPageModel",
+      // Object first (2026-10-15): full messages first, chain shell folded.
+      "data-inbox-thread-messages",
+      "<EmailThreadTranscript",
+      "data-system-judgement",
+      "<MountWhenOpen>",
     ]) {
       expect(inboxRoute).toContain(snippet);
     }
+    expect(inboxRoute.indexOf("<EmailThreadTranscript")).toBeLessThan(
+      inboxRoute.indexOf("<InboxFollowupReviewRequestDetailView"),
+    );
 
     for (const snippet of [
       "InboxFollowupReviewRequestDetailView",

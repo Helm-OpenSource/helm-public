@@ -1,18 +1,50 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ConnectorProvider } from "@prisma/client";
-import { getInboxData } from "@/features/inbox/queries";
+import type { ReactNode } from "react";
+import { getInboxData, getInboxViewerEmail } from "@/features/inbox/queries";
 import { logPageViewEvent } from "@/lib/analytics/session-events";
 import { getCurrentWorkspace, requireCurrentUser } from "@/lib/auth/session";
-import { db } from "@/lib/db";
 import { isEnglishLocale } from "@/lib/i18n/config";
 import { resolveWorkspaceUiLocaleForRequest } from "@/lib/i18n/request-locale.server";
-import { formatDateLabel } from "@/lib/utils";
-import { formatInboxDateLabel } from "@/features/inbox/inbox-date-labels";
+import { safeParseJson } from "@/lib/utils";
 import { buildInboxDetailPageModel } from "@/features/inbox-followup-review-request/detail-model";
 import { InboxFollowupReviewRequestDetailView } from "@/features/inbox-followup-review-request/detail-view";
+import {
+  EmailThreadLatestState,
+  EmailThreadTranscript,
+} from "@/features/inbox/email-thread-transcript";
+import { MountWhenOpen } from "@/components/shared/mount-when-open";
+import { PageHeader } from "@/components/shared/page-header";
+import { RelatedObjectLinks } from "@/components/shared/related-object-links";
+import {
+  SystemJudgementSummary,
+  systemJudgementDetailsClassName,
+} from "@/components/shared/system-judgement-summary";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatInboxMessageBody } from "@/features/inbox/message-formatting";
+
+function parseParticipants(value: string | null) {
+  if (!value) return [];
+  const parsed = safeParseJson<unknown>(value, null);
+  if (Array.isArray(parsed)) {
+    return parsed.filter((item): item is string => typeof item === "string" && item.trim() !== "");
+  }
+  return [value];
+}
+
+function ThreadFact({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="workspace-panel rounded-2xl px-4 py-3">
+      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">{label}</p>
+      <div className="mt-2 break-words text-sm font-medium text-[color:var(--foreground)]">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+const factLinkClassName =
+  "text-[color:var(--accent)] underline-offset-4 hover:underline";
 
 export default async function InboxDetailPage({
   params,
@@ -26,20 +58,10 @@ export default async function InboxDetailPage({
     workspaceDefaultLocale: workspace.defaultLocale,
   });
   const english = isEnglishLocale(locale);
-  const formatInboxDate = (value: Date | string | null | undefined) =>
-    formatInboxDateLabel(value, english, formatDateLabel);
-  const connector = await db.connector.findUnique({
-    where: {
-      workspaceId_userId_provider: {
-        workspaceId: workspace.id,
-        userId: user.id,
-        provider: ConnectorProvider.GMAIL,
-      },
-    },
-  });
+  const viewerEmail = await getInboxViewerEmail(workspace.id, user.id);
   const inbox = await getInboxData(workspace.id, {
     selectedThreadId: id,
-    viewerEmail: connector?.externalAccountEmail ?? null,
+    viewerEmail,
   });
   const thread = inbox.selected?.id === id ? inbox.selected : null;
 
@@ -70,59 +92,101 @@ export default async function InboxDetailPage({
     english,
     hasReviewRequest,
   });
+  const participants = parseParticipants(thread.participants);
+  const notLinked = english ? "Not linked" : "未关联";
 
+  // Object first: the thread, its full messages and the next hops come first;
+  // the inbox chain shell folds into the single closing system judgement block.
   return (
-    <div className="workspace-surface-stack">
-      <InboxFollowupReviewRequestDetailView model={model} english={english} />
-      <Card>
-        <CardHeader className="space-y-2">
-          <CardTitle>
-            {english ? "Full email thread content" : "完整邮件线程内容"}
-          </CardTitle>
-          <p className="text-sm leading-6 text-[color:var(--muted-foreground)]">
-            {english
-              ? "The inbox first screen stays concise. Use this section to read every message in full."
-              : "收件箱首屏保持精简，这里用于查看每一封邮件的完整正文。"}
-          </p>
-          <Link
-            href={`/inbox?threadId=${thread.id}`}
-            className="text-sm font-medium text-[color:var(--accent)] underline-offset-4 hover:underline"
-          >
-            {english ? "Back to inbox preview" : "返回收件箱预览"}
-          </Link>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {thread.messages.map((message) => (
-            <article
-              key={message.id}
-              className={`rounded-2xl px-4 py-4 ${message.isInbound ? "border border-[color:var(--border)] bg-[color:color-mix(in_oklab,var(--surface)_94%,white_6%)]" : "bg-[color:var(--accent)] text-[color:var(--accent-foreground)]"}`}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p
-                  className={`text-sm font-semibold ${message.isInbound ? "text-[color:var(--foreground)]" : "text-[color:var(--accent-foreground)]"}`}
+    <div className="workspace-surface-stack" data-source-page={`/inbox/${thread.id}`}>
+      <PageHeader
+        eyebrow={english ? "Inbox" : "收件箱"}
+        title={thread.subject}
+        english={english}
+        actions={
+          <Button variant="secondary" asChild>
+            <Link href={`/inbox?threadId=${thread.id}`}>
+              {english ? "Back to inbox preview" : "返回收件箱预览"}
+            </Link>
+          </Button>
+        }
+      />
+
+      <Card data-inbox-thread-facts="true">
+        <CardContent className="space-y-4 py-5">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <ThreadFact label={english ? "Counterpart" : "对方"}>
+              {thread.counterpart}
+            </ThreadFact>
+            <ThreadFact label={english ? "Contact" : "联系人"}>
+              {thread.contact ? (
+                <Link href={`/contacts/${thread.contact.id}`} className={factLinkClassName}>
+                  {thread.contact.name}
+                </Link>
+              ) : (
+                notLinked
+              )}
+            </ThreadFact>
+            <ThreadFact label={english ? "Company" : "公司"}>
+              {thread.company ? (
+                <Link href={`/companies/${thread.company.id}`} className={factLinkClassName}>
+                  {thread.company.name}
+                </Link>
+              ) : (
+                notLinked
+              )}
+            </ThreadFact>
+            <ThreadFact label={english ? "Opportunity" : "机会"}>
+              {thread.opportunity ? (
+                <Link
+                  href={`/opportunities?opportunityId=${thread.opportunity.id}`}
+                  className={factLinkClassName}
                 >
-                  {message.sender}
-                  <span
-                    className={`ml-2 text-xs font-normal ${message.isInbound ? "text-[color:var(--muted-foreground)]" : "text-[color:color-mix(in_oklab,var(--accent-foreground)_72%,transparent)]"}`}
-                  >
-                    {message.senderEmail}
-                  </span>
-                </p>
-                <p
-                  className={`text-xs ${message.isInbound ? "text-[color:var(--muted-foreground)]" : "text-[color:color-mix(in_oklab,var(--accent-foreground)_72%,transparent)]"}`}
-                >
-                  {formatInboxDate(message.sentAt)}
-                </p>
-              </div>
-              <p
-                className={`mt-3 whitespace-pre-wrap break-words text-sm leading-7 ${message.isInbound ? "text-[color:var(--foreground)]" : "text-[color:color-mix(in_oklab,var(--accent-foreground)_86%,transparent)]"}`}
-              >
-                {formatInboxMessageBody(message.body, english)}
-              </p>
-            </article>
-          ))}
+                  {thread.opportunity.title}
+                </Link>
+              ) : (
+                notLinked
+              )}
+            </ThreadFact>
+          </div>
+          {participants.length ? (
+            <p className="break-words text-sm text-[color:var(--muted-foreground)]">
+              {english ? "Participants: " : "参与人："}
+              {participants.join(english ? ", " : "、")}
+            </p>
+          ) : null}
+          <EmailThreadLatestState thread={thread} english={english} />
+          <RelatedObjectLinks links={model.actions} english={english} />
         </CardContent>
       </Card>
+
+      <Card data-inbox-thread-messages="true">
+        <CardHeader>
+          <CardTitle>
+            {english
+              ? `Full email thread content · ${thread.messages.length}`
+              : `完整邮件线程内容 · ${thread.messages.length} 封`}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {thread.messages.length ? (
+            <EmailThreadTranscript thread={thread} english={english} />
+          ) : (
+            <p className="text-sm text-[color:var(--muted-foreground)]">
+              {english ? "This thread has no messages." : "这个线程没有邮件。"}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <details className={systemJudgementDetailsClassName} data-system-judgement>
+        <SystemJudgementSummary english={english} />
+        <div className="px-4 pb-5">
+          <MountWhenOpen>
+            <InboxFollowupReviewRequestDetailView model={model} english={english} />
+          </MountWhenOpen>
+        </div>
+      </details>
     </div>
   );
 }
