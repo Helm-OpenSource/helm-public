@@ -4,6 +4,11 @@ const playwrightDistDir = ".tmp/playwright/.next";
 const playwrightPort = Number(process.env.PLAYWRIGHT_SERVER_PORT ?? "3100");
 const playwrightBaseUrl = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${playwrightPort}`;
 const reuseExistingServer = process.env.PLAYWRIGHT_REUSE_SERVER === "1";
+// The webServer builds the production bundle before starting it; CI raises this
+// on cold runners where `npm run build` alone can approach the default.
+const webServerTimeoutMs = Number(
+  process.env.PLAYWRIGHT_WEBSERVER_TIMEOUT_MS ?? "240000",
+);
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -28,6 +33,6 @@ export default defineConfig({
         // Browser e2e stays on an isolated production bundle so local dev-only
         // dependency resolution does not skew the runtime contract under test.
         reuseExistingServer,
-        timeout: 240_000,
+        timeout: webServerTimeoutMs,
       },
 });

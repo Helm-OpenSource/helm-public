@@ -55,6 +55,10 @@ const RESOURCE_REVIEW_SCORE = 55;
 export interface MobileCommandReadModel {
   mustPushItems: MustPushItem[];
   totalCount: number;
+  /** Critical items across every loaded item, counted before the display slice. */
+  urgentCount: number;
+  /** Critical or high items across every loaded item, counted before the display slice. */
+  highPressureCount: number;
   foldedCount: number;
   hasCriticalFolded: boolean;
   reviewCount: number;
@@ -189,6 +193,12 @@ export function buildMobileCommandReadModelFromItems(
   );
   const rankedItems = rankMustPushItems(itemsWithOutcomeCheckpoints);
   const totalCount = rankedItems.length;
+  const urgentCount = rankedItems.filter(
+    (item) => item.severity === "critical",
+  ).length;
+  const highPressureCount = rankedItems.filter(
+    (item) => item.severity === "critical" || item.severity === "high",
+  ).length;
   const displayItems = rankedItems.slice(0, limit);
   const foldedItems = rankedItems.slice(limit);
   const foldedCount = foldedItems.length;
@@ -209,6 +219,8 @@ export function buildMobileCommandReadModelFromItems(
   return {
     mustPushItems: displayItems,
     totalCount,
+    urgentCount,
+    highPressureCount,
     foldedCount,
     hasCriticalFolded,
     reviewCount,
@@ -914,6 +926,15 @@ function generateTodaySummary(items: MustPushItem[], english: boolean): string {
     default:
       return english ? `Handle ${target} first today` : `今天先处理 ${target}`;
   }
+}
+
+/** Header badge for the urgent total; null when nothing is critical. */
+export function formatMobileUrgentAlert(
+  urgentCount: number,
+  english: boolean,
+): string | null {
+  if (urgentCount <= 0) return null;
+  return english ? `${urgentCount} urgent` : `${urgentCount} 项紧急`;
 }
 
 function elapsedWholeDays(from: Date, to: Date): number {

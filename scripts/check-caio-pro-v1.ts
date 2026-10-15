@@ -293,8 +293,11 @@ const WORKFLOW_USES =
 const D2_DOCKER_SMOKE_WORKFLOW = ".github/workflows/d2-docker-smoke.yml";
 const D2_DOCKER_SMOKE_HELPER = "scripts/d2-docker-smoke.sh";
 const D2_DOCKER_SMOKE_INVOCATION = "bash scripts/d2-docker-smoke.sh";
+// Re-pinned 2026-10-16: the only change is the `pull_request:` arm dropping its
+// main/develop branch filter so stacked PRs get the same smoke; the job body and
+// the local-clone binding are byte-identical to the previous pin.
 const D2_DOCKER_SMOKE_WORKFLOW_SHA256 =
-  "37b362c3aa45c45478f54b539601ce528855838734ee8371b667d0993e0dd454";
+  "5c524f19b50d389bcd8c82733048946695031b63412c76191771af9fe65d843f";
 const D2_DOCKER_SMOKE_HELPER_SHA256 =
   "1385d785b7692aaec20cc79f8ff00ec8474b1966f19e10d283ef8e3bfe6c7431";
 const GATEWAY_REVERSE_COMPOSITION_MARKERS = [

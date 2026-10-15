@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildMobileCommandReadModelFromItems } from "./mobile-command-read-model";
+import {
+  buildMobileCommandReadModelFromItems,
+  formatMobileUrgentAlert,
+} from "./mobile-command-read-model";
 import type { MustPushItem } from "../types";
 
 function item(input: Partial<MustPushItem> & Pick<MustPushItem, "id" | "type" | "severity" | "score">): MustPushItem {
@@ -209,6 +212,22 @@ describe("buildMobileCommandReadModelFromItems", () => {
       expect(model.outcomeLedger.nextReviewHref).toBe(safeDefault);
       expect(model.outcomeLedger.nextReviewHref).not.toBe(unsafe);
     }
+  });
+
+  it("counts every urgent item before slicing for display: 5 urgent, 4 shown, count says 5", () => {
+    const model = buildMobileCommandReadModelFromItems(
+      [1, 2, 3, 4, 5].map((n) =>
+        item({ id: `urgent-${n}`, type: "stalled_opportunity", severity: "critical", score: 100 - n }),
+      ),
+      4,
+    );
+
+    expect(model.mustPushItems).toHaveLength(4);
+    expect(model.urgentCount).toBe(5);
+    expect(model.highPressureCount).toBe(5);
+    expect(formatMobileUrgentAlert(model.urgentCount, false)).toBe("5 项紧急");
+    expect(formatMobileUrgentAlert(model.urgentCount, true)).toBe("5 urgent");
+    expect(formatMobileUrgentAlert(0, false)).toBeNull();
   });
 
   it("only marks critical overflow when a critical item is actually folded", () => {

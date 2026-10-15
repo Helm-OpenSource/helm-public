@@ -96,7 +96,7 @@ async function openDashboardWorkEntryRail(page: Page) {
   const actionRail = page.locator('[data-dashboard-work-entry-action-rail="true"]');
   await expect(actionRail).toBeVisible();
   await expect(actionRail.getByRole("link", { name: /Open queue|查看队列/ })).toBeVisible();
-  await expect(actionRail.getByRole("link", { name: /Open Ask Helm|打开 Ask Helm/ })).toBeVisible();
+  await expect(actionRail.getByRole("link", { name: /Add a work signal|上报信号/ })).toBeVisible();
   await expect(actionRail.getByRole("link", { name: /Open sources|查看数据源/ })).toBeVisible();
   return actionRail;
 }
@@ -223,7 +223,7 @@ test("dashboard 把 explanation / review / memory replay 继续后置到 dedicat
 
   await expect(page.locator('[data-dashboard-home-surface-routing="true"]')).toHaveCount(0);
   await expect(actionRail.getByRole("link", { name: /Open queue|查看队列/ })).toBeVisible();
-  await expect(actionRail.getByRole("link", { name: /Open Ask Helm|打开 Ask Helm/ })).toBeVisible();
+  await expect(actionRail.getByRole("link", { name: /Add a work signal|上报信号/ })).toBeVisible();
   await expect(actionRail.getByRole("link", { name: /Open sources|查看数据源/ })).toBeVisible();
   await page.screenshot({
     path: testInfo.outputPath("dashboard-home-work-entry-action-rail.png"),
@@ -241,7 +241,7 @@ test("dashboard work-entry action rail lands on dedicated work surfaces", async 
   await expect(page.locator("#approval-queue")).toBeVisible();
 
   actionRail = await openDashboardWorkEntryRail(page);
-  await actionRail.getByRole("link", { name: /Open Ask Helm|打开 Ask Helm/ }).click();
+  await actionRail.getByRole("link", { name: /Add a work signal|上报信号/ }).click();
   await expect(page).toHaveURL(/\/search/);
   await expect(page).toHaveURL(/mode=ask/);
   await expect(page.locator("#ask-helm-signal-intake")).toBeVisible();

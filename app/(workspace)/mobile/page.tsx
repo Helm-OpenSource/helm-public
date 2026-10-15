@@ -34,7 +34,10 @@ import {
   adaptAskHelmResponseToMobile,
   getMobileGroundingSummary,
 } from "@/features/mobile/lib/adapt-ask-helm-response";
-import { getMobileCommandReadModel } from "@/features/mobile/lib/mobile-command-read-model";
+import {
+  formatMobileUrgentAlert,
+  getMobileCommandReadModel,
+} from "@/features/mobile/lib/mobile-command-read-model";
 import { WorkspaceStatus } from "@/features/mobile/components/workspace-status";
 import { AskHelmInput } from "@/features/mobile/components/ask-helm-input";
 import { MustPushList } from "@/features/mobile/components/must-push-list";
@@ -88,18 +91,10 @@ export default async function MobilePage({ searchParams }: MobilePageProps) {
   });
 
   // Build workspace status from read model data
-  const criticalCount = readModel.mustPushItems.filter(
-    (item) => item.severity === "critical",
-  ).length;
   const workspaceStatus: WorkspaceStatusType = {
     workspaceName: english ? "Today's customer work" : "今天的客户推进",
     todaySummary: readModel.todaySummary,
-    topAlert:
-      criticalCount > 0
-        ? english
-          ? `${criticalCount} urgent`
-          : `${criticalCount} 项紧急`
-        : null,
+    topAlert: formatMobileUrgentAlert(readModel.urgentCount, english),
     reviewCount: readModel.reviewCount,
     outcomeCheckpointCount: readModel.outcomeCheckpointCount,
   };
@@ -113,9 +108,7 @@ export default async function MobilePage({ searchParams }: MobilePageProps) {
     item.boundaryNote ? [item.boundaryNote.message] : [],
   );
   const hasAskHelmQuery = Boolean(q?.trim());
-  const highPressureCount = allItems.filter(
-    (item) => item.severity === "critical" || item.severity === "high",
-  ).length;
+  const highPressureCount = readModel.highPressureCount;
   const visiblePriorityItems = allItems.slice(0, 3);
   const signalLifecycleHref = buildOperatingSignalFlowSignalHref(
     "boundary:alias-f",

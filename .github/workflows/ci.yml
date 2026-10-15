@@ -9,7 +9,8 @@ on:
   push:
     branches: [main, develop]
   pull_request:
-    branches: [main, develop]
+  # Any base branch: stacked PRs whose base is a feature branch need the same
+  # checks as PRs into main/develop. `push:` stays limited to main/develop.
 
 jobs:
   type-check:
@@ -1156,3 +1157,106 @@ jobs:
 
       - name: Run public structure smoke
         run: npm run public:e2e:smoke
+
+  # 中文说明：真正的浏览器回归。MySQL 只在本 job 的 runner 回环上存在，口令按上面
+  # 同样的方式运行时生成并 mask；迁移 + 种子后，Playwright 构建并启动生产包，跑对象
+  # 优先第 1 波的主路径（联系人 → 机会 → 复核）和移动工作页。
+  # English: the real browser regression. Same runtime-minted, masked MySQL
+  # credential as the jobs above; after migrate + seed, Playwright builds and
+  # starts the production bundle and drives the object-first wave-1 path
+  # (contacts -> opportunity -> approval) and the mobile surface.
+  browser-regression:
+    name: Browser Regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [type-check, lint, repo-guards]
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: helm_browser_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      HELM_CI_MYSQL_DATABASE: helm_browser_ci
+      HELM_CI_MYSQL_USER: helm_ci
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Mint an isolated least-privilege MySQL credential
+        env:
+          HELM_CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          app_password="$(openssl rand -hex 24)"
+          root_password="$(openssl rand -hex 24)"
+          echo "::add-mask::${app_password}"
+          echo "::add-mask::${root_password}"
+          bootstrap_sql="$(mktemp)"
+          chmod 600 "${bootstrap_sql}"
+          {
+            printf "CREATE USER IF NOT EXISTS '%s'@'%%' IDENTIFIED BY '%s';\n" \
+              "${HELM_CI_MYSQL_USER}" "${app_password}"
+            printf "GRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
+              "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
+            # Same ephemeral-container exception as the jobs above: migrations
+            # create triggers, which binary logging refuses without SUPER.
+            printf "SET GLOBAL log_bin_trust_function_creators = 1;\n"
+            printf "ALTER USER IF EXISTS 'root'@'%%' IDENTIFIED BY '%s';\n" \
+              "${root_password}"
+            printf "ALTER USER IF EXISTS 'root'@'localhost' IDENTIFIED BY '%s';\n" \
+              "${root_password}"
+            printf "FLUSH PRIVILEGES;\n"
+          } >"${bootstrap_sql}"
+          docker exec -i "${HELM_CI_MYSQL_CONTAINER}" \
+            mysql --host=127.0.0.1 --protocol=tcp --user=root --batch \
+            <"${bootstrap_sql}"
+          rm -f "${bootstrap_sql}"
+          credential="${HELM_CI_MYSQL_USER}:${app_password}"
+          url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
+          [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
+          {
+            printf 'DATABASE_URL=%s\n' "${url}"
+          } >>"${GITHUB_ENV}"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create example .env file
+        run: cp .env.example .env
+
+      - name: Generate Prisma Client
+        run: npm run db:generate
+
+      - name: Migrate and seed the demo workspaces
+        run: npx tsx prisma/setup-db.ts prepare
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run the object-first browser regression
+        env:
+          APP_URL: http://127.0.0.1:3100
+          PLAYWRIGHT_WEBSERVER_TIMEOUT_MS: '600000'
+        run: npm run e2e:browser
+
+      - name: Upload Playwright results
+        uses: actions/upload-artifact@v6
+        if: failure()
+        with:
+          name: browser-regression-results
+          path: test-results/
+          retention-days: 7
