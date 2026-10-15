@@ -589,7 +589,9 @@ export function ContactDetailClient({
     pageStory.description,
     contact.company?.name ?? (english ? "Independent contact" : "独立联系人"),
     `${english ? "Last interaction" : "最近互动"} ${contactLastInteractionRelative}`,
-  ].join(" · ");
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const lastMeaningfulInteractionExplanation = english
     ? `The last meaningful interaction was ${contactLastInteractionRelative}. That means the system is not looking only at profile fields; it is using interaction cadence, active blockers, open commitments and your handling preferences as recommendation context.`
     : `最近一次互动是 ${formatRelative(contact.lastInteractionAt)}。这意味着判断不能只盯着资料字段，而要把最近互动节奏、当前卡点、未兑现承诺和你的处理偏好一起看。`;
