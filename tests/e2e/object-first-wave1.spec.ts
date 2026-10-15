@@ -107,7 +107,7 @@ test.describe("object-first wave 1", () => {
     await expect(rail.getByRole("link", { name: /Open sources|查看数据源/ })).toBeVisible();
     await expect(rail).not.toContainText(/真实工作里出现新情况时|If the answer is thin/);
     await expect(
-      dashboard.locator('details[data-system-judgement] summary'),
+      dashboard.locator('details[data-system-judgement] > summary'),
     ).toContainText(/展开候选项与依据|Open ranked candidates and proof/);
   });
 
