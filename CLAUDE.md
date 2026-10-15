@@ -8,7 +8,7 @@ Helm 是一套面向受控试点与中国市场的 AI 经营协同操作系统�
 
 **核心特征:**
 - 工作区优先、成员支持、受控试点架构
-- 判断优先、决策优先的设计理念
+- 对象优先的页面结构（系统判断折叠在视图末尾）
 - 主动汇报与人在环路的治理
 - 明确区分建议与承诺
 - 企业级视觉设计（非开发工具或聊天应用）
@@ -147,18 +147,22 @@ docs/             # 产品、架构和实现文档
 
 ### 设计原则
 - 浅色优先 (非深色模式优先)
-- 判断优先的层级
-- 决策优先的信息架构
+- 对象优先的层级（见下节）
 - 清晰的状态和风险指示器
 - 克制的颜色、字体和动效
 - 操作表面的高信息密度
 
-### 页面结构
-每个页面应优先展示:
-1. Helm 当前怎么看 (判断)
-2. 为什么这样看 (理由)
-3. 需要什么行动 (决策)
-4. 存在什么边界 (治理)
+### 对象优先（2026-10-15 起，取代「判断优先」与旧「页面结构 1–4」）
+- 工作区每个视图自上而下只放：对象（谁/什么）→ 原始内容（客户原话、会议记录、草稿全文、事实来源）→ 具体下一步（负责人、截止、按钮）。
+- 系统判断（排序理由、压力/风险叙述、边界说明、依据与来源、"为什么现在"）每视图最多一个 `<details data-system-judgement>`，放末尾、默认折叠。
+- 禁止页头描述句、筛选器下解释句、无数据仍渲染的占位卡、写死的通用理由、用系统摘要冒充原话；计数只能来自真实查询。
+- 守卫：`npm run check:object-first-workspace`（`lib/presentation/object-first-workspace-guard.test.ts`）；尚未改造的视图在守卫里登记为 pending，并写明所属波次。
+
+### Object-first (from 2026-10-15; supersedes judgement-first and the old "page structure 1–4")
+- Top-down, each workspace view shows only: the object → its original content (customer's words, meeting notes, draft body, fact source) → the concrete next action (owner, due, control).
+- System judgement (ranking rationale, pressure/risk narrative, boundary notes, evidence, "why now") lives in at most one collapsed `<details data-system-judgement>` at the end.
+- No header descriptions, explainer lines under filters, placeholder tiles without data, canned reasons, or system summaries standing in for original text; counts come from real queries only.
+- Guard: `npm run check:object-first-workspace` (`lib/presentation/object-first-workspace-guard.test.ts`); views not yet reworked are registered as pending with their wave.
 
 ## 测试策略
 
@@ -236,7 +240,7 @@ npm run quality:regression
 
 ### 实现过程中
 1. 在适用时遵循测试驱动开发
-2. 维护决策优先的信息架构
+2. 维护对象优先的页面结构
 3. 保持建议/承诺边界清晰
 4. 运行适当的验证命令
 

@@ -34,8 +34,7 @@ Helm is:
 - `workspace-first`
 - `membership-backed`
 - `controlled-trial`
-- `judgement-first`
-- `decision-first`
+- `object-first` (from 2026-10-15, supersedes `judgement-first / decision-first`; see CLAUDE.md "Object-first" and DESIGN.en.md §4)
 - `proactive-reporting-first`
 - `delivery-engineer-facing` (since 2026-05-18: the audience layer is AI-ecosystem delivery engineers, not direct SaaS sales to end customers)
 - `open-source-first` (Apache-2.0; commercial editions do not replace open source; see [docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.en.md](docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.en.md))
@@ -354,7 +353,7 @@ Recommended overlays with repo-local skills:
 
 - readiness tasks: `readiness-sprint`
 - freeze / alignment: `baseline-freeze`
-- judgement-first / decision-first page refactors: `decision-first-page-refactor`
+- workspace page rework: follow CLAUDE.md "Object-first" and DESIGN.en.md §4, guarded by `npm run check:object-first-workspace` (`decision-first-page-refactor` is retired)
 - worker / skill / resource main line: `worker-skill-resource-binding`
 
 When narrowing further, read the domain-specific skill first:
