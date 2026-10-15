@@ -1251,6 +1251,10 @@ jobs:
         env:
           APP_URL: http://127.0.0.1:3100
           PLAYWRIGHT_WEBSERVER_TIMEOUT_MS: '600000'
+          # The specs enter through /demo, which signs in a seeded demo account by
+          # email. .env.example ships the email entry off for real deployments;
+          # this ephemeral, seeded CI database is the one place it is turned on.
+          HELM_AUTH_EMAIL_ENTRY_ENABLED: 'true'
         run: npm run e2e:browser
 
       - name: Upload Playwright results
