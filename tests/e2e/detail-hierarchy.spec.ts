@@ -201,8 +201,9 @@ test("imports 首屏只保留 business-first 四类信息", async ({ page }, tes
 });
 
 // /reports left this check in object-first wave 3 (no focus strip; the missed and
-// high-risk lists come first). /settings stays until wave 4.
-test("imports/settings/diagnostics/analytics 首屏先暴露用户资产读数", async ({ page }, testInfo) => {
+// high-risk lists come first) and /settings in wave 4 (organisation facts and the
+// viewer's identity come first; see the object-first test below).
+test("imports/diagnostics/analytics 首屏先暴露用户资产读数", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 1200 });
   await loginAs(page, "founder@demo.com");
 
@@ -211,11 +212,6 @@ test("imports/settings/diagnostics/analytics 首屏先暴露用户资产读数",
       route: "/imports",
       labels: [/对象状态|Object state/, /阻塞|Blocker/, /待决策|Pending decision/, /下一步动作|Next action/],
       reference: /引用：接入判断|Reference: intake judgement/,
-    },
-    {
-      route: "/settings",
-      labels: [/对象状态|Object state/, /阻塞|Blocker/, /待决策|Pending decision/, /下一步动作|Next action/],
-      reference: /引用：设置依据|Reference: settings basis/,
     },
     {
       route: "/diagnostics",
@@ -248,6 +244,39 @@ test("imports/settings/diagnostics/analytics 首屏先暴露用户资产读数",
 
   await page.screenshot({
     path: testInfo.outputPath("sitewide-customer-asset-focus.png"),
+    fullPage: false,
+  });
+});
+
+test("memory / search / settings 先给对象，系统判断折在末尾", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 1200 });
+  await loginAs(page, "founder@demo.com");
+
+  await page.goto("/memory");
+  await expect(page.locator("#memory-work-timeline")).toBeVisible();
+  await expect(page.locator("[data-memory-timeline-entry]").first()).toBeVisible();
+  await expect(page.getByText(/客户状态清单|Customer-state ledger/)).toHaveCount(0);
+  await expect(page.getByText(/时间线阅读方式|Timeline reading guide/)).toHaveCount(0);
+  await openSystemJudgement(page);
+
+  await page.goto("/search");
+  await expect(page.locator("[data-search-recent-objects]")).toBeVisible();
+  await expect(page.locator("[data-search-recent-objects] a").first()).toBeVisible();
+  await openSystemJudgement(page);
+
+  await page.goto("/settings");
+  const organization = page.locator('[data-settings-organization-facts="true"]');
+  await expect(organization).toBeVisible();
+  await expect(organization.locator('[data-settings-viewer-identity="true"]')).toContainText(
+    /founder@demo\.com/,
+  );
+  // The focus strip only renders inside the collapsed system judgement block.
+  await expect(page.locator('[data-customer-asset-focus="true"]').first()).toBeHidden();
+  await openSystemJudgement(page);
+  await expect(page.locator('[data-customer-asset-focus="true"]').first()).toBeVisible();
+
+  await page.screenshot({
+    path: testInfo.outputPath("memory-search-settings-object-first.png"),
     fullPage: false,
   });
 });

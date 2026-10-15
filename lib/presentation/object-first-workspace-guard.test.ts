@@ -245,33 +245,79 @@ const workspaceViews: readonly WorkspaceView[] = [
   {
     id: "memory",
     route: "/memory",
-    status: "pending",
-    wave: 4,
-    reason:
-      "第 4 波：事实 join 对象名和来源 / wave 4 joins object names and sources into facts",
+    status: "enforced",
     files: ["app/(workspace)/memory/page.tsx", "features/memory/memory-client.tsx"],
+    regressionPatterns: [
+      /Customer-state ledger|客户状态清单/,
+      /Timeline reading guide|时间线阅读方式/,
+      /Business impact|经营影响/,
+      /Keep one timeline, then narrow the evidence type|保持同一条时间线/,
+      /briefing=\{/,
+      /\{english \? "Object" : "对象"\}：/,
+      /This overdue promise should be handled|这条逾期承诺应优先于低压力事项处理/,
+      /This blocker is the risk pressure|这条阻塞就是当前风险压力/,
+      /<HomeSurfaceArrivalBanner\b/,
+      /\{memoryMeetingWorkspaceContext\}/,
+      /\{memoryPermissionBoundaryNote\}/,
+    ],
+    leadingObjectMarkers: [
+      "id={MEMORY_PAGE_ANCHORS.timeline}",
+      "data-memory-timeline-entry",
+      "data-memory-fact-object",
+      "<MemoryFactSourceBlock",
+      "id={MEMORY_PAGE_ANCHORS.auditReplay}",
+    ],
   },
   {
     id: "search",
     route: "/search",
-    status: "pending",
-    wave: 4,
-    reason:
-      "第 4 波：空查询显示最近对象 / wave 4 shows recent objects for an empty query",
+    status: "enforced",
     files: ["app/(workspace)/search/page.tsx"],
+    regressionPatterns: [
+      /<SupportSurfaceNote\b/,
+      /<InlineEmpty\b/,
+      /Objects stay first when the question points to real workspace records|问题指向真实工作区对象时，对象结果优先展示/,
+    ],
+    leadingObjectMarkers: [
+      "<AskHelmMode",
+      "data-search-recent-objects",
+      "data-search-results",
+      "<SearchResultSections",
+    ],
   },
   {
     id: "settings",
     route: "/settings",
-    status: "pending",
-    wave: 4,
-    reason:
-      "第 4 波：组织信息前置 / wave 4 moves organisation facts first",
+    status: "enforced",
     files: [
       "app/(workspace)/settings/page.tsx",
       "features/settings/settings-client.tsx",
       "features/settings/components/settings-overview-panels.tsx",
+      "features/settings/components/account-settings-tab.tsx",
     ],
+    regressionPatterns: [
+      /<CustomerAssetFocusStrip\b/,
+      /<SettingsOverviewPanels\b/,
+      /<ObjectContextOperatingSummary\b/,
+      /Reference: settings basis|引用：设置依据/,
+      /Walkthrough readiness prompts|走查前提醒/,
+      /Sources, seats, review rules and assistive service choices that affect|入口、席位、复核规则和负责人权限，会直接影响今天的工作/,
+      // Header actions render only for viewers who can use them.
+      /onClick=\{restoreDefaults\}\s*disabled=\{pending \|\| !canManagePolicies\}/,
+      /<Button variant="secondary" disabled>\s*\{messages\.settings\.rerunSetup\}/,
+    ],
+    leadingObjectMarkers: ["<SettingsOrganizationCard", "<Tabs "],
+  },
+  {
+    // PR #463 (feat/opportunities-customer-first) reworks this view; it still
+    // renders pageStory.description, so it is enabled after #463 lands.
+    id: "opportunities",
+    route: "/opportunities",
+    status: "pending",
+    wave: 2,
+    reason:
+      "由 PR #463 改造，合并后启用 / reworked by PR #463, enabled once it lands",
+    files: ["features/opportunities/opportunities-client.tsx"],
   },
 ];
 
@@ -286,23 +332,14 @@ const workspaceStoryPages: ReadonlyArray<{ page: StoryPage } & ViewStatus> = [
     page: "opportunities",
     status: "pending",
     wave: 2,
+    // PR #463 still renders pageStory.description and leaves it non-empty.
     reason:
-      "由 feat/opportunities-customer-first 分支改造 / reworked on the opportunities customer-first branch",
+      "PR #463 仍渲染页头描述，合并后再清空 / PR #463 still renders the header description",
   },
   { page: "approvals", status: "enforced" },
   { page: "reports", status: "enforced" },
-  {
-    page: "memory",
-    status: "pending",
-    wave: 4,
-    reason: "第 4 波 / wave 4",
-  },
-  {
-    page: "settings",
-    status: "pending",
-    wave: 4,
-    reason: "第 4 波 / wave 4",
-  },
+  { page: "memory", status: "enforced" },
+  { page: "settings", status: "enforced" },
 ];
 
 const locales: readonly UiLocale[] = ["zh-CN", "en-US"];
