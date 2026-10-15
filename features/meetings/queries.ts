@@ -384,6 +384,12 @@ export async function getMeetingsOverviewData(workspaceId: string) {
     db.meeting.findMany({
       where: { workspaceId },
       include: {
+        owner: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         company: {
           select: {
             id: true,
@@ -406,6 +412,11 @@ export async function getMeetingsOverviewData(workspaceId: string) {
           orderBy: { name: "asc" },
           take: 4,
         },
+        _count: {
+          select: {
+            contacts: true,
+          },
+        },
         note: {
           select: {
             id: true,
@@ -422,8 +433,16 @@ export async function getMeetingsOverviewData(workspaceId: string) {
           },
           select: {
             id: true,
+            title: true,
+            dueDate: true,
             status: true,
             executionMode: true,
+            owner: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
         commitments: {
@@ -434,7 +453,15 @@ export async function getMeetingsOverviewData(workspaceId: string) {
           },
           select: {
             id: true,
+            title: true,
+            dueDate: true,
             overdueFlag: true,
+            ownerUser: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
         blockers: {
