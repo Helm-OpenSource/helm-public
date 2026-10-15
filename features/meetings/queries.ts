@@ -29,7 +29,7 @@ export async function getMeetingDetailData(workspaceId: string, meetingId: strin
     },
     include: {
       company: true,
-      owner: true,
+      owner: { select: { id: true, name: true } },
       opportunity: {
         include: {
           contacts: true,
@@ -43,7 +43,7 @@ export async function getMeetingDetailData(workspaceId: string, meetingId: strin
         include: {
           approvalTask: true,
           contact: true,
-          owner: true,
+          owner: { select: { id: true, name: true } },
         },
       },
       memoryEntries: {
