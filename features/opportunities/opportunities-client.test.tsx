@@ -125,7 +125,9 @@ const inquiry = opportunity({
     {
       id: "thread_1",
       subject: "Cannot try the product",
-      counterpart: "inbox@example.com",
+      // counterpart holds the customer's own address and must not surface.
+      counterpart: "alex@example.com",
+      participants: JSON.stringify(["alex@example.com", "inbox@example.com"]),
       source: "IMPORT",
       createdAt: inDays(-1),
       messageCount: 1,
@@ -252,7 +254,7 @@ describe("OpportunitiesClient (customer-first)", () => {
       .map((heading) => heading.textContent);
     expect(headings).toEqual(["客户", "客户原话", "处理"]);
     expect(within(dialog).getByText(FULL_TEXT)).toBeInTheDocument();
-    expect(within(dialog).getByText("官网咨询邮件 · inbox@example.com")).toBeInTheDocument();
+    expect(within(dialog).getByText("官网咨询邮件（inbox@example.com）")).toBeInTheDocument();
     expect(within(dialog).getByRole("link", { name: "去回复邮件" })).toHaveAttribute(
       "href",
       "/inbox/thread_1",

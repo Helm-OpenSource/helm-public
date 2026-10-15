@@ -22,8 +22,8 @@ export type OpportunityCustomerCardProps = {
   /** Company currently chosen in the unsaved draft ("" when none). */
   companyId: string;
   onCompanyChange: (companyId: string) => void;
+  /** Full source text, e.g. 官网咨询邮件（mailbox）. */
   sourceLabel: string;
-  sourceDetail: string | null;
   firstContactAt: string;
   ownerName: string | null;
   onEditOwner: () => void;
@@ -49,7 +49,6 @@ export function OpportunityCustomerCard({
   companyId,
   onCompanyChange,
   sourceLabel,
-  sourceDetail,
   firstContactAt,
   ownerName,
   onEditOwner,
@@ -143,7 +142,7 @@ export function OpportunityCustomerCard({
           ) : null}
         </Field>
         <Field label={english ? "Source" : "来源"}>
-          {sourceDetail ? `${sourceLabel} · ${sourceDetail}` : sourceLabel}
+          {sourceLabel}
         </Field>
         <Field label={english ? "First contact" : "首次咨询"}>{firstContactAt}</Field>
         <Field label={english ? "Owner" : "负责人"}>

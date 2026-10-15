@@ -125,7 +125,7 @@ describe("OpportunityOriginalDemand", () => {
         {
           id: "thread_1",
           subject: "Cannot try the product",
-          counterpart: "inbox@example.com",
+          participants: JSON.stringify(["alex@example.com", "inbox@example.com"]),
           source: "IMPORT",
           createdAt: new Date("2026-10-14T02:43:00Z"),
           messages: [
@@ -264,8 +264,7 @@ describe("OpportunityCustomerCard", () => {
         companies={[{ id: "company_1", name: "Example Co" }]}
         companyId=""
         onCompanyChange={() => undefined}
-        sourceLabel="官网咨询邮件"
-        sourceDetail="inbox@example.com"
+        sourceLabel="官网咨询邮件（inbox@example.com）"
         firstContactAt="2026-10-14 10:43"
         ownerName="Owner One"
         onEditOwner={() => undefined}
@@ -278,7 +277,7 @@ describe("OpportunityCustomerCard", () => {
     expect(html).toContain("未记录");
     expect(html).toContain("未关联");
     expect(html).toContain("关联");
-    expect(html).toContain("官网咨询邮件 · inbox@example.com");
+    expect(html).toContain("官网咨询邮件（inbox@example.com）");
     expect(html).toContain("2026-10-14 10:43");
     expect(html).toContain("Owner One");
     expect(html).toContain("改");

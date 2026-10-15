@@ -93,6 +93,8 @@ import {
   buildOriginalDemandThreads,
   buildSystemJudgementLines,
   describeDueChip,
+  describeOpportunitySource,
+  findInquiryMailbox,
   firstContactAt,
   formatMonthDayTime,
   formatTimestamp,
@@ -1665,19 +1667,11 @@ export function OpportunitiesClient({
                   companies={companies}
                   companyId={detailDraft.companyId}
                   onCompanyChange={(companyId) => updateDraft({ companyId })}
-                  sourceLabel={activeCard.sourceLabel}
-                  sourceDetail={
-                    activeCard.sourceKind === "website-inquiry" &&
-                    activeCard.replyTarget?.kind === "thread"
-                      ? ((
-                          activeOpportunity.emailThreads.find(
-                            (thread) =>
-                              activeCard.replyTarget?.kind === "thread" &&
-                              thread.id === activeCard.replyTarget.threadId,
-                          ) ?? activeOpportunity.emailThreads[0]
-                        )?.counterpart ?? null)
-                      : null
-                  }
+                  sourceLabel={describeOpportunitySource(
+                    activeCard.sourceKind,
+                    findInquiryMailbox(activeOpportunity),
+                    english,
+                  )}
                   firstContactAt={formatTimestamp(activeCard.firstContactAt)}
                   ownerName={
                     memberships.find(

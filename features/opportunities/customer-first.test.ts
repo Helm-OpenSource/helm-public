@@ -3,6 +3,8 @@ import {
   buildOriginalDemandThreads,
   buildSystemJudgementLines,
   describeDueChip,
+  describeOpportunitySource,
+  findInquiryMailbox,
   extractInboundFullText,
   getOpportunitySourceLabel,
   getReplyStatus,
@@ -42,7 +44,7 @@ function thread(overrides: Partial<CustomerFirstEmailThread> = {}): CustomerFirs
   return {
     id: "thread_1",
     subject: "Cannot try the product",
-    counterpart: "Alex Doe",
+    participants: JSON.stringify(["alex@example.com", "inbox@example.com"]),
     source: "IMPORT",
     createdAt: new Date("2026-10-14T02:43:00Z"),
     messages: [
@@ -246,29 +248,32 @@ describe("buildOriginalDemandThreads", () => {
 });
 
 describe("resolveOpportunitySourceKind / getOpportunitySourceLabel", () => {
-  it("labels mailbox-imported website inquiries", () => {
-    const byTag = resolveOpportunitySourceKind({
-      externalSource: null,
-      contacts: [contact({ tags: JSON.stringify(["官网咨询"]) })],
-      emailThreads: [],
-    });
-    const byImportedThreadAndChannel = resolveOpportunitySourceKind({
-      externalSource: null,
-      contacts: [contact({ channel: "邮箱" })],
-      emailThreads: [thread()],
-    });
+  const inquiryContact = contact({ channel: "邮箱", tags: JSON.stringify(["官网咨询"]) });
 
-    expect(byTag).toBe("website-inquiry");
-    expect(byImportedThreadAndChannel).toBe("website-inquiry");
+  it("labels a mailbox (邮箱) contact tagged 官网咨询 as a website inquiry", () => {
+    expect(
+      resolveOpportunitySourceKind({
+        externalSource: null,
+        contacts: [inquiryContact],
+        emailThreads: [thread()],
+      }),
+    ).toBe("website-inquiry");
     expect(getOpportunitySourceLabel("website-inquiry", false)).toBe("官网咨询邮件");
     expect(getOpportunitySourceLabel("website-inquiry", true)).toBe("Website inquiry email");
   });
 
-  it("does not call every imported thread a website inquiry", () => {
+  it("needs both the 邮箱 channel and the 官网咨询 tag", () => {
     expect(
       resolveOpportunitySourceKind({
         externalSource: null,
-        contacts: [contact()],
+        contacts: [contact({ tags: JSON.stringify(["官网咨询"]) })],
+        emailThreads: [],
+      }),
+    ).toBe("manual");
+    expect(
+      resolveOpportunitySourceKind({
+        externalSource: null,
+        contacts: [contact({ channel: "邮箱" })],
         emailThreads: [thread()],
       }),
     ).toBe("email");
@@ -299,6 +304,57 @@ describe("resolveOpportunitySourceKind / getOpportunitySourceLabel", () => {
     expect(getOpportunitySourceLabel("recording", false)).toBe("录制");
     expect(getOpportunitySourceLabel("manual", false)).toBe("手工");
     expect(getOpportunitySourceLabel("manual", true)).toBe("Manual");
+  });
+});
+
+describe("findInquiryMailbox / describeOpportunitySource", () => {
+  const inquiryContact = contact({ channel: "邮箱", tags: JSON.stringify(["官网咨询"]) });
+
+  it("names the receiving mailbox from participants [customer, mailbox] and ignores counterpart", () => {
+    const imported = {
+      ...thread(),
+      // The customer's address lives in counterpart; it must never be shown as source.
+      counterpart: "counterpart-must-not-show@example.com",
+      participants: JSON.stringify(["Alex@Example.com", "inbox@example.com"]),
+    };
+    const mailbox = findInquiryMailbox({ contacts: [inquiryContact], emailThreads: [imported] });
+    const zh = describeOpportunitySource("website-inquiry", mailbox, false);
+    const en = describeOpportunitySource("website-inquiry", mailbox, true);
+
+    expect(mailbox).toBe("inbox@example.com");
+    expect(zh).toBe("官网咨询邮件（inbox@example.com）");
+    expect(en).toBe("Website inquiry email (inbox@example.com)");
+    expect(zh).not.toContain("counterpart-must-not-show");
+    expect(zh).not.toContain("alex@example.com");
+  });
+
+  it("accepts delimited participants and prefers imported threads", () => {
+    expect(
+      findInquiryMailbox({
+        contacts: [inquiryContact],
+        emailThreads: [
+          thread({ id: "demo", source: "DEMO", participants: "alex@example.com, other@example.com" }),
+          thread({ id: "imported", participants: "alex@example.com; inbox@example.com" }),
+        ],
+      }),
+    ).toBe("inbox@example.com");
+  });
+
+  it("falls back to the fixed label when no mailbox address is available", () => {
+    for (const participants of [null, "", JSON.stringify(["alex@example.com"]), "not-json-no-address"]) {
+      const mailbox = findInquiryMailbox({
+        contacts: [inquiryContact],
+        emailThreads: [thread({ participants })],
+      });
+      expect(mailbox).toBeNull();
+      expect(describeOpportunitySource("website-inquiry", mailbox, false)).toBe("官网咨询邮件");
+    }
+    expect(findInquiryMailbox({ contacts: [inquiryContact], emailThreads: [] })).toBeNull();
+  });
+
+  it("only decorates website inquiries", () => {
+    expect(describeOpportunitySource("email", "inbox@example.com", false)).toBe("邮件");
+    expect(describeOpportunitySource("manual", "inbox@example.com", true)).toBe("Manual");
   });
 });
 

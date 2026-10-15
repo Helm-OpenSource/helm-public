@@ -47,7 +47,8 @@ export type OpportunityEmailMessage = {
 export type OpportunityEmailThread = {
   id: string;
   subject: string;
-  counterpart: string;
+  /** JSON array / delimited addresses; used only to name the receiving mailbox. */
+  participants: string | null;
   source: string;
   createdAt: Date;
   /** Total messages in the thread (not just the loaded page). */
@@ -222,7 +223,7 @@ export async function loadOpportunityEmailContext(
         select: {
           id: true,
           subject: true,
-          counterpart: true,
+          participants: true,
           source: true,
           createdAt: true,
           messages: {
@@ -247,7 +248,7 @@ export async function loadOpportunityEmailContext(
           {
             id: detail.id,
             subject: detail.subject,
-            counterpart: detail.counterpart,
+            participants: detail.participants,
             source: detail.source,
             createdAt: detail.createdAt,
             messageCount: threadActivity?.messageCount ?? detail.messages.length,

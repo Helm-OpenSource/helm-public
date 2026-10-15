@@ -31,7 +31,13 @@ export type CustomerFirstEmailMessage = {
 export type CustomerFirstEmailThread = {
   id: string;
   subject: string;
-  counterpart: string;
+  /**
+   * Raw participants column (JSON array or delimited addresses). For
+   * mailbox-imported website inquiries it holds [customer, receiving mailbox].
+   * `counterpart` is deliberately not loaded: it is the customer's address,
+   * not a source.
+   */
+  participants: string | null;
   source: string;
   createdAt: DateValue;
   /** Total messages in the thread; the loaded page may be shorter. */
@@ -72,7 +78,6 @@ export type OriginalDemandEntry = {
 export type OriginalDemandThread = {
   id: string;
   subject: string;
-  counterpart: string;
   messageCount: number;
   loadedCount: number;
   oldestLoadedMessageId: string | null;
@@ -221,7 +226,6 @@ export function buildOriginalDemandThreads(
     .map((thread) => ({
       id: thread.id,
       subject: thread.subject,
-      counterpart: thread.counterpart,
       messageCount: Math.max(thread.messageCount ?? 0, thread.messages.length),
       loadedCount: thread.messages.length,
       oldestLoadedMessageId: thread.messages[0]?.id ?? null,
@@ -241,8 +245,12 @@ export function buildOriginalDemandThreads(
     .filter((thread) => thread.entries.length > 0);
 }
 
-function hasWebsiteInquiryTag(contact: CustomerFirstContact) {
-  return (contact.tags ?? "").includes(WEBSITE_INQUIRY_TAG);
+/** A website-inquiry contact: arrived by mailbox (邮箱) and tagged 官网咨询. */
+function isWebsiteInquiryContact(contact: CustomerFirstContact) {
+  return (
+    contact.channel?.trim() === MAILBOX_CHANNEL &&
+    (contact.tags ?? "").includes(WEBSITE_INQUIRY_TAG)
+  );
 }
 
 export function resolveOpportunitySourceKind(input: {
@@ -250,15 +258,7 @@ export function resolveOpportunitySourceKind(input: {
   contacts: CustomerFirstContact[];
   emailThreads: CustomerFirstEmailThread[];
 }): OpportunitySourceKind {
-  const hasImportedThread = input.emailThreads.some(
-    (thread) => thread.source === "IMPORT",
-  );
-  const taggedInquiry = input.contacts.some(hasWebsiteInquiryTag);
-  const mailboxChannel = input.contacts.some(
-    (contact) => contact.channel?.trim() === MAILBOX_CHANNEL,
-  );
-
-  if (taggedInquiry || (hasImportedThread && mailboxChannel)) {
+  if (input.contacts.some(isWebsiteInquiryContact)) {
     return "website-inquiry";
   }
   if (input.externalSource === "TRANSCRIPT_INGEST") {
@@ -271,6 +271,47 @@ export function resolveOpportunitySourceKind(input: {
     return "email";
   }
   return "manual";
+}
+
+function parseParticipantAddresses(participants: string | null) {
+  if (!participants?.trim()) return [];
+  let values: unknown[] = [];
+  try {
+    const parsed: unknown = JSON.parse(participants);
+    values = Array.isArray(parsed) ? parsed : [parsed];
+  } catch {
+    values = participants.split(/[,;\s]+/);
+  }
+  return values
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter((value) => value.includes("@"));
+}
+
+/**
+ * The mailbox that received a website inquiry: the thread participants minus
+ * the contacts' own addresses. Imported threads are checked first.
+ */
+export function findInquiryMailbox(input: {
+  contacts: CustomerFirstContact[];
+  emailThreads: CustomerFirstEmailThread[];
+}): string | null {
+  const own = new Set(
+    input.contacts
+      .map((contact) => contact.email?.trim().toLowerCase())
+      .filter((email): email is string => Boolean(email)),
+  );
+  const threads = [
+    ...input.emailThreads.filter((thread) => thread.source === "IMPORT"),
+    ...input.emailThreads.filter((thread) => thread.source !== "IMPORT"),
+  ];
+  for (const thread of threads) {
+    const mailbox = parseParticipantAddresses(thread.participants).find(
+      (address) => !own.has(address.toLowerCase()),
+    );
+    if (mailbox) return mailbox;
+  }
+  return null;
 }
 
 export function getOpportunitySourceLabel(
@@ -289,6 +330,17 @@ export function getOpportunitySourceLabel(
     case "manual":
       return english ? "Manual" : "手工";
   }
+}
+
+/** Full source text for the 客户 card, e.g. 官网咨询邮件（mailbox）. */
+export function describeOpportunitySource(
+  kind: OpportunitySourceKind,
+  mailbox: string | null,
+  english: boolean,
+) {
+  const label = getOpportunitySourceLabel(kind, english);
+  if (kind !== "website-inquiry" || !mailbox) return label;
+  return english ? `${label} (${mailbox})` : `${label}（${mailbox}）`;
 }
 
 /** Reply target: the thread with the newest customer mail, else the latest active thread. */

@@ -8,7 +8,7 @@ type ThreadRow = {
   opportunityId: string | null;
   source: string;
   subject: string;
-  counterpart: string;
+  participants: string | null;
   createdAt: Date;
 };
 
@@ -156,7 +156,7 @@ function addThread(id: string, createdMinute: number, overrides: Partial<ThreadR
     opportunityId: OPPORTUNITY,
     source: "IMPORT",
     subject: `Subject ${id}`,
-    counterpart: "inbox@example.com",
+    participants: JSON.stringify(["alex@example.com", "inbox@example.com"]),
     createdAt: at(createdMinute),
     ...overrides,
   });
