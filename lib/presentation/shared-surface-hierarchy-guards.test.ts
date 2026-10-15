@@ -1044,10 +1044,12 @@ describe("shared surface hierarchy guards", () => {
     );
     expect(roleDetailShell).toContain("const nextActionDescription =");
     expect(search).toContain("Open contact:");
-    expect(opportunities).toContain("Open opportunity:");
-    expect(opportunities).toContain('actionLabel: english ? "Open account"');
-    expect(opportunities).toContain('actionLabel: english ? "Open contact"');
-    expect(opportunities).toContain("归你负责");
+    // Owner-approved customer-first redesign (2026-10-15): the operating
+    // connection strip and scope headline were removed from the opportunities
+    // page; the open action now lives on the shared list card.
+    expect(
+      read("features/opportunities/opportunity-list-card.tsx"),
+    ).toContain("Open opportunity:");
     expect(opportunities).not.toContain("owner-focused 视角");
     expect(inbox).toContain("Open thread:");
     expect(meetings).toContain("Open meeting:");
@@ -1358,7 +1360,8 @@ describe("shared surface hierarchy guards", () => {
     }
 
     expect(opportunities).not.toContain("briefing={");
-    expect(opportunities).toContain("<HomeSurfaceArrivalBanner");
+    // Customer-first redesign (owner 2026-10-15): no landing-contract banner.
+    expect(opportunities).not.toContain("<HomeSurfaceArrivalBanner");
     expect(opportunities).not.toContain("<BusinessFirstSurfaceSummary");
     expect(opportunities).not.toContain("<WorkspaceGuidancePanel");
 
@@ -1472,8 +1475,9 @@ describe("shared surface hierarchy guards", () => {
     );
     expect(homeSurfaceSecondaryDisclosure).toContain("<ControlledDisclosure");
     expect(homeSurfaceSecondaryDisclosure).toContain("Next layer");
-    expect(opportunities).toContain("<HomeSurfaceArrivalBanner");
-    expect(opportunities).toContain('useHomeSurfaceArrival("detail")');
+    // Customer-first redesign (owner 2026-10-15): no landing-contract banner.
+    expect(opportunities).not.toContain("<HomeSurfaceArrivalBanner");
+    expect(opportunities).not.toContain('useHomeSurfaceArrival("detail")');
     expect(opportunities).not.toContain("<BusinessFirstSurfaceSummary");
     expect(opportunities).not.toContain("<WorkspaceGuidancePanel");
     expect(opportunities).toContain('id="opportunity-workspace"');

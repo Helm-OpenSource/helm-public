@@ -6,10 +6,7 @@ import {
   getOpportunitiesData,
   getWorkspaceDingTalkWorkProgress,
 } from "@/features/opportunities/queries";
-import {
-  findMembershipsWithExistingUsers,
-  type MembershipWithUser,
-} from "@/lib/auth/membership-with-user";
+import { findMembershipsWithExistingUsers } from "@/lib/auth/membership-with-user";
 import { getWorkspaceBusinessLoopGapReadout } from "@/lib/helm-v2/runtime-upgrade";
 import type { BusinessLoopGapSummary } from "@/lib/operating-system";
 
@@ -40,15 +37,8 @@ export async function loadOpportunitiesPageData(
   searchParams: OpportunitySearchParams,
 ): Promise<{
   opportunities: Awaited<ReturnType<typeof getOpportunitiesData>>;
-  companies: Awaited<
-    ReturnType<
-      typeof db.company.findMany<{
-        where: { workspaceId: string };
-        orderBy: { name: "asc" };
-      }>
-    >
-  >;
-  memberships: MembershipWithUser[];
+  companies: Array<{ id: string; name: string }>;
+  memberships: Array<{ user: { id: string; name: string } }>;
   currentUserId: string;
   initialOpportunityId: string | null;
   initialFilters: OpportunitiesInitialFilters;
@@ -71,6 +61,7 @@ export async function loadOpportunitiesPageData(
     getOpportunitiesData(workspace.id),
     db.company.findMany({
       where: { workspaceId: workspace.id },
+      select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
     findMembershipsWithExistingUsers({
@@ -84,7 +75,11 @@ export async function loadOpportunitiesPageData(
   return {
     opportunities,
     companies,
-    memberships,
+    // Only id and name reach the client component; full user rows stay on the
+    // server.
+    memberships: memberships.map((membership) => ({
+      user: { id: membership.user.id, name: membership.user.name },
+    })),
     businessLoopGapSummary: businessLoopGapReadout.businessLoopGapSummary,
     currentUserId: user.id,
     workspaceDingTalkWorkProgress,

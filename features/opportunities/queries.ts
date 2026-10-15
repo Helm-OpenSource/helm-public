@@ -1,6 +1,5 @@
-import { ObjectType } from "@prisma/client";
 import { db } from "@/lib/db";
-import { safeParseJson } from "@/lib/utils";
+import { buildInboxThreadWhere } from "@/features/inbox/queries";
 import { buildDingTalkWorkProgressList } from "@/lib/connectors/dingtalk-work-progress";
 import {
   OPPORTUNITY_ATTACHMENT_MEMORY_SOURCE,
@@ -11,12 +10,52 @@ export async function getOpportunitiesData(workspaceId: string) {
   const opportunities = await db.opportunity.findMany({
     where: { workspaceId },
     include: {
-      company: true,
-      contacts: true,
-      owner: true,
+      company: { select: { id: true, name: true } },
+      contacts: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          channel: true,
+          tags: true,
+        },
+        orderBy: { createdAt: "asc" },
+      },
+      owner: { select: { id: true, name: true } },
       actionItems: {
+        select: { id: true, status: true },
         orderBy: { updatedAt: "desc" },
         take: 2,
+      },
+      // Customer-first detail (owner-approved redesign 2026-10-15): the
+      // customer's own words. Same visibility rule as the inbox for a viewer
+      // without a connected Gmail account — personal GMAIL threads never show
+      // on this shared page.
+      emailThreads: {
+        where: buildInboxThreadWhere(workspaceId, null),
+        select: {
+          id: true,
+          subject: true,
+          counterpart: true,
+          source: true,
+          createdAt: true,
+          messages: {
+            select: {
+              id: true,
+              sender: true,
+              senderEmail: true,
+              body: true,
+              snippet: true,
+              isInbound: true,
+              sentAt: true,
+            },
+            orderBy: { sentAt: "asc" },
+            take: 50,
+          },
+        },
+        orderBy: { createdAt: "asc" },
+        take: 10,
       },
     },
     orderBy: [{ stage: "asc" }, { priorityScore: "desc" }],
@@ -25,72 +64,26 @@ export async function getOpportunitiesData(workspaceId: string) {
   const opportunityIds = opportunities.map((item) => item.id);
   const signalSince = new Date();
   signalSince.setDate(signalSince.getDate() - 7);
-  const [facts, commitments, blockers, briefingSnapshots, auditLogs, attachmentEntries] = opportunityIds.length
+  // The customer-first page only needs counts from blockers and commitments
+  // (系统判断 risk line); their rows are no longer rendered.
+  const [overdueCommitments, openBlockers, attachmentEntries] = opportunityIds.length
     ? await Promise.all([
-        db.memoryFact.findMany({
-          where: {
-            workspaceId,
-            objectType: "OPPORTUNITY",
-            objectId: { in: opportunityIds },
-            status: { in: ["ACTIVE", "OBSERVED"] },
-          },
-          orderBy: [{ importance: "desc" }, { updatedAt: "desc" }],
-        }),
         db.commitment.findMany({
           where: {
             workspaceId,
             relatedOpportunityId: { in: opportunityIds },
+            status: { notIn: ["FULFILLED", "CANCELED"] },
+            OR: [{ overdueFlag: true }, { status: "OVERDUE" }],
           },
-          include: {
-            relatedContact: true,
-            relatedCompany: true,
-            relatedOpportunity: true,
-            relatedMeeting: true,
-            ownerUser: true,
-          },
-          orderBy: [{ dueDate: "asc" }, { updatedAt: "desc" }],
+          select: { relatedOpportunityId: true },
         }),
         db.blocker.findMany({
           where: {
             workspaceId,
             relatedOpportunityId: { in: opportunityIds },
+            status: { in: ["OPEN", "MONITORING"] },
           },
-          include: {
-            relatedContact: true,
-            relatedCompany: true,
-            relatedOpportunity: true,
-            relatedMeeting: true,
-          },
-          orderBy: [{ severity: "desc" }, { updatedAt: "desc" }],
-        }),
-        db.briefingSnapshot.findMany({
-          where: {
-            workspaceId,
-            objectType: ObjectType.OPPORTUNITY,
-            objectId: { in: opportunityIds },
-            snapshotType: "object_brief",
-            expiresAt: null,
-          },
-          orderBy: [{ generatedAt: "desc" }],
-        }),
-        db.auditLog.findMany({
-          where: {
-            workspaceId,
-            OR: [
-              { targetId: { in: opportunityIds } },
-              { relatedObjectId: { in: opportunityIds } },
-            ],
-          },
-          select: {
-            id: true,
-            actionType: true,
-            summary: true,
-            targetId: true,
-            relatedObjectId: true,
-            sourcePage: true,
-            createdAt: true,
-          },
-          orderBy: { createdAt: "desc" },
+          select: { relatedOpportunityId: true },
         }),
         db.memoryEntry.findMany({
           where: {
@@ -109,7 +102,7 @@ export async function getOpportunitiesData(workspaceId: string) {
           orderBy: { createdAt: "desc" },
         }),
       ])
-    : [[], [], [], [], [], []];
+    : [[], [], []];
   const [dingtalkSignals, dingtalkActionItems, dingtalkMeetingLinkedWorkSignals] = opportunityIds.length
     ? await Promise.all([
         db.connectorIngestionRecord.findMany({
@@ -182,24 +175,12 @@ export async function getOpportunitiesData(workspaceId: string) {
 
   return opportunities.map((opportunity) => ({
     ...opportunity,
-    memoryFacts: facts.filter((fact) => fact.objectId === opportunity.id).slice(0, 4),
-    commitments: commitments.filter((commitment) => commitment.relatedOpportunityId === opportunity.id).slice(0, 4),
-    blockers: blockers.filter((blocker) => blocker.relatedOpportunityId === opportunity.id).slice(0, 4),
-    auditLogs: auditLogs
-      .filter(
-        (log) =>
-          log.targetId === opportunity.id || log.relatedObjectId === opportunity.id,
-      )
-      .slice(0, 4),
-    briefingSnapshot: briefingSnapshots.find((snapshot) => snapshot.objectId === opportunity.id)
-      ? {
-          id: briefingSnapshots.find((snapshot) => snapshot.objectId === opportunity.id)!.id,
-          payload: safeParseJson<Record<string, unknown>>(
-            briefingSnapshots.find((snapshot) => snapshot.objectId === opportunity.id)!.content,
-            {},
-          ),
-        }
-      : null,
+    openBlockerCount: openBlockers.filter(
+      (blocker) => blocker.relatedOpportunityId === opportunity.id,
+    ).length,
+    overdueCommitmentCount: overdueCommitments.filter(
+      (commitment) => commitment.relatedOpportunityId === opportunity.id,
+    ).length,
     dingtalkSignalSummary: (() => {
       const signals = dingtalkSignals.filter(
         (signal) => signal.opportunityId === opportunity.id,
