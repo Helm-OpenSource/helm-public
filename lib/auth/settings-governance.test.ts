@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { WorkspaceRole } from "@prisma/client";
 import {
   canAdministerWorkspaceSettings,
+  canReadWorkspacePolicyRules,
   canExportWorkspaceAdminSupportPack,
   canManageWorkspaceMembers,
   canManageWorkspaceOperationalControls,
@@ -26,6 +27,22 @@ describe("settings governance auth seam", () => {
 
     for (const role of [WorkspaceRole.REVIEWER, WorkspaceRole.MEMBER, null, undefined]) {
       expect(canAdministerWorkspaceSettings(role)).toBe(false);
+    }
+  });
+
+  it("lets reviewers read policy rules without the admin view; members cannot", () => {
+    for (const role of [
+      WorkspaceRole.OWNER,
+      WorkspaceRole.BILLING_ADMIN,
+      WorkspaceRole.ADMIN,
+      WorkspaceRole.OPERATOR,
+      WorkspaceRole.REVIEWER,
+    ]) {
+      expect(canReadWorkspacePolicyRules(role)).toBe(true);
+    }
+
+    for (const role of [WorkspaceRole.MEMBER, null, undefined]) {
+      expect(canReadWorkspacePolicyRules(role)).toBe(false);
     }
   });
 

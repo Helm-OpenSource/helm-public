@@ -147,6 +147,8 @@ export type SettingsClientProps = {
        * workspace-wide loads, so the admin-only tabs are hidden for them.
        */
       settingsAdminView?: boolean;
+      /** Reviewers read the rules tab (read-only) without the admin view. */
+      policyRulesReadable?: boolean;
       canManageMembers: boolean;
       canManageBilling: boolean;
       canManageContributionRegistry: boolean;

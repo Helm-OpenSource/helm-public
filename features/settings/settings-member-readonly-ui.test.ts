@@ -65,7 +65,26 @@ describe("settings member read-only UI contract", () => {
     );
   });
 
-  it("gives members and reviewers the light view: account + permissions tabs, no service section", () => {
+  it("gives members the light view and reviewers a read-only rules tab on top of it", () => {
+    expect(settingsClientSource).toContain(
+      "settingsAdminView || (data.organizationSummary.policyRulesReadable ?? false);",
+    );
+    // The rules tab trigger follows policyRulesReadable; budgets/billing/connectors/pilot stay admin-only.
+    expect(settingsClientSource).toMatch(
+      /\{policyRulesReadable \? \(\s*<TabsTrigger value="policies">/,
+    );
+    expect(settingsClientSource).toMatch(
+      /\{settingsAdminView \? \(\s*<TabsTrigger value="budgets">/,
+    );
+    // Reviewers see each rule as read-only values, never as disabled controls,
+    // and none of the suggestion / adoption / formal-review sections.
+    expect(settingsClientSource).toContain('data-settings-policy-readonly="true"');
+    expect(settingsClientSource).toMatch(
+      /\{settingsAdminView \? \(\s*<>\s*<Card className="workspace-panel-muted">\s*<CardHeader>\s*<CardTitle>\s*\{english \? "Reusable work suggestions"/,
+    );
+  });
+
+  it("gives members and reviewers the light view: no service section, no walkthrough prompts", () => {
     expect(settingsClientSource).toContain(
       "const settingsAdminView = data.organizationSummary.settingsAdminView ?? true;",
     );
@@ -106,9 +125,16 @@ describe("settings member-side load contract", () => {
     expect(settingsQueriesSource).toContain(
       ": buildLightViewBillingSnapshot(viewer?.accessState);",
     );
-    // ~22 Promise.all loads are wrapped; the light view keeps workspace,
-    // memberships, notifications and the viewer's organisations.
-    expect(settingsQueriesSource.match(/adminOnly\(/g)?.length ?? 0).toBeGreaterThanOrEqual(22);
+    // 21 Promise.all loads are admin-only; the policy rows load for reviewers
+    // too; the light view keeps workspace, memberships, notifications and the
+    // viewer's organisations (see settings-viewer-loads.test.ts).
+    expect(settingsQueriesSource.match(/adminOnly\(/g)?.length ?? 0).toBeGreaterThanOrEqual(21);
+    expect(settingsQueriesSource).toContain(
+      "const policyRulesReadable = viewer ? canReadWorkspacePolicyRules(viewer.role) : true;",
+    );
+    expect(settingsQueriesSource).toMatch(
+      /policyRulesReadable\s*\?\s*db\.policyRule\.findMany\(/,
+    );
   });
 
   it("never hands full User rows (passwordHash) to client components", () => {
@@ -131,11 +157,20 @@ describe("settings tab resolution by view", () => {
     }
   });
 
-  it("falls back to the account tab for admin-only deep links in the light view", () => {
+  it("falls back to the account tab for admin-only deep links in the member view", () => {
     expect(resolveSettingsTabForView("permissions", false)).toBe("permissions");
     expect(resolveSettingsTabForView("account", false)).toBe("account");
     for (const tab of ["billing", "connectors", "policies", "budgets", "pilot", "unknown", null]) {
       expect(resolveSettingsTabForView(tab, false)).toBe("account");
+      expect(resolveSettingsTabForView(tab, false, false)).toBe("account");
+    }
+  });
+
+  it("lets reviewers open the rules tab and nothing else beyond the light view", () => {
+    expect(resolveSettingsTabForView("policies", false, true)).toBe("policies");
+    expect(resolveSettingsTabForView("permissions", false, true)).toBe("permissions");
+    for (const tab of ["billing", "connectors", "budgets", "pilot"]) {
+      expect(resolveSettingsTabForView(tab, false, true)).toBe("account");
     }
   });
 });

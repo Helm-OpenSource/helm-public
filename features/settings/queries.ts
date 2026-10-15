@@ -52,6 +52,7 @@ import { getOrgAdminGovernanceSummary } from "@/lib/auth/org-admin-governance";
 import {
   canAdministerWorkspaceSettings,
   canExportWorkspaceAdminSupportPack,
+  canReadWorkspacePolicyRules,
   canManageWorkspaceMembers,
   canManageWorkspaceOperationalControls,
   canManageWorkspacePolicies,
@@ -436,6 +437,8 @@ export async function getSettingsData(
   // workspace-wide loads below (connectors, imports, policies, budgets, skill
   // and strategy suggestions, governance counts, tenant resources, billing).
   const settingsAdminView = viewer ? canAdministerWorkspaceSettings(viewer.role) : true;
+  // Reviewers read the rules tab: for them the policy rows are the only extra load.
+  const policyRulesReadable = viewer ? canReadWorkspacePolicyRules(viewer.role) : true;
   const adminOnly = <T,>(load: () => Promise<T>, empty: T): Promise<T> =>
     settingsAdminView ? load() : Promise.resolve(empty);
   const sevenDaysAgo = subDays(new Date(), 7);
@@ -482,14 +485,12 @@ export async function getSettingsData(
         },
       },
     }),
-    adminOnly(
-      () =>
-        db.policyRule.findMany({
+    policyRulesReadable
+      ? db.policyRule.findMany({
           where: { workspaceId },
           orderBy: { createdAt: "asc" },
-        }),
-      [],
-    ),
+        })
+      : Promise.resolve([]),
     adminOnly(
       () =>
         db.budgetRule.findMany({
@@ -1544,6 +1545,7 @@ export async function getSettingsData(
       currentUserId: userId,
       activeMembershipRole: activeMembership?.role ?? "OWNER",
       settingsAdminView,
+      policyRulesReadable,
       canManageMembers,
       canManageBilling: billingManagementEnabled,
       canManageContributionRegistry: contributionRegistryManagementEnabled,
