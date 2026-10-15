@@ -13,6 +13,13 @@ const { dbMock } = vi.hoisted(() => ({
     externalMemoryRecord: { findMany: vi.fn() },
     memoryCandidate: { findMany: vi.fn() },
     memoryDistillationCandidate: { findMany: vi.fn() },
+    contact: { findMany: vi.fn() },
+    company: { findMany: vi.fn() },
+    opportunity: { findMany: vi.fn() },
+    meeting: { findMany: vi.fn() },
+    emailThread: { findMany: vi.fn() },
+    emailMessage: { findMany: vi.fn() },
+    meetingNote: { findMany: vi.fn() },
   },
 }));
 
@@ -26,6 +33,7 @@ vi.mock("@/lib/helm-v2/runtime-upgrade", () => ({
 }));
 
 import {
+  attachMemoryFactContext,
   buildMemoryDistillationCandidateWhere,
   buildMemoryEntrySourceWhere,
   getMemoryData,
@@ -48,6 +56,13 @@ function resetDbMocks() {
   dbMock.externalMemoryRecord.findMany.mockResolvedValue([]);
   dbMock.memoryCandidate.findMany.mockResolvedValue([]);
   dbMock.memoryDistillationCandidate.findMany.mockResolvedValue([]);
+  dbMock.contact.findMany.mockResolvedValue([]);
+  dbMock.company.findMany.mockResolvedValue([]);
+  dbMock.opportunity.findMany.mockResolvedValue([]);
+  dbMock.meeting.findMany.mockResolvedValue([]);
+  dbMock.emailThread.findMany.mockResolvedValue([]);
+  dbMock.emailMessage.findMany.mockResolvedValue([]);
+  dbMock.meetingNote.findMany.mockResolvedValue([]);
 }
 
 describe("memory source filter helper", () => {
@@ -573,5 +588,154 @@ describe("member signal memory candidate query contract", () => {
         provenance: null,
       }),
     ]);
+  });
+});
+
+describe("memory fact object and source context", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetDbMocks();
+  });
+
+  const fact = (
+    overrides: Partial<{
+      id: string;
+      objectType: string;
+      objectId: string;
+      sourceType: string;
+      sourceId: string;
+    }>,
+  ) => ({
+    id: "fact-1",
+    objectType: "CONTACT",
+    objectId: "contact-1",
+    sourceType: "SYSTEM_INFERENCE",
+    sourceId: "inference-1",
+    ...overrides,
+  });
+
+  it("does not query anything when there are no facts", async () => {
+    await expect(attachMemoryFactContext("workspace-1", [])).resolves.toEqual([]);
+    expect(dbMock.contact.findMany).not.toHaveBeenCalled();
+    expect(dbMock.emailMessage.findMany).not.toHaveBeenCalled();
+  });
+
+  it("attaches the object's own name and page instead of its type", async () => {
+    dbMock.contact.findMany.mockResolvedValue([{ id: "contact-1", name: "Vivian Chen" }]);
+    dbMock.company.findMany.mockResolvedValue([{ id: "company-1", name: "Atlas AI" }]);
+    dbMock.opportunity.findMany.mockResolvedValue([{ id: "opp-1", title: "Atlas renewal" }]);
+
+    const [contactFact, companyFact, opportunityFact, missingFact] =
+      await attachMemoryFactContext("workspace-1", [
+        fact({}),
+        fact({ id: "fact-2", objectType: "COMPANY", objectId: "company-1" }),
+        fact({ id: "fact-3", objectType: "OPPORTUNITY", objectId: "opp-1" }),
+        fact({ id: "fact-4", objectType: "CONTACT", objectId: "contact-gone" }),
+      ]);
+
+    expect(contactFact.object).toEqual({ name: "Vivian Chen", href: "/contacts/contact-1" });
+    expect(companyFact.object).toEqual({ name: "Atlas AI", href: "/companies/company-1" });
+    expect(opportunityFact.object).toEqual({
+      name: "Atlas renewal",
+      href: "/opportunities?opportunityId=opp-1",
+    });
+    expect(missingFact.object).toBeNull();
+    // Every lookup is scoped to the workspace and selects only what renders.
+    expect(dbMock.contact.findMany).toHaveBeenCalledWith({
+      where: { workspaceId: "workspace-1", id: { in: ["contact-1", "contact-gone"] } },
+      select: { id: true, name: true },
+    });
+  });
+
+  it("resolves an email message source to its original body, scoped through the thread", async () => {
+    const sentAt = new Date("2026-10-14T09:00:00Z");
+    dbMock.emailMessage.findMany.mockResolvedValue([
+      {
+        id: "message-1",
+        sender: "Vivian Chen",
+        senderEmail: "vivian@atlas.test",
+        body: "We need the security review before Friday.",
+        sentAt,
+        threadId: "thread-1",
+        thread: { subject: "Security review" },
+      },
+    ]);
+
+    const [withSource] = await attachMemoryFactContext("workspace-1", [
+      fact({ sourceType: "EMAIL_MESSAGE", sourceId: "message-1" }),
+    ]);
+
+    expect(withSource.source).toEqual({
+      kind: "EMAIL_MESSAGE",
+      title: "Security review",
+      author: "Vivian Chen",
+      occurredAt: sentAt,
+      text: "We need the security review before Friday.",
+      href: "/inbox/thread-1",
+    });
+    expect(dbMock.emailMessage.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: { in: ["message-1"] }, thread: { workspaceId: "workspace-1" } },
+      }),
+    );
+  });
+
+  it("resolves a meeting-note source by meeting id or note id, falling back to the meeting link", async () => {
+    const startsAt = new Date("2026-10-13T02:00:00Z");
+    dbMock.meeting.findMany.mockResolvedValue([
+      { id: "meeting-1", title: "Atlas weekly", startsAt },
+      { id: "meeting-2", title: "Atlas kickoff", startsAt },
+    ]);
+    dbMock.meetingNote.findMany.mockResolvedValue([
+      {
+        id: "note-1",
+        meetingId: "meeting-1",
+        summary: "Budget approved; legal review next.",
+        keyDecisions: null,
+        liveTranscript: null,
+        updatedAt: startsAt,
+        meeting: { title: "Atlas weekly", startsAt },
+      },
+    ]);
+
+    const [byMeetingId, byNoteId, noteMissing, otherSource] = await attachMemoryFactContext(
+      "workspace-1",
+      [
+        fact({ sourceType: "MEETING_NOTE", sourceId: "meeting-1" }),
+        fact({ id: "fact-2", sourceType: "MEETING_NOTE", sourceId: "note-1" }),
+        fact({ id: "fact-3", sourceType: "MEETING_NOTE", sourceId: "meeting-2" }),
+        fact({ id: "fact-4", sourceType: "CSV_IMPORT", sourceId: "row-9" }),
+      ],
+    );
+
+    expect(byMeetingId.source).toMatchObject({
+      kind: "MEETING_NOTE",
+      title: "Atlas weekly",
+      text: "Budget approved; legal review next.",
+      href: "/meetings/meeting-1",
+    });
+    expect(byNoteId.source).toMatchObject({
+      text: "Budget approved; legal review next.",
+      href: "/meetings/meeting-1",
+    });
+    expect(noteMissing.source).toMatchObject({
+      kind: "MEETING_NOTE",
+      title: "Atlas kickoff",
+      text: null,
+      href: "/meetings/meeting-2",
+    });
+    // No resolver for CSV imports: the timeline shows the source type only.
+    expect(otherSource.source).toBeNull();
+    expect(dbMock.meetingNote.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          workspaceId: "workspace-1",
+          OR: [
+            { id: { in: ["meeting-1", "note-1", "meeting-2"] } },
+            { meetingId: { in: ["meeting-1", "note-1", "meeting-2"] } },
+          ],
+        },
+      }),
+    );
   });
 });

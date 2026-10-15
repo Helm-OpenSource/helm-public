@@ -76,3 +76,37 @@ describe("memory client member signal verification source contract", () => {
     expect(memoryClientSource).toContain("{memberSignalVerificationSection}");
   });
 });
+
+describe("memory client object-first source contract (wave 4)", () => {
+  const judgementStart = memoryClientSource.indexOf("data-system-judgement");
+
+  it("shows each fact's own object and its source original text", () => {
+    expect(memoryClientSource).toContain("fact.object?.name ?? objectTypeLabels[fact.objectType]");
+    expect(memoryClientSource).toContain("data-memory-fact-object");
+    expect(memoryClientSource).toContain("<MemoryFactSourceBlock");
+    expect(memoryClientSource).toContain("data-memory-fact-source-text");
+    expect(memoryClientSource).not.toMatch(/\{english \? "Object" : "对象"\}：/);
+  });
+
+  it("drops the ledger, the reading guide and canned business-impact lines", () => {
+    expect(memoryClientSource).not.toContain("Customer-state ledger");
+    expect(memoryClientSource).not.toContain("客户状态清单");
+    expect(memoryClientSource).not.toContain("时间线阅读方式");
+    expect(memoryClientSource).not.toContain("经营影响");
+    expect(memoryClientSource).not.toContain("briefing={");
+  });
+
+  it("folds the meeting-memory wedge and arrival contract into the single closing block", () => {
+    expect(judgementStart).toBeGreaterThan(-1);
+    expect(memoryClientSource.indexOf("data-system-judgement", judgementStart + 1)).toBe(-1);
+    expect(memoryClientSource.indexOf("{memoryMeetingWorkspaceContext}")).toBeGreaterThan(
+      judgementStart,
+    );
+    expect(memoryClientSource.indexOf("<HomeSurfaceArrivalBanner")).toBeGreaterThan(
+      judgementStart,
+    );
+    expect(memoryClientSource.indexOf("id={MEMORY_PAGE_ANCHORS.auditReplay}")).toBeLessThan(
+      judgementStart,
+    );
+  });
+});
