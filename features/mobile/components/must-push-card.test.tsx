@@ -14,8 +14,8 @@ describe("MustPushCard", () => {
   const mockItem: MustPushItem = {
     id: "test-1",
     type: "overdue_commitment",
-    title: "星河连锁恢复方案已逾期 5 天",
-    reason: "承诺在 4 月 20 日前发送恢复方案，客户已两次催问进度。",
+    title: "星河连锁 · 恢复方案 已逾期 5 天",
+    reason: "阶段 待推进 · 负责人 未指派 · 截止 4月20日",
     primaryAction: {
       label: "打开机会",
       href: "/opportunities?id=xinghe",
@@ -39,8 +39,8 @@ describe("MustPushCard", () => {
   it("should render item title and reason", () => {
     render(<MustPushCard item={mockItem} />);
 
-    expect(screen.getByText("星河连锁恢复方案已逾期 5 天")).toBeInTheDocument();
-    expect(screen.getByText(/承诺在 4 月 20 日前/)).toBeInTheDocument();
+    expect(screen.getByText("星河连锁 · 恢复方案 已逾期 5 天")).toBeInTheDocument();
+    expect(screen.getByText(/截止 4月20日/)).toBeInTheDocument();
   });
 
   it("should display type badge", () => {
@@ -55,10 +55,10 @@ describe("MustPushCard", () => {
     expect(screen.getByText(/紧急/)).toBeInTheDocument();
   });
 
-  it("should display boundary note when present", () => {
+  it("keeps the boundary note out of the card; the hero folds it into the system judgement block", () => {
     render(<MustPushCard item={mockItem} />);
 
-    expect(screen.getByText(/先复核，再对客户承诺/)).toBeInTheDocument();
+    expect(screen.queryByText(/先复核，再对客户承诺/)).not.toBeInTheDocument();
   });
 
   it("should display outcome checkpoint when present", () => {

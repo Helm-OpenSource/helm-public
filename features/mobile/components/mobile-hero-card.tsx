@@ -13,12 +13,30 @@ const STATE_BADGE: Record<MobileHeroState, { label: string; labelEn: string; cls
 interface MobileHeroCardProps {
   model: MobileJudgementLoopModel;
   english?: boolean;
+  /** Boundary notes of the other visible items, folded into the same block. */
+  extraBoundaryNotes?: readonly string[];
 }
 
-export function MobileHeroCard({ model, english = false }: MobileHeroCardProps) {
+export function MobileHeroCard({
+  model,
+  english = false,
+  extraBoundaryNotes = [],
+}: MobileHeroCardProps) {
   const badge = STATE_BADGE[model.state];
   const badgeLabel = english ? badge.labelEn : badge.label;
   const isRestricted = model.state === "cross_tenant_denied" || model.state === "empty";
+  const heroBoundary = model.item?.boundaryNote?.message ?? null;
+  const otherBoundaryNotes = Array.from(new Set(extraBoundaryNotes)).filter(
+    (note) => note && note !== heroBoundary,
+  );
+  const hasSystemJudgement =
+    !isRestricted &&
+    Boolean(
+      model.evidence ||
+        heroBoundary ||
+        model.item?.outcomeCheckpoint ||
+        otherBoundaryNotes.length > 0,
+    );
 
   return (
     <section
@@ -52,58 +70,6 @@ export function MobileHeroCard({ model, english = false }: MobileHeroCardProps) 
         {model.subtext}
       </p>
 
-      {/* Evidence — only shown for non-restricted states with evidence */}
-      {!isRestricted && model.evidence && (
-        <div
-          id="mobile-evidence"
-          className="rounded-xl bg-[color:var(--surface-subtle)] border border-[color:var(--border)] px-3 py-3 space-y-2"
-          data-testid="mobile-hero-evidence"
-        >
-          <p className="text-xs font-medium text-[color:var(--muted)]">
-            {english ? "Source" : "业务来源"}
-          </p>
-          <p className="text-xs text-[color:var(--foreground)]">
-            {model.evidence.sourceHint}
-          </p>
-          <p className="text-xs font-medium text-[color:var(--muted)] mt-1">
-            {english ? "Why now" : "推进原因"}
-          </p>
-          <p className="text-xs text-[color:var(--foreground)]">
-            {model.evidence.helmInterpretation}
-          </p>
-        </div>
-      )}
-
-      {/* Boundary note — only for non-restricted states with item */}
-      {!isRestricted && model.item?.boundaryNote && (
-        <div
-          className="rounded-xl bg-[color:var(--status-warning-bg)] border border-[color:var(--status-warning-border)] px-3 py-2"
-          data-testid="mobile-hero-boundary"
-        >
-          <p className="text-xs text-[color:var(--status-warning-text)]">
-            {model.item.boundaryNote.message}
-          </p>
-        </div>
-      )}
-
-      {/* Outcome checkpoint — keeps Must Push tied to result recovery */}
-      {!isRestricted && model.item?.outcomeCheckpoint && (
-        <div
-          className="rounded-xl bg-[color:var(--surface-subtle)] border border-[color:var(--border)] px-3 py-3 space-y-2"
-          data-testid="mobile-hero-outcome"
-        >
-          <p className="text-xs font-medium text-[color:var(--muted)]">
-            {english ? "Outcome check" : "结果回收"}
-          </p>
-          <p className="text-xs text-[color:var(--foreground)]">
-            {model.item.outcomeCheckpoint.dueHint}
-          </p>
-          <p className="text-xs text-[color:var(--muted)]">
-            {model.item.outcomeCheckpoint.expectedSignal}
-          </p>
-        </div>
-      )}
-
       {/* Actions */}
       {model.actions.length > 0 && (
         <div className="flex flex-col gap-2 pt-1" data-testid="mobile-hero-actions">
@@ -122,6 +88,68 @@ export function MobileHeroCard({ model, english = false }: MobileHeroCardProps) 
             </Link>
           ))}
         </div>
+      )}
+
+      {/* Source, boundary and outcome check stay folded at the end of the card. */}
+      {hasSystemJudgement && (
+        <details
+          id="mobile-evidence"
+          className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-subtle)] px-3 py-2"
+          data-testid="mobile-hero-evidence"
+          data-system-judgement
+        >
+          <summary className="cursor-pointer text-xs font-medium text-[color:var(--muted)]">
+            {english ? "System judgement: source and boundary" : "系统判断：来源与边界"}
+          </summary>
+          <div className="mt-2 space-y-3">
+            {model.evidence && (
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-[color:var(--muted)]">
+                  {english ? "Source" : "业务来源"}
+                </p>
+                <p className="text-xs text-[color:var(--foreground)]">
+                  {model.evidence.sourceHint}
+                </p>
+              </div>
+            )}
+
+            {heroBoundary && (
+              <div
+                className="rounded-xl bg-[color:var(--status-warning-bg)] border border-[color:var(--status-warning-border)] px-3 py-2"
+                data-testid="mobile-hero-boundary"
+              >
+                <p className="text-xs text-[color:var(--status-warning-text)]">
+                  {heroBoundary}
+                </p>
+              </div>
+            )}
+
+            {model.item?.outcomeCheckpoint && (
+              <div className="space-y-1" data-testid="mobile-hero-outcome">
+                <p className="text-xs font-medium text-[color:var(--muted)]">
+                  {english ? "Outcome check" : "结果回收"}
+                </p>
+                <p className="text-xs text-[color:var(--foreground)]">
+                  {model.item.outcomeCheckpoint.dueHint}
+                </p>
+                <p className="text-xs text-[color:var(--muted)]">
+                  {model.item.outcomeCheckpoint.expectedSignal}
+                </p>
+              </div>
+            )}
+
+            {otherBoundaryNotes.length > 0 && (
+              <ul
+                className="list-disc space-y-1 pl-4 text-xs text-[color:var(--muted)]"
+                data-testid="mobile-hero-other-boundaries"
+              >
+                {otherBoundaryNotes.map((note) => (
+                  <li key={note}>{note}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </details>
       )}
     </section>
   );
