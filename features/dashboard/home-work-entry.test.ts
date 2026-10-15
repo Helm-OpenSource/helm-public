@@ -350,7 +350,7 @@ describe("buildDashboardHomeWorkEntry", () => {
         expect.objectContaining({ href: expect.stringMatching(/^\/approvals/) }),
       ]),
     );
-    expect(model.summary).not.toContain("复核压力");
+    expect(model).not.toHaveProperty("summary");
   });
 
   it("fails closed to a neutral role-work anchor when no safe resume target exists", () => {

@@ -20,7 +20,8 @@ name: Preflight (Fast PR Feedback)
 
 on:
   pull_request:
-    branches: [main, develop]
+  # Any base branch: stacked PRs whose base is a feature branch need the same
+  # checks as PRs into main/develop. `push:` stays limited to main/develop.
   push:
     branches: [main, develop]
 

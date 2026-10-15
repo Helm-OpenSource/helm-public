@@ -16,8 +16,6 @@ function model(): DashboardHomeWorkEntryModel {
   return {
     canReviewGovernedActions: true,
     state: "review-heavy",
-    title: "现在最该先进入的是复核。",
-    summary: "通用复核压力。",
     topWorkItems: [generic],
     reviewItems: [generic],
     reviewItemsArePrimary: true,
@@ -90,6 +88,7 @@ describe("routeWorkEntryToWorkstation", () => {
       "system-anomaly:warning",
       "role-workstation:quality-review",
     ]);
-    expect(result.title).toContain("异常");
+    expect(result).not.toHaveProperty("title");
+    expect(result).not.toHaveProperty("summary");
   });
 });

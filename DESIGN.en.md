@@ -12,7 +12,7 @@ This document exists to:
 
 - Unify Helm's long-term visual direction
 - Reduce style drift between pages
-- Keep product expression aligned with the `judgement-first / decision-first / formal review` product positioning
+- Keep product expression aligned with the `object-first / formal review` product positioning
 - Give subsequent Codex / design / engineering work a single fixed set of requirements
 
 This document is currently not:
@@ -70,21 +70,23 @@ More concretely:
 
 ## 4. Product Expression Must Come Before Visual Decoration
 
-Helm's visual work must by default serve these 5 product semantics:
+Helm's visual work must by default serve these 5 product semantics (from 2026-10-15, `object-first` supersedes `judgement-first / decision-first`):
 
-1. `judgement-first`
-2. `decision-first`
+1. `object-first`
+2. `system-judgement-last`
 3. `review-before-commitment`
 4. `recommendation != commitment`
 5. **Serve first, do not educate users**
 
-This means pages should by default answer, in priority order:
+This means each workspace view should by default answer, top-down:
 
-1. What Helm currently judges
-2. Why it judges that way
-3. What Helm has already advanced
-4. Who needs to make which decision now
-5. What action the user can take immediately
+1. Who or what the object is
+2. Its original content (customer's words, meeting notes, draft body, fact source)
+3. The next step, its owner and its due date
+4. What action the user can take immediately
+5. Why the system ranked it this way and where the boundary is — only inside one collapsed `<details data-system-judgement>` at the end of the view
+
+No header descriptions, explainer lines under filters, placeholder tiles without data, canned reasons, or system summaries standing in for original text; counts come from real queries only. Where older items in §6 and §7 below ask for judgement first, this section wins; those items are retired page by page in the rework waves.
 
 ### 4.1 The "Do Not Try to Teach Users" Principle
 
@@ -98,7 +100,7 @@ This means pages should by default answer, in priority order:
 
 **Correct approach**:
 - ✅ Directly show the actions and results the user needs
-- ✅ Tuck system rationale into a secondary "why this judgement" layer
+- ✅ Tuck system rationale into a secondary "why this judgement" layer (the single `<details data-system-judgement>` at the end of the view)
 - ✅ Show detailed explanations only when the user actively clicks for them
 - ✅ Replace system explanations with action outcomes
 

@@ -118,8 +118,6 @@ function buildWorkEntry(input?: Partial<DashboardHomeWorkEntryModel>): Dashboard
   return {
     canReviewGovernedActions: true,
     state: "returning-active",
-    title: "Home work entry",
-    summary: "Current ranked work.",
     topWorkItems: [
       {
         id: "top-1",

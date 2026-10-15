@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Prisma } from "@prisma/client";
 import { ArrowRight, Building2, Search, Users2 } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
@@ -8,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -35,41 +35,51 @@ export default async function ContactsPage() {
   });
   const english = uiConfig.locale === "en-US";
   const pageStory = getWorkspaceStory("contacts", uiConfig.locale, uiConfig.demoMode);
-  const contacts = await db.contact.findMany({
-    where: {
-      workspaceId: workspace.id,
-      archivedAt: null,
-    },
-    include: {
-      company: true,
-      opportunities: {
-        where: {
-          stage: {
-            notIn: ["DONE", "LOST"],
-          },
-        },
-        orderBy: { updatedAt: "desc" },
-        take: 3,
-      },
-      owner: true,
-    },
-    orderBy: [{ lastInteractionAt: "desc" }, { updatedAt: "desc" }],
-    take: 24,
-  });
-  const total = await db.contact.count({
-    where: { workspaceId: workspace.id, archivedAt: null },
-  });
-  const withCompany = contacts.filter((contact) => contact.company).length;
-  const withOpenOpportunity = contacts.filter(
-    (contact) => contact.opportunities.length > 0,
-  ).length;
+  const activeContactWhere: Prisma.ContactWhereInput = {
+    workspaceId: workspace.id,
+    archivedAt: null,
+  };
+  const openOpportunityWhere: Prisma.OpportunityWhereInput = {
+    stage: { notIn: ["DONE", "LOST"] },
+  };
   const staleThreshold = new Date();
   staleThreshold.setDate(staleThreshold.getDate() - 30);
-  const needsAttention = contacts.filter(
-    (contact) =>
-      !contact.lastInteractionAt ||
-      contact.lastInteractionAt.getTime() < staleThreshold.getTime(),
-  ).length;
+  const [contacts, total, withCompany, withOpenOpportunity, needsAttention] =
+    await Promise.all([
+      db.contact.findMany({
+        where: activeContactWhere,
+        include: {
+          company: true,
+          owner: true,
+          _count: {
+            select: {
+              opportunities: { where: openOpportunityWhere },
+            },
+          },
+        },
+        orderBy: [{ lastInteractionAt: "desc" }, { updatedAt: "desc" }],
+        take: 24,
+      }),
+      db.contact.count({ where: activeContactWhere }),
+      db.contact.count({
+        where: { ...activeContactWhere, companyId: { not: null } },
+      }),
+      db.contact.count({
+        where: {
+          ...activeContactWhere,
+          opportunities: { some: openOpportunityWhere },
+        },
+      }),
+      db.contact.count({
+        where: {
+          ...activeContactWhere,
+          OR: [
+            { lastInteractionAt: null },
+            { lastInteractionAt: { lt: staleThreshold } },
+          ],
+        },
+      }),
+    ]);
   const displayText = (value: string | null | undefined) =>
     formatRoleDetailDisplayText(value, english);
 
@@ -77,18 +87,19 @@ export default async function ContactsPage() {
     <div className="space-y-6" data-source-page="/contacts">
       <PageHeader
         eyebrow={pageStory.eyebrow}
-        title={
-          english
-            ? "Which person you should ping today — and what to say"
-            : "今天该联系谁，第一句怎么说"
-        }
-        description={pageStory.description}
+        title={english ? "Contacts" : "联系人"}
         actions={
           <>
             <Button variant="secondary" asChild>
               <Link href="/search">
                 <Search className="h-4 w-4" />
                 {english ? "Search objects" : "搜索对象"}
+              </Link>
+            </Button>
+            <Button variant="secondary" asChild>
+              <Link href="/imports/crm">
+                <Building2 className="h-4 w-4" />
+                {english ? "Connect CRM data" : "连接客户关系系统数据"}
               </Link>
             </Button>
             <Button asChild>
@@ -105,22 +116,18 @@ export default async function ContactsPage() {
         <StatCard
           label={english ? "Customer contacts" : "客户联系人"}
           value={total}
-          detail={english ? "People available to contact" : "可直接进入触达"}
         />
         <StatCard
           label={english ? "With company" : "已关联公司"}
           value={withCompany}
-          detail={english ? "Loaded in this view" : "当前列表内"}
         />
         <StatCard
           label={english ? "With open opportunity" : "关联活跃机会"}
           value={withOpenOpportunity}
-          detail={english ? "Revenue motion is already attached" : "已有收入推进线"}
         />
         <StatCard
-          label={english ? "Needs relationship review" : "需关系复核"}
+          label={english ? "No interaction in 30 days" : "30 天无互动"}
           value={needsAttention}
-          detail={english ? "No recent interaction signal" : "近期互动信号不足"}
         />
       </div>
 
@@ -132,11 +139,6 @@ export default async function ContactsPage() {
               {english ? "Relationship directory" : "联系人目录"}
             </CardTitle>
           </div>
-          <CardDescription>
-            {english
-              ? "Sorted by who's gone cold longest, who's mid-deal, and who you owe a reply. Click in for a draftable opener."
-              : "按「沉默最久 / 单子在跑 / 欠回复」排序。点进去就能拿到能直接发的开场话术草稿。"}
-          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 lg:grid-cols-2">
           {contacts.length ? (
@@ -171,6 +173,13 @@ export default async function ContactsPage() {
                         92,
                       )}
                     </p>
+                    {contact.phone || contact.email ? (
+                      <p className="mt-1 break-all text-sm leading-6 text-[color:var(--foreground)]">
+                        {[contact.phone, contact.email]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                    ) : null}
                   </div>
                   <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-[color:var(--muted-foreground)]" />
                 </div>
@@ -184,10 +193,10 @@ export default async function ContactsPage() {
                         ? "Company missing"
                         : "未关联公司"}
                   </Badge>
-                  <Badge variant={contact.opportunities.length ? "success" : "neutral"}>
+                  <Badge variant={contact._count.opportunities ? "success" : "neutral"}>
                     {english
-                      ? `${contact.opportunities.length} open opportunities`
-                      : `${contact.opportunities.length} 条活跃机会`}
+                      ? `${contact._count.opportunities} open opportunities`
+                      : `${contact._count.opportunities} 条活跃机会`}
                   </Badge>
                 </div>
                 <p className="mt-3 text-xs text-[color:var(--muted-foreground)]">
@@ -211,27 +220,6 @@ export default async function ContactsPage() {
               }
             />
           )}
-        </CardContent>
-      </Card>
-
-      <Card className="workspace-panel-muted">
-        <CardContent className="flex flex-col gap-3 py-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-[color:var(--foreground)]">
-              {english ? "Next relationship action" : "下一步处理关系"}
-            </p>
-            <p className="mt-1 text-sm leading-6 text-[color:var(--muted)]">
-              {english
-                ? "Use this page to pick who needs a touch today, then open the account or opportunity for the actual decision."
-                : "先挑出今天该联系的人，再进入客户或机会页面处理真实判断。"}
-            </p>
-          </div>
-          <Button variant="secondary" asChild>
-            <Link href="/imports/crm">
-              <Building2 className="h-4 w-4" />
-              {english ? "Connect CRM data" : "连接客户关系系统数据"}
-            </Link>
-          </Button>
         </CardContent>
       </Card>
     </div>

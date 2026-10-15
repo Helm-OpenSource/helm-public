@@ -34,7 +34,10 @@ import {
   adaptAskHelmResponseToMobile,
   getMobileGroundingSummary,
 } from "@/features/mobile/lib/adapt-ask-helm-response";
-import { getMobileCommandReadModel } from "@/features/mobile/lib/mobile-command-read-model";
+import {
+  formatMobileUrgentAlert,
+  getMobileCommandReadModel,
+} from "@/features/mobile/lib/mobile-command-read-model";
 import { WorkspaceStatus } from "@/features/mobile/components/workspace-status";
 import { AskHelmInput } from "@/features/mobile/components/ask-helm-input";
 import { MustPushList } from "@/features/mobile/components/must-push-list";
@@ -91,9 +94,7 @@ export default async function MobilePage({ searchParams }: MobilePageProps) {
   const workspaceStatus: WorkspaceStatusType = {
     workspaceName: english ? "Today's customer work" : "今天的客户推进",
     todaySummary: readModel.todaySummary,
-    topAlert: readModel.mustPushItems.find((i) => i.severity === "critical")
-      ? (english ? "1 urgent" : "1 项紧急")
-      : null,
+    topAlert: formatMobileUrgentAlert(readModel.urgentCount, english),
     reviewCount: readModel.reviewCount,
     outcomeCheckpointCount: readModel.outcomeCheckpointCount,
   };
@@ -103,10 +104,11 @@ export default async function MobilePage({ searchParams }: MobilePageProps) {
   const hasCriticalFolded = readModel.hasCriticalFolded;
   const heroModel = buildMobileJudgementLoop({ items: allItems, english });
   const supportingItems = allItems.slice(1);
+  const supportingBoundaryNotes = supportingItems.flatMap((item) =>
+    item.boundaryNote ? [item.boundaryNote.message] : [],
+  );
   const hasAskHelmQuery = Boolean(q?.trim());
-  const highPressureCount = allItems.filter(
-    (item) => item.severity === "critical" || item.severity === "high",
-  ).length;
+  const highPressureCount = readModel.highPressureCount;
   const visiblePriorityItems = allItems.slice(0, 3);
   const signalLifecycleHref = buildOperatingSignalFlowSignalHref(
     "boundary:alias-f",
@@ -166,7 +168,24 @@ export default async function MobilePage({ searchParams }: MobilePageProps) {
         {/* Main Content */}
         <div className="px-4 py-4 space-y-6">
           {/* Hero Card — primary first-screen entry */}
-          <MobileHeroCard model={heroModel} english={english} />
+          <MobileHeroCard
+            model={heroModel}
+            english={english}
+            extraBoundaryNotes={supportingBoundaryNotes}
+          />
+
+          {/* Must Push Items — skip first item already shown in Hero */}
+          {(supportingItems.length > 0 || foldedCount > 0) && (
+            <section>
+              <MustPushList
+                items={supportingItems}
+                totalCount={readModel.totalCount}
+                foldedCount={foldedCount}
+                hasCriticalFolded={hasCriticalFolded}
+                english={english}
+              />
+            </section>
+          )}
 
           <details
             className="group rounded-[24px] border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3"
@@ -177,7 +196,7 @@ export default async function MobilePage({ searchParams }: MobilePageProps) {
               className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-[color:var(--foreground)] marker:content-none [&::-webkit-details-marker]:hidden"
               data-testid="mobile-secondary-work-toggle"
             >
-              <span>{english ? "Open evidence, signal capture and other work" : "展开证据、上报和其他事项"}</span>
+              <span>{english ? "Open signal capture, outcome checks and other work" : "展开上报、结果回收和其他事项"}</span>
               <span className="rounded-full bg-[color:var(--surface-subtle)] px-2.5 py-1 text-xs text-[color:var(--muted-foreground)]">
                 {english ? "Details" : "详情"}
               </span>
@@ -315,19 +334,6 @@ export default async function MobilePage({ searchParams }: MobilePageProps) {
                   </p>
                 </div>
               )}
-                </section>
-              )}
-
-              {/* Must Push Items — skip first item already shown in Hero */}
-              {(supportingItems.length > 0 || foldedCount > 0) && (
-                <section>
-                  <MustPushList
-                    items={supportingItems}
-                    totalCount={readModel.totalCount}
-                    foldedCount={foldedCount}
-                    hasCriticalFolded={hasCriticalFolded}
-                    english={english}
-                  />
                 </section>
               )}
 

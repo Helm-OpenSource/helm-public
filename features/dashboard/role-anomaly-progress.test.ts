@@ -22,8 +22,6 @@ function buildModel(): DashboardHomeWorkEntryModel {
   return {
     canReviewGovernedActions: false,
     state: "returning-active",
-    title: "当前工作",
-    summary: "继续推进。",
     topWorkItems: [card],
     reviewItems: [],
     reviewItemsArePrimary: false,

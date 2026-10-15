@@ -38,6 +38,15 @@ test.describe("Mobile Command Surface", () => {
     await expect(page.getByTestId("mobile-hero-badge")).toBeVisible();
     await expect(page.getByRole("heading", { name: /Ask Helm|问 Helm/i })).toHaveCount(0);
     await expect(page.getByTestId("mobile-secondary-work-toggle")).toBeVisible();
+    // Object-first: the must-push list sits under the hero, not inside the
+    // secondary details, and the view keeps at most one collapsed system
+    // judgement block.
+    await expect(
+      page.getByTestId("mobile-secondary-work").getByTestId("mobile-must-push-list"),
+    ).toHaveCount(0);
+    expect(await page.locator("[data-system-judgement]").count()).toBeLessThanOrEqual(1);
+    await expect(page.locator("details[data-system-judgement][open]")).toHaveCount(0);
+    await expect(page.getByText(/推进原因|Why now/)).toHaveCount(0);
     await expect(page.locator("#ask-helm summary")).toContainText(
       /Ask or submit a signal|提问 \/ 上报信号/i,
     );

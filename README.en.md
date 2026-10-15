@@ -203,7 +203,7 @@ More detail in [docs/getting-started.en.md](docs/getting-started.en.md).
 
 | Route | Role |
 |---|---|
-| `/dashboard` | Today's 3 calls a human must make |
+| `/dashboard` | Today's work: move, review and resume |
 | `/mobile` | Mobile narrow-screen operations push entry + Ask Helm |
 | `/operating` | Operating board: judgment / decision / boundary, three layers |
 | `/approvals` | Customer-visible drafts and CRM stage changes wait here for your click |

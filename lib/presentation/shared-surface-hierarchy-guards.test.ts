@@ -1441,9 +1441,11 @@ describe("shared surface hierarchy guards", () => {
     expect(controlTowerView.indexOf("<DashboardHomeWorkEntrySurface")).toBeLessThan(
       controlTowerView.indexOf("<details"),
     );
-    expect(legacyHomeView.indexOf("<DashboardHomeWorkEntrySurface")).toBeLessThan(
-      legacyHomeView.indexOf("<details"),
-    );
+    // Object-first (2026-10-15): the legacy home no longer owns a second
+    // disclosure; its supporting panels fold into the work entry's single
+    // closing data-system-judgement block via the `supplementary` slot.
+    expect(legacyHomeView).not.toContain("<details");
+    expect(legacyHomeView).toContain("supplementary={");
     expect(dashboardPage).not.toContain("<DashboardHomeSecondaryDisclosure");
     expect(dashboardPage).not.toContain("dashboardHomeSecondaryVisibility");
     expect(dashboardPage).not.toContain("<GoalDrivenHomeSurface");

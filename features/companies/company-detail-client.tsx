@@ -529,7 +529,12 @@ export function CompanyDetailClient({
         eyebrow={pageStory.eyebrow}
         title={company.name}
         description={text(
-          `${pageStory.description} · ${english ? "Current maturity" : "当前成熟度"}：${company.cooperationMaturity ?? (english ? "Needs review" : "待判断")}`,
+          [
+            pageStory.description,
+            `${english ? "Current maturity" : "当前成熟度"}：${company.cooperationMaturity ?? (english ? "Needs review" : "待判断")}`,
+          ]
+            .filter(Boolean)
+            .join(" · "),
         )}
         actions={
           <>

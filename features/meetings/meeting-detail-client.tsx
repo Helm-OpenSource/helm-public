@@ -1144,7 +1144,13 @@ export function MeetingDetailClient({
         eyebrow={pageStory.eyebrow}
         title={meeting.title}
         titleAs="h2"
-        description={`${pageStory.description} · ${formatMeetingDetailDateLabel(meeting.startsAt, english)} · ${meeting.company?.name ?? (english ? "No linked company" : "未关联公司")}`}
+        description={[
+          pageStory.description,
+          formatMeetingDetailDateLabel(meeting.startsAt, english),
+          meeting.company?.name ?? (english ? "No linked company" : "未关联公司"),
+        ]
+          .filter(Boolean)
+          .join(" · ")}
         actions={
           <>
             <StartRecordingButton

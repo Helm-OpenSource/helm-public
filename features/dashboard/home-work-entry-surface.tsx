@@ -27,35 +27,6 @@ import type {
 } from "@/features/dashboard/home-work-entry";
 import { getAdditionalRoleAnomalyItems } from "@/features/dashboard/role-anomaly-progress";
 
-function getStateBadgeVariant(state: DashboardHomeWorkEntryModel["state"]) {
-  switch (state) {
-    case "empty-new":
-      return "warning" as const;
-    case "first-loop":
-      return "info" as const;
-    case "returning-active":
-      return "success" as const;
-    case "review-heavy":
-      return "danger" as const;
-  }
-}
-
-function getStateLabel(
-  state: DashboardHomeWorkEntryModel["state"],
-  english: boolean,
-) {
-  switch (state) {
-    case "empty-new":
-      return english ? "Waiting on your first call" : "等你开始第一笔";
-    case "first-loop":
-      return english ? "Closing the first loop" : "正在收的第一条闭环";
-    case "returning-active":
-      return english ? "Back in the push" : "继续当前推进";
-    case "review-heavy":
-      return english ? "Pending your call" : "等你拍板";
-  }
-}
-
 function WorkCard({
   item,
   ctaVariant = "secondary",
@@ -150,9 +121,11 @@ function ActionRailItem({
           <p className="break-words text-sm font-semibold leading-6 text-[color:var(--foreground)]">
             {title}
           </p>
-          <p className="break-words text-sm leading-6 text-[color:var(--muted)]">
-            {body}
-          </p>
+          {body ? (
+            <p className="break-words text-sm leading-6 text-[color:var(--muted)]">
+              {body}
+            </p>
+          ) : null}
         </div>
       </div>
       <div className="mt-4">
@@ -190,6 +163,7 @@ function WorkEntryActionRail({
 }) {
   const primary = model.topWorkItems[0] ?? model.resumeItem;
   const review = model.reviewItems[0] ?? null;
+  const reviewCount = model.pendingReviewCount ?? model.reviewItems.length;
   const reviewQueueHref = review ? "/approvals#approval-queue" : "/approvals";
   const showCrossRoleReviewQueue =
     model.canReviewGovernedActions &&
@@ -198,89 +172,83 @@ function WorkEntryActionRail({
   return (
     <nav
       aria-label={english ? "Current work quick actions" : "当前工作快速动作"}
-      className={`grid gap-2.5 md:grid-cols-2 ${
-        showCrossRoleReviewQueue ? "xl:grid-cols-5" : "xl:grid-cols-4"
-      }`}
+      className="space-y-2.5"
       data-dashboard-work-entry-action-rail="true"
     >
-      <ActionRailItem
-        label={english ? "Move" : "推进"}
-        title={primary.title}
-        body={primary.nextStep}
-        href={primary.href}
-        ctaLabel={primary.ctaLabel}
-        icon={<Target className="h-3.5 w-3.5" />}
-        tracking={primary.tracking}
-        ctaVariant="default"
-      />
-      {showCrossRoleReviewQueue ? (
+      <div
+        className={`grid gap-2.5 md:grid-cols-2 ${
+          showCrossRoleReviewQueue ? "xl:grid-cols-3" : "xl:grid-cols-2"
+        }`}
+      >
         <ActionRailItem
-          label={english ? "Review" : "拍板"}
-          title={
-            review
-              ? english
-                ? `${model.reviewItems.length} actions waiting`
-                : `${model.reviewItems.length} 个动作待审批`
-              : english
-                ? "Review queue is clear"
-                : "复核队列已清"
-          }
-          body={
-            review
-              ? english
-                ? `Start with ${review.title}.`
-                : `先看：${review.title}。`
-              : english
-                ? "New customer-visible work will reappear here."
-                : "新的客户可见动作会重新出现在这里。"
-          }
-          href={reviewQueueHref}
-          ctaLabel={english ? "Open queue" : "查看队列"}
-          icon={<ShieldAlert className="h-3.5 w-3.5" />}
+          label={english ? "Move" : "推进"}
+          title={primary.title}
+          body={primary.nextStep}
+          href={primary.href}
+          ctaLabel={primary.ctaLabel}
+          icon={<Target className="h-3.5 w-3.5" />}
+          tracking={primary.tracking}
+          ctaVariant="default"
         />
-      ) : null}
-      <ActionRailItem
-        label={english ? "Signal" : "信号"}
-        title={english ? "Add the work signal" : "上报信号"}
-        body={
-          english
-            ? "When real work changes, add it from Ask Helm before the system guesses."
-            : "真实工作里出现新情况时，从 Ask Helm 补进系统。"
-        }
-        href="/search?mode=ask#ask-helm-signal-intake"
-        ctaLabel={english ? "Open Ask Helm" : "打开 Ask Helm"}
-        icon={<CircleAlert className="h-3.5 w-3.5" />}
-      />
-      <ActionRailItem
-        label={english ? "Source" : "来源"}
-        title={english ? "Check source coverage" : "检查数据源状态"}
-        body={
-          english
-            ? "If the answer is thin, check imports and connector state first."
-            : "如果答案明显偏薄，先看导入和连接状态。"
-        }
-        href="/settings?tab=connectors"
-        ctaLabel={english ? "Open sources" : "查看数据源"}
-        icon={<ShieldCheck className="h-3.5 w-3.5" />}
-      />
-      <ActionRailItem
-        label={english ? "Resume" : "继续入口"}
-        title={model.resumeItem.title}
-        body={model.resumeItem.nextStep}
-        href={model.resumeItem.href}
-        ctaLabel={model.resumeItem.ctaLabel}
-        icon={<Clock3 className="h-3.5 w-3.5" />}
-        tracking={model.resumeItem.tracking}
-      />
+        {showCrossRoleReviewQueue ? (
+          <ActionRailItem
+            label={english ? "Review" : "拍板"}
+            title={
+              review
+                ? english
+                  ? `${reviewCount} actions waiting`
+                  : `${reviewCount} 个动作待审批`
+                : english
+                  ? "Review queue is clear"
+                  : "复核队列已清"
+            }
+            body={
+              review
+                ? english
+                  ? `Start with ${review.title}.`
+                  : `先看：${review.title}。`
+                : ""
+            }
+            href={reviewQueueHref}
+            ctaLabel={english ? "Open queue" : "查看队列"}
+            icon={<ShieldAlert className="h-3.5 w-3.5" />}
+          />
+        ) : null}
+        <ActionRailItem
+          label={english ? "Resume" : "继续入口"}
+          title={model.resumeItem.title}
+          body={model.resumeItem.nextStep}
+          href={model.resumeItem.href}
+          ctaLabel={model.resumeItem.ctaLabel}
+          icon={<Clock3 className="h-3.5 w-3.5" />}
+          tracking={model.resumeItem.tracking}
+        />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button asChild size="sm" variant="ghost">
+          <Link href="/search?mode=ask#ask-helm-signal-intake">
+            <CircleAlert className="h-3.5 w-3.5" aria-hidden />
+            {english ? "Add a work signal" : "上报信号"}
+          </Link>
+        </Button>
+        <Button asChild size="sm" variant="ghost">
+          <Link href="/settings?tab=connectors">
+            <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
+            {english ? "Open sources" : "查看数据源"}
+          </Link>
+        </Button>
+      </div>
     </nav>
   );
 }
 
 function ReviewQueueSummary({
   items,
+  totalCount,
   english,
 }: {
   items: DashboardHomeWorkEntryCard[];
+  totalCount: number;
   english: boolean;
 }) {
   const firstItem = items[0];
@@ -305,7 +273,7 @@ function ReviewQueueSummary({
         <div className="theme-surface-panel rounded-2xl px-4 py-4">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="danger">
-              {english ? `${items.length} waiting` : `${items.length} 个待复核`}
+              {english ? `${totalCount} waiting` : `${totalCount} 个待复核`}
             </Badge>
             <Badge variant="warning">
               {english ? "Held at boundary" : "停在边界后"}
@@ -416,9 +384,12 @@ function Block({
 export function DashboardHomeWorkEntrySurface({
   model,
   english,
+  supplementary,
 }: {
   model: DashboardHomeWorkEntryModel;
   english: boolean;
+  /** Extra system context folded into the same closing details block. */
+  supplementary?: ReactNode;
 }) {
   const showCrossRoleReviewQueue =
     model.canReviewGovernedActions &&
@@ -433,28 +404,12 @@ export function DashboardHomeWorkEntrySurface({
       data-dashboard-work-entry="true"
     >
       <CardContent className="space-y-5 py-5">
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="warning">
-              {english ? "Current work" : "当前工作"}
-            </Badge>
-            <Badge variant={getStateBadgeVariant(model.state)}>
-              {getStateLabel(model.state, english)}
-            </Badge>
-          </div>
-          <div className="space-y-2">
-            <p className="text-lg font-semibold tracking-tight text-[color:var(--foreground)]">
-              {model.title}
-            </p>
-            <p className="text-sm leading-7 text-[color:var(--muted)]">{model.summary}</p>
-          </div>
-        </div>
-
         <WorkEntryActionRail model={model} english={english} />
 
         <details
           className="group rounded-[24px] border border-[color:var(--border)] bg-[color:var(--background-elevated)]"
           data-dashboard-work-entry-supporting-context="true"
+          data-system-judgement
         >
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-[color:var(--foreground)]">
             <span>
@@ -507,7 +462,11 @@ export function DashboardHomeWorkEntrySurface({
                 ctaVariant="default"
               />
               {!showCrossRoleReviewQueue ? null : model.reviewItemsArePrimary ? (
-                <ReviewQueueSummary items={model.reviewItems} english={english} />
+                <ReviewQueueSummary
+                  items={model.reviewItems}
+                  totalCount={model.pendingReviewCount ?? model.reviewItems.length}
+                  english={english}
+                />
               ) : (
                 <Block
                   title={english ? "Needs your review" : "待你复核"}
@@ -593,6 +552,9 @@ export function DashboardHomeWorkEntrySurface({
               />
             </div>
           </div>
+          {supplementary ? (
+            <div className="space-y-5 px-3 pb-3">{supplementary}</div>
+          ) : null}
         </details>
       </CardContent>
     </Card>

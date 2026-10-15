@@ -1,7 +1,8 @@
 /**
  * Must Push Card Component
  *
- * Displays a single Must Push item with title, reason, action, and boundary.
+ * Displays a single Must Push item with its title, record facts and action.
+ * Boundary notes fold into the hero card's single system judgement block.
  */
 
 import Link from "next/link";
@@ -14,19 +15,6 @@ export interface MustPushCardProps {
   item: MustPushItem;
   variant?: "primary" | "supporting";
   english?: boolean;
-}
-
-function getSeverityColor(severity: MustPushItem["severity"]) {
-  switch (severity) {
-    case "critical":
-      return "bg-[color:var(--status-danger-bg)] text-[color:var(--status-danger-text)] border-[color:var(--status-danger-border)]";
-    case "high":
-      return "bg-[color:var(--status-warning-bg)] text-[color:var(--status-warning-text)] border-[color:var(--status-warning-border)]";
-    case "medium":
-      return "bg-[color:var(--status-warning-bg)] text-[color:var(--status-warning-text)] border-[color:var(--status-warning-border)]";
-    case "low":
-      return "bg-[color:var(--surface-subtle)] text-[color:var(--foreground)] border-[color:var(--border)]";
-  }
 }
 
 function getTypeLabel(type: MustPushItem["type"], english: boolean): string {
@@ -43,7 +31,6 @@ function getTypeLabel(type: MustPushItem["type"], english: boolean): string {
 
 export function MustPushCard({ item, variant = "supporting", english = false }: MustPushCardProps) {
   const isPrimary = variant === "primary";
-  const severityColor = getSeverityColor(item.severity);
 
   return (
     <Link
@@ -113,18 +100,6 @@ export function MustPushCard({ item, variant = "supporting", english = false }: 
         <ArrowRight className="h-4 w-4 text-[var(--accent)]" />
       </div>
 
-      {/* Boundary note */}
-      {item.boundaryNote && (
-        <div className={cn(
-          "mt-3 pt-3 border-t border-[color:var(--border)]",
-          "rounded-xl px-3 py-2",
-          severityColor
-        )}>
-          <p className="text-xs leading-snug">
-            {item.boundaryNote.message}
-          </p>
-        </div>
-      )}
     </Link>
   );
 }

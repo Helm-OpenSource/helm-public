@@ -34,8 +34,7 @@ Helm 是：
 - `workspace-first`
 - `membership-backed`
 - `controlled-trial`
-- `judgement-first`
-- `decision-first`
+- `object-first`（2026-10-15 起取代 `judgement-first / decision-first`；规则见 CLAUDE.md「对象优先」与 DESIGN.md §4）
 - `proactive-reporting-first`
 - `delivery-engineer-facing`（自 2026-05-18 起：受众层是 AI 生态交付工程师，非 SaaS 端客户直销）
 - `open-source-first`（Apache-2.0；商业版本不替代开源；详见 [docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.md](docs/positioning/HELM_FOR_DELIVERY_ENGINEERS_V1.md)）
@@ -360,7 +359,7 @@ npm run quality:regression
 
 - readiness 任务：`readiness-sprint`
 - freeze / alignment：`baseline-freeze`
-- judgement-first / decision-first 页面改造：`decision-first-page-refactor`
+- 工作区页面改造：按 CLAUDE.md「对象优先」与 DESIGN.md §4 执行，用 `npm run check:object-first-workspace` 守线（`decision-first-page-refactor` 已下线）
 - worker / skill / resource 主线：`worker-skill-resource-binding`
 
 进一步细化时，按领域先读：
