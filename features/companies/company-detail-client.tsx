@@ -1,43 +1,40 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import {
-  ArrowRight,
-  Building2,
-  BriefcaseBusiness,
-  Sparkles,
-} from "lucide-react";
+import { ArrowRight, BriefcaseBusiness, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { RecommendationJudgementCard } from "@/components/recommendations/recommendation-judgement-card";
 import { useWorkspaceUi } from "@/components/providers/workspace-ui-provider";
 import { BlockerCard } from "@/components/shared/blocker-card";
 import { CommitmentCard } from "@/components/shared/commitment-card";
-import { EmptyState } from "@/components/shared/empty-state";
 import { HomeSurfaceArrivalBanner } from "@/components/shared/home-surface-arrival-banner";
+import { MountWhenOpen } from "@/components/shared/mount-when-open";
 import { ObjectContextOperatingSummary } from "@/components/shared/object-context-operating-summary";
 import { PageHeader } from "@/components/shared/page-header";
+import {
+  RelatedObjectLinks,
+  type RelatedObjectLink,
+} from "@/components/shared/related-object-links";
 import { RiskBadge } from "@/components/shared/risk-badge";
 import { StageBadge } from "@/components/shared/status-badges";
+import {
+  SystemJudgementSummary,
+  systemJudgementDetailsClassName,
+} from "@/components/shared/system-judgement-summary";
 import { WorkspaceGuidancePanel } from "@/components/shared/workspace-guidance-panel";
 import { WorkspaceSurfacePreferences } from "@/components/shared/workspace-surface-preferences";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { opportunityTypeLabels, stageLabels } from "@/data/constants";
 import {
   getLocalizedMemorySourceLabels,
   getLocalizedOpportunityTypeLabels,
 } from "@/lib/i18n/labels";
 import { getWorkspaceStory } from "@/lib/presentation/workspace-story";
-import { formatDateLabel, trimText } from "@/lib/utils";
+import { formatDateLabel, safeParseJson, trimText } from "@/lib/utils";
 import {
   createCompanyQuickOpportunityAction,
   generateCompanyBriefAction,
@@ -48,6 +45,10 @@ import { generateObjectBriefingAction } from "@/features/memory/actions";
 import { createActionFromRecommendationAction } from "@/features/recommendations/actions";
 import { StartRecordingButton } from "@/features/conversation-capture/start-recording-button";
 import { CompanyDefinitionCard } from "@/features/companies/company-definition-card";
+import {
+  CustomerEmailThreadsCard,
+  type EmailTranscriptThread,
+} from "@/features/inbox/email-thread-transcript";
 import { formatRoleDetailDisplayText } from "@/lib/presentation/role-detail-display-copy";
 
 type CompanyDetailClientProps = {
@@ -57,6 +58,7 @@ type CompanyDetailClientProps = {
     industry: string | null;
     website: string | null;
     description: string | null;
+    tags: string | null;
     definitionSuggestionJson: string | null;
     definitionAcceptedJson: string | null;
     cooperationMaturity: string | null;
@@ -65,6 +67,8 @@ type CompanyDetailClientProps = {
       id: string;
       name: string;
       title: string | null;
+      email: string | null;
+      phone: string | null;
       relationshipWarmth: string;
       lastInteractionAt: Date | null;
     }>;
@@ -132,7 +136,11 @@ type CompanyDetailClientProps = {
       };
     } | null;
   };
+  emailThreads: EmailTranscriptThread[];
   recentInteractionCount: number;
+  relatedLinks: RelatedObjectLink[];
+  /** Route-level judgement (the folded chain shell), mounted inside the closing system judgement block. */
+  supplementary?: ReactNode;
   recommendations: Array<{
     recommendationId: string;
     title: string;
@@ -164,7 +172,10 @@ type CompanyDetailClientProps = {
 
 export function CompanyDetailClient({
   company,
+  emailThreads,
   recentInteractionCount,
+  relatedLinks,
+  supplementary,
   recommendations,
 }: CompanyDetailClientProps) {
   const router = useRouter();
@@ -186,6 +197,7 @@ export function CompanyDetailClient({
   const topCommitment =
     company.commitments.find((item) => item.overdueFlag) ??
     company.commitments[0];
+  const websiteHref = toSafeWebsiteHref(company.website);
   const keyContactNames = company.contacts
     .slice(0, 3)
     .map((contact) => contact.name)
@@ -426,116 +438,16 @@ export function CompanyDetailClient({
     });
   }
 
-  const companySecondaryContext = (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_360px]">
-      <WorkspaceGuidancePanel
-        eyebrow={english ? "Account guidance" : "账户引导"}
-        title={
-          english
-            ? "Read the company as an account in motion, not a static profile."
-            : "先把公司读成持续推进中的账户，而不是静态资料。"
-        }
-        summary={
-          english
-            ? "This surface should explain whether the account is warming, what is blocking it, and which next move can improve confidence without overselling progress."
-            : "先确认账户是否真的在升温、当前被什么拖住，以及哪一步动作能提高判断信心而不夸大进展。"
-        }
-        recommendations={companyGuidanceRecommendations}
-        reminders={companyGuidanceReminders}
-        recommendationsLabel={english ? "Recommended next moves" : "建议先处理"}
-        remindersLabel={english ? "Account reminders" : "账户提醒"}
-        boundaryLabel={english ? "Boundary" : "边界"}
-        boundary={
-          english
-            ? "This page can prepare account briefs, recommendation follow-through and object memory, but it still does not turn momentum into an approved external commitment."
-            : "这个页面可以准备账户简报、建议动作推进和对象记忆，但不会默认把势能写成已批准的外部承诺。"
-        }
-      />
-      <div className="workspace-surface-stack">
-        <WorkspaceSurfacePreferences />
-        <Card className="workspace-form-assist workspace-panel-muted">
-          <CardContent className="space-y-3 py-5">
-            <p className="workspace-eyebrow">
-              {english ? "Account assist" : "账户辅助"}
-            </p>
-            <p className="text-lg font-semibold tracking-tight text-[color:var(--foreground)]">
-              {english
-                ? "Use quick account actions before expanding the work graph."
-                : "先用快捷账户动作收敛判断，再扩大推进图谱。"}
-            </p>
-            <p className="text-sm leading-7 text-[color:var(--muted-foreground)]">
-              {english
-                ? "Refresh the account summary, generate a company brief, then open the lead opportunity or memory page only when the context is clear."
-                : "先刷新账户摘要、生成公司简报，再在上下文清晰时进入主机会或记忆页。"}
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() =>
-                  runAction(
-                    () => generateObjectBriefingAction("COMPANY", company.id),
-                    english ? "Company summary refreshed" : "公司摘要已刷新",
-                  )
-                }
-              >
-                <Sparkles className="h-4 w-4" />
-                {english ? "Refresh summary" : "刷新摘要"}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() =>
-                  runAction(
-                    () => generateCompanyBriefAction(company.id),
-                    english ? "Company brief generated" : "已生成公司简报",
-                  )
-                }
-              >
-                <Sparkles className="h-4 w-4" />
-                {english ? "Generate brief" : "生成简报"}
-              </Button>
-              <Button type="button" variant="secondary" asChild>
-                <Link
-                  href={`/memory?objectType=COMPANY&objectId=${company.id}`}
-                >
-                  {english ? "Open memory" : "查看记忆"}
-                </Link>
-              </Button>
-              {company.opportunities[0] ? (
-                <Button type="button" variant="secondary" asChild>
-                  <Link
-                    href={buildOpportunityAssetHref(
-                      company.opportunities[0].id,
-                      "company-detail",
-                    )}
-                  >
-                    {english ? "Open lead opportunity" : "查看主机会"}
-                  </Link>
-                </Button>
-              ) : null}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
+  const companyTags = safeParseJson<string[]>(company.tags, [])
+    .map((tag) => text(tag))
+    .filter(Boolean);
 
   return (
     <div className="workspace-surface-stack">
       <PageHeader
-        showBreadcrumb={false}
-        titleAs="h2"
         eyebrow={pageStory.eyebrow}
         title={company.name}
-        description={text(
-          [
-            pageStory.description,
-            `${english ? "Current maturity" : "当前成熟度"}：${company.cooperationMaturity ?? (english ? "Needs review" : "待判断")}`,
-          ]
-            .filter(Boolean)
-            .join(" · "),
-        )}
+        english={english}
         actions={
           <>
             <StartRecordingButton
@@ -577,174 +489,479 @@ export function CompanyDetailClient({
         }
       />
 
-      <HomeSurfaceArrivalBanner
-        kind="detail"
-        english={english}
-        contract={{
-          ownership: english
-            ? "Company detail owns the current account state, next-step judgement and account workspace."
-            : "公司详情面负责当前账户状态、下一步判断和账户工作区。",
-          nextStep: english
-            ? "Start in the account workspace, then decide whether the next move belongs in a lead opportunity, memory, or follow-through."
-            : "先从账户工作区开始，再决定下一步应该落在主机会、记忆还是后续推进。",
-          boundary: english
-            ? "This page can shape account judgement and recommendation follow-through, but it still does not grant external commitment authority."
-            : "这个页面可以整形账户判断和建议动作跟进，但不会获得对外承诺权限。",
-        }}
-      />
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Metric
-          label={english ? "Maturity" : "合作成熟度"}
-          value={
-            text(
-              company.cooperationMaturity ??
-                (english ? "Needs review" : "待判断"),
-            )
-          }
-        />
-        <Metric
-          label={english ? "Key contacts" : "关键联系人"}
-          value={
-            english
-              ? `${company.contacts.length}`
-              : `${company.contacts.length} 位`
-          }
-        />
-        <Metric
-          label={english ? "Active opportunities" : "活跃机会"}
-          value={
-            english
-              ? `${company.opportunities.length}`
-              : `${company.opportunities.length} 条`
-          }
-        />
-        <Metric
-          label={english ? "Current blockers" : "当前卡点"}
-          value={
-            english
-              ? `${company.blockers.length}`
-              : `${company.blockers.length} 个`
-          }
-        />
-      </div>
-
-      <div id="company-workspace">
-        <ObjectContextOperatingSummary
-          label={english ? "Account operating summary" : "账户操作摘要"}
-          title={text(companyOperatingTitle)}
-          summary={text(companyMomentum.summary)}
-          items={companyOperatingItems.map((item) => ({
-            label: text(item.label),
-            value: text(item.value),
-          }))}
-          connectionsLabel={english ? "Connected loop" : "关联对象与回路"}
-          connections={companyOperatingConnections.map((connection) => ({
-            ...connection,
-            label: text(connection.label),
-            value: text(connection.value),
-            description: connection.description
-              ? text(connection.description)
-              : connection.description,
-          }))}
-        />
-      </div>
-
-      {companySecondaryContext}
-
-      <Card className={demoMode ? "workspace-panel-muted" : undefined}>
-        <CardContent
-          className={`grid gap-4 py-5 ${demoMode ? "xl:grid-cols-[1.05fr_repeat(4,minmax(0,0.82fr))]" : "xl:grid-cols-4"}`}
-        >
-          {demoMode ? (
-            <div className="space-y-2">
-              <Badge variant="approval">{english ? "Account Intelligence" : "账户判断"}</Badge>
-              <p className="text-lg font-semibold text-[color:var(--foreground)]">
-                {english
-                  ? "The company page compresses key contacts, momentum path and the last 30 days of activity into one account view."
-                  : "公司页负责把关键联系人、推进路径和最近 30 天互动浓缩成一张账号视图。"}
+      <Card data-company-facts="true">
+        <CardHeader>
+          <CardTitle>{english ? "Company profile" : "公司信息"}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <Info
+              label={english ? "Industry" : "行业"}
+              value={company.industry ?? (english ? "Not set" : "未填写")}
+            />
+            <div className="workspace-panel rounded-2xl px-4 py-3">
+              <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                {english ? "Website" : "官网"}
               </p>
-              <p className="text-sm leading-6 text-[color:var(--muted-foreground)]">
-                {english
-                  ? "Use it to explain whether the account is warming, blocked or worth deeper investment, instead of only showing static profile fields."
-                  : "适合在客户演示里解释“这个账户现在是升温、受阻还是值得继续加码”，而不是只看静态资料。"}
-              </p>
+              {websiteHref ? (
+                <a
+                  href={websiteHref}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="mt-2 block break-words text-sm font-medium text-[color:var(--accent)] underline-offset-4 hover:underline"
+                >
+                  {company.website}
+                </a>
+              ) : (
+                <p className="mt-2 break-words text-sm font-medium text-[color:var(--foreground)]">
+                  {company.website ?? (english ? "Not set" : "未填写")}
+                </p>
+              )}
             </div>
+            <Info
+              label={english ? "Cooperation maturity" : "合作成熟度"}
+              value={text(
+                company.cooperationMaturity ?? (english ? "Not set" : "未填写"),
+              )}
+            />
+            <Info
+              label={english ? "Tags" : "标签"}
+              value={companyTags.join(" · ") || (english ? "No tags" : "暂无标签")}
+            />
+          </div>
+          {company.description ? (
+            <p className="whitespace-pre-wrap break-words text-sm leading-7 text-[color:var(--foreground)]">
+              {text(company.description)}
+            </p>
           ) : null}
-          <Info
-            label={english ? "Account momentum" : "账户势能"}
-            value={text(companyMomentum.label)}
-          />
-          <Info
-            label={english ? "Key contacts" : "关键联系人"}
-            value={keyContactNames || (english ? "To be identified" : "待识别")}
-          />
-          <Info
-            label={english ? "Main blocker" : "当前最大卡点"}
-            value={
-              topBlocker
-                ? trimText(topBlocker.title, 28)
-                : english
-                  ? "No major blocker"
-                  : "暂无显著阻塞"
-            }
-          />
-          <Info
-            label={english ? "Open commitments" : "未兑现承诺"}
-            value={
-              english
-                ? `${company.commitments.filter((item) => item.status !== "FULFILLED").length}`
-                : `${company.commitments.filter((item) => item.status !== "FULFILLED").length} 条`
-            }
-          />
-          <Info
-            label={english ? "Company memory" : "公司记忆"}
-            value={
-              english
-                ? `${company.memoryEntries.length + company.memoryFacts.length}`
-                : `${company.memoryEntries.length + company.memoryFacts.length} 条`
-            }
-          />
+          <RelatedObjectLinks links={relatedLinks} english={english} />
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_0.96fr_0.9fr]">
+      <CustomerEmailThreadsCard threads={emailThreads} english={english} />
+
+      <div className="grid gap-6 xl:grid-cols-2">
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                {english ? "Company profile" : "公司基础信息"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <CompanyDefinitionCard
-                locale={locale}
-                company={{
-                  id: company.id,
-                  name: company.name,
-                  website: company.website,
-                  definitionSuggestionJson: company.definitionSuggestionJson,
-                  definitionAcceptedJson: company.definitionAcceptedJson,
-                }}
-              />
-              <div className="grid gap-4 md:grid-cols-2">
+          {company.contacts.length ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  {english
+                    ? `Linked contacts · ${company.contacts.length}`
+                    : `关联联系人 · ${company.contacts.length}`}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {company.contacts.map((contact) => (
+                  <Link
+                    key={contact.id}
+                    href={`/contacts/${contact.id}`}
+                    className="flex items-center justify-between gap-3 rounded-2xl border border-[color:var(--border)] px-4 py-4 transition hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-subtle)]"
+                  >
+                    <div className="min-w-0 space-y-1">
+                      <p className="font-medium text-[color:var(--foreground)]">
+                        {contact.name}
+                        {contact.title ? (
+                          <span className="ml-2 text-sm font-normal text-[color:var(--muted-foreground)]">
+                            {contact.title}
+                          </span>
+                        ) : null}
+                      </p>
+                      {contact.phone || contact.email ? (
+                        <p className="break-words text-sm text-[color:var(--muted-foreground)]">
+                          {[contact.phone, contact.email].filter(Boolean).join(" · ")}
+                        </p>
+                      ) : null}
+                    </div>
+                    <ArrowRight className="h-4 w-4 shrink-0 text-[color:var(--muted-foreground)]" />
+                  </Link>
+                ))}
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {company.opportunities.length ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  {english
+                    ? `Linked opportunities · ${company.opportunities.length}`
+                    : `关联机会 · ${company.opportunities.length}`}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {company.opportunities.map((opportunity) => (
+                  <Link
+                    key={opportunity.id}
+                    href={buildOpportunityAssetHref(opportunity.id, "company-detail")}
+                    aria-label={opportunity.title}
+                    className="block rounded-2xl border border-[color:var(--border)] px-4 py-4 transition hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-subtle)]"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium text-[color:var(--foreground)]">
+                        {opportunity.title}
+                      </p>
+                      <Badge variant="default">
+                        {opportunityTypeLabelsByLocale[opportunity.type]}
+                      </Badge>
+                      <StageBadge stage={opportunity.stage} />
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-3">
+                      {opportunity.nextAction ? (
+                        <p className="text-sm text-[color:var(--muted-foreground)]">
+                          {trimText(text(opportunity.nextAction), 88)}
+                        </p>
+                      ) : (
+                        <span />
+                      )}
+                      <RiskBadge risk={opportunity.riskLevel} />
+                    </div>
+                  </Link>
+                ))}
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {company.meetings.length ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>{english ? "Recent meetings" : "最近会议"}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {company.meetings.map((meeting) => (
+                  <Link
+                    key={meeting.id}
+                    href={`/meetings/${meeting.id}`}
+                    aria-label={meeting.title}
+                    className="block rounded-2xl border border-[color:var(--border)] px-4 py-4 transition hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-subtle)]"
+                  >
+                    <p className="font-medium text-[color:var(--foreground)]">
+                      {meeting.title}
+                    </p>
+                    <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
+                      {formatCompanyDetailDateLabel(
+                        meeting.startsAt,
+                        english,
+                        formatDateLabel,
+                      )}
+                    </p>
+                    {meeting.note?.summary ? (
+                      <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
+                        {trimText(text(meeting.note.summary), 96)}
+                      </p>
+                    ) : null}
+                  </Link>
+                ))}
+              </CardContent>
+            </Card>
+          ) : null}
+        </div>
+
+        <div className="space-y-6">
+          {company.commitments.length ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>{english ? "Commitments" : "承诺"}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {company.commitments.map((commitment) => (
+                  <CommitmentCard
+                    key={commitment.id}
+                    commitment={{
+                      ...commitment,
+                      sourceLabel: describeCommitmentSource(
+                        commitment.sourceType,
+                        memorySourceLabels,
+                      ),
+                      ownerName: commitment.ownerUser?.name ?? null,
+                      targetLabel:
+                        commitment.relatedOpportunity?.title ??
+                        commitment.relatedMeeting?.title ??
+                        commitment.relatedContact?.name ??
+                        company.name,
+                    }}
+                    compact
+                  />
+                ))}
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {company.blockers.length ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>{english ? "Blockers" : "阻塞"}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {company.blockers.map((blocker) => (
+                  <BlockerCard
+                    key={blocker.id}
+                    blocker={{
+                      ...blocker,
+                      targetLabel:
+                        blocker.relatedOpportunity?.title ??
+                        blocker.relatedMeeting?.title ??
+                        blocker.relatedContact?.name ??
+                        company.name,
+                    }}
+                    compact
+                  />
+                ))}
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {company.memoryFacts.length ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>{english ? "Key memory" : "关键记忆"}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {company.memoryFacts.map((fact) => (
+                  <div
+                    key={fact.id}
+                    className="theme-surface-panel rounded-2xl px-4 py-3"
+                  >
+                    <p className="text-sm font-medium text-[color:var(--foreground)]">
+                      {text(fact.title)}
+                    </p>
+                    <p className="mt-1 text-sm text-[color:var(--muted)]">
+                      {text(fact.content)}
+                    </p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {company.memoryEntries.length ? (
+            <Card id="company-history">
+              <CardHeader>
+                <CardTitle>
+                  {english ? "Company memory entries" : "公司记忆条目"}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {company.memoryEntries.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="theme-surface-panel rounded-2xl px-4 py-4"
+                  >
+                    <p className="font-medium text-[color:var(--foreground)]">
+                      {text(entry.title)}
+                    </p>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[color:var(--muted-foreground)]">
+                      {text(entry.content)}
+                    </p>
+                    <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
+                      {formatCompanyDetailDateLabel(
+                        entry.createdAt,
+                        english,
+                        formatDateLabel,
+                      )}
+                    </p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ) : null}
+        </div>
+      </div>
+
+      {brief ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>{english ? "Company brief" : "公司级简报"}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <pre className="whitespace-pre-wrap text-sm leading-6 text-[color:var(--muted)]">
+              {text(brief)}
+            </pre>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <CompanyDefinitionCard
+        locale={locale}
+        company={{
+          id: company.id,
+          name: company.name,
+          website: company.website,
+          definitionSuggestionJson: company.definitionSuggestionJson,
+          definitionAcceptedJson: company.definitionAcceptedJson,
+        }}
+      />
+
+      <details className={systemJudgementDetailsClassName} data-system-judgement>
+        <SystemJudgementSummary english={english} />
+        <div className="space-y-6 px-4 pb-5">
+          <HomeSurfaceArrivalBanner
+            kind="detail"
+            english={english}
+            contract={{
+              ownership: english
+                ? "Company detail owns the current account state, next-step judgement and account workspace."
+                : "公司详情面负责当前账户状态、下一步判断和账户工作区。",
+              nextStep: english
+                ? "Start in the account workspace, then decide whether the next move belongs in a lead opportunity, memory, or follow-through."
+                : "先从账户工作区开始，再决定下一步应该落在主机会、记忆还是后续推进。",
+              boundary: english
+                ? "This page can shape account judgement and recommendation follow-through, but it still does not grant external commitment authority."
+                : "这个页面可以整形账户判断和建议动作跟进，但不会获得对外承诺权限。",
+            }}
+          />
+
+          <div id="company-workspace">
+            <ObjectContextOperatingSummary
+              label={english ? "Account operating summary" : "账户操作摘要"}
+              title={text(companyOperatingTitle)}
+              summary={text(companyMomentum.summary)}
+              items={companyOperatingItems.map((item) => ({
+                label: text(item.label),
+                value: text(item.value),
+              }))}
+              connectionsLabel={english ? "Connected loop" : "关联对象与回路"}
+              connections={companyOperatingConnections.map((connection) => ({
+                ...connection,
+                label: text(connection.label),
+                value: text(connection.value),
+                description: connection.description
+                  ? text(connection.description)
+                  : connection.description,
+              }))}
+            />
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_360px]">
+            <WorkspaceGuidancePanel
+              eyebrow={english ? "Account guidance" : "账户引导"}
+              title={
+                english
+                  ? "Read the company as an account in motion, not a static profile."
+                  : "先把公司读成持续推进中的账户，而不是静态资料。"
+              }
+              summary={
+                english
+                  ? "This surface should explain whether the account is warming, what is blocking it, and which next move can improve confidence without overselling progress."
+                  : "先确认账户是否真的在升温、当前被什么拖住，以及哪一步动作能提高判断信心而不夸大进展。"
+              }
+              recommendations={companyGuidanceRecommendations}
+              reminders={companyGuidanceReminders}
+              recommendationsLabel={english ? "Recommended next moves" : "建议先处理"}
+              remindersLabel={english ? "Account reminders" : "账户提醒"}
+              boundaryLabel={english ? "Boundary" : "边界"}
+              boundary={
+                english
+                  ? "This page can prepare account briefs, recommendation follow-through and object memory, but it still does not turn momentum into an approved external commitment."
+                  : "这个页面可以准备账户简报、建议动作推进和对象记忆，但不会默认把势能写成已批准的外部承诺。"
+              }
+            />
+            <div className="workspace-surface-stack">
+              <WorkspaceSurfacePreferences />
+              <Card className="workspace-form-assist workspace-panel-muted">
+                <CardContent className="space-y-3 py-5">
+                  <p className="workspace-eyebrow">
+                    {english ? "Account assist" : "账户辅助"}
+                  </p>
+                  <p className="text-lg font-semibold tracking-tight text-[color:var(--foreground)]">
+                    {english
+                      ? "Use quick account actions before expanding the work graph."
+                      : "先用快捷账户动作收敛判断，再扩大推进图谱。"}
+                  </p>
+                  <p className="text-sm leading-7 text-[color:var(--muted-foreground)]">
+                    {english
+                      ? "Refresh the account summary, generate a company brief, then open the lead opportunity or memory page only when the context is clear."
+                      : "先刷新账户摘要、生成公司简报，再在上下文清晰时进入主机会或记忆页。"}
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() =>
+                        runAction(
+                          () => generateObjectBriefingAction("COMPANY", company.id),
+                          english ? "Company summary refreshed" : "公司摘要已刷新",
+                        )
+                      }
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      {english ? "Refresh summary" : "刷新摘要"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() =>
+                        runAction(
+                          () => generateCompanyBriefAction(company.id),
+                          english ? "Company brief generated" : "已生成公司简报",
+                        )
+                      }
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      {english ? "Generate brief" : "生成简报"}
+                    </Button>
+                    <Button type="button" variant="secondary" asChild>
+                      <Link
+                        href={`/memory?objectType=COMPANY&objectId=${company.id}`}
+                      >
+                        {english ? "Open memory" : "查看记忆"}
+                      </Link>
+                    </Button>
+                    {company.opportunities[0] ? (
+                      <Button type="button" variant="secondary" asChild>
+                        <Link
+                          href={buildOpportunityAssetHref(
+                            company.opportunities[0].id,
+                            "company-detail",
+                          )}
+                        >
+                          {english ? "Open lead opportunity" : "查看主机会"}
+                        </Link>
+                      </Button>
+                    ) : null}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+
+          <Card className="workspace-panel-muted">
+            <CardContent className="space-y-4 py-5">
+              {demoMode ? (
+                <div className="space-y-2">
+                  <Badge variant="approval">
+                    {english ? "Account Intelligence" : "账户判断"}
+                  </Badge>
+                  <p className="text-lg font-semibold text-[color:var(--foreground)]">
+                    {english
+                      ? "The company page compresses key contacts, momentum path and the last 30 days of activity into one account view."
+                      : "公司页负责把关键联系人、推进路径和最近 30 天互动浓缩成一张账号视图。"}
+                  </p>
+                </div>
+              ) : null}
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <Info
-                  label={english ? "Industry" : "行业"}
-                  value={company.industry ?? (english ? "Not set" : "未填写")}
+                  label={english ? "Account momentum" : "账户势能"}
+                  value={text(companyMomentum.label)}
                 />
                 <Info
-                  label={english ? "Website" : "官网"}
-                  value={company.website ?? (english ? "Not set" : "未填写")}
+                  label={english ? "Key contacts" : "关键联系人"}
+                  value={keyContactNames || (english ? "To be identified" : "待识别")}
                 />
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
                 <Info
-                  label={english ? "Cooperation maturity" : "合作成熟度"}
+                  label={english ? "Open commitments" : "未兑现承诺"}
                   value={
-                    text(
-                      company.cooperationMaturity ??
-                        (english ? "Needs review" : "待判断"),
-                    )
+                    english
+                      ? `${company.commitments.filter((item) => item.status !== "FULFILLED").length}`
+                      : `${company.commitments.filter((item) => item.status !== "FULFILLED").length} 条`
+                  }
+                />
+                <Info
+                  label={english ? "Company memory" : "公司记忆"}
+                  value={
+                    english
+                      ? `${company.memoryEntries.length + company.memoryFacts.length}`
+                      : `${company.memoryEntries.length + company.memoryFacts.length} 条`
                   }
                 />
               </div>
@@ -772,29 +989,13 @@ export function CompanyDetailClient({
                   )}
                 </p>
               </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="theme-surface-panel rounded-2xl p-4">
-                  <p className="text-sm font-medium text-[color:var(--foreground)]">
-                    {english ? "Main blocker" : "当前最大卡点"}
-                  </p>
-                  <p className="mt-2 text-sm leading-7 text-[color:var(--muted)]">
-                    {text(
-                      topBlocker
-                        ? trimText(topBlocker.blockerText, 110)
-                        : english
-                          ? "There is no structured blocker yet, so it is still worth widening interaction and validating the real source of friction."
-                          : "当前没有结构化阻塞，适合继续扩大互动和验证真实推进阻力。",
-                    )}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-[color:var(--status-warning-border)] bg-[color:var(--status-warning-bg)]/60 p-4">
-                  <p className="text-sm font-medium text-[color:var(--foreground)]">
-                    {english ? "If we do not push this week" : "如果本周不推进"}
-                  </p>
-                  <p className="mt-2 text-sm leading-7 text-[color:var(--foreground)]">
-                    {text(noPushImpact)}
-                  </p>
-                </div>
+              <div className="rounded-2xl border border-[color:var(--status-warning-border)] bg-[color:var(--status-warning-bg)]/60 p-4">
+                <p className="text-sm font-medium text-[color:var(--foreground)]">
+                  {english ? "If we do not push this week" : "如果本周不推进"}
+                </p>
+                <p className="mt-2 text-sm leading-7 text-[color:var(--foreground)]">
+                  {text(noPushImpact)}
+                </p>
               </div>
               <div className="theme-surface-panel rounded-2xl p-4">
                 <p className="text-sm font-medium text-[color:var(--foreground)]">
@@ -802,37 +1003,9 @@ export function CompanyDetailClient({
                 </p>
                 <p className="mt-2 text-sm leading-7 text-[color:var(--muted)]">
                   {english
-                    ? `In the last 30 days there were ${recentInteractionCount} explicit interactions, covering ${company.meetings.length} meetings, ${company.memoryEntries.length} work-memory entries and ${company.opportunities.length} active business lines.`
+                    ? `In the last 30 days there were ${recentInteractionCount} explicit interactions, covering ${company.meetings.length} meetings, ${company.memoryEntries.length} work-memory entries and ${company.opportunities.length} business lines.`
                     : `最近 30 天共有 ${recentInteractionCount} 次明确互动，覆盖 ${company.meetings.length} 场会议、${company.memoryEntries.length} 条工作记忆和 ${company.opportunities.length} 条业务推进线。`}
                 </p>
-              </div>
-              <div className="theme-surface-panel rounded-2xl p-4">
-                <p className="text-sm font-medium text-[color:var(--foreground)]">
-                  {english ? "Key memory summary" : "关键记忆摘要"}
-                </p>
-                <div className="mt-3 space-y-3">
-                  {company.memoryFacts.length ? (
-                    company.memoryFacts.slice(0, 3).map((fact) => (
-                      <div
-                        key={fact.id}
-                        className="workspace-panel rounded-2xl px-4 py-3"
-                      >
-                        <p className="text-sm font-medium text-[color:var(--foreground)]">
-                          {text(fact.title)}
-                        </p>
-                        <p className="mt-1 text-sm text-[color:var(--muted)]">
-                          {trimText(text(fact.content), 96)}
-                        </p>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-[color:var(--muted-foreground)]">
-                      {english
-                        ? "There is no structured company memory yet."
-                        : "当前还没有结构化公司记忆。"}
-                    </p>
-                  )}
-                </div>
               </div>
               <div className="workspace-panel-muted rounded-2xl p-4">
                 <p className="text-sm font-medium text-[color:var(--foreground)]">
@@ -898,16 +1071,6 @@ export function CompanyDetailClient({
                   )}
                 </div>
               </div>
-              {brief ? (
-                <div className="workspace-panel-muted rounded-2xl p-4">
-                  <p className="text-sm font-medium text-[color:var(--foreground)]">
-                    {english ? "Company brief" : "公司级简报"}
-                  </p>
-                  <pre className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[color:var(--muted)]">
-                    {text(brief)}
-                  </pre>
-                </div>
-              ) : null}
               <div className="theme-surface-panel rounded-2xl p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-sm font-medium text-[color:var(--foreground)]">
@@ -942,8 +1105,8 @@ export function CompanyDetailClient({
                 <p className="mt-3 text-sm leading-7 text-[color:var(--muted)]">
                   {displayBriefingSummary ??
                     (english
-                      ? "The system condenses company memory, open commitments, active blockers and recent interactions into one account summary you can speak to directly."
-                      : "公司级记忆、开放承诺、当前卡点和最近互动会收敛成一段可直接讲述的账户摘要。")}
+                      ? "No object-level summary yet."
+                      : "还没有对象级工作摘要。")}
                 </p>
                 {briefingPayload?.recommendedNextSteps?.length ? (
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -960,337 +1123,9 @@ export function CompanyDetailClient({
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>{english ? "Recent meetings" : "最近会议"}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {company.meetings.length ? (
-                company.meetings.map((meeting) => (
-                  <Link
-                    key={meeting.id}
-                    href={`/meetings/${meeting.id}`}
-                    aria-label={meeting.title}
-                    className="block rounded-2xl border border-[color:var(--border)] px-4 py-4 transition hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-subtle)]"
-                  >
-                    <p className="font-medium text-[color:var(--foreground)]">
-                      {meeting.title}
-                    </p>
-                    <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-                      {formatCompanyDetailDateLabel(
-                        meeting.startsAt,
-                        english,
-                        formatDateLabel,
-                      )}
-                    </p>
-                    <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-                      {trimText(
-                        text(
-                          meeting.note?.summary ??
-                            (english ? "Open meeting detail" : "查看会议详情"),
-                        ),
-                        96,
-                      )}
-                    </p>
-                  </Link>
-                ))
-              ) : (
-                <EmptyState
-                  title={
-                    english
-                      ? "No company-related meetings yet"
-                      : "还没有公司相关会议"
-                  }
-                  description={
-                    english
-                      ? "New meetings, notes and follow-up actions will make this page feel more like a real account view."
-                      : "新会议、会后纪要和后续动作会帮助公司页更像真实账户视图。"
-                  }
-                />
-              )}
-            </CardContent>
-          </Card>
+          <MountWhenOpen>{supplementary}</MountWhenOpen>
         </div>
-
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                {english ? "Current commitments" : "当前承诺"}
-              </CardTitle>
-              <CardDescription>
-                {english
-                  ? "What's still open."
-                  : "还没兑现的承诺。"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {company.commitments.length ? (
-                company.commitments.map((commitment) => (
-                  <CommitmentCard
-                    key={commitment.id}
-                    commitment={{
-                      ...commitment,
-                      sourceLabel: describeCommitmentSource(
-                        commitment.sourceType,
-                        memorySourceLabels,
-                      ),
-                      ownerName: commitment.ownerUser?.name ?? null,
-                      targetLabel:
-                        commitment.relatedOpportunity?.title ??
-                        commitment.relatedMeeting?.title ??
-                        commitment.relatedContact?.name ??
-                        company.name,
-                    }}
-                    compact
-                  />
-                ))
-              ) : (
-                <EmptyState
-                  title={
-                    english
-                      ? "No company-level commitments"
-                      : "当前没有公司级承诺"
-                  }
-                  description={
-                    english
-                      ? "Commitments from meetings show up here."
-                      : "会议里形成的承诺会出现在这里。"
-                  }
-                />
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                {english ? "High-risk blockers" : "高风险阻塞"}
-              </CardTitle>
-              <CardDescription>
-                {english
-                  ? "What's keeping this account stuck."
-                  : "正在压住这家账户的阻塞。"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {company.blockers.length ? (
-                company.blockers.map((blocker) => (
-                  <BlockerCard
-                    key={blocker.id}
-                    blocker={{
-                      ...blocker,
-                      targetLabel:
-                        blocker.relatedOpportunity?.title ??
-                        blocker.relatedMeeting?.title ??
-                        blocker.relatedContact?.name ??
-                        company.name,
-                    }}
-                    compact
-                  />
-                ))
-              ) : (
-                <EmptyState
-                  title={
-                    english
-                      ? "No high-risk blocker right now"
-                      : "当前没有高风险阻塞"
-                  }
-                  description={
-                    english
-                      ? "Budget, resourcing and external push blockers will surface here first."
-                      : "预算、资源和对外推进阻塞会优先出现在这里。"
-                  }
-                />
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                {english ? "Linked contacts" : "关联联系人"}
-              </CardTitle>
-              <CardDescription>
-                {english
-                  ? "Who can move the next step."
-                  : "谁能推动下一步。"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {company.contacts.length ? (
-                company.contacts.map((contact) => (
-                  <Link
-                    key={contact.id}
-                    href={`/contacts/${contact.id}`}
-                    className="flex items-center justify-between gap-3 rounded-2xl border border-[color:var(--border)] px-4 py-4 transition hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-subtle)]"
-                  >
-                    <div>
-                      <p className="font-medium text-[color:var(--foreground)]">
-                        {contact.name}
-                      </p>
-                      <p className="text-sm text-[color:var(--muted-foreground)]">
-                        {contact.title ??
-                          (english ? "No title yet" : "未填写职位")}
-                      </p>
-                    </div>
-                    <ArrowRight className="h-4 w-4 text-[color:var(--muted-foreground)]" />
-                  </Link>
-                ))
-              ) : (
-                <EmptyState
-                  title={
-                    english ? "No linked contacts yet" : "还没有关联联系人"
-                  }
-                  description={
-                    english
-                      ? "Add key contacts to see who can push next."
-                      : "补齐关键联系人，就能看到下一步推谁。"
-                  }
-                />
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                {english ? "Linked opportunities" : "关联机会"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {company.opportunities.length ? (
-                company.opportunities.map((opportunity) => (
-                  <Link
-                    key={opportunity.id}
-                    href={buildOpportunityAssetHref(opportunity.id, "company-detail")}
-                    aria-label={opportunity.title}
-                    className="block rounded-2xl border border-[color:var(--border)] px-4 py-4 transition hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-subtle)]"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-medium text-[color:var(--foreground)]">
-                        {opportunity.title}
-                      </p>
-                      <Badge variant="default">
-                        {opportunityTypeLabelsByLocale[opportunity.type]}
-                      </Badge>
-                      <StageBadge stage={opportunity.stage} />
-                    </div>
-                    <div className="mt-2 flex items-center justify-between gap-3">
-                      <p className="text-sm text-[color:var(--muted-foreground)]">
-                        {trimText(text(opportunity.nextAction), 88)}
-                      </p>
-                      <RiskBadge risk={opportunity.riskLevel} />
-                    </div>
-                  </Link>
-                ))
-              ) : (
-                <EmptyState
-                  title={
-                    english ? "No linked opportunities yet" : "还没有关联机会"
-                  }
-                  description={
-                    english
-                      ? "Create one from this page."
-                      : "可以在这里直接新建一个。"
-                  }
-                />
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="space-y-6">
-          <Card className="theme-judgement-panel">
-            <CardHeader>
-              <CardTitle>
-                {english ? "Account momentum judgement" : "账户势能判断"}
-              </CardTitle>
-              <CardDescription>
-                {english
-                  ? "Who to push next, and why now."
-                  : "下一个推谁，为什么是现在。"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="theme-judgement-panel-inset rounded-2xl p-4">
-                <div className="flex items-start gap-3">
-                  <Building2 className="mt-0.5 h-4 w-4 text-[color:var(--accent)]" />
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium text-[color:var(--foreground)]">
-                      {companyMomentum.label}
-                    </p>
-                    <p className="text-sm leading-6 text-[color:var(--muted)]">
-                      {companyMomentum.summary}
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div className="theme-judgement-panel-inset rounded-2xl px-4 py-3 text-sm leading-6 text-[color:var(--muted)]">
-                {topCommitment
-                  ? english
-                    ? `Most urgent commitment: "${topCommitment.title}". Suggestions tied to it are ranked first.`
-                    : `最急的承诺：「${topCommitment.title}」。相关建议已经排在最前。`
-                  : english
-                    ? "There is no dominant overdue commitment right now, so the team can invest effort into restoring account heat and the next push."
-                    : "当前没有突出的逾期承诺，可以先把资源投入到恢复账户热度和下一次推进。"}
-              </div>
-              <div className="theme-judgement-panel-inset rounded-2xl px-4 py-3 text-sm leading-6 text-[color:var(--muted)]">
-                {companyMomentum.focusLine}
-              </div>
-              <Button
-                className="theme-primary-action w-full justify-start"
-                onClick={() =>
-                  document
-                    .getElementById("company-history")
-                    ?.scrollIntoView({ behavior: "smooth" })
-                }
-              >
-                {english ? "View all interactions" : "查看全部互动"}
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card id="company-history">
-            <CardHeader>
-              <CardTitle>{english ? "All interactions" : "全部互动"}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {company.memoryEntries.length ? (
-                company.memoryEntries.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="theme-surface-panel rounded-2xl px-4 py-4"
-                  >
-                    <p className="font-medium text-[color:var(--foreground)]">
-                      {text(entry.title)}
-                    </p>
-                    <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                      {trimText(text(entry.content), 120)}
-                    </p>
-                    <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
-                      {formatCompanyDetailDateLabel(
-                        entry.createdAt,
-                        english,
-                        formatDateLabel,
-                      )}
-                    </p>
-                  </div>
-                ))
-              ) : (
-                <EmptyState
-                  title={english ? "No company memory yet" : "还没有公司级记忆"}
-                  description={
-                    english
-                      ? "Meeting notes, interaction summaries and progress checkpoints will accumulate into company memory over time."
-                      : "会议纪要、互动总结和推进节点会逐步沉淀成公司级工作记忆。"
-                  }
-                />
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+      </details>
     </div>
   );
 }
@@ -1308,17 +1143,18 @@ function Info({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <Card>
-      <CardContent className="space-y-2 py-5">
-        <p className="text-sm text-[color:var(--muted-foreground)]">{label}</p>
-        <p className="break-words text-xl font-semibold text-[color:var(--foreground)]">
-          {value}
-        </p>
-      </CardContent>
-    </Card>
-  );
+function toSafeWebsiteHref(website: string | null) {
+  const raw = website?.trim();
+  if (!raw) return null;
+  const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try {
+    const url = new URL(candidate);
+    return url.protocol === "http:" || url.protocol === "https:"
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function describeCommitmentSource(
@@ -1393,7 +1229,7 @@ function buildCompanyMomentum({
       label: english ? "Warming window" : "处于升温窗口",
       summary: english
         ? `${companyName} has had dense recent interactions, and the system can already produce stable next-step recommendations. That usually means the account is ready for a more forceful push.`
-        : `${companyName} 最近互动足够密集，也已经能稳定给出下一步判断建议，说明这个账户具备继续加码推进的条件。`,
+        : `${companyName} 最近互动足够密集，也已经能稳定给出下一步建议，说明这个账户具备继续加码推进的条件。`,
       focusLine: english
         ? "Execute the strongest current recommendation first and try to turn the warming state into a clear next stage."
         : "优先把当前最强建议执行掉，争取把升温状态转成明确下一阶段。",

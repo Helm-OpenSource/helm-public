@@ -103,7 +103,10 @@ describe("customer success handoff surface sprint 1", () => {
       expect(companyRoute).toContain(snippet);
     }
 
-    expect(companyLoader).toContain("getApprovalTasksData");
+    // Object first (2026-10-15): the company page reads only its own pending
+    // review request instead of every approval task in the workspace.
+    expect(companyLoader).toContain("getCompanyPendingReviewRequestId");
+    expect(companyLoader).not.toContain("getApprovalTasksData");
 
     for (const snippet of [
       "data-customer-success-handoff-page",
