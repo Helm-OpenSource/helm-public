@@ -259,6 +259,9 @@ const workspaceViews: readonly WorkspaceView[] = [
       /<HomeSurfaceArrivalBanner\b/,
       /\{memoryMeetingWorkspaceContext\}/,
       /\{memoryPermissionBoundaryNote\}/,
+      // Unresolved objects are 未加载 (beyond the lookup cap) or 已删除 (queried,
+      // no row) — never a blanket "no longer exists".
+      /Object not found|对象已不存在/,
     ],
     leadingObjectMarkers: [
       "id={MEMORY_PAGE_ANCHORS.timeline}",

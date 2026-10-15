@@ -207,6 +207,11 @@ type MemoryClientProps = {
     createdAt: Date;
     /** The fact's own object (name + page), resolved server-side. */
     object?: { name: string; href: string | null } | null;
+    /**
+     * resolved / not_loaded (beyond the lookup cap, never "deleted") /
+     * missing (queried, no row) / unsupported (type has no name resolver).
+     */
+    objectState?: "resolved" | "not_loaded" | "missing" | "unsupported";
     /** Where the fact came from: original text where a resolver exists. */
     source?: {
       kind: "EMAIL_MESSAGE" | "MEETING_NOTE" | "EMAIL_THREAD" | "MEETING" | "OTHER";
@@ -2697,19 +2702,12 @@ export function MemoryClient({
                             {objectTypeLabels[item.fact.objectType] ??
                               item.fact.objectType}
                             ：
-                            {item.fact.object?.href ? (
-                              <Link
-                                href={item.fact.object.href}
-                                className="font-medium text-[color:var(--foreground)] underline-offset-4 hover:underline"
-                              >
-                                {item.fact.object.name}
-                              </Link>
-                            ) : (
-                              <span className="font-medium text-[color:var(--foreground)]">
-                                {item.fact.object?.name ??
-                                  (english ? "Object not found" : "对象已不存在")}
-                              </span>
-                            )}
+                            <MemoryFactObjectName
+                              english={english}
+                              object={item.fact.object ?? null}
+                              objectId={item.fact.objectId}
+                              objectState={item.fact.objectState}
+                            />
                           </span>
                           <span>
                             {english ? "Confidence" : "置信度"}：
@@ -3284,6 +3282,51 @@ export function MemoryClient({
         </div>
       </details>
     </div>
+  );
+}
+
+/**
+ * A fact's object: its name when it was loaded; the id with 「未加载」 when it
+ * sits beyond the server's lookup cap (never shown as deleted); 「已删除」 only
+ * when it was queried and no row came back.
+ */
+function MemoryFactObjectName({
+  english,
+  object,
+  objectId,
+  objectState,
+}: {
+  english: boolean;
+  object: { name: string; href: string | null } | null;
+  objectId: string;
+  objectState: MemoryClientProps["memoryFacts"][number]["objectState"];
+}) {
+  if (object) {
+    return object.href ? (
+      <Link
+        href={object.href}
+        className="font-medium text-[color:var(--foreground)] underline-offset-4 hover:underline"
+      >
+        {object.name}
+      </Link>
+    ) : (
+      <span className="font-medium text-[color:var(--foreground)]">{object.name}</span>
+    );
+  }
+
+  return (
+    <span data-memory-fact-object-state={objectState ?? "unsupported"}>
+      <span className="font-mono text-[color:var(--foreground)]">{objectId}</span>
+      {objectState === "not_loaded" ? (
+        <Badge variant="neutral" className="ml-2">
+          {english ? "Not loaded" : "未加载"}
+        </Badge>
+      ) : objectState === "missing" ? (
+        <Badge variant="warning" className="ml-2">
+          {english ? "Deleted" : "已删除"}
+        </Badge>
+      ) : null}
+    </span>
   );
 }
 

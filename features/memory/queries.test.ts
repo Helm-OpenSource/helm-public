@@ -33,6 +33,7 @@ vi.mock("@/lib/helm-v2/runtime-upgrade", () => ({
 }));
 
 import {
+  MEMORY_FACT_CONTEXT_ID_LIMIT,
   attachMemoryFactContext,
   buildMemoryDistillationCandidateWhere,
   buildMemoryEntrySourceWhere,
@@ -634,12 +635,14 @@ describe("memory fact object and source context", () => {
       ]);
 
     expect(contactFact.object).toEqual({ name: "Vivian Chen", href: "/contacts/contact-1" });
+    expect(contactFact.objectState).toBe("resolved");
     expect(companyFact.object).toEqual({ name: "Atlas AI", href: "/companies/company-1" });
     expect(opportunityFact.object).toEqual({
       name: "Atlas renewal",
       href: "/opportunities?opportunityId=opp-1",
     });
     expect(missingFact.object).toBeNull();
+    expect(missingFact.objectState).toBe("missing");
     // Every lookup is scoped to the workspace and selects only what renders.
     expect(dbMock.contact.findMany).toHaveBeenCalledWith({
       where: { workspaceId: "workspace-1", id: { in: ["contact-1", "contact-gone"] } },
@@ -737,5 +740,30 @@ describe("memory fact object and source context", () => {
         },
       }),
     );
+  });
+
+  it("reports ids beyond the per-type cap as not loaded, never as missing", async () => {
+    const total = MEMORY_FACT_CONTEXT_ID_LIMIT + 1;
+    dbMock.contact.findMany.mockImplementation(
+      async ({ where }: { where: { id: { in: string[] } } }) =>
+        where.id.in
+          .filter((id) => id !== "contact-3")
+          .map((id) => ({ id, name: id })),
+    );
+    const facts = Array.from({ length: total }, (_, index) =>
+      fact({ id: `fact-${index + 1}`, objectId: `contact-${index + 1}` }),
+    );
+
+    const result = await attachMemoryFactContext("workspace-1", [
+      ...facts,
+      fact({ id: "fact-action", objectType: "ACTION_ITEM", objectId: "action-1" }),
+    ]);
+
+    expect(result[0].objectState).toBe("resolved");
+    expect(result[2].objectState).toBe("missing");
+    expect(result[total - 1].objectState).toBe("not_loaded");
+    expect(result[total - 1].object).toBeNull();
+    // No name resolver for action items: unsupported, not missing.
+    expect(result[total].objectState).toBe("unsupported");
   });
 });

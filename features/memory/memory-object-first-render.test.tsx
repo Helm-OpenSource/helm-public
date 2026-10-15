@@ -5,6 +5,19 @@ import { render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+const { dbMock } = vi.hoisted(() => ({
+  dbMock: {
+    contact: { findMany: vi.fn() },
+    company: { findMany: vi.fn() },
+    opportunity: { findMany: vi.fn() },
+    meeting: { findMany: vi.fn() },
+    emailThread: { findMany: vi.fn() },
+    emailMessage: { findMany: vi.fn() },
+    meetingNote: { findMany: vi.fn() },
+  },
+}));
+
+vi.mock("@/lib/db", () => ({ db: dbMock }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
   usePathname: () => "/memory",
@@ -32,6 +45,10 @@ vi.mock("@/features/meetings/actions", () => ({
 }));
 
 import { MemoryClient } from "@/features/memory/memory-client";
+import {
+  MEMORY_FACT_CONTEXT_ID_LIMIT,
+  attachMemoryFactContext,
+} from "@/features/memory/queries";
 
 type MemoryClientProps = ComponentProps<typeof MemoryClient>;
 
@@ -74,6 +91,7 @@ function buildProps(overrides: Partial<MemoryClientProps> = {}): MemoryClientPro
         updatedAt: at,
         createdAt: at,
         object: { name: "赵雪", href: "/contacts/contact-1" },
+        objectState: "resolved",
         source: {
           kind: "EMAIL_MESSAGE",
           title: "安全评审",
@@ -100,6 +118,7 @@ function buildProps(overrides: Partial<MemoryClientProps> = {}): MemoryClientPro
         updatedAt: new Date("2026-10-13T02:43:00Z"),
         createdAt: new Date("2026-10-13T02:43:00Z"),
         object: null,
+        objectState: "missing",
         source: null,
       },
     ],
@@ -132,8 +151,10 @@ describe("memory page object-first render", () => {
       "href",
       "/inbox/thread-1",
     );
-    // No resolver for the CSV row and the company is gone: type only, no fake name.
-    expect(screen.getByText("对象已不存在")).toBeInTheDocument();
+    // The company was queried and is gone: its id with 「已删除」, no fake name.
+    expect(container.querySelector('[data-memory-fact-object-state="missing"]')).toHaveTextContent(
+      "company-gone已删除",
+    );
     expect(container.querySelector('[data-memory-fact-source="UNRESOLVED"]')).not.toBeNull();
 
     expect(screen.queryByText("客户状态清单")).toBeNull();
@@ -150,5 +171,73 @@ describe("memory page object-first render", () => {
     ).toBeTruthy();
     // No review candidates: no empty review disclosure either.
     expect(container.querySelector('[data-memory-review-candidates="true"]')).toBeNull();
+  });
+
+  it("tells an object beyond the lookup cap (未加载) apart from a deleted one (已删除)", async () => {
+    const total = MEMORY_FACT_CONTEXT_ID_LIMIT + 1;
+    const ids = Array.from({ length: total }, (_, index) => `contact-${index + 1}`);
+    const deletedId = "contact-7";
+    // The resolver gets one row per queried id except the deleted one.
+    dbMock.contact.findMany.mockImplementation(
+      async ({ where }: { where: { id: { in: string[] } } }) =>
+        where.id.in
+          .filter((id) => id !== deletedId)
+          .map((id) => ({ id, name: `联系人 ${id}` })),
+    );
+    const base = Date.parse("2026-10-01T00:00:00Z");
+    const facts = ids.map((id, index) => ({
+      id: `fact-${index + 1}`,
+      objectType: "CONTACT" as const,
+      objectId: id,
+      factType: "PREFERENCE",
+      title: `事实 ${index + 1}`,
+      content: `内容 ${index + 1}`,
+      confidence: 60,
+      importance: 50,
+      freshnessScore: 50,
+      status: "ACTIVE",
+      confirmedByUser: false,
+      sourceType: "USER_EDIT",
+      sourceId: `edit-${index + 1}`,
+      // The 501st and the deleted fact are the two newest, so both render
+      // inside the first timeline page.
+      updatedAt: new Date(
+        id === `contact-${total}`
+          ? base + 2 * 86_400_000
+          : id === deletedId
+            ? base + 86_400_000
+            : base - index * 1000,
+      ),
+      createdAt: new Date(base),
+    }));
+
+    const withContext = await attachMemoryFactContext("workspace-1", facts);
+
+    expect(dbMock.contact.findMany).toHaveBeenCalledTimes(1);
+    expect(
+      (dbMock.contact.findMany.mock.calls[0][0] as { where: { id: { in: string[] } } }).where.id
+        .in,
+    ).toHaveLength(MEMORY_FACT_CONTEXT_ID_LIMIT);
+    expect(withContext[total - 1].objectState).toBe("not_loaded");
+    expect(withContext[total - 1].object).toBeNull();
+    expect(withContext[6].objectState).toBe("missing");
+    expect(withContext[0]).toMatchObject({
+      objectState: "resolved",
+      object: { name: "联系人 contact-1", href: "/contacts/contact-1" },
+    });
+
+    const { container } = render(
+      <MemoryClient {...buildProps({ memoryFacts: withContext })} />,
+    );
+    const notLoaded = container.querySelector('[data-memory-fact-object-state="not_loaded"]');
+    expect(notLoaded).toHaveTextContent(`contact-${total}未加载`);
+    expect(notLoaded).not.toHaveTextContent("已删除");
+    expect(
+      container.querySelector('[data-memory-fact-object-state="missing"]'),
+    ).toHaveTextContent(`${deletedId}已删除`);
+    expect(screen.getByRole("link", { name: "联系人 contact-1" })).toHaveAttribute(
+      "href",
+      "/contacts/contact-1",
+    );
   });
 });

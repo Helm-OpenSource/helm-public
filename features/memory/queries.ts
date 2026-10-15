@@ -682,6 +682,17 @@ export type MemoryFactObjectRef = {
   href: string | null;
 };
 
+/**
+ * What the page knows about a fact's object:
+ * - `resolved`: the object row was loaded (`object` carries its name and page);
+ * - `not_loaded`: the id is beyond the per-type lookup cap, so it was never
+ *   queried — render the type and id with 「未加载」, never as deleted;
+ * - `missing`: the id was queried and no row came back — the object is gone;
+ * - `unsupported`: the object type has no name resolver (action item, approval
+ *   task, policy rule) — render the type only.
+ */
+export type MemoryFactObjectState = "resolved" | "not_loaded" | "missing" | "unsupported";
+
 export type MemoryFactSourceRef = {
   kind: "EMAIL_MESSAGE" | "MEETING_NOTE" | "EMAIL_THREAD" | "MEETING" | "OTHER";
   title: string | null;
@@ -698,7 +709,8 @@ type MemoryFactContextInput = {
   sourceId: string;
 };
 
-const MEMORY_FACT_CONTEXT_ID_LIMIT = 500;
+/** Per object / source type; ids beyond it are reported as `not_loaded`. */
+export const MEMORY_FACT_CONTEXT_ID_LIMIT = 500;
 
 function uniqueIds(values: Array<string | null | undefined>) {
   return Array.from(
@@ -902,7 +914,17 @@ export async function resolveMemoryFactContext<T extends MemoryFactContextInput>
     }
   }
 
-  return { objects, sources };
+  // Exactly the ids each object lookup queried, so an id beyond the cap is told
+  // apart from an id that was queried and did not come back.
+  const queriedObjectIds = new Map<string, ReadonlySet<string>>([
+    ["CONTACT", new Set(contactIds)],
+    ["COMPANY", new Set(companyIds)],
+    ["OPPORTUNITY", new Set(opportunityIds)],
+    ["MEETING", new Set(meetingIds)],
+    ["EMAIL_THREAD", new Set(threadIds)],
+  ]);
+
+  return { objects, sources, queriedObjectIds };
 }
 
 /**
@@ -912,12 +934,35 @@ export async function resolveMemoryFactContext<T extends MemoryFactContextInput>
 export async function attachMemoryFactContext<T extends MemoryFactContextInput>(
   workspaceId: string,
   facts: readonly T[],
-): Promise<Array<T & { object: MemoryFactObjectRef | null; source: MemoryFactSourceRef | null }>> {
+): Promise<
+  Array<
+    T & {
+      object: MemoryFactObjectRef | null;
+      objectState: MemoryFactObjectState;
+      source: MemoryFactSourceRef | null;
+    }
+  >
+> {
   if (!facts.length) return [];
-  const { objects, sources } = await resolveMemoryFactContext(workspaceId, facts);
-  return facts.map((fact) => ({
-    ...fact,
-    object: objects.get(`${fact.objectType}:${fact.objectId}`) ?? null,
-    source: sources.get(`${fact.sourceType}:${fact.sourceId}`) ?? null,
-  }));
+  const { objects, sources, queriedObjectIds } = await resolveMemoryFactContext(
+    workspaceId,
+    facts,
+  );
+  return facts.map((fact) => {
+    const object = objects.get(`${fact.objectType}:${fact.objectId}`) ?? null;
+    const queried = queriedObjectIds.get(String(fact.objectType));
+    const objectState: MemoryFactObjectState = object
+      ? "resolved"
+      : !queried
+        ? "unsupported"
+        : queried.has(fact.objectId)
+          ? "missing"
+          : "not_loaded";
+    return {
+      ...fact,
+      object,
+      objectState,
+      source: sources.get(`${fact.sourceType}:${fact.sourceId}`) ?? null,
+    };
+  });
 }
