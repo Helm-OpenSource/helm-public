@@ -93,6 +93,7 @@ import {
   buildOriginalDemandThreads,
   buildSystemJudgementLines,
   describeDueChip,
+  describeGovernedActionOutcome,
   describeOpportunitySource,
   findInquiryMailbox,
   firstContactAt,
@@ -109,6 +110,7 @@ import {
   type CustomerFirstEmailActivity,
   type CustomerFirstEmailMessage,
   type CustomerFirstEmailThread,
+  type GovernedActionOutcome,
 } from "@/features/opportunities/customer-first";
 import { OpportunityCustomerCard } from "@/features/opportunities/opportunity-customer-card";
 import {
@@ -298,6 +300,14 @@ export function OpportunitiesClient({
     Record<string, CustomerFirstEmailThread[]>
   >({});
   const [emailLoadingKey, setEmailLoadingKey] = useState<string | null>(null);
+  const [meetingResult, setMeetingResult] = useState<{
+    opportunityId: string;
+    outcome: GovernedActionOutcome;
+  } | null>(null);
+  const meetingOutcome =
+    meetingResult && meetingResult.opportunityId === detailDraft.id
+      ? meetingResult.outcome
+      : null;
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   );
@@ -671,27 +681,47 @@ export function OpportunitiesClient({
   };
 
   const handleScheduleMeeting = (
+    opportunityId: string,
     threadId: string | null,
     contactId: string | null,
   ) => {
     if (!threadId && !contactId) return;
+    const label = english ? "Meeting" : "安排会议";
     startTransition(async () => {
+      // The thread action attaches the meeting to the thread's opportunity;
+      // the contact action gets the current opportunity explicitly.
       const result = threadId
         ? await scheduleMeetingFromThreadAction(threadId)
-        : await createMeetingForContactAction(contactId!);
+        : await createMeetingForContactAction(contactId!, opportunityId);
       if (!result.ok) {
-        toast.error(
+        const message =
           result.error ??
-            (english ? "Failed to schedule the meeting" : "安排会议失败"),
-        );
+          (english ? "Failed to schedule the meeting" : "安排会议失败");
+        setMeetingResult({
+          opportunityId,
+          outcome: {
+            kind: "failed",
+            message: english ? `${label}: ${message}` : `${label}：${message}`,
+          },
+        });
+        toast.error(message);
         return;
       }
-      toast.success(
-        english
-          ? "Meeting request created and routed to approvals"
-          : "已生成会议安排，进入审批",
-      );
-      router.push("/approvals");
+      const outcome = describeGovernedActionOutcome(result.result, {
+        english,
+        label,
+      });
+      setMeetingResult({ opportunityId, outcome });
+      if (outcome.kind === "rejected") {
+        toast.error(outcome.message);
+      } else if (outcome.kind === "executed" || outcome.kind === "pending-approval") {
+        toast.success(outcome.message);
+      } else {
+        toast.message(outcome.message);
+      }
+      if (outcome.kind === "pending-approval") {
+        router.push("/approvals");
+      }
       router.refresh();
     });
   };
@@ -1718,8 +1748,10 @@ export function OpportunitiesClient({
                   onSave={handleSaveDetail}
                   saveLabel={english ? "Save" : "保存"}
                   replyTarget={activeCard.replyTarget}
+                  meetingOutcome={meetingOutcome}
                   onScheduleMeeting={() =>
                     handleScheduleMeeting(
+                      activeOpportunity.id,
                       activeCard.replyTarget?.kind === "thread"
                         ? activeCard.replyTarget.threadId
                         : null,

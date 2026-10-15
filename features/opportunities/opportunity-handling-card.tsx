@@ -12,7 +12,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { OpportunityReplyTarget } from "@/features/opportunities/customer-first";
+import type {
+  GovernedActionOutcome,
+  OpportunityReplyTarget,
+} from "@/features/opportunities/customer-first";
 
 export type OpportunityHandlingDraft = {
   nextAction: string;
@@ -41,6 +44,8 @@ export type OpportunityHandlingCardProps = {
   replyTarget?: OpportunityReplyTarget;
   onScheduleMeeting?: () => void;
   meetingDisabled?: boolean;
+  /** What the last 安排会议 actually did (from the governed action result). */
+  meetingOutcome?: GovernedActionOutcome | null;
   /** Secondary record fields (collapsed), shown after the actions. */
   recordSection?: ReactNode;
   /**
@@ -71,6 +76,7 @@ export function OpportunityHandlingCard({
   replyTarget,
   onScheduleMeeting,
   meetingDisabled = false,
+  meetingOutcome = null,
   recordSection,
   systemJudgement,
 }: OpportunityHandlingCardProps) {
@@ -216,6 +222,20 @@ export function OpportunityHandlingCard({
           </Button>
         ) : null}
       </div>
+
+      {meetingOutcome ? (
+        <p
+          role="status"
+          data-opportunity-meeting-outcome={meetingOutcome.kind}
+          className={
+            meetingOutcome.kind === "rejected" || meetingOutcome.kind === "failed"
+              ? "text-sm text-[color:var(--status-danger-text)]"
+              : "text-sm text-[color:var(--muted-foreground)]"
+          }
+        >
+          {meetingOutcome.message}
+        </p>
+      ) : null}
 
       {recordSection}
       {systemJudgement}

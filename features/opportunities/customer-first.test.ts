@@ -3,6 +3,7 @@ import {
   buildOriginalDemandThreads,
   buildSystemJudgementLines,
   describeDueChip,
+  describeGovernedActionOutcome,
   describeOpportunitySource,
   findInquiryMailbox,
   extractInboundFullText,
@@ -497,5 +498,50 @@ describe("describeDueChip / buildSystemJudgementLines", () => {
       "Risk: High.",
       "System suggestion: Reply to the inquiry",
     ]);
+  });
+});
+
+describe("describeGovernedActionOutcome", () => {
+  const zh = { english: false, label: "安排会议" };
+  const en = { english: true, label: "Meeting" };
+
+  it("maps every governed-action status to what actually happened", () => {
+    expect(describeGovernedActionOutcome({ status: "APPROVED", reason: "x" }, zh)).toEqual({
+      kind: "executed",
+      message: "安排会议：已自动执行",
+    });
+    expect(describeGovernedActionOutcome({ status: "EXECUTED" }, en)).toEqual({
+      kind: "executed",
+      message: "Meeting: executed automatically",
+    });
+    expect(describeGovernedActionOutcome({ status: "PENDING_APPROVAL" }, zh)).toEqual({
+      kind: "pending-approval",
+      message: "安排会议：已提交审批",
+    });
+    expect(describeGovernedActionOutcome({ status: "SUGGESTED" }, zh)).toEqual({
+      kind: "suggested",
+      message: "安排会议：仅建议，未执行",
+    });
+    expect(
+      describeGovernedActionOutcome({ status: "BLOCKED", reason: "策略禁止" }, zh),
+    ).toEqual({ kind: "rejected", message: "安排会议：已拒绝（策略禁止）" });
+    expect(
+      describeGovernedActionOutcome({ status: "REJECTED", reason: "Not allowed" }, en),
+    ).toEqual({ kind: "rejected", message: "Meeting: rejected (Not allowed)" });
+    expect(describeGovernedActionOutcome({ status: "REJECTED", reason: " " }, zh)).toEqual({
+      kind: "rejected",
+      message: "安排会议：已拒绝",
+    });
+  });
+
+  it("never claims approval for an unknown or missing status", () => {
+    expect(describeGovernedActionOutcome(undefined, zh)).toEqual({
+      kind: "other",
+      message: "安排会议：状态 未知",
+    });
+    expect(describeGovernedActionOutcome({ status: "MANUAL" }, en)).toEqual({
+      kind: "other",
+      message: "Meeting: status MANUAL",
+    });
   });
 });

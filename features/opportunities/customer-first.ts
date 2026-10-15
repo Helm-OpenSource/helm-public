@@ -495,3 +495,68 @@ export function buildSystemJudgementLines(input: {
 
   return lines;
 }
+
+export type GovernedActionOutcomeKind =
+  | "executed"
+  | "pending-approval"
+  | "suggested"
+  | "rejected"
+  | "failed"
+  | "other";
+
+export type GovernedActionOutcome = {
+  kind: GovernedActionOutcomeKind;
+  message: string;
+};
+
+/**
+ * What a governed action (e.g. 安排会议) actually did, from the status the
+ * policy engine returned: auto-executed, sent to approval, suggestion only, or
+ * rejected/blocked with the policy reason.
+ */
+export function describeGovernedActionOutcome(
+  result: { status?: string | null; reason?: string | null } | null | undefined,
+  input: { english: boolean; label: string },
+): GovernedActionOutcome {
+  const { english, label } = input;
+  const reason = result?.reason?.trim() || null;
+  const withLabel = (text: string) => (english ? `${label}: ${text}` : `${label}：${text}`);
+
+  switch (result?.status) {
+    case "APPROVED":
+    case "EXECUTED":
+      return {
+        kind: "executed",
+        message: withLabel(english ? "executed automatically" : "已自动执行"),
+      };
+    case "PENDING_APPROVAL":
+      return {
+        kind: "pending-approval",
+        message: withLabel(english ? "submitted for approval" : "已提交审批"),
+      };
+    case "SUGGESTED":
+      return {
+        kind: "suggested",
+        message: withLabel(english ? "suggestion only, not executed" : "仅建议，未执行"),
+      };
+    case "BLOCKED":
+    case "REJECTED":
+      return {
+        kind: "rejected",
+        message: withLabel(
+          english
+            ? `rejected${reason ? ` (${reason})` : ""}`
+            : `已拒绝${reason ? `（${reason}）` : ""}`,
+        ),
+      };
+    default:
+      return {
+        kind: "other",
+        message: withLabel(
+          english
+            ? `status ${result?.status ?? "unknown"}`
+            : `状态 ${result?.status ?? "未知"}`,
+        ),
+      };
+  }
+}

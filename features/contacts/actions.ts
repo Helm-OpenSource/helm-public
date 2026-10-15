@@ -58,7 +58,12 @@ export async function generateContactFollowUpAction(contactId: string, channel: 
   return { ok: true, result };
 }
 
-export async function createMeetingForContactAction(contactId: string) {
+/**
+ * `opportunityId` (optional) attaches the meeting to the opportunity being
+ * handled; it must be one of the contact's opportunities. Without it the
+ * contact's first opportunity is used, as before.
+ */
+export async function createMeetingForContactAction(contactId: string, opportunityId?: string) {
   const user = await requireCurrentUser();
   const workspace = await getCurrentWorkspace();
   const english = workspace.defaultLocale === "en-US";
@@ -68,6 +73,13 @@ export async function createMeetingForContactAction(contactId: string) {
   });
 
   if (!contact) return { ok: false, error: english ? "Contact not found" : "联系人不存在" };
+
+  const targetOpportunity = opportunityId
+    ? contact.opportunities.find((opportunity) => opportunity.id === opportunityId)
+    : contact.opportunities[0];
+  if (opportunityId && !targetOpportunity) {
+    return { ok: false, error: getWorkspaceScopedRecordUnavailableMessage(english, "opportunity") };
+  }
 
   const result = await createGovernedAction({
     workspaceId: workspace.id,
@@ -80,7 +92,7 @@ export async function createMeetingForContactAction(contactId: string) {
     description: english ? "Create a follow-up meeting placeholder automatically." : "自动创建一个后续推进会议占位",
     aiReason: english ? "This contact has a clear next step and holding a meeting slot early reduces drop-off risk." : "当前联系人有明确下一步，先占住会议节奏可以减少掉动作。",
     riskLevel: "MEDIUM",
-    opportunityId: contact.opportunities[0]?.id,
+    opportunityId: targetOpportunity?.id,
     contactId: contact.id,
     ownerId: contact.ownerId ?? user.id,
     metadata: {

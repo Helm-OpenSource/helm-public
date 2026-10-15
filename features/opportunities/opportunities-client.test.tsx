@@ -43,10 +43,16 @@ vi.mock("@/features/opportunities/actions", () => ({
 }));
 vi.mock("@/features/contacts/actions", () => ({
   addWorkingMemoryAction: vi.fn(async () => ({ ok: true })),
-  createMeetingForContactAction: vi.fn(async () => ({ ok: true })),
+  createMeetingForContactAction: vi.fn(async () => ({
+    ok: true,
+    result: { actionItemId: "a1", status: "PENDING_APPROVAL", requiresApproval: true, reason: "" },
+  })),
 }));
 vi.mock("@/features/inbox/actions", () => ({
-  scheduleMeetingFromThreadAction: vi.fn(async () => ({ ok: true })),
+  scheduleMeetingFromThreadAction: vi.fn(async () => ({
+    ok: true,
+    result: { actionItemId: "a1", status: "PENDING_APPROVAL", requiresApproval: true, reason: "" },
+  })),
 }));
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn(), message: vi.fn() },
@@ -57,7 +63,10 @@ import {
   loadEarlierOpportunityThreadMessagesAction,
   saveOpportunityAction,
 } from "@/features/opportunities/actions";
-import { addWorkingMemoryAction } from "@/features/contacts/actions";
+import {
+  addWorkingMemoryAction,
+  createMeetingForContactAction,
+} from "@/features/contacts/actions";
 import { scheduleMeetingFromThreadAction } from "@/features/inbox/actions";
 import { useConsoleStore } from "@/hooks/use-console-store";
 
@@ -304,7 +313,75 @@ describe("OpportunitiesClient (customer-first)", () => {
     await waitFor(() =>
       expect(scheduleMeetingFromThreadAction).toHaveBeenCalledWith("thread_1"),
     );
+    expect(await within(dialog).findByRole("status")).toHaveTextContent(
+      "安排会议：已提交审批",
+    );
     expect(router.push).toHaveBeenCalledWith("/approvals");
+  });
+
+  it.each([
+    [
+      "auto-executed",
+      { ok: true, result: { actionItemId: "a1", status: "APPROVED", requiresApproval: false, reason: "低风险自动执行" } },
+      "安排会议：已自动执行",
+      "executed",
+    ],
+    [
+      "advice only",
+      { ok: true, result: { actionItemId: "a1", status: "SUGGESTED", requiresApproval: false, reason: "仅建议策略" } },
+      "安排会议：仅建议，未执行",
+      "suggested",
+    ],
+    [
+      "rejected by policy",
+      { ok: true, result: { actionItemId: "a1", status: "BLOCKED", requiresApproval: false, reason: "工作区禁止自动建会" } },
+      "安排会议：已拒绝（工作区禁止自动建会）",
+      "rejected",
+    ],
+    [
+      "failed",
+      { ok: false, error: "线程不存在" },
+      "安排会议：线程不存在",
+      "failed",
+    ],
+  ])("shows the real meeting outcome when %s and stays on the page", async (_label, response, text, kind) => {
+    vi.mocked(scheduleMeetingFromThreadAction).mockResolvedValueOnce(response as never);
+    const user = userEvent.setup();
+    renderClient("opp_inquiry");
+
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "安排会议" }));
+
+    const status = await within(dialog).findByRole("status");
+    expect(status).toHaveTextContent(text);
+    expect(status).toHaveAttribute("data-opportunity-meeting-outcome", kind);
+    expect(within(dialog).queryByText("安排会议：已提交审批")).not.toBeInTheDocument();
+    expect(router.push).not.toHaveBeenCalledWith("/approvals");
+  });
+
+  it("attaches a thread-less meeting to the opportunity being handled", async () => {
+    const user = userEvent.setup();
+    const sharedContact = inquiry.contacts[0];
+    const current = opportunity({
+      id: "opp_current",
+      title: "Second deal for the same contact",
+      contacts: [sharedContact],
+    });
+    const other = opportunity({
+      id: "opp_other",
+      title: "First deal for the same contact",
+      priorityScore: 90,
+      contacts: [sharedContact],
+    });
+    renderClient("opp_current", [other, current]);
+
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "安排会议" }));
+
+    await waitFor(() =>
+      expect(createMeetingForContactAction).toHaveBeenCalledWith("contact_1", "opp_current"),
+    );
+    expect(scheduleMeetingFromThreadAction).not.toHaveBeenCalled();
   });
 
   it("marks a truncated thread and loads the earlier page on demand", async () => {
