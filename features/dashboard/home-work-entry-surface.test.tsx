@@ -9,10 +9,6 @@ function buildModel(
   return {
     canReviewGovernedActions,
     state: canReviewGovernedActions ? "review-heavy" : "returning-active",
-    title: canReviewGovernedActions ? "现在最该先进入的是复核。" : "继续当前工作。",
-    summary: canReviewGovernedActions
-      ? "当前有待复核事项。"
-      : "继续分配给本角色的工作。",
     topWorkItems: [
       {
         id: "work-1",
@@ -83,13 +79,24 @@ describe("DashboardHomeWorkEntrySurface", () => {
     expect(html).toContain('href="/approvals');
   });
 
+  it("shows the real pending review count instead of the capped preview length", () => {
+    const html = renderToStaticMarkup(
+      <DashboardHomeWorkEntrySurface
+        model={{ ...buildModel(true), pendingReviewCount: 7 }}
+        english={false}
+      />,
+    );
+
+    expect(html).toContain("7 个动作待审批");
+    expect(html).not.toContain("1 个动作待审批");
+    expect(html).toContain("data-system-judgement");
+  });
+
   it("omits the cross-role review queue from a dedicated workstation home", () => {
     const model = {
       ...buildModel(true),
       showCrossRoleReviewQueue: false,
       state: "returning-active" as const,
-      title: "先从本角色主工位继续。",
-      summary: "角色家绑定决定默认工作入口。",
       reviewItemsArePrimary: false,
     };
     const html = renderToStaticMarkup(

@@ -13,7 +13,9 @@ import type { DashboardViewModel } from "@/features/dashboard/view-model";
 
 /**
  * 旧版 dashboard 视图（controlTowerHome 关闭时的回滚态）。
- * 内容与拆分前的 /dashboard 完全一致；仅从 page 抽出为组件。
+ * 2026-10-15 起按对象优先：资源影响与背景面板折进工作入口末尾唯一的系统判断块。
+ * Object-first since 2026-10-15: resource impact and context panels fold into
+ * the work entry's single closing system judgement block.
  */
 export function LegacyHomeView({
   pageData,
@@ -58,13 +60,7 @@ export function LegacyHomeView({
 
       <PageHeader
         eyebrow={pageStory.eyebrow}
-        title={
-          pageStory.title ??
-          (english
-            ? "Today's 3 calls that need you"
-            : "今天必须由你拍板的 3 件事")
-        }
-        description={pageStory.description}
+        title={pageStory.title ?? (english ? "Today's work" : "今天的工作")}
         actions={
           demoQuickPathToMeetings ? (
             <Button asChild size="sm" variant="secondary">
@@ -79,6 +75,35 @@ export function LegacyHomeView({
       <DashboardHomeWorkEntrySurface
         model={dashboardHomeWorkEntry}
         english={english}
+        supplementary={
+          <>
+            {tenantResourceImpactReadout.totalResources > 0 ? (
+              <TenantResourceOperatingImpactPanel
+                readout={tenantResourceImpactReadout}
+                english={english}
+                surface="dashboard"
+              />
+            ) : null}
+            <DashboardHomeImplementationConsolePanel english={english} />
+            <OperatingFoundationSummaryCard
+              label={operatingFoundationSummary.label}
+              title={operatingFoundationSummary.title}
+              summary={operatingFoundationSummary.summary}
+              items={operatingFoundationSummary.items}
+              connections={operatingFoundationSummary.connections}
+              note={operatingFoundationSummary.note}
+            />
+            <ReportingProtocolPanel
+              protocol={dashboardProtocol}
+              english={english}
+            />
+            <ProactiveMechanismPanel
+              title={english ? "Prepared context" : "已准备的背景"}
+              flows={[founderProactiveFlow]}
+              english={english}
+            />
+          </>
+        }
       />
 
       {stage1OwnerLoopReadout ? (
@@ -87,50 +112,6 @@ export function LegacyHomeView({
           english={english}
         />
       ) : null}
-
-      {tenantResourceImpactReadout.totalResources > 0 ? (
-        <TenantResourceOperatingImpactPanel
-          readout={tenantResourceImpactReadout}
-          english={english}
-          surface="dashboard"
-        />
-      ) : null}
-
-      <details className="group rounded-[28px] border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-[color:var(--foreground)] marker:content-none [&::-webkit-details-marker]:hidden">
-          <span>
-            {english
-              ? "Open customer assets, evidence and coordination context"
-              : "展开客户资产变化、依据和协作背景"}
-          </span>
-          <span className="rounded-full border border-[color:var(--border)] px-2.5 py-1 text-xs text-[color:var(--muted-foreground)] transition group-open:bg-[color:var(--surface-subtle)]">
-            {english ? "Details" : "详情"}
-          </span>
-        </summary>
-        <div className="mt-5 space-y-5">
-          <DashboardHomeImplementationConsolePanel english={english} />
-
-          <OperatingFoundationSummaryCard
-            label={operatingFoundationSummary.label}
-            title={operatingFoundationSummary.title}
-            summary={operatingFoundationSummary.summary}
-            items={operatingFoundationSummary.items}
-            connections={operatingFoundationSummary.connections}
-            note={operatingFoundationSummary.note}
-          />
-
-          <ReportingProtocolPanel
-            protocol={dashboardProtocol}
-            english={english}
-          />
-
-          <ProactiveMechanismPanel
-            title={english ? "Prepared context" : "已准备的背景"}
-            flows={[founderProactiveFlow]}
-            english={english}
-          />
-        </div>
-      </details>
     </div>
   );
 }

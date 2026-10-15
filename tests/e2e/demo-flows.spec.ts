@@ -5,10 +5,12 @@ const founderShellHeadline =
 const loadingHeadingPattern =
   /^(正在打开工作区页面|Opening the workspace surface|正在准备当前页面|Preparing this page)$/u;
 
+// Object-first (2026-10-15): the dashboard header has no description sentence;
+// the demo mode is identified by its eyebrow.
 const dashboardStoryByDemoMode = {
-  founder: "今天必须由创始人拍板的 3 件事：原因、截止时间和下一步动作。",
-  sales: "不是又一个销售看板。是「今天必须打的 3 个电话——不打就要凉」。",
-  recruiter: "本周哪位终面在降温 / 哪条反馈已逾期 / 哪个职位的压力是真的。",
+  founder: "创始人模式 · 今天",
+  sales: "销售模式 · 今天",
+  recruiter: "猎头模式 · 今天",
 } as const;
 
 function demoEntryName(email: "founder@demo.com" | "saleslead@demo.com" | "recruiter@demo.com") {

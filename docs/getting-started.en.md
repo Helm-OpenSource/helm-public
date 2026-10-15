@@ -15,7 +15,7 @@ This guide is for developers running Helm locally **for the first time**. By the
 1. Install dependencies
 2. Bring up MySQL
 3. Run migrations + seed
-4. Start the dev server and see "today's 3 must-decide calls" at `/dashboard`
+4. Start the dev server and see "Today's work" at `/dashboard`
 5. Know which doc to read next
 
 If you only want a 90-second demo, go back to [README.en.md](../README.en.md#90-seconds-to-see-helm) and use `docker compose up`.
@@ -288,7 +288,7 @@ Open in a browser:
 | URL | What you see |
 |---|---|
 | http://localhost:3000 | Public landing page |
-| http://localhost:3000/dashboard | Today's 3 calls (login required) |
+| http://localhost:3000/dashboard | Today's work (login required) |
 | http://localhost:3000/mobile | Mobile Ask Helm |
 | http://localhost:3000/setup | 6-step setup wizard |
 
