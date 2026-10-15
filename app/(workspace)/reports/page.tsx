@@ -11,13 +11,11 @@ import { getLatestEngineeringDeliverySnapshot } from "@/lib/reports/engineering-
 import { safeParseJson } from "@/lib/utils";
 import { canViewEngineeringDeliveryReview } from "@/lib/workspace-identity";
 import { ReportsClient } from "@/features/reports/reports-client";
-import { getWorkspaceFirstLoopModel } from "@/lib/operating-system/first-loop-query";
 import { normalizeWorkspaceUiConfig } from "@/lib/workspace-ops";
 import {
   getDeploymentProfileDefaultLocaleCandidate,
   getRequestUiLocaleCandidate,
 } from "@/lib/i18n/request-locale.server";
-import { getFirstLoopAdoptionData } from "@/features/diagnostics/queries";
 import { Button } from "@/components/ui/button";
 import {
   logReportsExtensionPageView,
@@ -119,27 +117,12 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
     );
   }
 
-  const [
-    reports,
-    businessLoopGapReadout,
-    engineeringDeliveryReview,
-    firstLoopModel,
-    firstLoopAdoption,
-  ] = await Promise.all([
+  const [reports, businessLoopGapReadout, engineeringDeliveryReview] = await Promise.all([
     getWeeklyReports(workspace.id),
     getWorkspaceBusinessLoopGapReadout(workspace.id),
     canViewEngineeringDeliveryReview(workspace)
       ? getLatestEngineeringDeliverySnapshot({ english })
       : Promise.resolve(null),
-    getWorkspaceFirstLoopModel({
-      workspaceId: workspace.id,
-      currentUserId: user.id,
-      locale,
-      membershipRole: membership.role,
-      profileType: workspace.profileType,
-      focusAreasJson: workspace.focusAreas,
-    }),
-    getFirstLoopAdoptionData(workspace.id, { currentUserId: user.id }),
   ]);
 
   await logPageViewEvent({
@@ -163,8 +146,6 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
         }))}
         businessLoopGapSummary={businessLoopGapReadout.businessLoopGapSummary}
         engineeringDeliveryReview={engineeringDeliveryReview}
-        firstLoopModel={firstLoopModel}
-        firstLoopAdoption={firstLoopAdoption}
         insightGovernance={{
           canManage: canManageWorkspaceInsights(membership.role),
           manageDeniedMessage: getInsightGovernanceDeniedMessage(english),
