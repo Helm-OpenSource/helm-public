@@ -41,10 +41,17 @@ type WorkspaceView = {
   route: string;
   files: readonly string[];
   /**
-   * Page-specific regressions that wave 1 removed: canned reasons that state
-   * facts the data does not hold, or copy that contradicts the real ordering.
+   * Page-specific regressions a wave removed: canned reasons that state facts
+   * the data does not hold, copy that contradicts the real ordering, or
+   * judgement blocks that now live only inside the system judgement block.
    */
   regressionPatterns?: readonly RegExp[];
+  /**
+   * Object markers that must render, outside and before the system judgement
+   * block, in the file that holds that block (object → original content →
+   * next action, then judgement).
+   */
+  leadingObjectMarkers?: readonly string[];
 } & ViewStatus;
 
 const workspaceViews: readonly WorkspaceView[] = [
@@ -101,50 +108,71 @@ const workspaceViews: readonly WorkspaceView[] = [
   {
     id: "meeting-detail",
     route: "/meetings/[id]",
-    status: "pending",
-    wave: 2,
-    reason:
-      "第 2 波：链路壳与 FirstLoopSurfaceSummary 挪进末尾系统判断 / wave 2 folds the chain shell and first-loop summary",
+    status: "enforced",
     files: [
       "app/(workspace)/meetings/[id]/page.tsx",
       "features/meetings/meeting-detail-client.tsx",
     ],
+    regressionPatterns: [
+      /Meeting OS wedge|会议推进主线/,
+      /If we do not push today|如果今天不推进/,
+      /24-hour post-meeting window|黄金推进窗口/,
+      /Meeting guidance|会议引导/,
+      /Meeting ingress context|会议入口上下文/,
+      /Memory generation|记忆生成状态/,
+      /mock notes|mock 记录/,
+      /"Why this meeting matters"|这场会议值得讲的点/,
+      /titleAs="h2"/,
+    ],
+    leadingObjectMarkers: ["data-meeting-facts", "<Tabs "],
   },
   {
     id: "contact-detail",
     route: "/contacts/[id]",
-    status: "pending",
-    wave: 2,
-    reason:
-      "第 2 波：联系人信息置顶并渲染已加载的邮件线程 / wave 2 moves contact facts first and renders loaded threads",
+    status: "enforced",
     files: [
       "app/(workspace)/contacts/[id]/page.tsx",
       "features/contacts/contact-detail-client.tsx",
     ],
+    regressionPatterns: [
+      /Relationship operating summary|关系操作摘要/,
+      /Relationship guidance|关系引导/,
+      /Relationship judgement and recommended moves|关系判断与推荐动作/,
+      /titleAs="h2"/,
+    ],
+    leadingObjectMarkers: ["data-contact-facts", "<CustomerEmailThreadsCard"],
   },
   {
     id: "company-detail",
     route: "/companies/[id]",
-    status: "pending",
-    wave: 2,
-    reason:
-      "第 2 波：行业、官网置顶，补 emailThreads / wave 2 moves company facts first and loads threads",
+    status: "enforced",
     files: [
       "app/(workspace)/companies/[id]/page.tsx",
       "features/companies/company-detail-client.tsx",
     ],
+    regressionPatterns: [
+      /Account operating summary|账户操作摘要/,
+      /Account guidance|账户引导/,
+      /Account momentum judgement|账户势能判断/,
+      /"If we do not push this week"|"如果本周不推进"/,
+      /All interactions|全部互动/,
+      /getApprovalTasksData/,
+      /titleAs="h2"/,
+    ],
+    leadingObjectMarkers: ["data-company-facts", "<CustomerEmailThreadsCard"],
   },
   {
     id: "inbox-detail",
     route: "/inbox/[id]",
-    status: "pending",
-    wave: 2,
-    reason:
-      "第 2 波：完整邮件线程移到首屏 / wave 2 moves the full mail thread to the first screen",
+    status: "enforced",
     files: [
       "app/(workspace)/inbox/[id]/page.tsx",
       "features/inbox-followup-review-request/detail-view.tsx",
     ],
+    regressionPatterns: [
+      /inbox first screen stays concise|收件箱首屏保持精简/,
+    ],
+    leadingObjectMarkers: ["data-inbox-thread-facts", "<EmailThreadTranscript"],
   },
   {
     id: "inbox",
@@ -386,6 +414,24 @@ describe("object-first workspace guard", () => {
         }
       }
       expect(blocks, `${view.route} renders more than one system judgement block`).toBeLessThanOrEqual(1);
+
+      if (view.leadingObjectMarkers?.length) {
+        const blockFile =
+          view.files.find((file) => read(file).includes(SYSTEM_JUDGEMENT_ATTRIBUTE)) ??
+          view.files[view.files.length - 1];
+        const source = read(blockFile);
+        const blockStart = source.includes(SYSTEM_JUDGEMENT_ATTRIBUTE)
+          ? source.lastIndexOf("<details", source.indexOf(SYSTEM_JUDGEMENT_ATTRIBUTE))
+          : source.length;
+        for (const marker of view.leadingObjectMarkers) {
+          const markerIndex = source.indexOf(marker);
+          expect(markerIndex, `${blockFile} is missing ${marker}`).toBeGreaterThanOrEqual(0);
+          expect(
+            markerIndex,
+            `${blockFile}: ${marker} must render before the system judgement block`,
+          ).toBeLessThan(blockStart);
+        }
+      }
     });
   }
 
