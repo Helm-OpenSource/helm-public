@@ -30,4 +30,26 @@ describe("Ask Helm search page layered answer contract", () => {
     expect(layeredUsageIndex).toBeGreaterThan(-1);
     expect(auditUsageIndex).toBeGreaterThan(layeredUsageIndex);
   });
+
+  it("puts related objects before the layered answer (object-first)", () => {
+    const askModeStart = searchPageSource.indexOf("function AskHelmMode(");
+    const askMode = searchPageSource.slice(
+      askModeStart,
+      searchPageSource.indexOf("function AskHelmActionPacketPanel("),
+    );
+    const relatedIndex = askMode.indexOf('data-testid="ask-helm-related-objects"');
+    const layeredIndex = askMode.indexOf("<AskHelmLayeredAnswerPanel");
+    expect(relatedIndex).toBeGreaterThan(-1);
+    expect(layeredIndex).toBeGreaterThan(relatedIndex);
+    expect(askMode).not.toContain("Objects stay first when the question points to real workspace records.");
+  });
+
+  it("shows recent objects for an empty query, hides zero-hit types and shows contact email", () => {
+    expect(searchPageSource).toContain("loadRecentSearchObjects(workspace.id)");
+    expect(searchPageSource).toContain("data-search-recent-objects");
+    expect(searchPageSource).toContain("{results.contacts.length ? (");
+    expect(searchPageSource).not.toContain("<InlineEmpty");
+    expect(searchPageSource).toContain("data-search-contact-email");
+    expect(searchPageSource).not.toContain("<SupportSurfaceNote");
+  });
 });
