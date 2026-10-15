@@ -23,6 +23,21 @@ vi.mock("@/features/conversation-capture/start-recording-button", () => ({
 vi.mock("@/features/opportunities/actions", () => ({
   bulkUpdateOpportunitiesAction: vi.fn(),
   createActionFromDingTalkSignalAction: vi.fn(),
+  loadEarlierOpportunityThreadMessagesAction: vi.fn(async () => ({
+    ok: true,
+    messages: [
+      {
+        id: "m0",
+        sender: "Alex Doe",
+        senderEmail: "alex@example.com",
+        body: "The very first message in the thread",
+        snippet: null,
+        isInbound: true,
+        sentAt: new Date(Date.now() - 5 * 86_400_000),
+      },
+    ],
+  })),
+  loadMoreOpportunityEmailThreadsAction: vi.fn(async () => ({ ok: true, threads: [], total: 0 })),
   moveOpportunityStageAction: vi.fn(),
   saveOpportunityAction: vi.fn(async () => ({ ok: true, id: "opp_inquiry" })),
 }));
@@ -38,7 +53,10 @@ vi.mock("sonner", () => ({
 }));
 
 import { OpportunitiesClient } from "@/features/opportunities/opportunities-client";
-import { saveOpportunityAction } from "@/features/opportunities/actions";
+import {
+  loadEarlierOpportunityThreadMessagesAction,
+  saveOpportunityAction,
+} from "@/features/opportunities/actions";
 import { addWorkingMemoryAction } from "@/features/contacts/actions";
 import { scheduleMeetingFromThreadAction } from "@/features/inbox/actions";
 import { useConsoleStore } from "@/hooks/use-console-store";
@@ -70,6 +88,13 @@ function opportunity(overrides: Record<string, unknown>) {
     owner: null,
     actionItems: [],
     emailThreads: [],
+    emailThreadCount: 0,
+    emailActivity: {
+      firstInboundAt: null,
+      latestInboundAt: null,
+      latestOutboundAt: null,
+      latestInboundThreadId: null,
+    },
     openBlockerCount: 0,
     overdueCommitmentCount: 0,
     attachments: [],
@@ -103,6 +128,8 @@ const inquiry = opportunity({
       counterpart: "inbox@example.com",
       source: "IMPORT",
       createdAt: inDays(-1),
+      messageCount: 1,
+      lastActivityAt: inDays(-1),
       messages: [
         {
           id: "m1",
@@ -116,6 +143,13 @@ const inquiry = opportunity({
       ],
     },
   ],
+  emailThreadCount: 1,
+  emailActivity: {
+    firstInboundAt: inDays(-1),
+    latestInboundAt: inDays(-1),
+    latestOutboundAt: null,
+    latestInboundThreadId: "thread_1",
+  },
 });
 
 const manual = opportunity({
@@ -136,10 +170,13 @@ const won = opportunity({
   owner: { id: "user_1", name: "Owner One" },
 });
 
-function renderClient(initialOpportunityId: string | null = null) {
+function renderClient(
+  initialOpportunityId: string | null = null,
+  opportunities: unknown[] = [manual, inquiry, won],
+) {
   return render(
     <OpportunitiesClient
-      opportunities={[manual, inquiry, won] as never}
+      opportunities={opportunities as never}
       workspaceDingTalkWorkProgress={[]}
       companies={[{ id: "company_1", name: "Example Co" }]}
       memberships={[{ user: { id: "user_1", name: "Owner One" } }]}
@@ -225,6 +262,7 @@ describe("OpportunitiesClient (customer-first)", () => {
     expect(judgement).not.toHaveAttribute("open");
     expect(judgement).toHaveTextContent("排序依据：优先级 P2（72）");
     expect(judgement).toHaveTextContent("客户来信未回复");
+    expect(within(dialog).getAllByText("待回复").length).toBeGreaterThan(0);
 
     for (const removed of ["机会摘要", "推进快照", "现在先改什么", "可健康推进的窗口"]) {
       expect(within(dialog).queryByText(removed)).not.toBeInTheDocument();
@@ -265,5 +303,28 @@ describe("OpportunitiesClient (customer-first)", () => {
       expect(scheduleMeetingFromThreadAction).toHaveBeenCalledWith("thread_1"),
     );
     expect(router.push).toHaveBeenCalledWith("/approvals");
+  });
+
+  it("marks a truncated thread and loads the earlier page on demand", async () => {
+    const user = userEvent.setup();
+    const truncated = {
+      ...inquiry,
+      nextStepSummary: null,
+      emailThreads: [{ ...inquiry.emailThreads[0], messageCount: 2 }],
+    };
+    renderClient("opp_inquiry", [manual, truncated, won]);
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("已截断，共 2 封，显示最近 1 封")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "加载更早" }));
+
+    await waitFor(() =>
+      expect(loadEarlierOpportunityThreadMessagesAction).toHaveBeenCalledWith({
+        threadId: "thread_1",
+        beforeMessageId: "m1",
+      }),
+    );
+    expect(await within(dialog).findByText("The very first message in the thread")).toBeInTheDocument();
+    expect(within(dialog).queryByText(/已截断/)).not.toBeInTheDocument();
   });
 });

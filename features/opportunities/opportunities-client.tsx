@@ -77,6 +77,8 @@ import type { BusinessLoopGapSummary } from "@/lib/operating-system/operating-ga
 import {
   bulkUpdateOpportunitiesAction,
   createActionFromDingTalkSignalAction,
+  loadEarlierOpportunityThreadMessagesAction,
+  loadMoreOpportunityEmailThreadsAction,
   moveOpportunityStageAction,
   saveOpportunityAction,
 } from "@/features/opportunities/actions";
@@ -91,18 +93,19 @@ import {
   buildOriginalDemandThreads,
   buildSystemJudgementLines,
   describeDueChip,
-  findPrimaryInboundMessage,
   firstContactAt,
   formatMonthDayTime,
   formatTimestamp,
   getOpportunitySourceLabel,
-  hasUnansweredInbound,
+  getReplyStatus,
   isOpenAndOverdue,
   resolveOpportunitySourceKind,
   resolveReplyTarget,
   selectOriginalDemandText,
   summarizeOpportunityCounts,
   type CustomerFirstContact,
+  type CustomerFirstEmailActivity,
+  type CustomerFirstEmailMessage,
   type CustomerFirstEmailThread,
 } from "@/features/opportunities/customer-first";
 import { OpportunityCustomerCard } from "@/features/opportunities/opportunity-customer-card";
@@ -133,7 +136,11 @@ type OpportunityItem = {
   contacts: CustomerFirstContact[];
   owner: { id: string; name: string } | null;
   actionItems: Array<{ id: string; status: string }>;
+  /** Latest-active threads (first page), each with its latest messages. */
   emailThreads: CustomerFirstEmailThread[];
+  emailThreadCount: number;
+  /** Aggregate over every visible message; drives reply state. */
+  emailActivity: CustomerFirstEmailActivity;
   openBlockerCount: number;
   overdueCommitmentCount: number;
   dingtalkSignalSummary?: {
@@ -273,9 +280,22 @@ export function OpportunitiesClient({
       memberships[0]?.user.id,
     ),
   );
-  const [recommendationTitle, setRecommendationTitle] = useState<
-    string | null
-  >(null);
+  const [recommendation, setRecommendation] = useState<{
+    opportunityId: string;
+    title: string | null;
+  } | null>(null);
+  const recommendationTitle =
+    recommendation && recommendation.opportunityId === detailDraft.id
+      ? recommendation.title
+      : null;
+  // Older pages fetched on demand: messages by thread, threads by opportunity.
+  const [olderMessages, setOlderMessages] = useState<
+    Record<string, CustomerFirstEmailMessage[]>
+  >({});
+  const [moreThreads, setMoreThreads] = useState<
+    Record<string, CustomerFirstEmailThread[]>
+  >({});
+  const [emailLoadingKey, setEmailLoadingKey] = useState<string | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   );
@@ -299,26 +319,34 @@ export function OpportunitiesClient({
     { value: "priority", label: english ? "High priority only" : "仅高优先级" },
   ] as const;
 
-  useEffect(() => {
+  // Fresh server data (router.refresh) replaces local items and drops the
+  // older email pages fetched for the previous snapshot.
+  const [syncedOpportunities, setSyncedOpportunities] = useState(opportunities);
+  if (syncedOpportunities !== opportunities) {
+    setSyncedOpportunities(opportunities);
     setItems(opportunities);
-  }, [opportunities]);
+    setOlderMessages({});
+    setMoreThreads({});
+  }
 
-  useEffect(() => {
-    if (!initialOpportunityId) return;
-    const target = opportunities.find(
-      (item) => item.id === initialOpportunityId,
-    );
-    if (!target) return;
-    setDetailDraft(createDraftFromOpportunity(target, memberships[0]?.user.id));
-    setQueuedFiles([]);
-    setFileInputKey((value) => value + 1);
-    setNote("");
-    setSheetOpen(true);
-  }, [initialOpportunityId, memberships, opportunities]);
+  // Opening a card puts ?opportunityId= in the URL; a new id opens its sheet.
+  const [syncedInitialId, setSyncedInitialId] = useState(initialOpportunityId);
+  if (syncedInitialId !== initialOpportunityId) {
+    setSyncedInitialId(initialOpportunityId);
+    const target = initialOpportunityId
+      ? opportunities.find((item) => item.id === initialOpportunityId)
+      : undefined;
+    if (target) {
+      setDetailDraft(createDraftFromOpportunity(target, memberships[0]?.user.id));
+      setQueuedFiles([]);
+      setFileInputKey((value) => value + 1);
+      setNote("");
+      setSheetOpen(true);
+    }
+  }
 
   useEffect(() => {
     const opportunityId = detailDraft.id;
-    setRecommendationTitle(null);
     if (!opportunityId) return;
 
     let active = true;
@@ -332,10 +360,13 @@ export function OpportunitiesClient({
         const title = payload?.success
           ? payload.data?.recommendations?.[0]?.title
           : null;
-        setRecommendationTitle(typeof title === "string" ? title : null);
+        setRecommendation({
+          opportunityId,
+          title: typeof title === "string" ? title : null,
+        });
       })
       .catch(() => {
-        if (active) setRecommendationTitle(null);
+        if (active) setRecommendation({ opportunityId, title: null });
       });
 
     return () => {
@@ -448,8 +479,31 @@ export function OpportunitiesClient({
     currentUserId,
     now: new Date(),
   });
-  const activeOpportunity =
+  const withLoadedEmail = (opportunity: OpportunityItem): OpportunityItem => {
+    const extraThreads = (moreThreads[opportunity.id] ?? []).filter(
+      (thread) =>
+        !opportunity.emailThreads.some((existing) => existing.id === thread.id),
+    );
+    return {
+      ...opportunity,
+      emailThreads: [...opportunity.emailThreads, ...extraThreads].map(
+        (thread) => {
+          const older = (olderMessages[thread.id] ?? []).filter(
+            (message) =>
+              !thread.messages.some((existing) => existing.id === message.id),
+          );
+          return older.length
+            ? { ...thread, messages: [...older, ...thread.messages] }
+            : thread;
+        },
+      ),
+    };
+  };
+  const activeRawOpportunity =
     items.find((item) => item.id === detailDraft.id) ?? null;
+  const activeOpportunity = activeRawOpportunity
+    ? withLoadedEmail(activeRawOpportunity)
+    : null;
   const businessLoopGapReadout = buildBusinessLoopGapReadout({
     english,
     businessLoopGapSummary,
@@ -471,9 +525,8 @@ export function OpportunitiesClient({
         english,
       }),
       firstContactAt: firstContactAt(opportunity),
-      hasInboundMail: Boolean(
-        findPrimaryInboundMessage(opportunity.emailThreads),
-      ),
+      hasInboundMail: Boolean(opportunity.emailActivity.firstInboundAt),
+      replyStatus: getReplyStatus(opportunity.emailActivity),
       demand,
       demandExcerpt: demand.text
         ? formatInboxMessageBody(demand.text, english)
@@ -494,6 +547,7 @@ export function OpportunitiesClient({
         stageLabel={card.stageLabel}
         sourceLabel={card.sourceLabel}
         dueChip={card.dueChip}
+        replyStatus={card.replyStatus}
         receivedAt={
           card.hasInboundMail ? formatMonthDayTime(card.firstContactAt) : null
         }
@@ -638,6 +692,55 @@ export function OpportunitiesClient({
       router.push("/approvals");
       router.refresh();
     });
+  };
+
+  const handleLoadEarlierMessages = (
+    threadId: string,
+    beforeMessageId: string,
+  ) => {
+    setEmailLoadingKey(`thread:${threadId}`);
+    void loadEarlierOpportunityThreadMessagesAction({ threadId, beforeMessageId })
+      .then((result) => {
+        if (!result.ok) {
+          toast.error(
+            result.error ??
+              (english ? "Failed to load earlier mail" : "更早的邮件加载失败"),
+          );
+          return;
+        }
+        setOlderMessages((current) => ({
+          ...current,
+          [threadId]: [...result.messages, ...(current[threadId] ?? [])],
+        }));
+      })
+      .catch(() =>
+        toast.error(english ? "Failed to load earlier mail" : "更早的邮件加载失败"),
+      )
+      .finally(() => setEmailLoadingKey(null));
+  };
+
+  const handleLoadMoreThreads = (opportunityId: string, offset: number) => {
+    setEmailLoadingKey("threads");
+    void loadMoreOpportunityEmailThreadsAction({ opportunityId, offset })
+      .then((result) => {
+        if (!result.ok) {
+          toast.error(
+            result.error ??
+              (english ? "Failed to load earlier threads" : "更早的线程加载失败"),
+          );
+          return;
+        }
+        setMoreThreads((current) => ({
+          ...current,
+          [opportunityId]: [...(current[opportunityId] ?? []), ...result.threads],
+        }));
+      })
+      .catch(() =>
+        toast.error(
+          english ? "Failed to load earlier threads" : "更早的线程加载失败",
+        ),
+      )
+      .finally(() => setEmailLoadingKey(null));
   };
 
   const handleSaveDetail = () => {
@@ -823,7 +926,7 @@ export function OpportunitiesClient({
       card.dueChip?.overdue ? (english ? "overdue" : "已逾期") : null,
       opportunity.company ? null : english ? "no linked company" : "未关联公司",
       opportunity.owner ? null : english ? "no owner" : "未分配负责人",
-      hasUnansweredInbound(opportunity.emailThreads)
+      card.replyStatus === "awaiting"
         ? english
           ? "customer mail not answered"
           : "客户来信未回复"
@@ -1566,10 +1669,12 @@ export function OpportunitiesClient({
                   sourceDetail={
                     activeCard.sourceKind === "website-inquiry" &&
                     activeCard.replyTarget?.kind === "thread"
-                      ? (activeOpportunity.emailThreads.find(
-                          (thread) =>
-                            activeCard.replyTarget?.kind === "thread" &&
-                            thread.id === activeCard.replyTarget.threadId,
+                      ? ((
+                          activeOpportunity.emailThreads.find(
+                            (thread) =>
+                              activeCard.replyTarget?.kind === "thread" &&
+                              thread.id === activeCard.replyTarget.threadId,
+                          ) ?? activeOpportunity.emailThreads[0]
                         )?.counterpart ?? null)
                       : null
                   }
@@ -1591,7 +1696,17 @@ export function OpportunitiesClient({
                 <OpportunityOriginalDemand
                   english={english}
                   threads={buildOriginalDemandThreads(activeOpportunity)}
+                  threadTotal={activeOpportunity.emailThreadCount}
                   fallback={activeCard.demand}
+                  replyStatus={activeCard.replyStatus}
+                  loadingKey={emailLoadingKey}
+                  onLoadEarlierMessages={handleLoadEarlierMessages}
+                  onLoadMoreThreads={() =>
+                    handleLoadMoreThreads(
+                      activeOpportunity.id,
+                      activeOpportunity.emailThreads.length,
+                    )
+                  }
                 />
 
                 <OpportunityHandlingCard

@@ -17,6 +17,10 @@ import { db } from "@/lib/db";
 import { recordOpportunityStageChangedDelta } from "@/lib/evolution/delta-event.service";
 import { refreshEvolutionState } from "@/lib/evolution/pattern-detection.service";
 import { createGovernedAction } from "@/lib/policies/engine";
+import {
+  loadEarlierOpportunityThreadMessages,
+  loadOpportunityEmailContext,
+} from "@/features/opportunities/email-context";
 
 const opportunitySchema = z.object({
   id: z.string().optional(),
@@ -544,4 +548,63 @@ export async function bulkUpdateOpportunitiesAction(input: z.infer<typeof bulkOp
   revalidatePath("/search");
 
   return { ok: true };
+}
+
+const earlierThreadMessagesSchema = z.object({
+  threadId: z.string().min(1),
+  beforeMessageId: z.string().min(1),
+});
+
+/** Read-only: one older page of an opportunity email thread (customer-first detail). */
+export async function loadEarlierOpportunityThreadMessagesAction(
+  input: z.infer<typeof earlierThreadMessagesSchema>,
+) {
+  const { workspace } = await getCurrentWorkspaceSession();
+  const english = workspace.defaultLocale === "en-US";
+  const parsed = earlierThreadMessagesSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false as const, error: english ? "Invalid request" : "请求参数错误" };
+  }
+
+  const messages = await loadEarlierOpportunityThreadMessages(workspace.id, parsed.data);
+  if (!messages) {
+    return { ok: false as const, error: getWorkspaceScopedRecordUnavailableMessage(english, "thread") };
+  }
+
+  return { ok: true as const, messages };
+}
+
+const moreOpportunityThreadsSchema = z.object({
+  opportunityId: z.string().min(1),
+  offset: z.number().int().min(0).max(1000),
+});
+
+/** Read-only: the next page of an opportunity's email threads, latest activity first. */
+export async function loadMoreOpportunityEmailThreadsAction(
+  input: z.infer<typeof moreOpportunityThreadsSchema>,
+) {
+  const { workspace } = await getCurrentWorkspaceSession();
+  const english = workspace.defaultLocale === "en-US";
+  const parsed = moreOpportunityThreadsSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false as const, error: english ? "Invalid request" : "请求参数错误" };
+  }
+
+  const opportunity = await db.opportunity.findFirst({
+    where: { id: parsed.data.opportunityId, workspaceId: workspace.id },
+    select: { id: true },
+  });
+  if (!opportunity) {
+    return { ok: false as const, error: getWorkspaceScopedRecordUnavailableMessage(english, "opportunity") };
+  }
+
+  const contexts = await loadOpportunityEmailContext(workspace.id, [opportunity.id], {
+    threadOffset: parsed.data.offset,
+  });
+  const context = contexts.get(opportunity.id);
+  return {
+    ok: true as const,
+    threads: context?.emailThreads ?? [],
+    total: context?.emailThreadCount ?? 0,
+  };
 }

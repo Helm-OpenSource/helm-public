@@ -4,9 +4,11 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type {
-  CustomerFirstContact,
-  OpportunityReplyTarget,
+import {
+  getReplyStatusLabel,
+  type CustomerFirstContact,
+  type OpportunityReplyTarget,
+  type ReplyStatus,
 } from "@/features/opportunities/customer-first";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +18,8 @@ export type OpportunityListCardProps = {
   stageLabel: string;
   sourceLabel: string;
   dueChip: { label: string; overdue: boolean } | null;
+  /** From the aggregate over all messages, not the loaded slice. */
+  replyStatus: ReplyStatus;
   receivedAt: string | null;
   contact: CustomerFirstContact | null;
   companyName: string | null;
@@ -39,6 +43,7 @@ export function OpportunityListCard({
   stageLabel,
   sourceLabel,
   dueChip,
+  replyStatus,
   receivedAt,
   contact,
   companyName,
@@ -50,6 +55,7 @@ export function OpportunityListCard({
   leading,
   className,
 }: OpportunityListCardProps) {
+  const replyStatusLabel = getReplyStatusLabel(replyStatus, english);
   return (
     <article
       data-opportunity-list-card
@@ -69,6 +75,14 @@ export function OpportunityListCard({
             {dueChip ? (
               <Badge variant={dueChip.overdue ? "danger" : "warning"}>
                 {dueChip.label}
+              </Badge>
+            ) : null}
+            {replyStatusLabel ? (
+              <Badge
+                data-opportunity-reply-status={replyStatus ?? undefined}
+                variant={replyStatus === "awaiting" ? "warning" : "neutral"}
+              >
+                {replyStatusLabel}
               </Badge>
             ) : null}
             {receivedAt ? (

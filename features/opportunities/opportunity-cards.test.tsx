@@ -59,6 +59,7 @@ describe("OpportunityListCard", () => {
         stageLabel="新机会"
         sourceLabel="官网咨询邮件"
         dueChip={{ label: "10-17 前处理", overdue: false }}
+        replyStatus="awaiting"
         receivedAt="10-14 10:43"
         contact={contact}
         companyName={null}
@@ -73,6 +74,7 @@ describe("OpportunityListCard", () => {
     expect(html).toContain("官网咨询邮件");
     expect(html).toContain("10-17 前处理");
     expect(html).toContain("收到于 10-14 10:43");
+    expect(html).toContain("待回复");
     expect(html).toContain("Alex Doe");
     expect(html).toContain("alex@example.com");
     expect(html).toContain("未关联公司");
@@ -92,6 +94,7 @@ describe("OpportunityListCard", () => {
         stageLabel="New"
         sourceLabel="Manual"
         dueChip={null}
+        replyStatus="replied"
         receivedAt={null}
         contact={contact}
         companyName="Example Co"
@@ -107,6 +110,7 @@ describe("OpportunityListCard", () => {
     expect(html).toContain("Pilot renewal");
     expect(html).toContain("Not set");
     expect(html).toContain("Unassigned");
+    expect(html).toContain("Replied");
     expect(html).toContain('href="mailto:alex@example.com"');
     expect(html).toContain("Reply");
   });
@@ -151,7 +155,9 @@ describe("OpportunityOriginalDemand", () => {
       <OpportunityOriginalDemand
         english={false}
         threads={threads}
+        threadTotal={1}
         fallback={{ text: null, source: "none" }}
+        replyStatus="replied"
       />,
     );
 
@@ -159,6 +165,8 @@ describe("OpportunityOriginalDemand", () => {
     expect(html).toContain("Cannot try the product");
     expect(html).toContain(FULL_TEXT);
     expect(html).toContain("我方回复");
+    expect(html).toContain("已回复");
+    expect(html).not.toContain("已截断");
     expect(html).toContain("We are checking the line.");
     expect(html.indexOf(FULL_TEXT)).toBeLessThan(html.indexOf("We are checking the line."));
   });
@@ -168,11 +176,19 @@ describe("OpportunityOriginalDemand", () => {
       <OpportunityOriginalDemand
         english
         threads={[]}
+        threadTotal={0}
         fallback={{ text: "Short snippet", source: "description" }}
+        replyStatus={null}
       />,
     );
     const empty = renderToStaticMarkup(
-      <OpportunityOriginalDemand english={false} threads={[]} fallback={{ text: null, source: "none" }} />,
+      <OpportunityOriginalDemand
+        english={false}
+        threads={[]}
+        threadTotal={0}
+        fallback={{ text: null, source: "none" }}
+        replyStatus={null}
+      />,
     );
 
     expect(withDescription).toContain("From the opportunity description");

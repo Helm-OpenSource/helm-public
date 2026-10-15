@@ -34,8 +34,22 @@ export type CustomerFirstEmailThread = {
   counterpart: string;
   source: string;
   createdAt: DateValue;
+  /** Total messages in the thread; the loaded page may be shorter. */
+  messageCount?: number;
+  lastActivityAt?: DateValue;
+  /** Loaded messages (the latest page plus any older pages), chronological. */
   messages: CustomerFirstEmailMessage[];
 };
+
+/** Aggregate over every visible message (not the loaded slice). */
+export type CustomerFirstEmailActivity = {
+  firstInboundAt: DateValue | null;
+  latestInboundAt: DateValue | null;
+  latestOutboundAt: DateValue | null;
+  latestInboundThreadId: string | null;
+};
+
+export type ReplyStatus = "awaiting" | "replied" | null;
 
 export type OriginalDemandInput = {
   nextStepSummary: string | null;
@@ -59,6 +73,9 @@ export type OriginalDemandThread = {
   id: string;
   subject: string;
   counterpart: string;
+  messageCount: number;
+  loadedCount: number;
+  oldestLoadedMessageId: string | null;
   entries: OriginalDemandEntry[];
 };
 
@@ -88,15 +105,26 @@ function toTime(value: DateValue) {
   return (typeof value === "string" ? new Date(value) : value).getTime();
 }
 
-function sortThreads(threads: CustomerFirstEmailThread[]) {
+function sortMessages(thread: CustomerFirstEmailThread) {
+  return [...thread.messages].sort(
+    (left, right) => toTime(left.sentAt) - toTime(right.sentAt),
+  );
+}
+
+/** Latest activity first, messages chronological inside each thread. */
+function sortThreadsByActivity(threads: CustomerFirstEmailThread[]) {
   return [...threads]
-    .map((thread) => ({
-      ...thread,
-      messages: [...thread.messages].sort(
-        (left, right) => toTime(left.sentAt) - toTime(right.sentAt),
-      ),
-    }))
-    .sort((left, right) => toTime(left.createdAt) - toTime(right.createdAt));
+    .map((thread) => ({ ...thread, messages: sortMessages(thread) }))
+    .sort(
+      (left, right) =>
+        toTime(right.lastActivityAt ?? right.createdAt) -
+        toTime(left.lastActivityAt ?? left.createdAt),
+    );
+}
+
+/** True when every message of the thread is loaded. */
+export function isThreadFullyLoaded(thread: CustomerFirstEmailThread) {
+  return thread.messageCount === undefined || thread.messages.length >= thread.messageCount;
 }
 
 export function extractInboundFullText(
@@ -109,8 +137,7 @@ export function extractInboundFullText(
   return text || null;
 }
 
-/** Earliest inbound message across the linked threads. */
-export function findPrimaryInboundMessage(threads: CustomerFirstEmailThread[]) {
+function earliestInbound(threads: CustomerFirstEmailThread[]) {
   let primary: {
     thread: CustomerFirstEmailThread;
     message: CustomerFirstEmailMessage;
@@ -126,6 +153,14 @@ export function findPrimaryInboundMessage(threads: CustomerFirstEmailThread[]) {
   }
 
   return primary;
+}
+
+/**
+ * The customer's first message. Only fully loaded threads qualify: in a
+ * truncated thread the earliest loaded message is not the first one.
+ */
+export function findPrimaryInboundMessage(threads: CustomerFirstEmailThread[]) {
+  return earliestInbound(threads.filter(isThreadFullyLoaded));
 }
 
 function messageText(message: CustomerFirstEmailMessage) {
@@ -153,6 +188,14 @@ export function selectOriginalDemandText(input: OriginalDemandInput): {
     return { text: threadBody, source: "thread" };
   }
 
+  // Only truncated threads: the earliest loaded customer message still shows
+  // what they said.
+  const loaded = earliestInbound(input.emailThreads);
+  const loadedBody = loaded ? messageText(loaded.message) : "";
+  if (loadedBody) {
+    return { text: loadedBody, source: "thread" };
+  }
+
   const description = input.description?.trim();
   if (description) {
     return { text: description, source: "description" };
@@ -162,9 +205,9 @@ export function selectOriginalDemandText(input: OriginalDemandInput): {
 }
 
 /**
- * Threads in chronological order with their messages (inbound and our
- * replies). The first inbound message carries the 来信全文 text when the
- * selection rule prefers it.
+ * Threads ordered by latest activity, each with its loaded messages in
+ * chronological order (inbound and our replies). The customer's first message
+ * carries the 来信全文 text when the selection rule prefers it.
  */
 export function buildOriginalDemandThreads(
   input: OriginalDemandInput,
@@ -174,11 +217,14 @@ export function buildOriginalDemandThreads(
   const primaryMessageId =
     selection.source === "full-text" ? primary?.message.id ?? null : null;
 
-  return sortThreads(input.emailThreads)
+  return sortThreadsByActivity(input.emailThreads)
     .map((thread) => ({
       id: thread.id,
       subject: thread.subject,
       counterpart: thread.counterpart,
+      messageCount: Math.max(thread.messageCount ?? 0, thread.messages.length),
+      loadedCount: thread.messages.length,
+      oldestLoadedMessageId: thread.messages[0]?.id ?? null,
       entries: thread.messages.map((message) => {
         const fromFullText = message.id === primaryMessageId;
         return {
@@ -245,15 +291,17 @@ export function getOpportunitySourceLabel(
   }
 }
 
+/** Reply target: the thread with the newest customer mail, else the latest active thread. */
 export function resolveReplyTarget(input: {
   contacts: CustomerFirstContact[];
   emailThreads: CustomerFirstEmailThread[];
+  emailActivity: CustomerFirstEmailActivity;
 }): OpportunityReplyTarget {
-  const thread =
-    findPrimaryInboundMessage(input.emailThreads)?.thread ??
-    sortThreads(input.emailThreads)[0];
-  if (thread) {
-    return { kind: "thread", threadId: thread.id, href: `/inbox/${thread.id}` };
+  const threadId =
+    input.emailActivity.latestInboundThreadId ??
+    sortThreadsByActivity(input.emailThreads)[0]?.id;
+  if (threadId) {
+    return { kind: "thread", threadId, href: `/inbox/${threadId}` };
   }
 
   const address = input.contacts
@@ -262,24 +310,32 @@ export function resolveReplyTarget(input: {
   return address ? { kind: "mailto", address } : null;
 }
 
-/** True when the latest linked message is inbound, i.e. we have not replied. */
-export function hasUnansweredInbound(threads: CustomerFirstEmailThread[]) {
-  let latest: CustomerFirstEmailMessage | null = null;
-  for (const thread of threads) {
-    for (const message of thread.messages) {
-      if (!latest || toTime(message.sentAt) >= toTime(latest.sentAt)) {
-        latest = message;
-      }
-    }
+/**
+ * Awaiting reply when the newest customer mail is later than our newest
+ * reply. Uses the aggregate over all messages, never the loaded slice.
+ */
+export function getReplyStatus(activity: CustomerFirstEmailActivity): ReplyStatus {
+  if (!activity.latestInboundAt) return null;
+  if (
+    activity.latestOutboundAt &&
+    toTime(activity.latestOutboundAt) >= toTime(activity.latestInboundAt)
+  ) {
+    return "replied";
   }
-  return Boolean(latest?.isInbound);
+  return "awaiting";
+}
+
+export function getReplyStatusLabel(status: ReplyStatus, english: boolean) {
+  if (status === "awaiting") return english ? "Awaiting reply" : "待回复";
+  if (status === "replied") return english ? "Replied" : "已回复";
+  return null;
 }
 
 export function firstContactAt(input: {
   createdAt: DateValue;
-  emailThreads: CustomerFirstEmailThread[];
+  emailActivity: CustomerFirstEmailActivity;
 }) {
-  return findPrimaryInboundMessage(input.emailThreads)?.message.sentAt ?? input.createdAt;
+  return input.emailActivity.firstInboundAt ?? input.createdAt;
 }
 
 export function isClosedStage(stage: string) {

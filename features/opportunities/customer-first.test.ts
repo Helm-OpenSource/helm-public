@@ -5,14 +5,23 @@ import {
   describeDueChip,
   extractInboundFullText,
   getOpportunitySourceLabel,
-  hasUnansweredInbound,
+  getReplyStatus,
+  getReplyStatusLabel,
   resolveOpportunitySourceKind,
   resolveReplyTarget,
   selectOriginalDemandText,
   summarizeOpportunityCounts,
   type CustomerFirstContact,
+  type CustomerFirstEmailActivity,
   type CustomerFirstEmailThread,
 } from "@/features/opportunities/customer-first";
+
+const NO_ACTIVITY: CustomerFirstEmailActivity = {
+  firstInboundAt: null,
+  latestInboundAt: null,
+  latestOutboundAt: null,
+  latestInboundThreadId: null,
+};
 
 const FULL_TEXT_BODY =
   "Hello team,\n\nThe demo line in the product page does not connect during service hours. Could you confirm whether it is available and share another way to try the voice flow?\n\nThanks,\nAlex";
@@ -131,6 +140,31 @@ describe("selectOriginalDemandText", () => {
         emailThreads: [],
       }),
     ).toEqual({ text: null, source: "none" });
+  });
+
+  it("does not treat the earliest loaded message of a truncated thread as the first mail", () => {
+    const truncated = thread({ messageCount: 51 });
+    expect(
+      selectOriginalDemandText({
+        nextStepSummary: `来信全文（alex@example.com）：Short`,
+        description: null,
+        emailThreads: [truncated],
+      }),
+    ).toEqual({ text: "Short", source: "full-text" });
+    expect(
+      selectOriginalDemandText({
+        nextStepSummary: null,
+        description: "fallback",
+        emailThreads: [truncated],
+      }),
+    ).toEqual({ text: FULL_TEXT_BODY.slice(0, 60), source: "thread" });
+    const threads = buildOriginalDemandThreads({
+      nextStepSummary: `来信全文（alex@example.com）：${FULL_TEXT_BODY}`,
+      description: null,
+      emailThreads: [truncated],
+    });
+    expect(threads[0]).toMatchObject({ messageCount: 51, loadedCount: 1, oldestLoadedMessageId: "message_1" });
+    expect(threads[0].entries[0].fromFullText).toBe(false);
   });
 
   it("only considers inbound messages as the customer's words", () => {
@@ -269,47 +303,69 @@ describe("resolveOpportunitySourceKind / getOpportunitySourceLabel", () => {
 });
 
 describe("resolveReplyTarget", () => {
-  it("routes to the inbox thread page when a thread exists", () => {
-    expect(resolveReplyTarget({ contacts: [contact()], emailThreads: [thread()] })).toEqual({
-      kind: "thread",
-      threadId: "thread_1",
-      href: "/inbox/thread_1",
-    });
+  it("routes to the thread holding the newest customer mail", () => {
+    expect(
+      resolveReplyTarget({
+        contacts: [contact()],
+        emailThreads: [thread()],
+        emailActivity: { ...NO_ACTIVITY, latestInboundThreadId: "thread_9" },
+      }),
+    ).toEqual({ kind: "thread", threadId: "thread_9", href: "/inbox/thread_9" });
+  });
+
+  it("uses the most recently active thread when there is no customer mail", () => {
+    expect(
+      resolveReplyTarget({
+        contacts: [contact()],
+        emailThreads: [
+          thread({ id: "thread_old", lastActivityAt: new Date("2026-10-01T00:00:00Z") }),
+          thread({ id: "thread_new", lastActivityAt: new Date("2026-10-10T00:00:00Z") }),
+        ],
+        emailActivity: NO_ACTIVITY,
+      }),
+    ).toEqual({ kind: "thread", threadId: "thread_new", href: "/inbox/thread_new" });
   });
 
   it("falls back to the contact address, then to nothing", () => {
-    expect(resolveReplyTarget({ contacts: [contact()], emailThreads: [] })).toEqual({
-      kind: "mailto",
-      address: "alex@example.com",
-    });
     expect(
-      resolveReplyTarget({ contacts: [contact({ email: null })], emailThreads: [] }),
+      resolveReplyTarget({ contacts: [contact()], emailThreads: [], emailActivity: NO_ACTIVITY }),
+    ).toEqual({ kind: "mailto", address: "alex@example.com" });
+    expect(
+      resolveReplyTarget({
+        contacts: [contact({ email: null })],
+        emailThreads: [],
+        emailActivity: NO_ACTIVITY,
+      }),
     ).toBeNull();
   });
 });
 
-describe("hasUnansweredInbound", () => {
-  it("is true when the latest message is inbound", () => {
-    expect(hasUnansweredInbound([thread()])).toBe(true);
+describe("getReplyStatus", () => {
+  it("compares the newest customer mail with our newest reply", () => {
     expect(
-      hasUnansweredInbound([
-        thread({
-          messages: [
-            thread().messages[0],
-            {
-              id: "reply",
-              sender: "Support",
-              senderEmail: "support@example.com",
-              body: "Reply",
-              snippet: null,
-              isInbound: false,
-              sentAt: new Date("2026-10-15T00:00:00Z"),
-            },
-          ],
-        }),
-      ]),
-    ).toBe(false);
-    expect(hasUnansweredInbound([])).toBe(false);
+      getReplyStatus({
+        ...NO_ACTIVITY,
+        latestInboundAt: new Date("2026-10-15T02:00:00Z"),
+        latestOutboundAt: new Date("2026-10-15T01:00:00Z"),
+      }),
+    ).toBe("awaiting");
+    expect(
+      getReplyStatus({ ...NO_ACTIVITY, latestInboundAt: new Date("2026-10-15T02:00:00Z") }),
+    ).toBe("awaiting");
+    expect(
+      getReplyStatus({
+        ...NO_ACTIVITY,
+        latestInboundAt: new Date("2026-10-15T02:00:00Z"),
+        latestOutboundAt: new Date("2026-10-15T03:00:00Z"),
+      }),
+    ).toBe("replied");
+    expect(
+      getReplyStatus({ ...NO_ACTIVITY, latestOutboundAt: new Date("2026-10-15T03:00:00Z") }),
+    ).toBeNull();
+    expect(getReplyStatusLabel("awaiting", false)).toBe("待回复");
+    expect(getReplyStatusLabel("replied", false)).toBe("已回复");
+    expect(getReplyStatusLabel("replied", true)).toBe("Replied");
+    expect(getReplyStatusLabel(null, false)).toBeNull();
   });
 });
 

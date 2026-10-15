@@ -1,5 +1,8 @@
 import { db } from "@/lib/db";
-import { buildInboxThreadWhere } from "@/features/inbox/queries";
+import {
+  EMPTY_OPPORTUNITY_EMAIL_CONTEXT,
+  loadOpportunityEmailContext,
+} from "@/features/opportunities/email-context";
 import { buildDingTalkWorkProgressList } from "@/lib/connectors/dingtalk-work-progress";
 import {
   OPPORTUNITY_ATTACHMENT_MEMORY_SOURCE,
@@ -28,40 +31,17 @@ export async function getOpportunitiesData(workspaceId: string) {
         orderBy: { updatedAt: "desc" },
         take: 2,
       },
-      // Customer-first detail (owner-approved redesign 2026-10-15): the
-      // customer's own words. Same visibility rule as the inbox for a viewer
-      // without a connected Gmail account — personal GMAIL threads never show
-      // on this shared page.
-      emailThreads: {
-        where: buildInboxThreadWhere(workspaceId, null),
-        select: {
-          id: true,
-          subject: true,
-          counterpart: true,
-          source: true,
-          createdAt: true,
-          messages: {
-            select: {
-              id: true,
-              sender: true,
-              senderEmail: true,
-              body: true,
-              snippet: true,
-              isInbound: true,
-              sentAt: true,
-            },
-            orderBy: { sentAt: "asc" },
-            take: 50,
-          },
-        },
-        orderBy: { createdAt: "asc" },
-        take: 10,
-      },
     },
     orderBy: [{ stage: "asc" }, { priorityScore: "desc" }],
   });
 
   const opportunityIds = opportunities.map((item) => item.id);
+  // Customer-first detail (owner-approved redesign 2026-10-15): the
+  // customer's own words plus an accurate reply state (see email-context.ts).
+  const emailContexts = await loadOpportunityEmailContext(
+    workspaceId,
+    opportunityIds,
+  );
   const signalSince = new Date();
   signalSince.setDate(signalSince.getDate() - 7);
   // The customer-first page only needs counts from blockers and commitments
@@ -175,6 +155,7 @@ export async function getOpportunitiesData(workspaceId: string) {
 
   return opportunities.map((opportunity) => ({
     ...opportunity,
+    ...(emailContexts.get(opportunity.id) ?? EMPTY_OPPORTUNITY_EMAIL_CONTEXT),
     openBlockerCount: openBlockers.filter(
       (blocker) => blocker.relatedOpportunityId === opportunity.id,
     ).length,
