@@ -55,8 +55,10 @@ const broaderOperationalSurfaces = [
   "app/(workspace)/meetings/page.tsx",
 ] as const;
 
+// /reports left this list in object-first wave 3: its focus strip is gone and the
+// object-first guard (object-first-workspace-guard.test.ts) now pins the page.
+// /settings stays until wave 4 reworks it.
 const sitewideCustomerAssetFocusSurfaces = [
-  "features/reports/reports-client.tsx",
   "features/imports/imports-client.tsx",
   "features/settings/settings-client.tsx",
   "features/diagnostics/diagnostics-client.tsx",
