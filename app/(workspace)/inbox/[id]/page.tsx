@@ -6,9 +6,9 @@ import { logPageViewEvent } from "@/lib/analytics/session-events";
 import { getCurrentWorkspace, requireCurrentUser } from "@/lib/auth/session";
 import { isEnglishLocale } from "@/lib/i18n/config";
 import { resolveWorkspaceUiLocaleForRequest } from "@/lib/i18n/request-locale.server";
-import { safeParseJson } from "@/lib/utils";
 import { buildInboxDetailPageModel } from "@/features/inbox-followup-review-request/detail-model";
 import { InboxFollowupReviewRequestDetailView } from "@/features/inbox-followup-review-request/detail-view";
+import { parseThreadParticipants } from "@/features/inbox/thread-participants";
 import {
   EmailThreadLatestState,
   EmailThreadTranscript,
@@ -22,15 +22,6 @@ import {
 } from "@/components/shared/system-judgement-summary";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
-function parseParticipants(value: string | null) {
-  if (!value) return [];
-  const parsed = safeParseJson<unknown>(value, null);
-  if (Array.isArray(parsed)) {
-    return parsed.filter((item): item is string => typeof item === "string" && item.trim() !== "");
-  }
-  return [value];
-}
 
 function ThreadFact({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -92,7 +83,7 @@ export default async function InboxDetailPage({
     english,
     hasReviewRequest,
   });
-  const participants = parseParticipants(thread.participants);
+  const participants = parseThreadParticipants(thread.participants);
   const notLinked = english ? "Not linked" : "未关联";
 
   // Object first: the thread, its full messages and the next hops come first;

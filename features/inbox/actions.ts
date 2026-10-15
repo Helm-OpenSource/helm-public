@@ -128,6 +128,10 @@ export async function createTodoFromThreadAction(threadId: string) {
     opportunityId: thread.opportunityId ?? undefined,
     contactId: thread.contactId ?? undefined,
     ownerId: user.id,
+    // Lets the review queue link the task back to its originating thread.
+    metadata: {
+      threadId: thread.id,
+    },
   });
 
   return { ok: true, result };
@@ -157,6 +161,7 @@ export async function scheduleMeetingFromThreadAction(threadId: string) {
     contactId: thread.contactId ?? undefined,
     ownerId: user.id,
     metadata: {
+      threadId: thread.id,
       createMeetingTitle: english ? `${thread.subject} follow-up meeting` : `${thread.subject} 跟进会议`,
       agenda: english ? "Make a decision around the main thread focus" : "围绕当前线程焦点做出决策",
     },
