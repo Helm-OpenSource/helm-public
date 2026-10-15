@@ -141,6 +141,12 @@ export type SettingsClientProps = {
       currentAuthSessionId: string | null;
       currentUserId: string;
       activeMembershipRole: WorkspaceRole;
+      /**
+       * Whether the viewer administers settings (owner, billing admin, admin,
+       * operator). Members and reviewers get the light view without the
+       * workspace-wide loads, so the admin-only tabs are hidden for them.
+       */
+      settingsAdminView?: boolean;
       canManageMembers: boolean;
       canManageBilling: boolean;
       canManageContributionRegistry: boolean;

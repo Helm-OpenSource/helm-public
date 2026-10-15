@@ -1,4 +1,5 @@
 import {
+  AccessState,
   ActorType,
   MembershipStatus,
   ParticipantPortalAccessStatus,
@@ -10,7 +11,10 @@ import {
 } from "@prisma/client";
 import { subDays } from "date-fns";
 import { buildWorkerCommercialWiringView } from "@/lib/billing/add-on-worker-commercial";
-import { getWorkspaceBillingSnapshot } from "@/lib/billing/foundation";
+import {
+  getWorkspaceBillingSnapshot,
+  TRIAL_COLLABORATOR_SEATS,
+} from "@/lib/billing/foundation";
 import { getChinaRenewRestoreSummary } from "@/lib/billing/china-renew-restore";
 import { getBillingOverviewActionState } from "@/lib/billing/integration";
 import { getLifecycleBoundarySummary } from "@/lib/billing/lifecycle-boundary";
@@ -46,6 +50,7 @@ import {
 import { canManageWorkspaceInsights } from "@/lib/auth/insight-governance";
 import { getOrgAdminGovernanceSummary } from "@/lib/auth/org-admin-governance";
 import {
+  canAdministerWorkspaceSettings,
   canExportWorkspaceAdminSupportPack,
   canManageWorkspaceMembers,
   canManageWorkspaceOperationalControls,
@@ -389,16 +394,61 @@ function requiredCapabilityForTenantResource(
   return null;
 }
 
-export async function getSettingsData(workspaceId: string, userId: string) {
+type WorkspaceBillingSnapshot = Omit<
+  Awaited<ReturnType<typeof getWorkspaceBillingSnapshot>>,
+  "accessState"
+> & { accessState: AccessState };
+
+/**
+ * The viewer the settings page renders for. When it is passed and the role
+ * does not administer settings (members, reviewers), the workspace-wide loads
+ * are skipped; server actions call without it and keep the full data.
+ */
+export type SettingsViewer = {
+  role: WorkspaceRole | null | undefined;
+  accessState?: AccessState | null;
+};
+
+// Members and reviewers never reach billing; their access state comes from the
+// session (already synced there) instead of a billing snapshot, which would
+// also re-run the commercial-foundation writes on every visit.
+function buildLightViewBillingSnapshot(
+  accessState: AccessState | null | undefined,
+): WorkspaceBillingSnapshot {
+  return {
+    accessState: accessState ?? AccessState.TRIALING,
+    billingAccount: null,
+    trialState: null,
+    activeSeatCount: 0,
+    trialCollaboratorSeats: TRIAL_COLLABORATOR_SEATS,
+    memberships: [],
+    workerEntitlements: [],
+    usageSummary: [],
+  };
+}
+
+export async function getSettingsData(
+  workspaceId: string,
+  userId: string,
+  viewer?: SettingsViewer,
+) {
+  // Object-first wave 4: only viewers who administer settings pay for the
+  // workspace-wide loads below (connectors, imports, policies, budgets, skill
+  // and strategy suggestions, governance counts, tenant resources, billing).
+  const settingsAdminView = viewer ? canAdministerWorkspaceSettings(viewer.role) : true;
+  const adminOnly = <T,>(load: () => Promise<T>, empty: T): Promise<T> =>
+    settingsAdminView ? load() : Promise.resolve(empty);
   const sevenDaysAgo = subDays(new Date(), 7);
-  const billingSnapshot = await getWorkspaceBillingSnapshot(workspaceId);
+  const billingSnapshot: WorkspaceBillingSnapshot = settingsAdminView
+    ? await getWorkspaceBillingSnapshot(workspaceId)
+    : buildLightViewBillingSnapshot(viewer?.accessState);
   const currentAuthSessionId = await getSessionId();
 
   const [
     workspace,
     policies,
     budgets,
-    memberships,
+    membershipRows,
     notifications,
     connectorRows,
     skillSuggestions,
@@ -432,14 +482,22 @@ export async function getSettingsData(workspaceId: string, userId: string) {
         },
       },
     }),
-    db.policyRule.findMany({
-      where: { workspaceId },
-      orderBy: { createdAt: "asc" },
-    }),
-    db.budgetRule.findMany({
-      where: { workspaceId },
-      orderBy: { createdAt: "asc" },
-    }),
+    adminOnly(
+      () =>
+        db.policyRule.findMany({
+          where: { workspaceId },
+          orderBy: { createdAt: "asc" },
+        }),
+      [],
+    ),
+    adminOnly(
+      () =>
+        db.budgetRule.findMany({
+          where: { workspaceId },
+          orderBy: { createdAt: "asc" },
+        }),
+      [],
+    ),
     findMembershipsWithExistingUsers({
       where: { workspaceId },
       orderBy: { createdAt: "asc" },
@@ -449,138 +507,194 @@ export async function getSettingsData(workspaceId: string, userId: string) {
       orderBy: { createdAt: "desc" },
       take: 5,
     }),
-    db.connector.findMany({
-      where: { workspaceId },
-      select: {
-        id: true,
-        workspaceId: true,
-        provider: true,
-        status: true,
-        externalAccountEmail: true,
-        manualSendEnabled: true,
-        lastSyncedAt: true,
-        lastSyncStatus: true,
-        lastSyncMessage: true,
-        tokenExpiresAt: true,
-        metadata: true,
-        createdAt: true,
-        updatedAt: true,
-        user: {
+    adminOnly(
+      () =>
+        db.connector.findMany({
+          where: { workspaceId },
           select: {
             id: true,
-            name: true,
+            workspaceId: true,
+            provider: true,
+            status: true,
+            externalAccountEmail: true,
+            manualSendEnabled: true,
+            lastSyncedAt: true,
+            lastSyncStatus: true,
+            lastSyncMessage: true,
+            tokenExpiresAt: true,
+            metadata: true,
+            createdAt: true,
+            updatedAt: true,
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+        }),
+      [],
+    ),
+    adminOnly(
+      () =>
+        getOpenSkillSuggestions(workspaceId),
+      [],
+    ),
+    adminOnly(
+      () =>
+        getRecentSkillAdoptions(workspaceId, 4),
+      [],
+    ),
+    adminOnly(
+      () =>
+        db.strategySuggestion.findMany({
+          where: {
+            workspaceId,
+            status: "OPEN",
+          },
+          orderBy: [{ confidence: "desc" }, { createdAt: "desc" }],
+          take: 6,
+        }),
+      [],
+    ),
+    adminOnly(
+      () =>
+        db.strategySuggestion.findMany({
+          where: {
+            workspaceId,
+            status: "ACCEPTED",
+            appliedAt: { not: null },
+          },
+          select: {
+            id: true,
+            title: true,
+            targetPolicyKey: true,
+            appliedEffectSummary: true,
+            appliedAt: true,
+            confirmedAt: true,
+          },
+          orderBy: [{ appliedAt: "desc" }, { confirmedAt: "desc" }],
+          take: 4,
+        }),
+      [],
+    ),
+    adminOnly(
+      () =>
+        db.auditLog.count({
+          where: {
+            workspaceId,
+            createdAt: {
+              gte: sevenDaysAgo,
+            },
+          },
+        }),
+      0,
+    ),
+    adminOnly(
+      () =>
+        db.approvalTask.count({
+          where: {
+            workspaceId,
+            status: "PENDING",
+          },
+        }),
+      0,
+    ),
+    adminOnly(
+      () =>
+        db.lLMCallLog.count({
+          where: {
+            workspaceId,
+            fallbackReason: { not: null },
+            createdAt: {
+              gte: sevenDaysAgo,
+            },
+          },
+        }),
+      0,
+    ),
+    adminOnly(
+      () =>
+        db.emailThread.count({
+          where: {
+            workspaceId,
+            source: {
+              in: [RecordSource.GMAIL, RecordSource.IMPORT],
+            },
+          },
+        }),
+      0,
+    ),
+    adminOnly(
+      () =>
+        db.emailThread.count({
+          where: {
+            workspaceId,
+            source: {
+              in: [RecordSource.GMAIL, RecordSource.IMPORT],
+            },
+            contactId: null,
+            companyId: null,
+            opportunityId: null,
+          },
+        }),
+      0,
+    ),
+    adminOnly(
+      () =>
+        db.memoryEntry.count({
+          where: {
+            workspaceId,
+            source: "CSV 导入",
+          },
+        }),
+      0,
+    ),
+    adminOnly(
+      () =>
+        db.importSource.findMany({
+          where: {
+            workspaceId,
+            sourceType: {
+              in: ["HUBSPOT", "SALESFORCE"],
+            },
+          },
+          orderBy: { createdAt: "desc" },
+        }),
+      [],
+    ),
+    adminOnly(
+      () =>
+        db.contact.findMany({
+          where: {
+            workspaceId,
+            email: { not: null },
+          },
+          select: {
             email: true,
           },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-    getOpenSkillSuggestions(workspaceId),
-    getRecentSkillAdoptions(workspaceId, 4),
-    db.strategySuggestion.findMany({
-      where: {
-        workspaceId,
-        status: "OPEN",
-      },
-      orderBy: [{ confidence: "desc" }, { createdAt: "desc" }],
-      take: 6,
-    }),
-    db.strategySuggestion.findMany({
-      where: {
-        workspaceId,
-        status: "ACCEPTED",
-        appliedAt: { not: null },
-      },
-      select: {
-        id: true,
-        title: true,
-        targetPolicyKey: true,
-        appliedEffectSummary: true,
-        appliedAt: true,
-        confirmedAt: true,
-      },
-      orderBy: [{ appliedAt: "desc" }, { confirmedAt: "desc" }],
-      take: 4,
-    }),
-    db.auditLog.count({
-      where: {
-        workspaceId,
-        createdAt: {
-          gte: sevenDaysAgo,
-        },
-      },
-    }),
-    db.approvalTask.count({
-      where: {
-        workspaceId,
-        status: "PENDING",
-      },
-    }),
-    db.lLMCallLog.count({
-      where: {
-        workspaceId,
-        fallbackReason: { not: null },
-        createdAt: {
-          gte: sevenDaysAgo,
-        },
-      },
-    }),
-    db.emailThread.count({
-      where: {
-        workspaceId,
-        source: {
-          in: [RecordSource.GMAIL, RecordSource.IMPORT],
-        },
-      },
-    }),
-    db.emailThread.count({
-      where: {
-        workspaceId,
-        source: {
-          in: [RecordSource.GMAIL, RecordSource.IMPORT],
-        },
-        contactId: null,
-        companyId: null,
-        opportunityId: null,
-      },
-    }),
-    db.memoryEntry.count({
-      where: {
-        workspaceId,
-        source: "CSV 导入",
-      },
-    }),
-    db.importSource.findMany({
-      where: {
-        workspaceId,
-        sourceType: {
-          in: ["HUBSPOT", "SALESFORCE"],
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-    db.contact.findMany({
-      where: {
-        workspaceId,
-        email: { not: null },
-      },
-      select: {
-        email: true,
-      },
-    }),
-    db.eventLog.findMany({
-      where: {
-        workspaceId,
-        eventName: "csv_import_completed",
-        createdAt: {
-          gte: sevenDaysAgo,
-        },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-      take: 12,
-    }),
+        }),
+      [],
+    ),
+    adminOnly(
+      () =>
+        db.eventLog.findMany({
+          where: {
+            workspaceId,
+            eventName: "csv_import_completed",
+            createdAt: {
+              gte: sevenDaysAgo,
+            },
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+          take: 12,
+        }),
+      [],
+    ),
     db.membership.findMany({
       where: {
         userId,
@@ -598,78 +712,107 @@ export async function getSettingsData(workspaceId: string, userId: string) {
       },
       orderBy: { createdAt: "asc" },
     }),
-    db.connectorIngestionRecord.findMany({
-      where: {
-        workspaceId,
-        objectRefs: {
-          contains: "\"provider\":\"DINGTALK\"",
-        },
-      },
-      select: {
-        id: true,
-        sourceScope: true,
-        sourceType: true,
-        sourceId: true,
-        sourceSummary: true,
-        draftPayload: true,
-        evidenceRef: true,
-        createdAt: true,
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-      take: 12,
-    }),
-    db.importJob.findMany({
-      where: { workspaceId },
-      select: {
-        id: true,
-        sourceId: true,
-        status: true,
-        totalRecords: true,
-        successRecords: true,
-        failedRecords: true,
-        warningRecords: true,
-        finishedAt: true,
-        errorSummary: true,
-        startedAt: true,
-      },
-      orderBy: [{ startedAt: "desc" }],
-      take: 24,
-    }),
-    db.workspaceSolutionExtension.findMany({
-      where: { workspaceId },
-      select: {
-        id: true,
-        workspaceId: true,
-        extensionKey: true,
-        kind: true,
-        status: true,
-        version: true,
-        updatedAt: true,
-      },
-      orderBy: [{ updatedAt: "desc" }],
-      take: 24,
-    }),
-    db.captureSession.findMany({
-      where: { workspaceId },
-      select: {
-        id: true,
-        workspaceId: true,
-        title: true,
-        status: true,
-        sourceType: true,
-        transcriptStatus: true,
-        processingStatus: true,
-        updatedAt: true,
-      },
-      orderBy: [{ updatedAt: "desc" }],
-      take: 12,
-    }),
-    listTenantResourceManualProofRecords(workspaceId),
-    listTenantResourceGuardedWritePilotRecords(workspaceId),
+    adminOnly(
+      () =>
+        db.connectorIngestionRecord.findMany({
+          where: {
+            workspaceId,
+            objectRefs: {
+              contains: "\"provider\":\"DINGTALK\"",
+            },
+          },
+          select: {
+            id: true,
+            sourceScope: true,
+            sourceType: true,
+            sourceId: true,
+            sourceSummary: true,
+            draftPayload: true,
+            evidenceRef: true,
+            createdAt: true,
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+          take: 12,
+        }),
+      [],
+    ),
+    adminOnly(
+      () =>
+        db.importJob.findMany({
+          where: { workspaceId },
+          select: {
+            id: true,
+            sourceId: true,
+            status: true,
+            totalRecords: true,
+            successRecords: true,
+            failedRecords: true,
+            warningRecords: true,
+            finishedAt: true,
+            errorSummary: true,
+            startedAt: true,
+          },
+          orderBy: [{ startedAt: "desc" }],
+          take: 24,
+        }),
+      [],
+    ),
+    adminOnly(
+      () =>
+        db.workspaceSolutionExtension.findMany({
+          where: { workspaceId },
+          select: {
+            id: true,
+            workspaceId: true,
+            extensionKey: true,
+            kind: true,
+            status: true,
+            version: true,
+            updatedAt: true,
+          },
+          orderBy: [{ updatedAt: "desc" }],
+          take: 24,
+        }),
+      [],
+    ),
+    adminOnly(
+      () =>
+        db.captureSession.findMany({
+          where: { workspaceId },
+          select: {
+            id: true,
+            workspaceId: true,
+            title: true,
+            status: true,
+            sourceType: true,
+            transcriptStatus: true,
+            processingStatus: true,
+            updatedAt: true,
+          },
+          orderBy: [{ updatedAt: "desc" }],
+          take: 12,
+        }),
+      [],
+    ),
+    adminOnly(
+      () =>
+        listTenantResourceManualProofRecords(workspaceId),
+      [],
+    ),
+    adminOnly(
+      () =>
+        listTenantResourceGuardedWritePilotRecords(workspaceId),
+      [],
+    ),
   ]);
 
+  // Only what the team list and member card render; never the full User row.
+  const memberships = membershipRows.map(({ user, ...membership }) => ({
+    ...membership,
+    user: { id: user.id, name: user.name, email: user.email },
+  }));
   const duplicateEmailCount = Array.from(
     contactsWithEmail.reduce((acc, contact) => {
       const email = String(contact.email ?? "").trim().toLowerCase();
@@ -786,7 +929,7 @@ export async function getSettingsData(workspaceId: string, userId: string) {
   const connectedCrmSourceCount = importSources.filter((source) => source.status === "CONNECTED").length;
   const approvalProtectedActions = policies.filter((policy) => policy.mode === "REQUIRES_APPROVAL").length;
   const membershipLifecycle = buildMembershipLifecycleSummary({
-    memberships: billingSnapshot.memberships,
+    memberships: settingsAdminView ? billingSnapshot.memberships : memberships,
     includedAdminSeats: workspace?.billingAccount?.includedAdminSeats ?? 1,
     trialCollaboratorSeats: billingSnapshot.trialCollaboratorSeats,
   });
@@ -873,7 +1016,16 @@ export async function getSettingsData(workspaceId: string, userId: string) {
 
   const organizations = await Promise.all(
     userOrganizations.map(async (membership) => {
-      const summary = await getWorkspaceBillingSnapshot(membership.workspaceId);
+      const summary = settingsAdminView
+        ? await getWorkspaceBillingSnapshot(membership.workspaceId)
+        : {
+            accessState:
+              membership.workspaceId === workspaceId
+                ? billingSnapshot.accessState
+                : (membership.workspace.trialState?.status ??
+                  membership.workspace.billingAccount?.billingStatus ??
+                  AccessState.TRIALING),
+          };
       const memberCount = await db.membership.count({
         where: {
           workspaceId: membership.workspaceId,
@@ -941,12 +1093,14 @@ export async function getSettingsData(workspaceId: string, userId: string) {
   const reservedCommercialReadable = contributionRegistryReadable;
   const reservedFormalSkillGovernanceReadable = reservedWorkspace;
   const english = workspace?.defaultLocale === "en-US";
-  const formalSkillReviewQueue = reservedFormalSkillGovernanceReadable
-    ? await getFormalSkillReviewQueue(workspaceId, 6)
-    : [];
-  const recentFormalReviewDecisions = reservedFormalSkillGovernanceReadable
-    ? await getRecentFormalReviewDecisions(workspaceId, 6)
-    : [];
+  const formalSkillReviewQueue =
+    settingsAdminView && reservedFormalSkillGovernanceReadable
+      ? await getFormalSkillReviewQueue(workspaceId, 6)
+      : [];
+  const recentFormalReviewDecisions =
+    settingsAdminView && reservedFormalSkillGovernanceReadable
+      ? await getRecentFormalReviewDecisions(workspaceId, 6)
+      : [];
   const organizationGovernance = organizationAuditReadable
     ? await getOrgAdminGovernanceSummary(workspaceId, {
         currentAuthSessionId,
@@ -1389,6 +1543,7 @@ export async function getSettingsData(workspaceId: string, userId: string) {
       currentAuthSessionId,
       currentUserId: userId,
       activeMembershipRole: activeMembership?.role ?? "OWNER",
+      settingsAdminView,
       canManageMembers,
       canManageBilling: billingManagementEnabled,
       canManageContributionRegistry: contributionRegistryManagementEnabled,

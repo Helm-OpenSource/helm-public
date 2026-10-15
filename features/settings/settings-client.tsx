@@ -24,7 +24,10 @@ import {
 import { useWorkspaceUi } from "@/components/providers/workspace-ui-provider";
 import { CustomerAssetFocusStrip } from "@/components/shared/customer-asset-focus-strip";
 import { EmptyState } from "@/components/shared/empty-state";
-import { LazyDisclosure } from "@/components/shared/lazy-disclosure";
+import {
+  SystemJudgementSummary,
+  systemJudgementDetailsClassName,
+} from "@/components/shared/system-judgement-summary";
 import { ObjectContextOperatingSummary } from "@/components/shared/object-context-operating-summary";
 import { PageHeader } from "@/components/shared/page-header";
 import { ActionModeBadge } from "@/components/shared/status-badges";
@@ -153,7 +156,10 @@ import {
 } from "@/features/settings/data-intake-ux";
 import { CONNECTOR_PERMISSION_SUMMARIES } from "@/features/agentic-governance/connector-permission-summary";
 import { pickConnectorForCurrentUser } from "@/features/settings/connector-selection";
-import { AccountSettingsTab } from "@/features/settings/components/account-settings-tab";
+import {
+  AccountSettingsTab,
+  SettingsOrganizationCard,
+} from "@/features/settings/components/account-settings-tab";
 import { updateWorkspaceLLMConfigAction } from "@/features/settings/llm-config-actions";
 import { BillingMetricsPanels } from "@/features/settings/components/billing-metrics-panels";
 import { BillingAttributionOverviewPanels } from "@/features/settings/components/billing-attribution-overview-panels";
@@ -174,7 +180,11 @@ import {
 } from "@/features/settings/components/permissions-settings";
 import { PilotSettingsTab } from "@/features/settings/components/pilot-settings-tab";
 import { ConnectorPermissionSummaryPanel } from "@/features/settings/components/connector-permission-summary-panel";
-import { SettingsOverviewPanels } from "@/features/settings/components/settings-overview-panels";
+import {
+  SettingsCommonEntries,
+  SettingsConnectorBanner,
+  SettingsOverviewPanels,
+} from "@/features/settings/components/settings-overview-panels";
 import { TenantResourceReadinessPanel } from "@/features/settings/components/tenant-resource-readiness-panel";
 import { QoderWorkConnectionCard } from "@/features/settings/components/qoderwork-connection-card";
 import { Info } from "@/features/settings/components/settings-display";
@@ -218,7 +228,7 @@ import {
   getWeComCalendarRegistryNextAction,
 } from "@/features/settings/formatters/governance-formatters";
 import {
-  resolveInitialSettingsTab,
+  resolveSettingsTabForView,
   type FormalReviewChecklistState,
 } from "@/features/settings/types/settings-types";
 import type {
@@ -550,7 +560,13 @@ export function SettingsClient({
     useState<ProgramApplicationStatus | "ALL">("ALL");
   const [programApplicationProgramFilter, setProgramApplicationProgramFilter] =
     useState<string>("ALL");
-  const activeTab = resolveInitialSettingsTab(connectorState.tab);
+  // Members and reviewers get the light settings view (see getSettingsData):
+  // organisation facts, their identity, account and permissions tabs only.
+  const settingsAdminView = data.organizationSummary.settingsAdminView ?? true;
+  const activeTab = resolveSettingsTabForView(
+    connectorState.tab,
+    settingsAdminView,
+  );
   const [pilotDraft, setPilotDraft] = useState({
     defaultLocale: locale,
     pilotMode,
@@ -566,7 +582,7 @@ export function SettingsClient({
     formatSettingsDateLabel(value, english);
 
   const navigateSettingsTab = (value: string) => {
-    const tab = resolveInitialSettingsTab(value);
+    const tab = resolveSettingsTabForView(value, settingsAdminView);
     if (tab === activeTab) {
       return;
     }
@@ -2626,126 +2642,70 @@ export function SettingsClient({
     );
   };
 
+  const viewerMembership =
+    data.memberships.find((membership) => membership.user.id === currentUserId) ??
+    null;
+
   return (
     <div className="workspace-surface-stack">
       <PageHeader
         eyebrow={pageStory.eyebrow}
         title={messages.settings.title}
-        description={
-          english
-            ? "Sources, seats, review rules and assistive service choices that affect today's work."
-            : "入口、席位、复核规则和负责人权限，会直接影响今天的工作。"
-        }
+        english={english}
         actions={
-          <>
-            <Button
-              variant="secondary"
-              onClick={restoreDefaults}
-              disabled={pending || !canManagePolicies}
-            >
-              {messages.settings.restoreDefaults}
-            </Button>
-            {canManageWorkspaceSetup ? (
-              <Button asChild variant="secondary">
-                <Link href="/setup">{messages.settings.rerunSetup}</Link>
-              </Button>
-            ) : (
-              <Button variant="secondary" disabled>
-                {messages.settings.rerunSetup}
-              </Button>
-            )}
-          </>
+          canManagePolicies || canManageWorkspaceSetup ? (
+            <>
+              {canManagePolicies ? (
+                <Button
+                  variant="secondary"
+                  onClick={restoreDefaults}
+                  disabled={pending}
+                >
+                  {messages.settings.restoreDefaults}
+                </Button>
+              ) : null}
+              {canManageWorkspaceSetup ? (
+                <Button asChild variant="secondary">
+                  <Link href="/setup">{messages.settings.rerunSetup}</Link>
+                </Button>
+              ) : null}
+            </>
+          ) : null
         }
       />
 
-      <CustomerAssetFocusStrip
-        eyebrow={english ? "Operating controls" : "经营控制"}
-        title={
-          english
-            ? "Change only the control that blocks today's work."
-            : "只改卡住今天工作的那条控制。"
+      <SettingsOrganizationCard
+        currentAccessStateLabel={currentAccessStateLabel}
+        defaultStrategiesSummary={defaultStrategiesSummary}
+        english={english}
+        focusAreasSummary={focusAreasSummary}
+        roleLabelsByLocale={roleLabelsByLocale}
+        viewer={
+          viewerMembership
+            ? {
+                name: viewerMembership.user.name,
+                email: viewerMembership.user.email,
+                role: viewerMembership.role,
+                title: viewerMembership.title,
+              }
+            : null
         }
-        summary={
-          english
-            ? "Settings are useful when they reveal source health, owner access, pending review, and the next safe control change."
-            : "设置页先告诉你入口是否正常、负责人是否有权限、哪些复核待处理，以及下一步该改哪条控制。"
-        }
-        items={[...settingsAssetFocusItems]}
-        primaryAction={{
-          label:
-            data.integrationSummary.connectorErrorCount > 0
-              ? english
-                ? "Fix sources"
-                : "修入口"
-              : english
-                ? "Review controls"
-                : "检查控制",
-          href:
-            data.integrationSummary.connectorErrorCount > 0
-              ? "/settings?tab=connectors"
-              : "/settings?tab=policies",
-        }}
-        secondaryAction={{
-          label: english ? "Open diagnostics" : "打开就绪度",
-          href: "/diagnostics",
-        }}
+        workspace={data.workspace}
       />
 
-      <LazyDisclosure title={english ? "Reference: settings basis" : "引用：设置依据"}>
-        <ObjectContextOperatingSummary
-          label={english ? "Settings operating summary" : "设置操作摘要"}
-          title={settingsSummaryTitle}
-          summary={settingsSummaryText}
-          items={settingsSummaryItems}
-          connectionsLabel={english ? "Connected loop" : "关联对象与回路"}
-          connections={settingsSummaryConnections}
-        />
-      </LazyDisclosure>
-
-      <SettingsOverviewPanels
-        applyRecommendedPilotPreset={applyRecommendedPilotPreset}
-        canApplyRecommendedPilotPreset={canManageOperationalControls}
-        connectorBannerMessage={
+      <SettingsConnectorBanner
+        message={
           connectorState.status
             ? formatConnectorBannerMessage(connectorState, english)
             : null
         }
-        connectorBannerTone={
+        tone={
           connectorState.status
             ? connectorState.status === "connected"
               ? "success"
               : "warning"
             : null
         }
-        diagnosticsEnabled={featureFlags.diagnosticsCenter}
-        english={english}
-        navLabels={{
-          analytics: messages.shell.nav.analytics,
-          diagnostics: messages.shell.nav.diagnostics,
-          imports: messages.shell.nav.imports,
-          inbox: messages.shell.nav.inbox,
-        }}
-        onReviewAuthControls={() =>
-          router.push("/settings?tab=permissions", { scroll: false })
-        }
-        operatingReadiness={{
-          connectedConnectorCount:
-            data.integrationSummary.connectedConnectorCount,
-          connectorErrorCount: data.integrationSummary.connectorErrorCount,
-          importedSignalCount: data.integrationSummary.importedSignalCount,
-          pendingApprovals: data.governanceSummary.pendingApprovals,
-          approvalProtectedActions:
-            data.governanceSummary.approvalProtectedActions,
-          budgetCount: data.budgets.length,
-          llmFallbacks7d: data.governanceSummary.llmFallbacks7d,
-        }}
-        recommendations={settingsGuidanceRecommendations}
-        reminders={settingsGuidanceReminders}
-        stats={{
-          policyCount: data.policies.length,
-          budgetCount: data.budgets.length,
-          teamMemberCount: data.memberships.length,
-        }}
       />
 
       <Tabs defaultValue={activeTab} onValueChange={navigateSettingsTab}>
@@ -2753,34 +2713,37 @@ export function SettingsClient({
           <TabsTrigger value="account">
             {messages.settings.tabs.account}
           </TabsTrigger>
-          <TabsTrigger value="billing">
-            {messages.settings.tabs.billing}
-          </TabsTrigger>
-          <TabsTrigger value="connectors">
-            {messages.settings.tabs.connectors}
-          </TabsTrigger>
-          <TabsTrigger value="policies">
-            {messages.settings.tabs.policies}
-          </TabsTrigger>
-          <TabsTrigger value="budgets">
-            {messages.settings.tabs.budgets}
-          </TabsTrigger>
+          {settingsAdminView ? (
+            <>
+              <TabsTrigger value="billing">
+                {messages.settings.tabs.billing}
+              </TabsTrigger>
+              <TabsTrigger value="connectors">
+                {messages.settings.tabs.connectors}
+              </TabsTrigger>
+              <TabsTrigger value="policies">
+                {messages.settings.tabs.policies}
+              </TabsTrigger>
+              <TabsTrigger value="budgets">
+                {messages.settings.tabs.budgets}
+              </TabsTrigger>
+            </>
+          ) : null}
           <TabsTrigger value="permissions">
             {messages.settings.tabs.permissions}
           </TabsTrigger>
-          <TabsTrigger value="pilot">
-            {messages.settings.tabs.pilot}
-          </TabsTrigger>
+          {settingsAdminView ? (
+            <TabsTrigger value="pilot">
+              {messages.settings.tabs.pilot}
+            </TabsTrigger>
+          ) : null}
         </TabsList>
 
         <AccountSettingsTab
           createOrganization={createOrganization}
           crmSources={crmSources}
-          currentAccessStateLabel={currentAccessStateLabel}
           data={data}
-          defaultStrategiesSummary={defaultStrategiesSummary}
           english={english}
-          focusAreasSummary={focusAreasSummary}
           llmDraft={llmDraft}
           llmConfig={llmConfig}
           organizationDraft={organizationDraft}
@@ -7438,6 +7401,93 @@ export function SettingsClient({
           setPilotDraft={setPilotDraft}
         />
       </Tabs>
+
+      <SettingsCommonEntries
+        diagnosticsEnabled={featureFlags.diagnosticsCenter}
+        english={english}
+        navLabels={{
+          analytics: messages.shell.nav.analytics,
+          diagnostics: messages.shell.nav.diagnostics,
+          imports: messages.shell.nav.imports,
+          inbox: messages.shell.nav.inbox,
+        }}
+      />
+
+      {settingsAdminView ? (
+        <details className={systemJudgementDetailsClassName} data-system-judgement>
+          <SystemJudgementSummary english={english} />
+          <div className="workspace-surface-stack px-4 pb-5">
+            <CustomerAssetFocusStrip
+              eyebrow={english ? "Operating controls" : "经营控制"}
+              title={
+                english
+                  ? "Change only the control that blocks today's work."
+                  : "只改卡住今天工作的那条控制。"
+              }
+              summary={
+                english
+                  ? "Settings are useful when they reveal source health, owner access, pending review, and the next safe control change."
+                  : "设置页先告诉你入口是否正常、负责人是否有权限、哪些复核待处理，以及下一步该改哪条控制。"
+              }
+              items={[...settingsAssetFocusItems]}
+              primaryAction={{
+                label:
+                  data.integrationSummary.connectorErrorCount > 0
+                    ? english
+                      ? "Fix sources"
+                      : "修入口"
+                    : english
+                      ? "Review controls"
+                      : "检查控制",
+                href:
+                  data.integrationSummary.connectorErrorCount > 0
+                    ? "/settings?tab=connectors"
+                    : "/settings?tab=policies",
+              }}
+              secondaryAction={{
+                label: english ? "Open diagnostics" : "打开就绪度",
+                href: "/diagnostics",
+              }}
+            />
+
+            <ObjectContextOperatingSummary
+              label={english ? "Settings operating summary" : "设置操作摘要"}
+              title={settingsSummaryTitle}
+              summary={settingsSummaryText}
+              items={settingsSummaryItems}
+              connectionsLabel={english ? "Connected loop" : "关联对象与回路"}
+              connections={settingsSummaryConnections}
+            />
+
+            <SettingsOverviewPanels
+              applyRecommendedPilotPreset={applyRecommendedPilotPreset}
+              canApplyRecommendedPilotPreset={canManageOperationalControls}
+              english={english}
+              onReviewAuthControls={() =>
+                router.push("/settings?tab=permissions", { scroll: false })
+              }
+              operatingReadiness={{
+                connectedConnectorCount:
+                  data.integrationSummary.connectedConnectorCount,
+                connectorErrorCount: data.integrationSummary.connectorErrorCount,
+                importedSignalCount: data.integrationSummary.importedSignalCount,
+                pendingApprovals: data.governanceSummary.pendingApprovals,
+                approvalProtectedActions:
+                  data.governanceSummary.approvalProtectedActions,
+                budgetCount: data.budgets.length,
+                llmFallbacks7d: data.governanceSummary.llmFallbacks7d,
+              }}
+              recommendations={settingsGuidanceRecommendations}
+              reminders={settingsGuidanceReminders}
+              stats={{
+                policyCount: data.policies.length,
+                budgetCount: data.budgets.length,
+                teamMemberCount: data.memberships.length,
+              }}
+            />
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }

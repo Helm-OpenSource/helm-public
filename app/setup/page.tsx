@@ -57,15 +57,27 @@ export default async function SetupPage({
     profileType: session.workspace.profileType,
     focusAreasJson: session.workspace.focusAreas,
   });
-  const teamMembers = await findMembershipsWithExistingUsers({
-    where: {
-      workspaceId: session.workspace.id,
-    },
-    orderBy: [
-      { status: "asc" },
-      { createdAt: "asc" },
-    ],
-  });
+  // Only what the setup wizard renders: never pass the full User row
+  // (passwordHash, phone, login timestamps) to the client component.
+  const teamMembers = (
+    await findMembershipsWithExistingUsers({
+      where: {
+        workspaceId: session.workspace.id,
+      },
+      orderBy: [
+        { status: "asc" },
+        { createdAt: "asc" },
+      ],
+    })
+  ).map((member) => ({
+    id: member.id,
+    role: member.role,
+    status: member.status,
+    joinedAt: member.joinedAt,
+    title: member.title,
+    rolePresetKey: member.rolePresetKey,
+    user: { id: member.user.id, name: member.user.name, email: member.user.email },
+  }));
 
   return (
     <WorkspaceUiProvider

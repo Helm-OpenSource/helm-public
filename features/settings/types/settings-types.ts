@@ -66,6 +66,21 @@ export function resolveInitialSettingsTab(value: string | null | undefined): Set
   return "account";
 }
 
+/**
+ * Viewers who do not administer settings (members, reviewers) only get the
+ * account and permissions tabs; the other tabs depend on workspace-wide loads
+ * that are skipped for them, so a deep link falls back to the account tab.
+ */
+export function resolveSettingsTabForView(
+  value: string | null | undefined,
+  settingsAdminView: boolean,
+): SettingsTab {
+  const tab = resolveInitialSettingsTab(value);
+  return settingsAdminView || tab === "account" || tab === "permissions"
+    ? tab
+    : "account";
+}
+
 export type SettingsConnectorCallbackStatus =
   | "SUCCESS"
   | "FAILURE"
