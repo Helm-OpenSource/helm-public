@@ -1,6 +1,7 @@
 import { ActorType } from "@prisma/client";
 import { endOfDay, startOfDay } from "date-fns";
 import { db } from "@/lib/db";
+import { safeUserSelect } from "@/lib/auth/safe-user-select";
 import {
   getMeetingConnectorIngestionRetrievalSummary,
   syncMeetingConnectorIngestionRetrievalRuntime,
@@ -29,7 +30,7 @@ export async function getMeetingDetailData(workspaceId: string, meetingId: strin
     },
     include: {
       company: true,
-      owner: { select: { id: true, name: true } },
+      owner: { select: safeUserSelect },
       opportunity: {
         include: {
           contacts: true,
@@ -43,7 +44,7 @@ export async function getMeetingDetailData(workspaceId: string, meetingId: strin
         include: {
           approvalTask: true,
           contact: true,
-          owner: { select: { id: true, name: true } },
+          owner: { select: safeUserSelect },
         },
       },
       memoryEntries: {
@@ -115,7 +116,7 @@ export async function getMeetingDetailData(workspaceId: string, meetingId: strin
         relatedContact: true,
         relatedCompany: true,
         relatedOpportunity: true,
-        ownerUser: true,
+        ownerUser: { select: safeUserSelect },
       },
       orderBy: [{ dueDate: "asc" }, { updatedAt: "desc" }],
     }),

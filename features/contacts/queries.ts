@@ -1,5 +1,6 @@
 import { ActorType } from "@prisma/client";
 import { db } from "@/lib/db";
+import { safeUserSelect } from "@/lib/auth/safe-user-select";
 import { generateContactBriefingSnapshot } from "@/lib/memory/briefing.service";
 import { buildInboxThreadWhere } from "@/features/inbox/queries";
 
@@ -15,11 +16,11 @@ export async function getContactDetailData(
     },
     include: {
       company: true,
-      owner: { select: { id: true, name: true } },
+      owner: { select: safeUserSelect },
       opportunities: {
         include: {
           company: true,
-          owner: true,
+          owner: { select: safeUserSelect },
         },
         orderBy: { updatedAt: "desc" },
       },
@@ -73,7 +74,7 @@ export async function getContactDetailData(
         relatedCompany: true,
         relatedOpportunity: true,
         relatedMeeting: true,
-        ownerUser: true,
+        ownerUser: { select: safeUserSelect },
       },
       orderBy: [{ dueDate: "asc" }, { updatedAt: "desc" }],
     }),
