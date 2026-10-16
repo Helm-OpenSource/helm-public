@@ -7,7 +7,6 @@ import {
   AuthCodePurpose,
   MembershipStatus,
   WorkspaceRole,
-  type User,
   type Workspace,
 } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -201,7 +200,12 @@ const loginWorkspaceSelectionSchema = z.object({
 });
 const LOGIN_WORKSPACE_SELECTOR_PATH = "/login/workspaces";
 
-type AuthUser = User & {
+type AuthUser = {
+  id: string;
+  email: string;
+  phone: string | null;
+  passwordHash: string | null;
+  lastLoginAt: Date | null;
   memberships: Array<{
     workspaceId: string;
     role: WorkspaceRole;
@@ -367,7 +371,12 @@ async function findUserByIdentifier(identifier: string) {
 
   return db.user.findFirst({
     where: email ? { email } : { phone: phone ?? undefined },
-    include: {
+    select: {
+      id: true,
+      email: true,
+      phone: true,
+      passwordHash: true,
+      lastLoginAt: true,
       memberships: {
         where: {
           status: {

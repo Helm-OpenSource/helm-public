@@ -64,6 +64,7 @@ export async function recordFailedLogin(
         windowStartedAt: next.windowStartedAt,
         lockedUntil: next.lockedUntil,
       },
+      select: { identifierHash: true },
     });
   } catch (error) {
     if (!isMissingFailedLoginTableError(error)) {
@@ -74,10 +75,16 @@ export async function recordFailedLogin(
 
 export async function clearFailedLogins(identifier: string): Promise<void> {
   try {
-    await db.failedLoginAttempt.deleteMany({
+    await db.failedLoginAttempt.updateMany({
       where: { identifierHash: hashLoginIdentifier(identifier) },
+      data: {
+        attemptCount: 0,
+        windowStartedAt: new Date(),
+        lockedUntil: null,
+      },
     });
   } catch {
-    // Best-effort cleanup on success; ignore failures.
+    // Best-effort cleanup on success; ignore failures. Resetting in place keeps
+    // the runtime identity from needing table-wide DELETE permission.
   }
 }

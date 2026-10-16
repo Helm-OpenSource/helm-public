@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MembershipStatus } from "@prisma/client";
+import { MembershipStatus, WorkspaceRole, WorkspaceStatus } from "@prisma/client";
 import { AUTH_SESSION_PROVIDER_TYPES } from "@/lib/auth/provider-seam";
 
 const {
@@ -76,6 +76,7 @@ import {
   createSession,
   getCurrentWorkspaceSession,
   getCurrentWorkspaceSessionOrNull,
+  getCurrentCaioOperatorSessionOrNull,
   getCurrentUser,
   rotateCurrentAuthSession,
   revokeWorkspaceAuthSessionsByScope,
@@ -308,7 +309,6 @@ describe("resolvePreferredMembership", () => {
       status: MembershipStatus.INVITED,
     });
   });
-
   // THE CASE THE TEST ABOVE CANNOT REACH.
   //
   // That fixture carries an INVITED membership alongside the INACTIVE one, so
@@ -1510,5 +1510,105 @@ describe("deployment email-entry session policy", () => {
       await expect(createSession({ userId: "user-1", email: "user@example.com", providerType: AUTH_SESSION_PROVIDER_TYPES.EMAIL_ENTRY })).rejects.toThrow("Session provider unavailable");
       expect(dbMock.authSession.create).not.toHaveBeenCalled();
     } finally { vi.unstubAllEnvs(); }
+  });
+});
+
+describe("CAIO operator session projection", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv("HELM_DEPLOYMENT_ENTRY_PROFILE", "cloud");
+    vi.stubEnv("HELM_DEPLOYMENT_ENTRY_HOME_PATH", "/caio/operator");
+    cookiesMock.mockResolvedValue(createCookieStore({ [SESSION_ID_COOKIE]: "caio-session-key" }));
+    dbMock.authSession.findUnique.mockResolvedValue({
+      id: "session-1",
+      userId: "user-1",
+      activeWorkspaceId: "workspace-1",
+      providerType: AUTH_SESSION_PROVIDER_TYPES.PASSWORD,
+      revokedAt: null,
+      expiresAt: ACTIVE_SESSION_EXPIRES_AT,
+    });
+    dbMock.membership.findUnique.mockResolvedValue({
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      role: WorkspaceRole.OWNER,
+      status: MembershipStatus.ACTIVE,
+      user: { id: "user-1", name: "Owner" },
+      workspace: {
+        id: "workspace-1",
+        name: "Astra workspace",
+        slug: "astra-workspace",
+        systemKey: "astra-workspace",
+        status: WorkspaceStatus.ACTIVE,
+        defaultLocale: "zh-CN",
+      },
+    });
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("loads only the current session, membership, and operator identity fields", async () => {
+    const result = await getCurrentCaioOperatorSessionOrNull();
+
+    expect(dbMock.authSession.findUnique).toHaveBeenCalledWith({
+      where: { sessionKeyHash: expect.any(String) },
+      select: {
+        id: true,
+        userId: true,
+        activeWorkspaceId: true,
+        providerType: true,
+        revokedAt: true,
+        expiresAt: true,
+      },
+    });
+    expect(dbMock.membership.findUnique).toHaveBeenCalledWith({
+      where: { workspaceId_userId: { workspaceId: "workspace-1", userId: "user-1" } },
+      select: {
+        workspaceId: true,
+        userId: true,
+        role: true,
+        status: true,
+        user: { select: { id: true, name: true } },
+        workspace: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            systemKey: true,
+            status: true,
+            defaultLocale: true,
+          },
+        },
+      },
+    });
+    expect(result).toMatchObject({
+      authSessionId: "session-1",
+      user: { id: "user-1", name: "Owner" },
+      membership: { workspaceId: "workspace-1", role: WorkspaceRole.OWNER, status: MembershipStatus.ACTIVE },
+      workspace: { id: "workspace-1", status: WorkspaceStatus.ACTIVE, defaultLocale: "zh-CN" },
+    });
+    expect(ensureWorkspaceCommercialFoundationMock).not.toHaveBeenCalled();
+    expect(syncWorkspaceAccessStateMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["invited membership", MembershipStatus.INVITED, WorkspaceStatus.ACTIVE],
+    ["inactive workspace", MembershipStatus.ACTIVE, WorkspaceStatus.SUSPENDED],
+  ])("rejects an %s", async (_label, membershipStatus, workspaceStatus) => {
+    dbMock.membership.findUnique.mockResolvedValue({
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      role: WorkspaceRole.OWNER,
+      status: membershipStatus,
+      user: { id: "user-1", name: "Owner" },
+      workspace: {
+        id: "workspace-1",
+        name: "Astra workspace",
+        slug: "astra-workspace",
+        systemKey: "astra-workspace",
+        status: workspaceStatus,
+        defaultLocale: "zh-CN",
+      },
+    });
+
+    await expect(getCurrentCaioOperatorSessionOrNull()).resolves.toBeNull();
   });
 });

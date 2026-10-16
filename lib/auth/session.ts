@@ -2,7 +2,7 @@ import { isSessionProviderAllowed } from "@/lib/auth/email-entry-policy";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createHash, randomUUID } from "node:crypto";
-import { AccessState, ActorType, MembershipStatus } from "@prisma/client";
+import { AccessState, ActorType, MembershipStatus, WorkspaceStatus } from "@prisma/client";
 import type { AuthSessionProviderType } from "@/lib/auth/provider-seam";
 import {
   hasAuthSessionMissingSourcePage,
@@ -188,6 +188,27 @@ async function getAuthSessionRecordByKey(sessionKey: string) {
   return authSession;
 }
 
+async function getAuthSessionForReplacementByKey(sessionKey: string) {
+  const authSession = await db.authSession.findUnique({
+    where: { sessionKeyHash: hashAuthSessionKey(sessionKey) },
+    select: {
+      id: true,
+      userId: true,
+      activeWorkspaceId: true,
+      providerType: true,
+      revokedAt: true,
+      expiresAt: true,
+      user: { select: { id: true, name: true } },
+    },
+  });
+
+  if (!authSession || !isSessionUsable(authSession) || !isSessionProviderAllowed(authSession.providerType)) {
+    return null;
+  }
+
+  return authSession;
+}
+
 function isAuthSessionMissingUserRelationError(error: unknown) {
   if (!(error instanceof Error)) {
     return false;
@@ -335,6 +356,7 @@ async function revokeAuthSession(input: {
       revokedAt,
       lastSeenAt: revokedAt,
     },
+    select: { id: true },
   });
 
   if (!input.workspaceId) {
@@ -889,6 +911,87 @@ export async function getCurrentWorkspaceSessionOrNull() {
   };
 }
 
+/**
+ * Narrow authenticated context for the CAIO operator surface. This route runs
+ * under a dedicated database identity, so it must not load the general
+ * workspace shell's full User, billing, trial, or worker-entitlement records.
+ */
+export async function getCurrentCaioOperatorSessionOrNull() {
+  const cookieStore = await cookies();
+  const sessionKey = cookieStore.get(SESSION_ID_COOKIE)?.value;
+  if (!sessionKey) return null;
+
+  const authSession = await db.authSession.findUnique({
+    where: { sessionKeyHash: hashAuthSessionKey(sessionKey) },
+    select: {
+      id: true,
+      userId: true,
+      activeWorkspaceId: true,
+      providerType: true,
+      revokedAt: true,
+      expiresAt: true,
+    },
+  });
+
+  if (
+    !authSession ||
+    !authSession.activeWorkspaceId ||
+    !isSessionUsable(authSession) ||
+    !isSessionProviderAllowed(authSession.providerType)
+  ) {
+    return null;
+  }
+
+  const membership = await db.membership.findUnique({
+    where: {
+      workspaceId_userId: {
+        workspaceId: authSession.activeWorkspaceId,
+        userId: authSession.userId,
+      },
+    },
+    select: {
+      workspaceId: true,
+      userId: true,
+      role: true,
+      status: true,
+      user: { select: { id: true, name: true } },
+      workspace: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          systemKey: true,
+          status: true,
+          defaultLocale: true,
+        },
+      },
+    },
+  });
+
+  if (
+    !membership ||
+    membership.userId !== authSession.userId ||
+    membership.status !== MembershipStatus.ACTIVE ||
+    membership.workspace.status !== WorkspaceStatus.ACTIVE ||
+    !isWorkspaceAllowedForDeployment(membership.workspace)
+  ) {
+    return null;
+  }
+
+  return {
+    authSessionId: authSession.id,
+    user: membership.user,
+    membership,
+    workspace: membership.workspace,
+  };
+}
+
+export async function getCurrentCaioOperatorSession() {
+  const session = await getCurrentCaioOperatorSessionOrNull();
+  if (!session) redirect("/login");
+  return session;
+}
+
 export async function getCurrentMembership() {
   const session = await getCurrentWorkspaceSession();
   return session.membership;
@@ -937,9 +1040,9 @@ export async function createSession(input: {
   const existingSessionKey = cookieStore.get(SESSION_ID_COOKIE)?.value;
 
   if (existingSessionKey) {
-    let currentSession: Awaited<ReturnType<typeof getAuthSessionRecordByKey>> = null;
+    let currentSession: Awaited<ReturnType<typeof getAuthSessionForReplacementByKey>> = null;
     try {
-      currentSession = await getAuthSessionRecordByKey(existingSessionKey);
+      currentSession = await getAuthSessionForReplacementByKey(existingSessionKey);
     } catch (error) {
       if (!isAuthSessionMissingUserRelationError(error)) {
         throw error;
@@ -994,6 +1097,7 @@ export async function createSession(input: {
       lastWorkspaceSwitchAt: input.workspaceId ? createdAt : undefined,
       expiresAt,
     },
+    select: { id: true },
   });
 
   await setAuthSessionCookies({

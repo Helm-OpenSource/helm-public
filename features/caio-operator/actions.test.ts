@@ -28,7 +28,10 @@ const { cacheMock, sessionMock, catalogMock, observationMock, gateMock, question
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: cacheMock.revalidatePath }));
-vi.mock("@/lib/auth/session", () => ({ getCurrentWorkspaceSession: sessionMock.getCurrentWorkspaceSession }));
+vi.mock("@/lib/auth/session", () => ({
+  getCurrentWorkspaceSession: sessionMock.getCurrentWorkspaceSession,
+  getCurrentCaioOperatorSession: sessionMock.getCurrentWorkspaceSession,
+}));
 
 vi.mock("@/lib/stage1-owner-loop/data-asset-catalog.service", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/stage1-owner-loop/data-asset-catalog.service")>()),

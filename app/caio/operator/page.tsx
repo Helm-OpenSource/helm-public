@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
 import { OperatorConsole } from "@/features/caio-operator/operator-console.client";
 import { getCaioOperatorReadout } from "@/features/caio-operator/queries";
-import { getCurrentWorkspaceSession } from "@/lib/auth/session";
+import { getCurrentCaioOperatorSession } from "@/lib/auth/session";
 import { isEnglishLocale } from "@/lib/i18n/config";
 import { resolveWorkspaceUiLocaleForRequest } from "@/lib/i18n/request-locale.server";
 
@@ -23,7 +23,7 @@ function gateStatusLabel(status: string, english: boolean): string {
 }
 
 export default async function CaioOperatorPage() {
-  const session = await getCurrentWorkspaceSession();
+  const session = await getCurrentCaioOperatorSession();
 
   // Same boundary as /caio: the operator surface is OWNER-only. CEO acts submitted from here (G0
   // acceptance) are still authorized by the services against the registered principal binding.
