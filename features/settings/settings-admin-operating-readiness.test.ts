@@ -11,7 +11,23 @@ const settingsOverviewPanelsSource = readFileSync(
 );
 
 describe("settings admin operating readiness contract", () => {
-  it("surfaces tenant admin readiness before detailed configuration", () => {
+  it("keeps operating readiness, guidance and the focus strip inside the closing system judgement block", () => {
+    const judgementStart = settingsClientSource.indexOf("data-system-judgement");
+    expect(judgementStart).toBeGreaterThan(-1);
+    expect(settingsClientSource.indexOf("data-system-judgement", judgementStart + 1)).toBe(-1);
+    expect(settingsClientSource.indexOf("<SettingsOverviewPanels")).toBeGreaterThan(judgementStart);
+    expect(settingsClientSource.indexOf("<CustomerAssetFocusStrip")).toBeGreaterThan(judgementStart);
+    expect(settingsClientSource.indexOf("<ObjectContextOperatingSummary")).toBeGreaterThan(
+      judgementStart,
+    );
+    expect(settingsClientSource.indexOf("</Tabs>")).toBeLessThan(judgementStart);
+    // Only viewers who administer settings load the counts behind these panels.
+    expect(settingsClientSource).toMatch(
+      /\{settingsAdminView \? \(\s*<details className=\{systemJudgementDetailsClassName\} data-system-judgement>/,
+    );
+  });
+
+  it("surfaces tenant admin readiness inside the system judgement panels", () => {
     expect(settingsOverviewPanelsSource).toContain(
       'data-testid="settings-admin-operating-readiness"',
     );

@@ -15,7 +15,7 @@ review_after: 2026-07-28
 1. 装好依赖
 2. 起好 MySQL
 3. 跑通迁移与种子
-4. 启动 dev server 并看到 `/dashboard` 的「今天必须拍板的 3 件事」
+4. 启动 dev server 并看到 `/dashboard` 的「今天的工作」
 5. 知道下一步该读哪份文档
 
 如果你只是想 90 秒看 demo，请回到 [README.md](../README.md#90-秒看到-helm) 用 `docker compose up`。
@@ -280,7 +280,7 @@ npm run dev
 | URL | 看到什么 |
 |---|---|
 | http://localhost:3000 | 公开首页 |
-| http://localhost:3000/dashboard | 今天必须拍板的 3 件事（需登录） |
+| http://localhost:3000/dashboard | 今天的工作（需登录） |
 | http://localhost:3000/mobile | 移动端 Ask Helm |
 | http://localhost:3000/setup | 6 步初始化；数据来源先走 L0/L1/L2 source intake |
 

@@ -129,6 +129,7 @@ function buildDashboardViewModelInternal(input: {
     firstLoopModel,
     goalDrivenHome,
     pendingApprovals: data.pendingApprovals,
+    pendingApprovalCount: data.completionSummary.pendingApprovals,
     assignmentItems: data.externalAssignmentActionItems,
     setupFirstLoopHandoff,
   });

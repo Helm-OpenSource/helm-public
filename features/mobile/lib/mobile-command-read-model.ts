@@ -10,6 +10,7 @@
 import { format } from "date-fns";
 import type { WorkspaceClass, WorkspaceRole } from "@prisma/client";
 import { db } from "@/lib/db";
+import { getLocalizedRiskLabels, getLocalizedStageLabels } from "@/lib/i18n/labels";
 import { BusinessAdvancementInvariantViolationError } from "@/lib/business-advancement/invariant-guards";
 import {
   resolveThinReadModelAdvancementCandidatesWithFallback,
@@ -54,6 +55,10 @@ const RESOURCE_REVIEW_SCORE = 55;
 export interface MobileCommandReadModel {
   mustPushItems: MustPushItem[];
   totalCount: number;
+  /** Critical items across every loaded item, counted before the display slice. */
+  urgentCount: number;
+  /** Critical or high items across every loaded item, counted before the display slice. */
+  highPressureCount: number;
   foldedCount: number;
   hasCriticalFolded: boolean;
   reviewCount: number;
@@ -188,6 +193,12 @@ export function buildMobileCommandReadModelFromItems(
   );
   const rankedItems = rankMustPushItems(itemsWithOutcomeCheckpoints);
   const totalCount = rankedItems.length;
+  const urgentCount = rankedItems.filter(
+    (item) => item.severity === "critical",
+  ).length;
+  const highPressureCount = rankedItems.filter(
+    (item) => item.severity === "critical" || item.severity === "high",
+  ).length;
   const displayItems = rankedItems.slice(0, limit);
   const foldedItems = rankedItems.slice(limit);
   const foldedCount = foldedItems.length;
@@ -208,6 +219,8 @@ export function buildMobileCommandReadModelFromItems(
   return {
     mustPushItems: displayItems,
     totalCount,
+    urgentCount,
+    highPressureCount,
     foldedCount,
     hasCriticalFolded,
     reviewCount,
@@ -268,19 +281,20 @@ async function loadOverdueOpportunities(
     .filter((opp): opp is typeof opp & { dueDate: Date } => opp.dueDate !== null)
     .map((opp) => {
       const staleDays = elapsedWholeDays(opp.dueDate, now);
-      const targetName = opp.company?.name ?? opp.title;
+      const objectName = formatOpportunityObjectName(opp);
       const dayCount = formatDayCount(staleDays, english);
-      const dueDate = formatMobileDate(opp.dueDate, english);
 
       return {
         id: `overdue-opp-${opp.id}`,
         type: "overdue_commitment",
         title: english
-          ? `${targetName} renewal is ${dayCount} overdue`
-          : `${targetName} 续约已逾期 ${dayCount}`,
-        reason: english
-          ? `Commitment was due by ${dueDate}; review the next step before any customer-facing follow-up.`
-          : `承诺在 ${dueDate} 前发送续约方案，客户已多次催问进度。`,
+          ? `${objectName} is ${dayCount} overdue`
+          : `${objectName} 已逾期 ${dayCount}`,
+        reason: joinMobileFacts([
+          stageFact(opp.stage, english),
+          ownerFact(opp.owner?.name, english),
+          dueFact(opp.dueDate, english),
+        ]),
         primaryAction: {
           label: english ? "Open opportunity" : "打开机会",
           href: `/opportunities?opportunityId=${opp.id}`,
@@ -323,22 +337,24 @@ async function loadHighRiskOpportunities(
     const isCritical = opp.riskLevel === "CRITICAL";
     const updatedAt = opp.updatedAt ?? opp.createdAt;
     const staleDays = elapsedWholeDays(updatedAt, now);
-    const targetName = opp.company?.name ?? opp.title;
+    const objectName = formatOpportunityObjectName(opp);
     const dayCount = formatDayCount(staleDays, english);
+    const riskLabel =
+      getLocalizedRiskLabels(english ? "en-US" : "zh-CN")[opp.riskLevel] ??
+      opp.riskLevel;
 
     return {
       id: `stalled-opp-${opp.id}`,
       type: "stalled_opportunity",
       title: english
-        ? `${targetName} opportunity has stalled for ${dayCount}`
-        : `${targetName} 机会停滞 ${dayCount}`,
-      reason: english
-        ? isCritical
-          ? "Marked as critical risk; review evidence before committing to an external next step."
-          : "No new follow-up is visible after the last touchpoint; restore the operating rhythm."
-        : isCritical
-          ? "已标注关键风险，竞争对手可能已在接触。"
-          : "上次会议后没有新的跟进动作，建议恢复节奏。",
+        ? `${objectName} not updated for ${dayCount}`
+        : `${objectName} ${dayCount}未更新`,
+      reason: joinMobileFacts([
+        [english ? "Risk" : "风险", riskLabel],
+        stageFact(opp.stage, english),
+        ownerFact(opp.owner?.name, english),
+        opp.dueDate ? dueFact(opp.dueDate, english) : null,
+      ]),
       primaryAction: {
         label: english ? "Open opportunity" : "打开机会",
         href: `/opportunities?opportunityId=${opp.id}`,
@@ -389,11 +405,7 @@ async function loadPendingApprovals(workspaceId: string, english: boolean): Prom
       id: `approval-${task.id}`,
       type: "blocked_decision",
       title: english ? `${targetName} needs your review` : `${targetName} 需要你复核`,
-      reason:
-        task.actionItem.description ??
-        (english
-          ? "Helm suggested an action; it needs review before execution."
-          : "系统建议了一个行动，需要你确认后再执行。"),
+      reason: task.actionItem.description?.trim() || task.actionItem.title,
       primaryAction: {
         label: english ? "Open review" : "进入复核",
         href: "/approvals",
@@ -429,6 +441,7 @@ async function loadPostMeetingItems(
       meeting: true,
       opportunity: { include: { company: true } },
       contact: true,
+      owner: { select: { name: true } },
     },
     orderBy: { dueDate: "asc" },
     take: POST_MEETING_QUERY_LIMIT,
@@ -445,11 +458,11 @@ async function loadPostMeetingItems(
       id: `meeting-followup-${item.id}`,
       type: "meeting_follow_up",
       title: english ? `${targetName} needs meeting follow-up` : `${targetName} 会后待跟进`,
-      reason:
-        item.title ??
-        (english
-          ? "The meeting is over; action items and owners need review."
-          : "会议已结束，需要整理行动项和负责人。"),
+      reason: joinMobileFacts([
+        [english ? "Action" : "动作", item.title],
+        ownerFact(item.owner?.name, english),
+        item.dueDate ? dueFact(item.dueDate, english) : null,
+      ]),
       primaryAction: {
         label: english ? "View meeting" : "查看会议",
         href: item.meetingId ? `/meetings/${item.meetingId}` : "/meetings",
@@ -491,9 +504,11 @@ async function loadWaitingEmailThreads(workspaceId: string, english: boolean): P
       id: `waiting-thread-${thread.id}`,
       type: "customer_waiting",
       title: english ? `${targetName} is waiting for a reply` : `${targetName} 等待回复`,
-      reason: english
-        ? "The customer sent a follow-up; review before replying."
-        : "客户已发送后续消息，需要尽快回应。",
+      reason: joinMobileFacts([
+        [english ? "Thread" : "线程", thread.subject],
+        [english ? "From" : "来自", thread.counterpart],
+        [english ? "Updated" : "更新于", formatMobileDate(thread.updatedAt, english)],
+      ]),
       primaryAction: {
         label: english ? "Open inbox" : "查看收件箱",
         href: "/inbox",
@@ -913,6 +928,15 @@ function generateTodaySummary(items: MustPushItem[], english: boolean): string {
   }
 }
 
+/** Header badge for the urgent total; null when nothing is critical. */
+export function formatMobileUrgentAlert(
+  urgentCount: number,
+  english: boolean,
+): string | null {
+  if (urgentCount <= 0) return null;
+  return english ? `${urgentCount} urgent` : `${urgentCount} 项紧急`;
+}
+
 function elapsedWholeDays(from: Date, to: Date): number {
   return Math.floor((to.getTime() - from.getTime()) / MS_PER_DAY);
 }
@@ -927,4 +951,37 @@ function formatDayCount(days: number, english: boolean): string {
 
 function formatMobileDate(date: Date, english: boolean): string {
   return format(date, english ? "MMM d" : "M月d日");
+}
+
+type MobileFact = readonly [label: string, value: string];
+
+/** Joins real record fields into the one-line fact summary shown under a title. */
+function joinMobileFacts(facts: ReadonlyArray<MobileFact | null>): string {
+  return facts
+    .filter((fact): fact is MobileFact => fact !== null && fact[1].trim() !== "")
+    .map(([label, value]) => `${label} ${value}`)
+    .join(" · ");
+}
+
+function stageFact(stage: string, english: boolean): MobileFact {
+  const labels = getLocalizedStageLabels(english ? "en-US" : "zh-CN");
+  return [english ? "Stage" : "阶段", labels[stage] ?? stage];
+}
+
+function ownerFact(name: string | null | undefined, english: boolean): MobileFact {
+  return [
+    english ? "Owner" : "负责人",
+    name?.trim() || (english ? "unassigned" : "未指派"),
+  ];
+}
+
+function dueFact(date: Date, english: boolean): MobileFact {
+  return [english ? "Due" : "截止", formatMobileDate(date, english)];
+}
+
+function formatOpportunityObjectName(opp: {
+  title: string;
+  company: { name: string } | null;
+}): string {
+  return opp.company?.name ? `${opp.company.name} · ${opp.title}` : opp.title;
 }

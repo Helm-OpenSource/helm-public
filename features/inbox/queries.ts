@@ -1,4 +1,4 @@
-import { type Prisma, RecordSource } from "@prisma/client";
+import { ConnectorProvider, type Prisma, RecordSource } from "@prisma/client";
 import { db } from "@/lib/db";
 
 export function buildInboxThreadWhere(
@@ -34,6 +34,40 @@ export function buildInboxThreadWhere(
   };
 }
 
+/**
+ * The current user's connected mailbox address, which scopes which mailbox
+ * threads they may read (see buildInboxThreadWhere). Inbox, contact and
+ * company pages all read threads through this same rule.
+ */
+export async function getInboxViewerEmail(workspaceId: string, userId: string) {
+  const connector = await db.connector.findUnique({
+    where: {
+      workspaceId_userId_provider: {
+        workspaceId,
+        userId,
+        provider: ConnectorProvider.GMAIL,
+      },
+    },
+    select: { externalAccountEmail: true },
+  });
+  return connector?.externalAccountEmail ?? null;
+}
+
+/**
+ * Every message of every listed thread, in send order. The inbox reads "who
+ * spoke last" and "not answered yet" from this full list
+ * (summarizeEmailThreadLatest), so the message relation must never take a
+ * slice here.
+ */
+export const inboxThreadInclude = {
+  contact: true,
+  company: true,
+  opportunity: true,
+  messages: {
+    orderBy: { sentAt: "asc" },
+  },
+} satisfies Prisma.EmailThreadInclude;
+
 export async function getInboxData(
   workspaceId: string,
   options?: {
@@ -44,14 +78,7 @@ export async function getInboxData(
   const selectedThreadId = options?.selectedThreadId;
   const threads = await db.emailThread.findMany({
     where: buildInboxThreadWhere(workspaceId, options?.viewerEmail),
-    include: {
-      contact: true,
-      company: true,
-      opportunity: true,
-      messages: {
-        orderBy: { sentAt: "asc" },
-      },
-    },
+    include: inboxThreadInclude,
     orderBy: [{ updatedAt: "desc" }],
   });
 

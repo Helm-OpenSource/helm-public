@@ -96,9 +96,18 @@ async function openDashboardWorkEntryRail(page: Page) {
   const actionRail = page.locator('[data-dashboard-work-entry-action-rail="true"]');
   await expect(actionRail).toBeVisible();
   await expect(actionRail.getByRole("link", { name: /Open queue|查看队列/ })).toBeVisible();
-  await expect(actionRail.getByRole("link", { name: /Open Ask Helm|打开 Ask Helm/ })).toBeVisible();
+  await expect(actionRail.getByRole("link", { name: /Add a work signal|上报信号/ })).toBeVisible();
   await expect(actionRail.getByRole("link", { name: /Open sources|查看数据源/ })).toBeVisible();
   return actionRail;
+}
+
+async function openSystemJudgement(page: Page) {
+  const block = page.locator("details[data-system-judgement]");
+  await expect(block).toHaveCount(1);
+  await expect(block).not.toHaveAttribute("open", "");
+  await block.locator(":scope > summary").click();
+  await expect(block).toHaveAttribute("open", "");
+  return block;
 }
 
 function buildHomeSurfaceEntryHref(href: string, focus: string) {
@@ -144,6 +153,40 @@ test("contact 与 company detail 只保留一个主标题", async ({ page }, tes
   });
 });
 
+test("company / contact / meeting / inbox detail 先给对象和原文，链路壳折在末尾系统判断里", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1200 });
+  await loginAs(page, "founder@demo.com");
+
+  const detailChecks: Array<{ list: "/companies" | "/contacts" | "/meetings"; facts: string }> = [
+    { list: "/companies", facts: '[data-company-facts="true"]' },
+    { list: "/contacts", facts: '[data-contact-facts="true"]' },
+    { list: "/meetings", facts: '[data-meeting-facts="true"]' },
+  ];
+
+  for (const check of detailChecks) {
+    const href = await openFirstDetailHrefFromList(page, check.list);
+    await page.goto(href);
+    await expect(page.locator(check.facts)).toBeVisible();
+    await expect(page.locator("h1")).toHaveCount(1);
+    await expect(page.locator('[data-breadcrumb-trail="true"]')).toHaveCount(1);
+    // The chain shell mounts only once the reader opens the system judgement.
+    await expect(page.locator("[data-conversation-chain-extension-page]")).toHaveCount(0);
+    await openSystemJudgement(page);
+    await expect(page.locator("[data-conversation-chain-extension-page]")).toHaveCount(1);
+  }
+
+  await page.goto("/inbox");
+  const inboxDetailHref = await readFirstLinkedHref(page, "/inbox");
+  await page.goto(inboxDetailHref);
+  await expect(page).toHaveURL(/\/inbox\//);
+  await expect(page.locator('[data-inbox-thread-messages="true"]')).toBeVisible();
+  await expect(page.locator('[data-inbox-thread-messages="true"] [data-email-message]').first()).toBeVisible();
+  await expect(page.locator("h1")).toHaveCount(1);
+  await expect(page.locator('[data-inbox-followup-review-request-page="true"]')).toHaveCount(0);
+  await openSystemJudgement(page);
+  await expect(page.locator('[data-inbox-followup-review-request-page="true"]').first()).toBeVisible();
+});
+
 test("imports 首屏只保留 business-first 四类信息", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 1200 });
   await loginAs(page, "founder@demo.com");
@@ -157,25 +200,18 @@ test("imports 首屏只保留 business-first 四类信息", async ({ page }, tes
   });
 });
 
-test("reports/imports/settings/diagnostics/analytics 首屏先暴露用户资产读数", async ({ page }, testInfo) => {
+// /reports left this check in object-first wave 3 (no focus strip; the missed and
+// high-risk lists come first) and /settings in wave 4 (organisation facts and the
+// viewer's identity come first; see the object-first test below).
+test("imports/diagnostics/analytics 首屏先暴露用户资产读数", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 1200 });
   await loginAs(page, "founder@demo.com");
 
   const targets = [
     {
-      route: "/reports",
-      labels: [/当前资产|Current asset/, /当前压力|Pressure/, /待决策|Decision/, /下一步动作|Next action/],
-      reference: /引用：洞察权限|Reference: insight permission|引用：交付评审|Reference: delivery review/,
-    },
-    {
       route: "/imports",
       labels: [/对象状态|Object state/, /阻塞|Blocker/, /待决策|Pending decision/, /下一步动作|Next action/],
       reference: /引用：接入判断|Reference: intake judgement/,
-    },
-    {
-      route: "/settings",
-      labels: [/对象状态|Object state/, /阻塞|Blocker/, /待决策|Pending decision/, /下一步动作|Next action/],
-      reference: /引用：设置依据|Reference: settings basis/,
     },
     {
       route: "/diagnostics",
@@ -212,6 +248,39 @@ test("reports/imports/settings/diagnostics/analytics 首屏先暴露用户资产
   });
 });
 
+test("memory / search / settings 先给对象，系统判断折在末尾", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 1200 });
+  await loginAs(page, "founder@demo.com");
+
+  await page.goto("/memory");
+  await expect(page.locator("#memory-work-timeline")).toBeVisible();
+  await expect(page.locator("[data-memory-timeline-entry]").first()).toBeVisible();
+  await expect(page.getByText(/客户状态清单|Customer-state ledger/)).toHaveCount(0);
+  await expect(page.getByText(/时间线阅读方式|Timeline reading guide/)).toHaveCount(0);
+  await openSystemJudgement(page);
+
+  await page.goto("/search");
+  await expect(page.locator("[data-search-recent-objects]")).toBeVisible();
+  await expect(page.locator("[data-search-recent-objects] a").first()).toBeVisible();
+  await openSystemJudgement(page);
+
+  await page.goto("/settings");
+  const organization = page.locator('[data-settings-organization-facts="true"]');
+  await expect(organization).toBeVisible();
+  await expect(organization.locator('[data-settings-viewer-identity="true"]')).toContainText(
+    /founder@demo\.com/,
+  );
+  // The focus strip only renders inside the collapsed system judgement block.
+  await expect(page.locator('[data-customer-asset-focus="true"]').first()).toBeHidden();
+  await openSystemJudgement(page);
+  await expect(page.locator('[data-customer-asset-focus="true"]').first()).toBeVisible();
+
+  await page.screenshot({
+    path: testInfo.outputPath("memory-search-settings-object-first.png"),
+    fullPage: false,
+  });
+});
+
 test("dashboard 把 explanation / review / memory replay 继续后置到 dedicated surfaces", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 1200 });
   await loginAs(page, "founder@demo.com");
@@ -223,7 +292,7 @@ test("dashboard 把 explanation / review / memory replay 继续后置到 dedicat
 
   await expect(page.locator('[data-dashboard-home-surface-routing="true"]')).toHaveCount(0);
   await expect(actionRail.getByRole("link", { name: /Open queue|查看队列/ })).toBeVisible();
-  await expect(actionRail.getByRole("link", { name: /Open Ask Helm|打开 Ask Helm/ })).toBeVisible();
+  await expect(actionRail.getByRole("link", { name: /Add a work signal|上报信号/ })).toBeVisible();
   await expect(actionRail.getByRole("link", { name: /Open sources|查看数据源/ })).toBeVisible();
   await page.screenshot({
     path: testInfo.outputPath("dashboard-home-work-entry-action-rail.png"),
@@ -241,7 +310,7 @@ test("dashboard work-entry action rail lands on dedicated work surfaces", async 
   await expect(page.locator("#approval-queue")).toBeVisible();
 
   actionRail = await openDashboardWorkEntryRail(page);
-  await actionRail.getByRole("link", { name: /Open Ask Helm|打开 Ask Helm/ }).click();
+  await actionRail.getByRole("link", { name: /Add a work signal|上报信号/ }).click();
   await expect(page).toHaveURL(/\/search/);
   await expect(page).toHaveURL(/mode=ask/);
   await expect(page.locator("#ask-helm-signal-intake")).toBeVisible();
@@ -257,42 +326,48 @@ test("dashboard work-entry action rail lands on dedicated work surfaces", async 
   });
 });
 
-test("contact / company / meeting detail home-entry keep guidance behind dedicated next-layer disclosure", async ({ page }, testInfo) => {
+test("contact / company / meeting detail home-entry keep guidance inside the closing system judgement block", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 1200 });
   await loginAs(page, "founder@demo.com");
 
   const companyDetailHref = await openFirstDetailHrefFromList(page, "/companies");
   await page.goto(buildHomeSurfaceEntryHref(companyDetailHref, "Company account"));
   await expect(page).toHaveURL(/entry=home-surface-detail/);
-  await expect(page.locator('[data-home-surface-arrival="detail"]')).toBeVisible();
+  await expect(page.locator('[data-company-facts="true"]')).toBeVisible();
+  await expect(page.locator('[data-home-surface-arrival="detail"]')).toBeHidden();
+  let judgement = await openSystemJudgement(page);
+  await expect(judgement.locator('[data-home-surface-arrival="detail"]')).toBeVisible();
   await expect(page.locator('[data-home-surface-secondary="detail"]')).toHaveCount(0);
   await expect(page.locator('[data-home-surface-arrival-cta="detail"]')).toHaveCount(0);
-  const companyGuidanceEyebrow = page
-    .locator(".workspace-eyebrow")
-    .filter({ hasText: /Account guidance|账户引导/ });
-  await expect(companyGuidanceEyebrow).toBeVisible();
+  await expect(
+    judgement.locator(".workspace-eyebrow").filter({ hasText: /Account guidance|账户引导/ }),
+  ).toBeVisible();
 
   const contactDetailHref = await openFirstDetailHrefFromList(page, "/contacts");
   await page.goto(buildHomeSurfaceEntryHref(contactDetailHref, "Relationship state"));
   await expect(page).toHaveURL(/entry=home-surface-detail/);
-  await expect(page.locator('[data-home-surface-arrival="detail"]')).toBeVisible();
+  await expect(page.locator('[data-contact-facts="true"]')).toBeVisible();
+  await expect(page.locator('[data-home-surface-arrival="detail"]')).toBeHidden();
+  judgement = await openSystemJudgement(page);
+  await expect(judgement.locator('[data-home-surface-arrival="detail"]')).toBeVisible();
   await expect(page.locator('[data-home-surface-secondary="detail"]')).toHaveCount(0);
   await expect(page.locator('[data-home-surface-arrival-cta="detail"]')).toHaveCount(0);
-  const contactGuidanceEyebrow = page
-    .locator(".workspace-eyebrow")
-    .filter({ hasText: /Relationship guidance|关系引导/ });
-  await expect(contactGuidanceEyebrow).toBeVisible();
+  await expect(
+    judgement.locator(".workspace-eyebrow").filter({ hasText: /Relationship guidance|关系引导/ }),
+  ).toBeVisible();
 
   const meetingDetailHref = await openFirstDetailHrefFromList(page, "/meetings");
   await page.goto(buildHomeSurfaceEntryHref(meetingDetailHref, "Meeting follow-through"));
   await expect(page).toHaveURL(/entry=home-surface-detail/);
-  await expect(page.locator('[data-home-surface-arrival="detail"]')).toBeVisible();
+  await expect(page.locator('[data-meeting-facts="true"]')).toBeVisible();
+  await expect(page.locator('[data-home-surface-arrival="detail"]')).toBeHidden();
+  judgement = await openSystemJudgement(page);
+  await expect(judgement.locator('[data-home-surface-arrival="detail"]')).toBeVisible();
   await expect(page.locator('[data-home-surface-secondary="detail"]')).toHaveCount(0);
   await expect(page.locator('[data-home-surface-arrival-cta="detail"]')).toHaveCount(0);
-  const meetingGuidanceEyebrow = page
-    .locator(".workspace-eyebrow")
-    .filter({ hasText: /Meeting guidance|会议引导/ });
-  await expect(meetingGuidanceEyebrow).toBeVisible();
+  await expect(
+    judgement.locator(".workspace-eyebrow").filter({ hasText: /Meeting guidance|会议引导/ }),
+  ).toBeVisible();
 
   await page.screenshot({
     path: testInfo.outputPath("detail-home-entry-next-layer-disclosures.png"),

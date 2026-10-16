@@ -32,6 +32,7 @@ import {
 import type { BusinessLoopGapSummary } from "@/lib/operating-system/operating-gap";
 import { resolveApprovalsExtensions } from "@/lib/extensions/registry";
 import { getApprovalTasksData } from "@/features/approvals/queries";
+import { getInboxViewerEmail } from "@/features/inbox/queries";
 import { listGovernedJudgementCandidateReviews } from "@/lib/governed-intelligence/governed-candidate-review";
 import { listMemberWorkSignalCandidateReviews } from "@/lib/member-gateway/signal-candidate-review.service";
 import { resolveOptionalApprovalsReadModel } from "@/features/approvals/optional-read-model";
@@ -92,7 +93,11 @@ export async function loadApprovalsPageData(
   const canReviewCandidates = canReviewWorkspaceGovernedActions(
     membership.role,
   );
-  const tasks = await getApprovalTasksData(workspace.id, english);
+  // Origin-thread links on queue cards follow the inbox visibility rule.
+  const viewerEmail = await getInboxViewerEmail(workspace.id, user.id);
+  const tasks = await getApprovalTasksData(workspace.id, english, {
+    viewerEmail,
+  });
   const governedCandidates = canReviewCandidates
     ? await resolveOptionalApprovalsReadModel(
         listGovernedJudgementCandidateReviews(workspace.id),

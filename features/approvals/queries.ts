@@ -1,8 +1,41 @@
 import { db } from "@/lib/db";
 import { safeParseJson } from "@/lib/utils";
 import { buildBiReportSourceDetailHref } from "@/features/approvals/approval-object-detail-link";
+import { buildInboxThreadWhere } from "@/features/inbox/queries";
 
-export async function getApprovalTasksData(workspaceId: string, english = false) {
+/**
+ * The email thread an action was created from, when the action records one:
+ * `metadata.threadId` (written by the inbox reply-draft flow) or an
+ * `EMAIL_THREAD` source. Returns null when the action names no thread.
+ */
+export function resolveApprovalOriginThreadId(actionItem: {
+  metadata: string | null;
+  sourceType: string | null;
+  sourceId: string | null;
+}) {
+  const metadata = normalizeActionItemMetadata(actionItem.metadata);
+  const metadataThreadId =
+    typeof metadata?.threadId === "string" ? metadata.threadId.trim() : "";
+  if (metadataThreadId) {
+    return metadataThreadId;
+  }
+  if (actionItem.sourceType === "EMAIL_THREAD" && actionItem.sourceId?.trim()) {
+    return actionItem.sourceId.trim();
+  }
+  return null;
+}
+
+export async function getApprovalTasksData(
+  workspaceId: string,
+  english = false,
+  options?: {
+    /**
+     * The viewer's connected mailbox address. Origin-thread links follow the
+     * inbox visibility rule, so without it only non-mailbox threads resolve.
+     */
+    viewerEmail?: string | null;
+  },
+) {
   const tasks = await db.approvalTask.findMany({
     where: { workspaceId },
     include: {
@@ -16,6 +49,9 @@ export async function getApprovalTasksData(workspaceId: string, english = false)
           contact: true,
           meeting: true,
           owner: true,
+          createdBy: {
+            select: { id: true, name: true, email: true },
+          },
           recommendationLog: true,
           decisionWorkPacketClaim: {
             select: { decisionRecordId: true },
@@ -39,7 +75,15 @@ export async function getApprovalTasksData(workspaceId: string, english = false)
     safeParseJson<string[]>(task.actionItem.recommendationLog?.commitmentIds, []),
   );
 
-  const [facts, blockers, commitments] = await Promise.all([
+  const originThreadIds = Array.from(
+    new Set(
+      tasks
+        .map((task) => resolveApprovalOriginThreadId(task.actionItem))
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+
+  const [facts, blockers, commitments, originThreads] = await Promise.all([
     supportingFactIds.length
       ? db.memoryFact.findMany({
           where: {
@@ -78,10 +122,30 @@ export async function getApprovalTasksData(workspaceId: string, english = false)
           },
         })
       : Promise.resolve([]),
+    // One batched read: only threads that exist in this workspace and that
+    // the viewer may open under the inbox rule become links.
+    originThreadIds.length
+      ? db.emailThread.findMany({
+          where: {
+            AND: [
+              buildInboxThreadWhere(workspaceId, options?.viewerEmail),
+              { id: { in: originThreadIds } },
+            ],
+          },
+          select: { id: true, subject: true },
+        })
+      : Promise.resolve([] as Array<{ id: string; subject: string }>),
   ]);
+  const originThreadById = new Map(
+    originThreads.map((thread) => [thread.id, thread]),
+  );
 
   return tasks.map((task) => ({
     ...task,
+    originThread: (() => {
+      const threadId = resolveApprovalOriginThreadId(task.actionItem);
+      return threadId ? (originThreadById.get(threadId) ?? null) : null;
+    })(),
     biSource: (() => {
       const metadata = normalizeActionItemMetadata(task.actionItem.metadata);
       const sourceId = task.actionItem.sourceId;

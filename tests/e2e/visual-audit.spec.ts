@@ -72,7 +72,7 @@ test.describe("Visual audit — highest-risk pages before company-wide trial", (
     await page.goto("/operating");
     await waitForWorkspaceUiHydration(page);
     await expect(page.locator('[data-source-page="/operating"]')).toBeVisible();
-    await expect(page.locator("[data-operating-signal-flow-map='true']")).toBeVisible();
+    await expect(page.locator('[data-operating-work-list="true"]')).toBeVisible();
     await page.screenshot({
       path: `${SCREENSHOT_DIR}/operating-pc-expanded.png`,
       fullPage: false,

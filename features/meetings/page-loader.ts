@@ -166,7 +166,15 @@ export async function loadMeetingDetailPageData(meetingId: string) {
     english,
     firstLoopModel,
     meeting,
-    memberships,
+    // Only the owner picker's fields reach the client: never the full User
+    // row (password, verification and login state).
+    memberships: memberships.map((membership) => ({
+      user: {
+        id: membership.user.id,
+        name: membership.user.name,
+        email: membership.user.email,
+      },
+    })),
     recommendations,
   };
 }

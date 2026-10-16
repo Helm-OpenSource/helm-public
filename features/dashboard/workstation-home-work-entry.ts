@@ -50,17 +50,6 @@ export function routeWorkEntryToWorkstation(input: {
     showCrossRoleReviewQueue:
       input.workstation.showCrossRoleReviewQueue === true,
     state: "returning-active",
-    title:
-      roleAnomalyItems.length > 0
-        ? input.english
-          ? "Handle routed anomalies, then return to your desk."
-          : "先推进本角色异常，再回到主工位。"
-        : input.english
-          ? "Continue from your role's primary desk."
-          : "先从本角色主工位继续。",
-    summary: input.english
-      ? "The bound role-home route is the default work entry; cross-role work does not take over this position."
-      : "角色家绑定决定默认工作入口；跨角色通用事项不再占据首要位置。",
     topWorkItems: [...roleAnomalyItems.slice(0, 2), workstationCard],
     resumeItem: workstationCard,
     reviewItemsArePrimary: false,

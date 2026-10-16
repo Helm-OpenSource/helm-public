@@ -19,9 +19,10 @@ vi.mock("next/link", () => ({
 const baseItem = (overrides: Partial<MustPushItem> = {}): MustPushItem => ({
   id: "item-001",
   type: "stalled_opportunity",
-  title: "商机停滞超 14 天",
-  reason: "该商机上次推进记录距今已超两周，存在丢单风险。",
+  title: "示例客户 · 年度采购 14 天未更新",
+  reason: "风险 高风险 · 阶段 待推进 · 负责人 未指派",
   primaryAction: { label: "查看商机", href: "/opportunities/opp-001", mode: "open_object" },
+  boundaryNote: { type: "suggestion_not_commitment", message: "建议恢复节奏，不承诺成交结果。" },
   outcomeCheckpoint: {
     label: "结果回收",
     dueHint: "72 小时内回看",
@@ -37,11 +38,11 @@ const baseItem = (overrides: Partial<MustPushItem> = {}): MustPushItem => ({
 const normalModel = (): MobileJudgementLoopModel => ({
   state: "normal",
   item: baseItem(),
-  headline: "商机停滞超 14 天",
-  subtext: "该商机上次推进记录距今已超两周，存在丢单风险。",
+  headline: "示例客户 · 年度采购 14 天未更新",
+  subtext: "风险 高风险 · 阶段 待推进 · 负责人 未指派",
   evidence: {
     sourceHint: "机会台账 · 停滞机会",
-    helmInterpretation: "该商机上次推进记录距今已超两周，存在丢单风险。",
+    helmInterpretation: "风险 高风险 · 阶段 待推进 · 负责人 未指派",
   },
   actions: [
     { label: "进入复核", href: "/approvals?source=mobile&itemId=item-001", variant: "primary" },
@@ -78,12 +79,12 @@ describe("MobileHeroCard — normal render", () => {
 
   it("renders headline", () => {
     render(<MobileHeroCard model={normalModel()} />);
-    expect(screen.getByTestId("mobile-hero-headline").textContent).toBe("商机停滞超 14 天");
+    expect(screen.getByTestId("mobile-hero-headline").textContent).toBe("示例客户 · 年度采购 14 天未更新");
   });
 
   it("renders subtext", () => {
     render(<MobileHeroCard model={normalModel()} />);
-    expect(screen.getByTestId("mobile-hero-subtext").textContent).toContain("丢单风险");
+    expect(screen.getByTestId("mobile-hero-subtext").textContent).toContain("负责人 未指派");
   });
 
   it("renders evidence section with id mobile-evidence", () => {
@@ -115,15 +116,46 @@ describe("MobileHeroCard — evidence labels", () => {
     expect(screen.getByText("业务来源")).toBeTruthy();
   });
 
-  it("shows 推进原因 label", () => {
+  it("does not repeat the reason under a 推进原因 label", () => {
     render(<MobileHeroCard model={normalModel()} />);
-    expect(screen.getByText("推进原因")).toBeTruthy();
+    expect(screen.queryByText("推进原因")).toBeNull();
   });
 
   it("shows English labels when english=true", () => {
     render(<MobileHeroCard model={normalModel()} english />);
     expect(screen.getByText("Source")).toBeTruthy();
-    expect(screen.getByText("Why now")).toBeTruthy();
+    expect(screen.queryByText("Why now")).toBeNull();
+  });
+
+  it("folds source, boundary and outcome into one collapsed system judgement block after the actions", () => {
+    render(<MobileHeroCard model={normalModel()} />);
+    const block = document.getElementById("mobile-evidence");
+    expect(block?.tagName).toBe("DETAILS");
+    expect(block).toHaveAttribute("data-system-judgement");
+    expect(block).not.toHaveAttribute("open");
+    expect(document.querySelectorAll("[data-system-judgement]")).toHaveLength(1);
+    expect(block).toContainElement(screen.getByTestId("mobile-hero-boundary"));
+    expect(block).toContainElement(screen.getByTestId("mobile-hero-outcome"));
+    const actions = screen.getByTestId("mobile-hero-actions");
+    expect(
+      actions.compareDocumentPosition(block as Node) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("folds the other items' boundary notes into the same block without duplicates", () => {
+    render(
+      <MobileHeroCard
+        model={normalModel()}
+        extraBoundaryNotes={[
+          "可以准备跟进草稿，对外发送仍需复核。",
+          "可以准备跟进草稿，对外发送仍需复核。",
+          "建议恢复节奏，不承诺成交结果。",
+        ]}
+      />,
+    );
+    const others = screen.getByTestId("mobile-hero-other-boundaries");
+    expect(others.querySelectorAll("li")).toHaveLength(1);
+    expect(document.getElementById("mobile-evidence")).toContainElement(others);
   });
 
   it("renders sourceHint content", () => {
@@ -169,12 +201,12 @@ describe("MobileHeroCard — cross_tenant_denied", () => {
 
   it("does not render item title in output", () => {
     render(<MobileHeroCard model={crossTenantModel()} />);
-    expect(screen.queryByText("商机停滞超 14 天")).toBeNull();
+    expect(screen.queryByText("示例客户 · 年度采购 14 天未更新")).toBeNull();
   });
 
   it("does not render item reason in output", () => {
     render(<MobileHeroCard model={crossTenantModel()} />);
-    expect(screen.queryByText(/丢单风险/)).toBeNull();
+    expect(screen.queryByText(/负责人 未指派/)).toBeNull();
   });
 
   it("renders safe navigation actions", () => {

@@ -24,7 +24,10 @@ import {
 import { useWorkspaceUi } from "@/components/providers/workspace-ui-provider";
 import { CustomerAssetFocusStrip } from "@/components/shared/customer-asset-focus-strip";
 import { EmptyState } from "@/components/shared/empty-state";
-import { LazyDisclosure } from "@/components/shared/lazy-disclosure";
+import {
+  SystemJudgementSummary,
+  systemJudgementDetailsClassName,
+} from "@/components/shared/system-judgement-summary";
 import { ObjectContextOperatingSummary } from "@/components/shared/object-context-operating-summary";
 import { PageHeader } from "@/components/shared/page-header";
 import { ActionModeBadge } from "@/components/shared/status-badges";
@@ -153,7 +156,10 @@ import {
 } from "@/features/settings/data-intake-ux";
 import { CONNECTOR_PERMISSION_SUMMARIES } from "@/features/agentic-governance/connector-permission-summary";
 import { pickConnectorForCurrentUser } from "@/features/settings/connector-selection";
-import { AccountSettingsTab } from "@/features/settings/components/account-settings-tab";
+import {
+  AccountSettingsTab,
+  SettingsOrganizationCard,
+} from "@/features/settings/components/account-settings-tab";
 import { updateWorkspaceLLMConfigAction } from "@/features/settings/llm-config-actions";
 import { BillingMetricsPanels } from "@/features/settings/components/billing-metrics-panels";
 import { BillingAttributionOverviewPanels } from "@/features/settings/components/billing-attribution-overview-panels";
@@ -174,7 +180,11 @@ import {
 } from "@/features/settings/components/permissions-settings";
 import { PilotSettingsTab } from "@/features/settings/components/pilot-settings-tab";
 import { ConnectorPermissionSummaryPanel } from "@/features/settings/components/connector-permission-summary-panel";
-import { SettingsOverviewPanels } from "@/features/settings/components/settings-overview-panels";
+import {
+  SettingsCommonEntries,
+  SettingsConnectorBanner,
+  SettingsOverviewPanels,
+} from "@/features/settings/components/settings-overview-panels";
 import { TenantResourceReadinessPanel } from "@/features/settings/components/tenant-resource-readiness-panel";
 import { QoderWorkConnectionCard } from "@/features/settings/components/qoderwork-connection-card";
 import { Info } from "@/features/settings/components/settings-display";
@@ -218,7 +228,7 @@ import {
   getWeComCalendarRegistryNextAction,
 } from "@/features/settings/formatters/governance-formatters";
 import {
-  resolveInitialSettingsTab,
+  resolveSettingsTabForView,
   type FormalReviewChecklistState,
 } from "@/features/settings/types/settings-types";
 import type {
@@ -550,7 +560,17 @@ export function SettingsClient({
     useState<ProgramApplicationStatus | "ALL">("ALL");
   const [programApplicationProgramFilter, setProgramApplicationProgramFilter] =
     useState<string>("ALL");
-  const activeTab = resolveInitialSettingsTab(connectorState.tab);
+  // Members and reviewers get the light settings view (see getSettingsData):
+  // organisation facts, their identity, account and permissions tabs only.
+  const settingsAdminView = data.organizationSummary.settingsAdminView ?? true;
+  // Reviewers (owner decision, #467) also read the rules tab, read-only.
+  const policyRulesReadable =
+    settingsAdminView || (data.organizationSummary.policyRulesReadable ?? false);
+  const activeTab = resolveSettingsTabForView(
+    connectorState.tab,
+    settingsAdminView,
+    policyRulesReadable,
+  );
   const [pilotDraft, setPilotDraft] = useState({
     defaultLocale: locale,
     pilotMode,
@@ -566,7 +586,11 @@ export function SettingsClient({
     formatSettingsDateLabel(value, english);
 
   const navigateSettingsTab = (value: string) => {
-    const tab = resolveInitialSettingsTab(value);
+    const tab = resolveSettingsTabForView(
+      value,
+      settingsAdminView,
+      policyRulesReadable,
+    );
     if (tab === activeTab) {
       return;
     }
@@ -2626,126 +2650,70 @@ export function SettingsClient({
     );
   };
 
+  const viewerMembership =
+    data.memberships.find((membership) => membership.user.id === currentUserId) ??
+    null;
+
   return (
     <div className="workspace-surface-stack">
       <PageHeader
         eyebrow={pageStory.eyebrow}
         title={messages.settings.title}
-        description={
-          english
-            ? "Sources, seats, review rules and assistive service choices that affect today's work."
-            : "入口、席位、复核规则和负责人权限，会直接影响今天的工作。"
-        }
+        english={english}
         actions={
-          <>
-            <Button
-              variant="secondary"
-              onClick={restoreDefaults}
-              disabled={pending || !canManagePolicies}
-            >
-              {messages.settings.restoreDefaults}
-            </Button>
-            {canManageWorkspaceSetup ? (
-              <Button asChild variant="secondary">
-                <Link href="/setup">{messages.settings.rerunSetup}</Link>
-              </Button>
-            ) : (
-              <Button variant="secondary" disabled>
-                {messages.settings.rerunSetup}
-              </Button>
-            )}
-          </>
+          canManagePolicies || canManageWorkspaceSetup ? (
+            <>
+              {canManagePolicies ? (
+                <Button
+                  variant="secondary"
+                  onClick={restoreDefaults}
+                  disabled={pending}
+                >
+                  {messages.settings.restoreDefaults}
+                </Button>
+              ) : null}
+              {canManageWorkspaceSetup ? (
+                <Button asChild variant="secondary">
+                  <Link href="/setup">{messages.settings.rerunSetup}</Link>
+                </Button>
+              ) : null}
+            </>
+          ) : null
         }
       />
 
-      <CustomerAssetFocusStrip
-        eyebrow={english ? "Operating controls" : "经营控制"}
-        title={
-          english
-            ? "Change only the control that blocks today's work."
-            : "只改卡住今天工作的那条控制。"
+      <SettingsOrganizationCard
+        currentAccessStateLabel={currentAccessStateLabel}
+        defaultStrategiesSummary={defaultStrategiesSummary}
+        english={english}
+        focusAreasSummary={focusAreasSummary}
+        roleLabelsByLocale={roleLabelsByLocale}
+        viewer={
+          viewerMembership
+            ? {
+                name: viewerMembership.user.name,
+                email: viewerMembership.user.email,
+                role: viewerMembership.role,
+                title: viewerMembership.title,
+              }
+            : null
         }
-        summary={
-          english
-            ? "Settings are useful when they reveal source health, owner access, pending review, and the next safe control change."
-            : "设置页先告诉你入口是否正常、负责人是否有权限、哪些复核待处理，以及下一步该改哪条控制。"
-        }
-        items={[...settingsAssetFocusItems]}
-        primaryAction={{
-          label:
-            data.integrationSummary.connectorErrorCount > 0
-              ? english
-                ? "Fix sources"
-                : "修入口"
-              : english
-                ? "Review controls"
-                : "检查控制",
-          href:
-            data.integrationSummary.connectorErrorCount > 0
-              ? "/settings?tab=connectors"
-              : "/settings?tab=policies",
-        }}
-        secondaryAction={{
-          label: english ? "Open diagnostics" : "打开就绪度",
-          href: "/diagnostics",
-        }}
+        workspace={data.workspace}
       />
 
-      <LazyDisclosure title={english ? "Reference: settings basis" : "引用：设置依据"}>
-        <ObjectContextOperatingSummary
-          label={english ? "Settings operating summary" : "设置操作摘要"}
-          title={settingsSummaryTitle}
-          summary={settingsSummaryText}
-          items={settingsSummaryItems}
-          connectionsLabel={english ? "Connected loop" : "关联对象与回路"}
-          connections={settingsSummaryConnections}
-        />
-      </LazyDisclosure>
-
-      <SettingsOverviewPanels
-        applyRecommendedPilotPreset={applyRecommendedPilotPreset}
-        canApplyRecommendedPilotPreset={canManageOperationalControls}
-        connectorBannerMessage={
+      <SettingsConnectorBanner
+        message={
           connectorState.status
             ? formatConnectorBannerMessage(connectorState, english)
             : null
         }
-        connectorBannerTone={
+        tone={
           connectorState.status
             ? connectorState.status === "connected"
               ? "success"
               : "warning"
             : null
         }
-        diagnosticsEnabled={featureFlags.diagnosticsCenter}
-        english={english}
-        navLabels={{
-          analytics: messages.shell.nav.analytics,
-          diagnostics: messages.shell.nav.diagnostics,
-          imports: messages.shell.nav.imports,
-          inbox: messages.shell.nav.inbox,
-        }}
-        onReviewAuthControls={() =>
-          router.push("/settings?tab=permissions", { scroll: false })
-        }
-        operatingReadiness={{
-          connectedConnectorCount:
-            data.integrationSummary.connectedConnectorCount,
-          connectorErrorCount: data.integrationSummary.connectorErrorCount,
-          importedSignalCount: data.integrationSummary.importedSignalCount,
-          pendingApprovals: data.governanceSummary.pendingApprovals,
-          approvalProtectedActions:
-            data.governanceSummary.approvalProtectedActions,
-          budgetCount: data.budgets.length,
-          llmFallbacks7d: data.governanceSummary.llmFallbacks7d,
-        }}
-        recommendations={settingsGuidanceRecommendations}
-        reminders={settingsGuidanceReminders}
-        stats={{
-          policyCount: data.policies.length,
-          budgetCount: data.budgets.length,
-          teamMemberCount: data.memberships.length,
-        }}
       />
 
       <Tabs defaultValue={activeTab} onValueChange={navigateSettingsTab}>
@@ -2753,34 +2721,41 @@ export function SettingsClient({
           <TabsTrigger value="account">
             {messages.settings.tabs.account}
           </TabsTrigger>
-          <TabsTrigger value="billing">
-            {messages.settings.tabs.billing}
-          </TabsTrigger>
-          <TabsTrigger value="connectors">
-            {messages.settings.tabs.connectors}
-          </TabsTrigger>
-          <TabsTrigger value="policies">
-            {messages.settings.tabs.policies}
-          </TabsTrigger>
-          <TabsTrigger value="budgets">
-            {messages.settings.tabs.budgets}
-          </TabsTrigger>
+          {settingsAdminView ? (
+            <>
+              <TabsTrigger value="billing">
+                {messages.settings.tabs.billing}
+              </TabsTrigger>
+              <TabsTrigger value="connectors">
+                {messages.settings.tabs.connectors}
+              </TabsTrigger>
+            </>
+          ) : null}
+          {policyRulesReadable ? (
+            <TabsTrigger value="policies">
+              {messages.settings.tabs.policies}
+            </TabsTrigger>
+          ) : null}
+          {settingsAdminView ? (
+            <TabsTrigger value="budgets">
+              {messages.settings.tabs.budgets}
+            </TabsTrigger>
+          ) : null}
           <TabsTrigger value="permissions">
             {messages.settings.tabs.permissions}
           </TabsTrigger>
-          <TabsTrigger value="pilot">
-            {messages.settings.tabs.pilot}
-          </TabsTrigger>
+          {settingsAdminView ? (
+            <TabsTrigger value="pilot">
+              {messages.settings.tabs.pilot}
+            </TabsTrigger>
+          ) : null}
         </TabsList>
 
         <AccountSettingsTab
           createOrganization={createOrganization}
           crmSources={crmSources}
-          currentAccessStateLabel={currentAccessStateLabel}
           data={data}
-          defaultStrategiesSummary={defaultStrategiesSummary}
           english={english}
-          focusAreasSummary={focusAreasSummary}
           llmDraft={llmDraft}
           llmConfig={llmConfig}
           organizationDraft={organizationDraft}
@@ -6177,26 +6152,155 @@ export function SettingsClient({
                   : "策略和系统规则调整仅开放给负责人或管理员。你仍然可以在这里阅读当前姿态，但修改系统规则需要更高的工作区能力。"}
               </div>
             ) : null}
-            <Card className="workspace-panel-muted">
-              <CardHeader>
-                <CardTitle>
-                  {english ? "Reusable work suggestions" : "系统最近建议沉淀的做法"}
-                </CardTitle>
-                <CardDescription>
-                  {english
-                    ? "Accepting creates a candidate. Nothing here registers a formal skill."
-                    : "采纳只生成候选；不会自动注册成正式能力。"}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {data.skillSuggestions.length ? (
-                  data.skillSuggestions.map((suggestion) => (
-                    <div
-                      key={suggestion.id}
-                      className="workspace-panel rounded-2xl px-4 py-4"
-                    >
-                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                        <div className="space-y-2">
+            {/* Reviewers read the rules only; suggestions, adoptions and formal
+                review stay with the admin view (their data is not loaded). */}
+            {settingsAdminView ? (
+              <>
+                <Card className="workspace-panel-muted">
+                  <CardHeader>
+                    <CardTitle>
+                      {english ? "Reusable work suggestions" : "系统最近建议沉淀的做法"}
+                    </CardTitle>
+                    <CardDescription>
+                      {english
+                        ? "Accepting creates a candidate. Nothing here registers a formal skill."
+                        : "采纳只生成候选；不会自动注册成正式能力。"}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {data.skillSuggestions.length ? (
+                      data.skillSuggestions.map((suggestion) => (
+                        <div
+                          key={suggestion.id}
+                          className="workspace-panel rounded-2xl px-4 py-4"
+                        >
+                          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                            <div className="space-y-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-sm font-semibold text-[color:var(--foreground)]">
+                                  {formatSettingsSkillSuggestionText(
+                                    suggestion.candidateSkillName,
+                                    english,
+                                  )}
+                                </p>
+                                <Badge variant="approval">
+                                  {formatSettingsCapabilityCategory(
+                                    suggestion.candidateCategory,
+                                    english,
+                                  )}
+                                </Badge>
+                                <Badge variant="neutral">
+                                  {skillBoundaryLabels[
+                                    suggestion.candidateBoundary
+                                  ] ?? suggestion.candidateBoundary}
+                                </Badge>
+                                <Badge variant="info">
+                                  {skillEffectModeLabels[
+                                    suggestion.candidateEffectMode
+                                  ] ?? suggestion.candidateEffectMode}
+                                </Badge>
+                              </div>
+                              <p className="text-sm leading-6 text-[color:var(--muted)]">
+                                {formatSettingsSkillSuggestionText(
+                                  suggestion.reason,
+                                  english,
+                                )}
+                              </p>
+                              <div className="flex flex-wrap gap-3 text-xs text-[color:var(--muted-foreground)]">
+                                <span>
+                                  {english ? "Surface" : "默认呈现层"}：
+                                  {skillSurfaceLabels[
+                                    suggestion.candidateDefaultSurface
+                                  ] ?? suggestion.candidateDefaultSurface}
+                                </span>
+                                <span>
+                                  {english ? "Confidence" : "置信度"}：
+                                  {suggestion.confidence}
+                                </span>
+                                <span>
+                                  {english ? "Created" : "创建时间"}：
+                                  {formatSettingsDateLabel(suggestion.createdAt, english)}
+                                </span>
+                              </div>
+                              <div className="theme-surface-panel-soft rounded-2xl px-3 py-3 text-xs leading-6 text-[color:var(--muted)]">
+                                {formatSettingsSkillSuggestionText(
+                                  suggestion.nonCommitmentNote,
+                                  english,
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                size="sm"
+                                disabled={pending || !canManagePolicies}
+                                onClick={() =>
+                                  runSuggestionAction(
+                                    () =>
+                                      acceptSkillSuggestionAction({
+                                        id: suggestion.id,
+                                      }),
+                                    english
+                                      ? "Work suggestion accepted"
+                                      : "已采纳可复用做法建议",
+                                  )
+                                }
+                              >
+                                {english ? "Accept as reusable practice" : "采纳为可复用做法"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                disabled={pending || !canManagePolicies}
+                                onClick={() =>
+                                  runSuggestionAction(
+                                    () =>
+                                      dismissSkillSuggestionAction({
+                                        id: suggestion.id,
+                                      }),
+                                    english
+                                      ? "Work suggestion dismissed"
+                                      : "已忽略可复用做法建议",
+                                  )
+                                }
+                              >
+                                {english ? "Dismiss for now" : "先忽略"}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <EmptyState
+                        title={
+                          english
+                            ? "No new reusable practice recently"
+                            : "系统最近没有新的可复用做法建议"
+                        }
+                        description={
+                          english
+                            ? "When stable operating patterns become reusable but still need review, they will appear here."
+                            : "当稳定推进规律开始可复用、但仍需要人工复核时，会在这里出现。"
+                        }
+                      />
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>
+                      {english
+                        ? "Recently adopted reusable practices"
+                        : "最近已收敛的可复用做法"}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {data.recentSkillAdoptions.length ? (
+                      data.recentSkillAdoptions.map((suggestion) => (
+                        <div
+                          key={suggestion.id}
+                          className="theme-surface-panel rounded-2xl px-4 py-4"
+                        >
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="text-sm font-semibold text-[color:var(--foreground)]">
                               {formatSettingsSkillSuggestionText(
@@ -6204,490 +6308,133 @@ export function SettingsClient({
                                 english,
                               )}
                             </p>
-                            <Badge variant="approval">
-                              {formatSettingsCapabilityCategory(
-                                suggestion.candidateCategory,
-                                english,
-                              )}
-                            </Badge>
-                            <Badge variant="neutral">
-                              {skillBoundaryLabels[
-                                suggestion.candidateBoundary
-                              ] ?? suggestion.candidateBoundary}
-                            </Badge>
-                            <Badge variant="info">
-                              {skillEffectModeLabels[
-                                suggestion.candidateEffectMode
-                              ] ?? suggestion.candidateEffectMode}
-                            </Badge>
-                          </div>
-                          <p className="text-sm leading-6 text-[color:var(--muted)]">
-                            {formatSettingsSkillSuggestionText(
-                              suggestion.reason,
-                              english,
-                            )}
-                          </p>
-                          <div className="flex flex-wrap gap-3 text-xs text-[color:var(--muted-foreground)]">
-                            <span>
-                              {english ? "Surface" : "默认呈现层"}：
-                              {skillSurfaceLabels[
-                                suggestion.candidateDefaultSurface
-                              ] ?? suggestion.candidateDefaultSurface}
-                            </span>
-                            <span>
-                              {english ? "Confidence" : "置信度"}：
-                              {suggestion.confidence}
-                            </span>
-                            <span>
-                              {english ? "Created" : "创建时间"}：
-                              {formatSettingsDateLabel(suggestion.createdAt, english)}
-                            </span>
-                          </div>
-                          <div className="theme-surface-panel-soft rounded-2xl px-3 py-3 text-xs leading-6 text-[color:var(--muted)]">
-                            {formatSettingsSkillSuggestionText(
-                              suggestion.nonCommitmentNote,
-                              english,
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            size="sm"
-                            disabled={pending || !canManagePolicies}
-                            onClick={() =>
-                              runSuggestionAction(
-                                () =>
-                                  acceptSkillSuggestionAction({
-                                    id: suggestion.id,
-                                  }),
-                                english
-                                  ? "Work suggestion accepted"
-                                  : "已采纳可复用做法建议",
-                              )
-                            }
-                          >
-                            {english ? "Accept as reusable practice" : "采纳为可复用做法"}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            disabled={pending || !canManagePolicies}
-                            onClick={() =>
-                              runSuggestionAction(
-                                () =>
-                                  dismissSkillSuggestionAction({
-                                    id: suggestion.id,
-                                  }),
-                                english
-                                  ? "Work suggestion dismissed"
-                                  : "已忽略可复用做法建议",
-                              )
-                            }
-                          >
-                            {english ? "Dismiss for now" : "先忽略"}
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <EmptyState
-                    title={
-                      english
-                        ? "No new reusable practice recently"
-                        : "系统最近没有新的可复用做法建议"
-                    }
-                    description={
-                      english
-                        ? "When stable operating patterns become reusable but still need review, they will appear here."
-                        : "当稳定推进规律开始可复用、但仍需要人工复核时，会在这里出现。"
-                    }
-                  />
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  {english
-                    ? "Recently adopted reusable practices"
-                    : "最近已收敛的可复用做法"}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {data.recentSkillAdoptions.length ? (
-                  data.recentSkillAdoptions.map((suggestion) => (
-                    <div
-                      key={suggestion.id}
-                      className="theme-surface-panel rounded-2xl px-4 py-4"
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                          {formatSettingsSkillSuggestionText(
-                            suggestion.candidateSkillName,
-                            english,
-                          )}
-                        </p>
-                        <Badge
-                          variant={
-                            suggestion.capabilityStage === "probationary_skill"
-                              ? "success"
-                              : "approval"
-                          }
-                        >
-                          {skillStageLabels[suggestion.capabilityStage] ??
-                            suggestion.capabilityStage}
-                        </Badge>
-                        <Badge
-                          variant={
-                            suggestion.formalReviewStatus ===
-                            "HARDENING_REQUIRED"
-                              ? "danger"
-                              : suggestion.formalReviewStatus === "QUEUED"
-                                ? "success"
-                                : "info"
-                          }
-                        >
-                          {formalReviewStatusLabels[
-                            suggestion.formalReviewStatus
-                          ] ?? suggestion.formalReviewStatus}
-                        </Badge>
-                        {suggestion.formalReviewDecision !== "NONE" ? (
-                          <Badge
-                            variant={
-                              suggestion.formalReviewDecision ===
-                              "APPROVED_PENDING_PROMOTION"
-                                ? "success"
-                                : suggestion.formalReviewDecision === "REJECTED"
-                                  ? "danger"
-                                  : "warning"
-                            }
-                          >
-                            {formalReviewDecisionLabels[
-                              suggestion.formalReviewDecision
-                            ] ?? suggestion.formalReviewDecision}
-                          </Badge>
-                        ) : null}
-                        {suggestion.formalPromotionReady ? (
-                          <Badge variant="warning">
-                            {english
-                              ? "Ready for manual confirmation"
-                              : "已达人工确认条件"}
-                          </Badge>
-                        ) : null}
-                      </div>
-                      <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                        {formatSettingsSkillSuggestionText(
-                          suggestion.appliedEffectSummary ??
-                            (english
-                              ? "It has been adopted as a review-first practice and is still waiting for later evidence."
-                              : "已作为先复核的可复用做法收敛，仍会继续等待后续证据。"),
-                          english,
-                        )}
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-3 text-xs text-[color:var(--muted-foreground)]">
-                        <span>
-                          {english ? "Effective at" : "生效时间"}：
-                          {formatSettingsDateLabel(
-                            suggestion.appliedAt ?? suggestion.confirmedAt,
-                            english,
-                          )}
-                        </span>
-                        <span>
-                          {english ? "Calibration" : "校准分"}：
-                          {suggestion.calibrationScore}
-                        </span>
-                        <span>
-                          {english ? "Evidence" : "证据"}：
-                          {suggestion.evidenceCount}
-                        </span>
-                        <span>
-                          {english ? "Revalidations" : "持续复现"}：
-                          {suggestion.revalidationCount}
-                        </span>
-                        <span>
-                          {english ? "Adoptions" : "采纳次数"}：
-                          {suggestion.adoptionCount}
-                        </span>
-                        <span>
-                          {english ? "Dismissals" : "忽略次数"}：
-                          {suggestion.dismissalCount}
-                        </span>
-                        <span>
-                          {english ? "Boundary incidents" : "边界事件"}：
-                          {suggestion.boundaryIncidentCount}
-                        </span>
-                      </div>
-                      {suggestion.formalReviewSummary ? (
-                        <div className="mt-2 theme-surface-panel-soft rounded-2xl px-3 py-3 text-xs leading-6 text-[color:var(--muted)]">
-                          {formatSettingsSkillSuggestionText(
-                            suggestion.formalReviewSummary,
-                            english,
-                          )}
-                        </div>
-                      ) : null}
-                      {suggestion.formalReviewDecision !== "NONE" ? (
-                        <div className="mt-2 flex flex-wrap gap-3 text-xs text-[color:var(--muted-foreground)]">
-                          <span>
-                            {english ? "Decision at" : "决定时间"}：
-                            {formatSettingsDateLabel(suggestion.formalReviewDecisionAt, english)}
-                          </span>
-                          <span>
-                            {english ? "Reviewer" : "评审人"}：
-                            {suggestion.formalReviewDecisionByName ??
-                              (english ? "Unknown" : "未知")}
-                          </span>
-                        </div>
-                      ) : null}
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {reservedFormalSkillGovernanceReadable &&
-                        suggestion.formalPromotionReady &&
-                        suggestion.formalReviewStatus !== "QUEUED" &&
-                        suggestion.formalReviewDecision !==
-                          "APPROVED_PENDING_PROMOTION" ? (
-                          <Button
-                            size="sm"
-                            disabled={
-                              pending || !canManageReservedFormalSkillGovernance
-                            }
-                            onClick={() =>
-                              runSuggestionAction(
-                                () =>
-                                  queueSkillFormalReviewAction({
-                                    id: suggestion.id,
-                                  }),
-                                english
-                                  ? "Queued for manual confirmation"
-                                  : "已加入人工确认队列",
-                              )
-                            }
-                          >
-                            {suggestion.formalReviewDecision === "DEFERRED" ||
-                            suggestion.formalReviewDecision === "REJECTED" ||
-                            suggestion.formalReviewStatus ===
-                              "HARDENING_REQUIRED"
-                              ? english
-                                ? "Queue again"
-                                : "重新入队"
-                              : english
-                                ? "Queue for manual confirmation"
-                                : "加入人工确认队列"}
-                          </Button>
-                        ) : null}
-                        {reservedFormalSkillGovernanceReadable &&
-                        suggestion.formalReviewStatus === "QUEUED" ? (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            disabled={
-                              pending || !canManageReservedFormalSkillGovernance
-                            }
-                            onClick={() =>
-                              runSuggestionAction(
-                                () =>
-                                  returnSkillFormalReviewForHardeningAction({
-                                    id: suggestion.id,
-                                  }),
-                                english
-                                  ? "Returned for hardening"
-                                  : "已退回加固",
-                              )
-                            }
-                          >
-                            {english ? "Return for hardening" : "退回加固"}
-                          </Button>
-                        ) : null}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <EmptyState
-                    title={
-                      english
-                        ? "No adopted reusable practice yet"
-                        : "还没有收敛完成的可复用做法"
-                    }
-                    description={
-                      english
-                        ? "Once you accept a work suggestion, this section will show whether it is still candidate-only, under trial, or ready for manual confirmation."
-                        : "当你采纳可复用做法后，这里会显示它仍在候选层、已经进入试运行，还是已经达到人工确认条件。"
-                    }
-                  />
-                )}
-              </CardContent>
-            </Card>
-
-            {reservedFormalSkillGovernanceReadable ? (
-              <>
-                <Card className="workspace-panel-muted">
-                  <CardHeader>
-                    <CardTitle>
-                      {english
-                        ? "Manual practice confirmation queue"
-                        : "可复用做法人工确认队列"}
-                    </CardTitle>
-                    <CardDescription>
-                      {english
-                        ? "Manual review only — no auto-promotion."
-                        : "只走人工评审，不自动晋级。"}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {data.formalSkillReviewQueue.length ? (
-                      data.formalSkillReviewQueue.map((item) => (
-                        <div
-                          key={item.id}
-                          className="workspace-panel rounded-2xl px-4 py-4"
-                        >
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                              {formatSettingsSkillSuggestionText(
-                                item.candidateSkillName,
-                                english,
-                              )}
-                            </p>
                             <Badge
                               variant={
-                                item.capabilityStage === "probationary_skill"
+                                suggestion.capabilityStage === "probationary_skill"
                                   ? "success"
                                   : "approval"
                               }
                             >
-                              {skillStageLabels[item.capabilityStage] ??
-                                item.capabilityStage}
+                              {skillStageLabels[suggestion.capabilityStage] ??
+                                suggestion.capabilityStage}
                             </Badge>
                             <Badge
                               variant={
-                                item.formalReviewStatus === "HARDENING_REQUIRED"
+                                suggestion.formalReviewStatus ===
+                                "HARDENING_REQUIRED"
                                   ? "danger"
-                                  : item.formalReviewStatus === "QUEUED"
+                                  : suggestion.formalReviewStatus === "QUEUED"
                                     ? "success"
                                     : "info"
                               }
                             >
                               {formalReviewStatusLabels[
-                                item.formalReviewStatus
-                              ] ?? item.formalReviewStatus}
+                                suggestion.formalReviewStatus
+                              ] ?? suggestion.formalReviewStatus}
                             </Badge>
+                            {suggestion.formalReviewDecision !== "NONE" ? (
+                              <Badge
+                                variant={
+                                  suggestion.formalReviewDecision ===
+                                  "APPROVED_PENDING_PROMOTION"
+                                    ? "success"
+                                    : suggestion.formalReviewDecision === "REJECTED"
+                                      ? "danger"
+                                      : "warning"
+                                }
+                              >
+                                {formalReviewDecisionLabels[
+                                  suggestion.formalReviewDecision
+                                ] ?? suggestion.formalReviewDecision}
+                              </Badge>
+                            ) : null}
+                            {suggestion.formalPromotionReady ? (
+                              <Badge variant="warning">
+                                {english
+                                  ? "Ready for manual confirmation"
+                                  : "已达人工确认条件"}
+                              </Badge>
+                            ) : null}
                           </div>
                           <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
                             {formatSettingsSkillSuggestionText(
-                              item.formalReviewSummary ??
-                                item.appliedEffectSummary ??
+                              suggestion.appliedEffectSummary ??
                                 (english
-                                  ? "This practice is waiting for manual confirmation."
-                                  : "这条做法正在等待人工确认。"),
+                                  ? "It has been adopted as a review-first practice and is still waiting for later evidence."
+                                  : "已作为先复核的可复用做法收敛，仍会继续等待后续证据。"),
                               english,
                             )}
                           </p>
                           <div className="mt-2 flex flex-wrap gap-3 text-xs text-[color:var(--muted-foreground)]">
                             <span>
-                              {english ? "Calibration" : "校准分"}：
-                              {item.calibrationScore}
-                            </span>
-                            <span>
-                              {english ? "Evidence" : "证据"}：
-                              {item.evidenceCount}
-                            </span>
-                            <span>
-                              {english ? "Revalidations" : "持续复现"}：
-                              {item.revalidationCount}
-                            </span>
-                            <span>
-                              {english ? "Adoptions" : "采纳次数"}：
-                              {item.adoptionCount}
-                            </span>
-                            <span>
-                              {english ? "Dismissals" : "忽略次数"}：
-                              {item.dismissalCount}
-                            </span>
-                            <span>
-                              {english ? "Boundary incidents" : "边界事件"}：
-                              {item.boundaryIncidentCount}
-                            </span>
-                            <span>
-                              {english ? "Queued at" : "入队时间"}：
+                              {english ? "Effective at" : "生效时间"}：
                               {formatSettingsDateLabel(
-                                item.formalReviewQueuedAt ??
-                                  item.appliedAt ??
-                                  item.confirmedAt,
+                                suggestion.appliedAt ?? suggestion.confirmedAt,
                                 english,
                               )}
                             </span>
+                            <span>
+                              {english ? "Calibration" : "校准分"}：
+                              {suggestion.calibrationScore}
+                            </span>
+                            <span>
+                              {english ? "Evidence" : "证据"}：
+                              {suggestion.evidenceCount}
+                            </span>
+                            <span>
+                              {english ? "Revalidations" : "持续复现"}：
+                              {suggestion.revalidationCount}
+                            </span>
+                            <span>
+                              {english ? "Adoptions" : "采纳次数"}：
+                              {suggestion.adoptionCount}
+                            </span>
+                            <span>
+                              {english ? "Dismissals" : "忽略次数"}：
+                              {suggestion.dismissalCount}
+                            </span>
+                            <span>
+                              {english ? "Boundary incidents" : "边界事件"}：
+                              {suggestion.boundaryIncidentCount}
+                            </span>
                           </div>
-                          {item.formalReviewStatus === "QUEUED" ? (
-                            <div className="mt-3 space-y-3 rounded-2xl border border-[color:var(--border)]/80 px-4 py-4">
-                              <div className="space-y-2">
-                                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                                  {english ? "Review note" : "评审说明"}
-                                </p>
-                                <Textarea
-                                  value={formalReviewNotes[item.id] ?? ""}
-                                  onChange={(event) =>
-                                    setFormalReviewNotes((current) => ({
-                                      ...current,
-                                      [item.id]: event.target.value,
-                                    }))
-                                  }
-                                  placeholder={
-                                    english
-                                      ? "Summarize why this should be approved, deferred, or rejected."
-                                      : "写下为什么应该批准、暂缓或拒绝。"
-                                  }
-                                  rows={3}
-                                />
-                              </div>
-                              <div className="grid gap-3 md:grid-cols-2">
-                                {(
-                                  Object.keys(
-                                    formalReviewChecklistLabels,
-                                  ) as Array<keyof FormalReviewChecklistState>
-                                ).map((key) => (
-                                  <div
-                                    key={key}
-                                    className="flex items-center justify-between rounded-2xl bg-[color:var(--surface-subtle)] px-3 py-3"
-                                  >
-                                    <span className="text-xs leading-6 text-[color:var(--muted)]">
-                                      {formalReviewChecklistLabels[key]}
-                                    </span>
-                                    <Switch
-                                      checked={
-                                        getFormalReviewChecklistDraft(item.id)[
-                                          key
-                                        ]
-                                      }
-                                      disabled={pending || !canManagePolicies}
-                                      onCheckedChange={(checked) =>
-                                        setFormalReviewChecklists(
-                                          (current) => ({
-                                            ...current,
-                                            [item.id]: {
-                                              ...getFormalReviewChecklistDraft(
-                                                item.id,
-                                              ),
-                                              [key]: checked,
-                                            },
-                                          }),
-                                        )
-                                      }
-                                    />
-                                  </div>
-                                ))}
-                              </div>
+                          {suggestion.formalReviewSummary ? (
+                            <div className="mt-2 theme-surface-panel-soft rounded-2xl px-3 py-3 text-xs leading-6 text-[color:var(--muted)]">
+                              {formatSettingsSkillSuggestionText(
+                                suggestion.formalReviewSummary,
+                                english,
+                              )}
+                            </div>
+                          ) : null}
+                          {suggestion.formalReviewDecision !== "NONE" ? (
+                            <div className="mt-2 flex flex-wrap gap-3 text-xs text-[color:var(--muted-foreground)]">
+                              <span>
+                                {english ? "Decision at" : "决定时间"}：
+                                {formatSettingsDateLabel(suggestion.formalReviewDecisionAt, english)}
+                              </span>
+                              <span>
+                                {english ? "Reviewer" : "评审人"}：
+                                {suggestion.formalReviewDecisionByName ??
+                                  (english ? "Unknown" : "未知")}
+                              </span>
                             </div>
                           ) : null}
                           <div className="mt-3 flex flex-wrap gap-2">
-                            {item.formalReviewStatus !== "QUEUED" &&
-                            item.formalPromotionReady ? (
+                            {reservedFormalSkillGovernanceReadable &&
+                            suggestion.formalPromotionReady &&
+                            suggestion.formalReviewStatus !== "QUEUED" &&
+                            suggestion.formalReviewDecision !==
+                              "APPROVED_PENDING_PROMOTION" ? (
                               <Button
                                 size="sm"
-                                disabled={pending || !canManagePolicies}
+                                disabled={
+                                  pending || !canManageReservedFormalSkillGovernance
+                                }
                                 onClick={() =>
                                   runSuggestionAction(
                                     () =>
                                       queueSkillFormalReviewAction({
-                                        id: item.id,
+                                        id: suggestion.id,
                                       }),
                                     english
                                       ? "Queued for manual confirmation"
@@ -6695,75 +6442,32 @@ export function SettingsClient({
                                   )
                                 }
                               >
-                                {english
-                                  ? "Queue for manual confirmation"
-                                  : "加入人工确认队列"}
+                                {suggestion.formalReviewDecision === "DEFERRED" ||
+                                suggestion.formalReviewDecision === "REJECTED" ||
+                                suggestion.formalReviewStatus ===
+                                  "HARDENING_REQUIRED"
+                                  ? english
+                                    ? "Queue again"
+                                    : "重新入队"
+                                  : english
+                                    ? "Queue for manual confirmation"
+                                    : "加入人工确认队列"}
                               </Button>
                             ) : null}
-                            {item.formalReviewStatus === "QUEUED" ? (
-                              <Button
-                                size="sm"
-                                disabled={pending || !canManagePolicies}
-                                onClick={() =>
-                                  runFormalReviewDecisionAction(
-                                    item.id,
-                                    approveSkillFormalReviewAction,
-                                    english
-                                      ? "Manual confirmation approved"
-                                      : "已通过人工确认",
-                                  )
-                                }
-                              >
-                                {english ? "Approve" : "批准"}
-                              </Button>
-                            ) : null}
-                            {item.formalReviewStatus === "QUEUED" ? (
+                            {reservedFormalSkillGovernanceReadable &&
+                            suggestion.formalReviewStatus === "QUEUED" ? (
                               <Button
                                 size="sm"
                                 variant="secondary"
-                                disabled={pending || !canManagePolicies}
-                                onClick={() =>
-                                  runFormalReviewDecisionAction(
-                                    item.id,
-                                    deferSkillFormalReviewAction,
-                                    english
-                                      ? "Manual confirmation deferred"
-                                      : "已暂缓人工确认",
-                                  )
+                                disabled={
+                                  pending || !canManageReservedFormalSkillGovernance
                                 }
-                              >
-                                {english ? "Defer" : "暂缓"}
-                              </Button>
-                            ) : null}
-                            {item.formalReviewStatus === "QUEUED" ? (
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                disabled={pending || !canManagePolicies}
-                                onClick={() =>
-                                  runFormalReviewDecisionAction(
-                                    item.id,
-                                    rejectSkillFormalReviewAction,
-                                    english
-                                      ? "Manual confirmation rejected"
-                                      : "已拒绝人工确认",
-                                  )
-                                }
-                              >
-                                {english ? "Reject" : "拒绝"}
-                              </Button>
-                            ) : null}
-                            {item.formalReviewStatus === "QUEUED" ? (
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                disabled={pending || !canManagePolicies}
                                 onClick={() =>
                                   runSuggestionAction(
                                     () =>
-                                      returnSkillFormalReviewForHardeningAction(
-                                        { id: item.id },
-                                      ),
+                                      returnSkillFormalReviewForHardeningAction({
+                                        id: suggestion.id,
+                                      }),
                                     english
                                       ? "Returned for hardening"
                                       : "已退回加固",
@@ -6780,161 +6484,563 @@ export function SettingsClient({
                       <EmptyState
                         title={
                           english
-                            ? "No manual confirmation item yet"
-                            : "还没有人工确认项"
+                            ? "No adopted reusable practice yet"
+                            : "还没有收敛完成的可复用做法"
                         }
                         description={
                           english
-                            ? "Once a trial practice becomes ready, it will appear here as a manual queue item instead of auto-promoting."
-                            : "当试运行做法达到人工确认条件后，它会作为人工队列项出现在这里，而不是自动晋级。"
+                            ? "Once you accept a work suggestion, this section will show whether it is still candidate-only, under trial, or ready for manual confirmation."
+                            : "当你采纳可复用做法后，这里会显示它仍在候选层、已经进入试运行，还是已经达到人工确认条件。"
                         }
                       />
                     )}
                   </CardContent>
                 </Card>
 
+                {reservedFormalSkillGovernanceReadable ? (
+                  <>
+                    <Card className="workspace-panel-muted">
+                      <CardHeader>
+                        <CardTitle>
+                          {english
+                            ? "Manual practice confirmation queue"
+                            : "可复用做法人工确认队列"}
+                        </CardTitle>
+                        <CardDescription>
+                          {english
+                            ? "Manual review only — no auto-promotion."
+                            : "只走人工评审，不自动晋级。"}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {data.formalSkillReviewQueue.length ? (
+                          data.formalSkillReviewQueue.map((item) => (
+                            <div
+                              key={item.id}
+                              className="workspace-panel rounded-2xl px-4 py-4"
+                            >
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-sm font-semibold text-[color:var(--foreground)]">
+                                  {formatSettingsSkillSuggestionText(
+                                    item.candidateSkillName,
+                                    english,
+                                  )}
+                                </p>
+                                <Badge
+                                  variant={
+                                    item.capabilityStage === "probationary_skill"
+                                      ? "success"
+                                      : "approval"
+                                  }
+                                >
+                                  {skillStageLabels[item.capabilityStage] ??
+                                    item.capabilityStage}
+                                </Badge>
+                                <Badge
+                                  variant={
+                                    item.formalReviewStatus === "HARDENING_REQUIRED"
+                                      ? "danger"
+                                      : item.formalReviewStatus === "QUEUED"
+                                        ? "success"
+                                        : "info"
+                                  }
+                                >
+                                  {formalReviewStatusLabels[
+                                    item.formalReviewStatus
+                                  ] ?? item.formalReviewStatus}
+                                </Badge>
+                              </div>
+                              <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                                {formatSettingsSkillSuggestionText(
+                                  item.formalReviewSummary ??
+                                    item.appliedEffectSummary ??
+                                    (english
+                                      ? "This practice is waiting for manual confirmation."
+                                      : "这条做法正在等待人工确认。"),
+                                  english,
+                                )}
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-3 text-xs text-[color:var(--muted-foreground)]">
+                                <span>
+                                  {english ? "Calibration" : "校准分"}：
+                                  {item.calibrationScore}
+                                </span>
+                                <span>
+                                  {english ? "Evidence" : "证据"}：
+                                  {item.evidenceCount}
+                                </span>
+                                <span>
+                                  {english ? "Revalidations" : "持续复现"}：
+                                  {item.revalidationCount}
+                                </span>
+                                <span>
+                                  {english ? "Adoptions" : "采纳次数"}：
+                                  {item.adoptionCount}
+                                </span>
+                                <span>
+                                  {english ? "Dismissals" : "忽略次数"}：
+                                  {item.dismissalCount}
+                                </span>
+                                <span>
+                                  {english ? "Boundary incidents" : "边界事件"}：
+                                  {item.boundaryIncidentCount}
+                                </span>
+                                <span>
+                                  {english ? "Queued at" : "入队时间"}：
+                                  {formatSettingsDateLabel(
+                                    item.formalReviewQueuedAt ??
+                                      item.appliedAt ??
+                                      item.confirmedAt,
+                                    english,
+                                  )}
+                                </span>
+                              </div>
+                              {item.formalReviewStatus === "QUEUED" ? (
+                                <div className="mt-3 space-y-3 rounded-2xl border border-[color:var(--border)]/80 px-4 py-4">
+                                  <div className="space-y-2">
+                                    <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                                      {english ? "Review note" : "评审说明"}
+                                    </p>
+                                    <Textarea
+                                      value={formalReviewNotes[item.id] ?? ""}
+                                      onChange={(event) =>
+                                        setFormalReviewNotes((current) => ({
+                                          ...current,
+                                          [item.id]: event.target.value,
+                                        }))
+                                      }
+                                      placeholder={
+                                        english
+                                          ? "Summarize why this should be approved, deferred, or rejected."
+                                          : "写下为什么应该批准、暂缓或拒绝。"
+                                      }
+                                      rows={3}
+                                    />
+                                  </div>
+                                  <div className="grid gap-3 md:grid-cols-2">
+                                    {(
+                                      Object.keys(
+                                        formalReviewChecklistLabels,
+                                      ) as Array<keyof FormalReviewChecklistState>
+                                    ).map((key) => (
+                                      <div
+                                        key={key}
+                                        className="flex items-center justify-between rounded-2xl bg-[color:var(--surface-subtle)] px-3 py-3"
+                                      >
+                                        <span className="text-xs leading-6 text-[color:var(--muted)]">
+                                          {formalReviewChecklistLabels[key]}
+                                        </span>
+                                        <Switch
+                                          checked={
+                                            getFormalReviewChecklistDraft(item.id)[
+                                              key
+                                            ]
+                                          }
+                                          disabled={pending || !canManagePolicies}
+                                          onCheckedChange={(checked) =>
+                                            setFormalReviewChecklists(
+                                              (current) => ({
+                                                ...current,
+                                                [item.id]: {
+                                                  ...getFormalReviewChecklistDraft(
+                                                    item.id,
+                                                  ),
+                                                  [key]: checked,
+                                                },
+                                              }),
+                                            )
+                                          }
+                                        />
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {item.formalReviewStatus !== "QUEUED" &&
+                                item.formalPromotionReady ? (
+                                  <Button
+                                    size="sm"
+                                    disabled={pending || !canManagePolicies}
+                                    onClick={() =>
+                                      runSuggestionAction(
+                                        () =>
+                                          queueSkillFormalReviewAction({
+                                            id: item.id,
+                                          }),
+                                        english
+                                          ? "Queued for manual confirmation"
+                                          : "已加入人工确认队列",
+                                      )
+                                    }
+                                  >
+                                    {english
+                                      ? "Queue for manual confirmation"
+                                      : "加入人工确认队列"}
+                                  </Button>
+                                ) : null}
+                                {item.formalReviewStatus === "QUEUED" ? (
+                                  <Button
+                                    size="sm"
+                                    disabled={pending || !canManagePolicies}
+                                    onClick={() =>
+                                      runFormalReviewDecisionAction(
+                                        item.id,
+                                        approveSkillFormalReviewAction,
+                                        english
+                                          ? "Manual confirmation approved"
+                                          : "已通过人工确认",
+                                      )
+                                    }
+                                  >
+                                    {english ? "Approve" : "批准"}
+                                  </Button>
+                                ) : null}
+                                {item.formalReviewStatus === "QUEUED" ? (
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    disabled={pending || !canManagePolicies}
+                                    onClick={() =>
+                                      runFormalReviewDecisionAction(
+                                        item.id,
+                                        deferSkillFormalReviewAction,
+                                        english
+                                          ? "Manual confirmation deferred"
+                                          : "已暂缓人工确认",
+                                      )
+                                    }
+                                  >
+                                    {english ? "Defer" : "暂缓"}
+                                  </Button>
+                                ) : null}
+                                {item.formalReviewStatus === "QUEUED" ? (
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    disabled={pending || !canManagePolicies}
+                                    onClick={() =>
+                                      runFormalReviewDecisionAction(
+                                        item.id,
+                                        rejectSkillFormalReviewAction,
+                                        english
+                                          ? "Manual confirmation rejected"
+                                          : "已拒绝人工确认",
+                                      )
+                                    }
+                                  >
+                                    {english ? "Reject" : "拒绝"}
+                                  </Button>
+                                ) : null}
+                                {item.formalReviewStatus === "QUEUED" ? (
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    disabled={pending || !canManagePolicies}
+                                    onClick={() =>
+                                      runSuggestionAction(
+                                        () =>
+                                          returnSkillFormalReviewForHardeningAction(
+                                            { id: item.id },
+                                          ),
+                                        english
+                                          ? "Returned for hardening"
+                                          : "已退回加固",
+                                      )
+                                    }
+                                  >
+                                    {english ? "Return for hardening" : "退回加固"}
+                                  </Button>
+                                ) : null}
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <EmptyState
+                            title={
+                              english
+                                ? "No manual confirmation item yet"
+                                : "还没有人工确认项"
+                            }
+                            description={
+                              english
+                                ? "Once a trial practice becomes ready, it will appear here as a manual queue item instead of auto-promoting."
+                                : "当试运行做法达到人工确认条件后，它会作为人工队列项出现在这里，而不是自动晋级。"
+                            }
+                          />
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    <Card className="workspace-panel-muted">
+                      <CardHeader>
+                        <CardTitle>
+                          {english
+                            ? "Recent manual confirmation decisions"
+                            : "最近人工确认决定"}
+                        </CardTitle>
+                        <CardDescription>
+                          {english
+                            ? "Manual review outcomes. Approved still needs the explicit promotion step."
+                            : "人工评审结果。通过之后仍需显式晋级。"}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {data.recentFormalReviewDecisions.length ? (
+                          data.recentFormalReviewDecisions.map((item) => (
+                            <div
+                              key={item.id}
+                              className="workspace-panel rounded-2xl px-4 py-4"
+                            >
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-sm font-semibold text-[color:var(--foreground)]">
+                                  {formatSettingsSkillSuggestionText(
+                                    item.candidateSkillName,
+                                    english,
+                                  )}
+                                </p>
+                                <Badge
+                                  variant={
+                                    item.capabilityStage === "probationary_skill"
+                                      ? "success"
+                                      : "approval"
+                                  }
+                                >
+                                  {skillStageLabels[item.capabilityStage] ??
+                                    item.capabilityStage}
+                                </Badge>
+                                <Badge
+                                  variant={
+                                    item.formalReviewDecision ===
+                                    "APPROVED_PENDING_PROMOTION"
+                                      ? "success"
+                                      : item.formalReviewDecision === "REJECTED"
+                                        ? "danger"
+                                        : "warning"
+                                  }
+                                >
+                                  {formalReviewDecisionLabels[
+                                    item.formalReviewDecision
+                                  ] ?? item.formalReviewDecision}
+                                </Badge>
+                              </div>
+                              <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                                {formatSettingsSkillSuggestionText(
+                                  item.formalReviewSummary ??
+                                    item.appliedEffectSummary ??
+                                    (english
+                                      ? "A manual confirmation decision was recorded for this practice."
+                                      : "这条做法已经记录了一次人工确认决定。"),
+                                  english,
+                                )}
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-3 text-xs text-[color:var(--muted-foreground)]">
+                                <span>
+                                  {english ? "Decision at" : "决定时间"}：
+                                  {formatSettingsDateLabel(item.formalReviewDecisionAt, english)}
+                                </span>
+                                <span>
+                                  {english ? "Reviewer" : "评审人"}：
+                                  {item.formalReviewDecisionByName ??
+                                    (english ? "Unknown" : "未知")}
+                                </span>
+                                <span>
+                                  {english ? "Calibration" : "校准分"}：
+                                  {item.calibrationScore}
+                                </span>
+                                <span>
+                                  {english ? "Boundary incidents" : "边界事件"}：
+                                  {item.boundaryIncidentCount}
+                                </span>
+                              </div>
+                              {item.formalReviewDecisionNote ? (
+                                <div className="mt-2 theme-surface-panel-soft rounded-2xl px-3 py-3 text-xs leading-6 text-[color:var(--muted)]">
+                                  {formatSettingsSkillSuggestionText(
+                                    item.formalReviewDecisionNote,
+                                    english,
+                                  )}
+                                </div>
+                              ) : null}
+                              <div className="mt-2 grid gap-3 md:grid-cols-2">
+                                {(
+                                  Object.keys(formalReviewChecklistLabels) as Array<
+                                    keyof FormalReviewChecklistState
+                                  >
+                                ).map((key) => (
+                                  <div
+                                    key={key}
+                                    className="flex items-center justify-between rounded-2xl bg-[color:var(--surface-subtle)] px-3 py-3"
+                                  >
+                                    <span className="text-xs leading-6 text-[color:var(--muted)]">
+                                      {formalReviewChecklistLabels[key]}
+                                    </span>
+                                    <Badge
+                                      variant={
+                                        item.formalReviewChecklist[key]
+                                          ? "success"
+                                          : "neutral"
+                                      }
+                                    >
+                                      {item.formalReviewChecklist[key]
+                                        ? english
+                                          ? "Done"
+                                          : "完成"
+                                        : english
+                                          ? "Open"
+                                          : "未完成"}
+                                    </Badge>
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {(item.formalReviewDecision === "DEFERRED" ||
+                                  item.formalReviewDecision === "REJECTED") &&
+                                item.formalPromotionReady ? (
+                                  <Button
+                                    size="sm"
+                                    disabled={pending || !canManagePolicies}
+                                    onClick={() =>
+                                      runSuggestionAction(
+                                        () =>
+                                          queueSkillFormalReviewAction({
+                                            id: item.id,
+                                          }),
+                                        english
+                                          ? "Queued for manual confirmation"
+                                          : "已加入人工确认队列",
+                                      )
+                                    }
+                                  >
+                                    {english ? "Queue again" : "重新入队"}
+                                  </Button>
+                                ) : null}
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <EmptyState
+                            title={
+                              english
+                                ? "No manual confirmation decision yet"
+                                : "还没有人工确认决定"
+                            }
+                            description={
+                              english
+                                ? "Once a queued item is approved, deferred, or rejected, the manual decision trail will appear here."
+                                : "当入队项被批准、暂缓或拒绝后，人工评审轨迹会显示在这里。"
+                            }
+                          />
+                        )}
+                      </CardContent>
+                    </Card>
+                  </>
+                ) : (
+                  <div className="theme-surface-panel-soft rounded-2xl px-4 py-4 text-sm leading-6 text-[color:var(--muted)]">
+                    {english
+                      ? "Manual confirmation queue and decision ledger stay reserved for the Helm internal operating workspace. Customer workspaces can still review reusable-practice suggestions and local policy posture here."
+                      : "人工确认队列和决定台账只保留给 Helm 自留经营工作区。客户工作区仍可在这里处理可复用做法建议和本租户的策略姿态。"}
+                  </div>
+                )}
+
                 <Card className="workspace-panel-muted">
                   <CardHeader>
                     <CardTitle>
                       {english
-                        ? "Recent manual confirmation decisions"
-                        : "最近人工确认决定"}
+                        ? "System-suggested policy changes"
+                        : "系统最近建议调整的策略"}
                     </CardTitle>
-                    <CardDescription>
-                      {english
-                        ? "Manual review outcomes. Approved still needs the explicit promotion step."
-                        : "人工评审结果。通过之后仍需显式晋级。"}
-                    </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    {data.recentFormalReviewDecisions.length ? (
-                      data.recentFormalReviewDecisions.map((item) => (
+                    {data.strategySuggestions.length ? (
+                      data.strategySuggestions.map((suggestion) => (
                         <div
-                          key={item.id}
+                          key={suggestion.id}
                           className="workspace-panel rounded-2xl px-4 py-4"
                         >
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                              {formatSettingsSkillSuggestionText(
-                                item.candidateSkillName,
-                                english,
-                              )}
-                            </p>
-                            <Badge
-                              variant={
-                                item.capabilityStage === "probationary_skill"
-                                  ? "success"
-                                  : "approval"
-                              }
-                            >
-                              {skillStageLabels[item.capabilityStage] ??
-                                item.capabilityStage}
-                            </Badge>
-                            <Badge
-                              variant={
-                                item.formalReviewDecision ===
-                                "APPROVED_PENDING_PROMOTION"
-                                  ? "success"
-                                  : item.formalReviewDecision === "REJECTED"
-                                    ? "danger"
-                                    : "warning"
-                              }
-                            >
-                              {formalReviewDecisionLabels[
-                                item.formalReviewDecision
-                              ] ?? item.formalReviewDecision}
-                            </Badge>
-                          </div>
-                          <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                            {formatSettingsSkillSuggestionText(
-                              item.formalReviewSummary ??
-                                item.appliedEffectSummary ??
-                                (english
-                                  ? "A manual confirmation decision was recorded for this practice."
-                                  : "这条做法已经记录了一次人工确认决定。"),
-                              english,
-                            )}
-                          </p>
-                          <div className="mt-2 flex flex-wrap gap-3 text-xs text-[color:var(--muted-foreground)]">
-                            <span>
-                              {english ? "Decision at" : "决定时间"}：
-                              {formatSettingsDateLabel(item.formalReviewDecisionAt, english)}
-                            </span>
-                            <span>
-                              {english ? "Reviewer" : "评审人"}：
-                              {item.formalReviewDecisionByName ??
-                                (english ? "Unknown" : "未知")}
-                            </span>
-                            <span>
-                              {english ? "Calibration" : "校准分"}：
-                              {item.calibrationScore}
-                            </span>
-                            <span>
-                              {english ? "Boundary incidents" : "边界事件"}：
-                              {item.boundaryIncidentCount}
-                            </span>
-                          </div>
-                          {item.formalReviewDecisionNote ? (
-                            <div className="mt-2 theme-surface-panel-soft rounded-2xl px-3 py-3 text-xs leading-6 text-[color:var(--muted)]">
-                              {formatSettingsSkillSuggestionText(
-                                item.formalReviewDecisionNote,
-                                english,
-                              )}
-                            </div>
-                          ) : null}
-                          <div className="mt-2 grid gap-3 md:grid-cols-2">
-                            {(
-                              Object.keys(formalReviewChecklistLabels) as Array<
-                                keyof FormalReviewChecklistState
-                              >
-                            ).map((key) => (
-                              <div
-                                key={key}
-                                className="flex items-center justify-between rounded-2xl bg-[color:var(--surface-subtle)] px-3 py-3"
-                              >
-                                <span className="text-xs leading-6 text-[color:var(--muted)]">
-                                  {formalReviewChecklistLabels[key]}
-                                </span>
-                                <Badge
-                                  variant={
-                                    item.formalReviewChecklist[key]
-                                      ? "success"
-                                      : "neutral"
-                                  }
-                                >
-                                  {item.formalReviewChecklist[key]
-                                    ? english
-                                      ? "Done"
-                                      : "完成"
-                                    : english
-                                      ? "Open"
-                                      : "未完成"}
-                                </Badge>
+                          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                            <div className="space-y-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-sm font-semibold text-[color:var(--foreground)]">
+                                  {formatSettingsSkillSuggestionText(
+                                    suggestion.title,
+                                    english,
+                                  )}
+                                </p>
+                                {suggestion.suggestedValue &&
+                                suggestion.suggestedValue in actionModeLabels ? (
+                                  <ActionModeBadge
+                                    mode={
+                                      suggestion.suggestedValue as keyof typeof actionModeLabels
+                                    }
+                                  />
+                                ) : null}
                               </div>
-                            ))}
-                          </div>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {(item.formalReviewDecision === "DEFERRED" ||
-                              item.formalReviewDecision === "REJECTED") &&
-                            item.formalPromotionReady ? (
+                              <p className="text-sm leading-6 text-[color:var(--muted)]">
+                                {formatSettingsSkillSuggestionText(
+                                  suggestion.reason,
+                                  english,
+                                )}
+                              </p>
+                              <div className="flex flex-wrap gap-3 text-xs text-[color:var(--muted-foreground)]">
+                                <span>
+                                  {english ? "Current value" : "当前值"}：
+                                  {formatSettingsSkillSuggestionText(
+                                    suggestion.currentValue ??
+                                      (english ? "Not set" : "未设置"),
+                                    english,
+                                  )}
+                                </span>
+                                <span>
+                                  {english ? "Suggested value" : "建议值"}：
+                                  {formatSettingsSkillSuggestionText(
+                                    suggestion.suggestedValue ??
+                                      (english ? "Not set" : "未设置"),
+                                    english,
+                                  )}
+                                </span>
+                                <span>
+                                  {english ? "Confidence" : "置信度"}：
+                                  {suggestion.confidence}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
                               <Button
                                 size="sm"
                                 disabled={pending || !canManagePolicies}
                                 onClick={() =>
                                   runSuggestionAction(
                                     () =>
-                                      queueSkillFormalReviewAction({
-                                        id: item.id,
+                                      acceptStrategySuggestionAction({
+                                        id: suggestion.id,
                                       }),
                                     english
-                                      ? "Queued for manual confirmation"
-                                      : "已加入人工确认队列",
+                                      ? "Strategy suggestion accepted"
+                                      : "已采纳策略建议",
                                   )
                                 }
                               >
-                                {english ? "Queue again" : "重新入队"}
+                                {english ? "Accept" : "采纳建议"}
                               </Button>
-                            ) : null}
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                disabled={pending || !canManagePolicies}
+                                onClick={() =>
+                                  runSuggestionAction(
+                                    () =>
+                                      dismissStrategySuggestionAction({
+                                        id: suggestion.id,
+                                      }),
+                                    english
+                                      ? "Strategy suggestion dismissed"
+                                      : "已忽略策略建议",
+                                  )
+                                }
+                              >
+                                {english ? "Dismiss for now" : "先忽略"}
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       ))
@@ -6942,44 +7048,34 @@ export function SettingsClient({
                       <EmptyState
                         title={
                           english
-                            ? "No manual confirmation decision yet"
-                            : "还没有人工确认决定"
+                            ? "No new policy suggestion recently"
+                            : "系统最近没有新的策略建议"
                         }
                         description={
                           english
-                            ? "Once a queued item is approved, deferred, or rejected, the manual decision trail will appear here."
-                            : "当入队项被批准、暂缓或拒绝后，人工评审轨迹会显示在这里。"
+                            ? "When the system observes stable approval preferences, budget blockers or follow-up timing patterns, it will suggest whether to adjust policy here."
+                            : "当系统观察到稳定审批偏好、预算阻塞或会后跟进规律时，会在这里提示你是否调整策略。"
                         }
                       />
                     )}
                   </CardContent>
                 </Card>
-              </>
-            ) : (
-              <div className="theme-surface-panel-soft rounded-2xl px-4 py-4 text-sm leading-6 text-[color:var(--muted)]">
-                {english
-                  ? "Manual confirmation queue and decision ledger stay reserved for the Helm internal operating workspace. Customer workspaces can still review reusable-practice suggestions and local policy posture here."
-                  : "人工确认队列和决定台账只保留给 Helm 自留经营工作区。客户工作区仍可在这里处理可复用做法建议和本租户的策略姿态。"}
-              </div>
-            )}
 
-            <Card className="workspace-panel-muted">
-              <CardHeader>
-                <CardTitle>
-                  {english
-                    ? "System-suggested policy changes"
-                    : "系统最近建议调整的策略"}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {data.strategySuggestions.length ? (
-                  data.strategySuggestions.map((suggestion) => (
-                    <div
-                      key={suggestion.id}
-                      className="workspace-panel rounded-2xl px-4 py-4"
-                    >
-                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                        <div className="space-y-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>
+                      {english
+                        ? "Recently adopted system-rule suggestions"
+                        : "最近已收敛到系统规则的建议"}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {data.recentStrategyAdoptions.length ? (
+                      data.recentStrategyAdoptions.map((suggestion) => (
+                        <div
+                          key={suggestion.id}
+                          className="theme-surface-panel rounded-2xl px-4 py-4"
+                        >
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="text-sm font-semibold text-[color:var(--foreground)]">
                               {formatSettingsSkillSuggestionText(
@@ -6987,161 +7083,46 @@ export function SettingsClient({
                                 english,
                               )}
                             </p>
-                            {suggestion.suggestedValue &&
-                            suggestion.suggestedValue in actionModeLabels ? (
-                              <ActionModeBadge
-                                mode={
-                                  suggestion.suggestedValue as keyof typeof actionModeLabels
-                                }
-                              />
-                            ) : null}
+                            <Badge variant="approval">
+                              {english ? "Adopted" : "已收敛"}
+                            </Badge>
                           </div>
-                          <p className="text-sm leading-6 text-[color:var(--muted)]">
+                          <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
                             {formatSettingsSkillSuggestionText(
-                              suggestion.reason,
+                              suggestion.appliedEffectSummary ??
+                                (english
+                                  ? "It has been adopted and is now affecting later actions of the same kind."
+                                  : "已被采纳并开始影响后续同类动作。"),
                               english,
                             )}
                           </p>
-                          <div className="flex flex-wrap gap-3 text-xs text-[color:var(--muted-foreground)]">
-                            <span>
-                              {english ? "Current value" : "当前值"}：
-                              {formatSettingsSkillSuggestionText(
-                                suggestion.currentValue ??
-                                  (english ? "Not set" : "未设置"),
-                                english,
-                              )}
-                            </span>
-                            <span>
-                              {english ? "Suggested value" : "建议值"}：
-                              {formatSettingsSkillSuggestionText(
-                                suggestion.suggestedValue ??
-                                  (english ? "Not set" : "未设置"),
-                                english,
-                              )}
-                            </span>
-                            <span>
-                              {english ? "Confidence" : "置信度"}：
-                              {suggestion.confidence}
-                            </span>
-                          </div>
+                          <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
+                            {english ? "Effective at" : "生效时间"}：
+                            {formatSettingsDateLabel(
+                              suggestion.appliedAt ?? suggestion.confirmedAt,
+                              english,
+                            )}
+                          </p>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            size="sm"
-                            disabled={pending || !canManagePolicies}
-                            onClick={() =>
-                              runSuggestionAction(
-                                () =>
-                                  acceptStrategySuggestionAction({
-                                    id: suggestion.id,
-                                  }),
-                                english
-                                  ? "Strategy suggestion accepted"
-                                  : "已采纳策略建议",
-                              )
-                            }
-                          >
-                            {english ? "Accept" : "采纳建议"}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            disabled={pending || !canManagePolicies}
-                            onClick={() =>
-                              runSuggestionAction(
-                                () =>
-                                  dismissStrategySuggestionAction({
-                                    id: suggestion.id,
-                                  }),
-                                english
-                                  ? "Strategy suggestion dismissed"
-                                  : "已忽略策略建议",
-                              )
-                            }
-                          >
-                            {english ? "Dismiss for now" : "先忽略"}
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <EmptyState
-                    title={
-                      english
-                        ? "No new policy suggestion recently"
-                        : "系统最近没有新的策略建议"
-                    }
-                    description={
-                      english
-                        ? "When the system observes stable approval preferences, budget blockers or follow-up timing patterns, it will suggest whether to adjust policy here."
-                        : "当系统观察到稳定审批偏好、预算阻塞或会后跟进规律时，会在这里提示你是否调整策略。"
-                    }
-                  />
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  {english
-                    ? "Recently adopted system-rule suggestions"
-                    : "最近已收敛到系统规则的建议"}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {data.recentStrategyAdoptions.length ? (
-                  data.recentStrategyAdoptions.map((suggestion) => (
-                    <div
-                      key={suggestion.id}
-                      className="theme-surface-panel rounded-2xl px-4 py-4"
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                          {formatSettingsSkillSuggestionText(
-                            suggestion.title,
-                            english,
-                          )}
-                        </p>
-                        <Badge variant="approval">
-                          {english ? "Adopted" : "已收敛"}
-                        </Badge>
-                      </div>
-                      <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                        {formatSettingsSkillSuggestionText(
-                          suggestion.appliedEffectSummary ??
-                            (english
-                              ? "It has been adopted and is now affecting later actions of the same kind."
-                              : "已被采纳并开始影响后续同类动作。"),
-                          english,
-                        )}
-                      </p>
-                      <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
-                        {english ? "Effective at" : "生效时间"}：
-                        {formatSettingsDateLabel(
-                          suggestion.appliedAt ?? suggestion.confirmedAt,
-                          english,
-                        )}
-                      </p>
-                    </div>
-                  ))
-                ) : (
-                  <EmptyState
-                    title={
-                      english
-                        ? "No adopted strategy suggestion yet"
-                        : "还没有收敛完成的策略建议"
-                    }
-                    description={
-                      english
-                        ? "Once you accept system suggestions, this section will show which boundaries have turned into real rules."
-                        : "当你采纳系统建议后，这里会显示哪些边界已经真正变成了规则。"
-                    }
-                  />
-                )}
-              </CardContent>
-            </Card>
+                      ))
+                    ) : (
+                      <EmptyState
+                        title={
+                          english
+                            ? "No adopted strategy suggestion yet"
+                            : "还没有收敛完成的策略建议"
+                        }
+                        description={
+                          english
+                            ? "Once you accept system suggestions, this section will show which boundaries have turned into real rules."
+                            : "当你采纳系统建议后，这里会显示哪些边界已经真正变成了规则。"
+                        }
+                      />
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            ) : null}
 
             {data.policies.map((policy) => {
               const guide = policyGuidesByLocale[policy.actionType];
@@ -7165,118 +7146,150 @@ export function SettingsClient({
                       <ActionModeBadge mode={policy.mode} />
                     </div>
 
-                    <div className="grid gap-4 lg:grid-cols-[1fr_220px_220px_120px]">
-                      <div className="theme-surface-panel rounded-2xl px-4 py-3">
-                        <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                          {english ? "Action type" : "动作类型"}
-                        </p>
-                        <p className="mt-2 text-sm font-medium text-[color:var(--foreground)]">
-                          {actionTypeLabels[policy.actionType]}
-                        </p>
-                        <p className="mt-2 text-xs leading-6 text-[color:var(--muted-foreground)]">
-                          {guide.example}
-                        </p>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-[color:var(--foreground)]">
-                          {english ? "Default mode" : "默认行为"}
-                        </label>
-                        <Select
-                          disabled={!canManagePolicies || pending}
-                          defaultValue={policy.mode}
-                          onValueChange={(value) =>
-                            savePolicy(
-                              policy.id,
-                              {
-                                mode: value as typeof policy.mode,
-                                riskThreshold: policy.riskThreshold,
-                                enabled: policy.enabled,
-                              },
-                              policy.actionType,
-                            )
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {Object.entries(actionModeLabelsByLocale).map(
-                              ([value, label]) => (
-                                <SelectItem key={value} value={value}>
-                                  {label}
-                                </SelectItem>
-                              ),
-                            )}
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-[color:var(--muted-foreground)]">
-                          {english ? "Recommended" : "推荐"}：
-                          {actionModeLabelsByLocale[defaults.mode]}
-                        </p>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-[color:var(--foreground)]">
-                          {english
-                            ? "Auto-execution threshold"
-                            : "自动执行阈值"}
-                        </label>
-                        <Select
-                          disabled={!canManagePolicies || pending}
-                          defaultValue={policy.riskThreshold}
-                          onValueChange={(value) =>
-                            savePolicy(
-                              policy.id,
-                              {
-                                mode: policy.mode,
-                                riskThreshold:
-                                  value as typeof policy.riskThreshold,
-                                enabled: policy.enabled,
-                              },
-                              policy.actionType,
-                            )
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {Object.entries(riskLabelsByLocale).map(
-                              ([value, label]) => (
-                                <SelectItem key={value} value={value}>
-                                  {label}
-                                </SelectItem>
-                              ),
-                            )}
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-[color:var(--muted-foreground)]">
-                          {english ? "Recommended" : "推荐"}：
-                          {riskLabelsByLocale[defaults.riskThreshold]}
-                        </p>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-[color:var(--foreground)]">
-                          {english ? "Enabled" : "启用"}
-                        </label>
-                        <div className="theme-surface-panel flex h-11 items-center rounded-2xl px-4">
-                          <Switch
+                    {settingsAdminView ? (
+                      <div className="grid gap-4 lg:grid-cols-[1fr_220px_220px_120px]">
+                        <div className="theme-surface-panel rounded-2xl px-4 py-3">
+                          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                            {english ? "Action type" : "动作类型"}
+                          </p>
+                          <p className="mt-2 text-sm font-medium text-[color:var(--foreground)]">
+                            {actionTypeLabels[policy.actionType]}
+                          </p>
+                          <p className="mt-2 text-xs leading-6 text-[color:var(--muted-foreground)]">
+                            {guide.example}
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-[color:var(--foreground)]">
+                            {english ? "Default mode" : "默认行为"}
+                          </label>
+                          <Select
                             disabled={!canManagePolicies || pending}
-                            checked={policy.enabled}
-                            onCheckedChange={(checked) =>
+                            defaultValue={policy.mode}
+                            onValueChange={(value) =>
                               savePolicy(
                                 policy.id,
                                 {
-                                  mode: policy.mode,
+                                  mode: value as typeof policy.mode,
                                   riskThreshold: policy.riskThreshold,
-                                  enabled: checked,
+                                  enabled: policy.enabled,
                                 },
                                 policy.actionType,
                               )
                             }
-                          />
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Object.entries(actionModeLabelsByLocale).map(
+                                ([value, label]) => (
+                                  <SelectItem key={value} value={value}>
+                                    {label}
+                                  </SelectItem>
+                                ),
+                              )}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-[color:var(--muted-foreground)]">
+                            {english ? "Recommended" : "推荐"}：
+                            {actionModeLabelsByLocale[defaults.mode]}
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-[color:var(--foreground)]">
+                            {english
+                              ? "Auto-execution threshold"
+                              : "自动执行阈值"}
+                          </label>
+                          <Select
+                            disabled={!canManagePolicies || pending}
+                            defaultValue={policy.riskThreshold}
+                            onValueChange={(value) =>
+                              savePolicy(
+                                policy.id,
+                                {
+                                  mode: policy.mode,
+                                  riskThreshold:
+                                    value as typeof policy.riskThreshold,
+                                  enabled: policy.enabled,
+                                },
+                                policy.actionType,
+                              )
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Object.entries(riskLabelsByLocale).map(
+                                ([value, label]) => (
+                                  <SelectItem key={value} value={value}>
+                                    {label}
+                                  </SelectItem>
+                                ),
+                              )}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-[color:var(--muted-foreground)]">
+                            {english ? "Recommended" : "推荐"}：
+                            {riskLabelsByLocale[defaults.riskThreshold]}
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-[color:var(--foreground)]">
+                            {english ? "Enabled" : "启用"}
+                          </label>
+                          <div className="theme-surface-panel flex h-11 items-center rounded-2xl px-4">
+                            <Switch
+                              disabled={!canManagePolicies || pending}
+                              checked={policy.enabled}
+                              onCheckedChange={(checked) =>
+                                savePolicy(
+                                  policy.id,
+                                  {
+                                    mode: policy.mode,
+                                    riskThreshold: policy.riskThreshold,
+                                    enabled: checked,
+                                  },
+                                  policy.actionType,
+                                )
+                              }
+                            />
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div
+                        className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
+                        data-settings-policy-readonly="true"
+                      >
+                        <Info
+                          label={english ? "Action type" : "动作类型"}
+                          value={actionTypeLabelsByLocale[policy.actionType]}
+                        />
+                        <Info
+                          label={english ? "Default mode" : "默认行为"}
+                          value={actionModeLabelsByLocale[policy.mode]}
+                        />
+                        <Info
+                          label={english ? "Auto-execution threshold" : "自动执行阈值"}
+                          value={riskLabelsByLocale[policy.riskThreshold]}
+                        />
+                        <Info
+                          label={english ? "Enabled" : "启用"}
+                          value={
+                            policy.enabled
+                              ? english
+                                ? "On"
+                                : "已启用"
+                              : english
+                                ? "Off"
+                                : "已关闭"
+                          }
+                        />
+                      </div>
+                    )}
 
                     <div className="workspace-panel-muted rounded-2xl px-4 py-3 text-sm text-[color:var(--foreground)]">
                       <p className="font-medium text-[color:var(--foreground)]">
@@ -7438,6 +7451,93 @@ export function SettingsClient({
           setPilotDraft={setPilotDraft}
         />
       </Tabs>
+
+      <SettingsCommonEntries
+        diagnosticsEnabled={featureFlags.diagnosticsCenter}
+        english={english}
+        navLabels={{
+          analytics: messages.shell.nav.analytics,
+          diagnostics: messages.shell.nav.diagnostics,
+          imports: messages.shell.nav.imports,
+          inbox: messages.shell.nav.inbox,
+        }}
+      />
+
+      {settingsAdminView ? (
+        <details className={systemJudgementDetailsClassName} data-system-judgement>
+          <SystemJudgementSummary english={english} />
+          <div className="workspace-surface-stack px-4 pb-5">
+            <CustomerAssetFocusStrip
+              eyebrow={english ? "Operating controls" : "经营控制"}
+              title={
+                english
+                  ? "Change only the control that blocks today's work."
+                  : "只改卡住今天工作的那条控制。"
+              }
+              summary={
+                english
+                  ? "Settings are useful when they reveal source health, owner access, pending review, and the next safe control change."
+                  : "设置页先告诉你入口是否正常、负责人是否有权限、哪些复核待处理，以及下一步该改哪条控制。"
+              }
+              items={[...settingsAssetFocusItems]}
+              primaryAction={{
+                label:
+                  data.integrationSummary.connectorErrorCount > 0
+                    ? english
+                      ? "Fix sources"
+                      : "修入口"
+                    : english
+                      ? "Review controls"
+                      : "检查控制",
+                href:
+                  data.integrationSummary.connectorErrorCount > 0
+                    ? "/settings?tab=connectors"
+                    : "/settings?tab=policies",
+              }}
+              secondaryAction={{
+                label: english ? "Open diagnostics" : "打开就绪度",
+                href: "/diagnostics",
+              }}
+            />
+
+            <ObjectContextOperatingSummary
+              label={english ? "Settings operating summary" : "设置操作摘要"}
+              title={settingsSummaryTitle}
+              summary={settingsSummaryText}
+              items={settingsSummaryItems}
+              connectionsLabel={english ? "Connected loop" : "关联对象与回路"}
+              connections={settingsSummaryConnections}
+            />
+
+            <SettingsOverviewPanels
+              applyRecommendedPilotPreset={applyRecommendedPilotPreset}
+              canApplyRecommendedPilotPreset={canManageOperationalControls}
+              english={english}
+              onReviewAuthControls={() =>
+                router.push("/settings?tab=permissions", { scroll: false })
+              }
+              operatingReadiness={{
+                connectedConnectorCount:
+                  data.integrationSummary.connectedConnectorCount,
+                connectorErrorCount: data.integrationSummary.connectorErrorCount,
+                importedSignalCount: data.integrationSummary.importedSignalCount,
+                pendingApprovals: data.governanceSummary.pendingApprovals,
+                approvalProtectedActions:
+                  data.governanceSummary.approvalProtectedActions,
+                budgetCount: data.budgets.length,
+                llmFallbacks7d: data.governanceSummary.llmFallbacks7d,
+              }}
+              recommendations={settingsGuidanceRecommendations}
+              reminders={settingsGuidanceReminders}
+              stats={{
+                policyCount: data.policies.length,
+                budgetCount: data.budgets.length,
+                teamMemberCount: data.memberships.length,
+              }}
+            />
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }

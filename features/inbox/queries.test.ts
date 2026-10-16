@@ -1,6 +1,6 @@
 import { RecordSource } from "@prisma/client";
 import { describe, expect, it } from "vitest";
-import { buildInboxThreadWhere } from "@/features/inbox/queries";
+import { buildInboxThreadWhere, inboxThreadInclude } from "@/features/inbox/queries";
 
 describe("inbox thread visibility scope", () => {
   it("keeps non-mailbox threads visible and scopes aliyun mailbox threads to the current inbox account", () => {
@@ -29,5 +29,13 @@ describe("inbox thread visibility scope", () => {
         not: RecordSource.GMAIL,
       },
     });
+  });
+});
+
+describe("inbox thread include", () => {
+  it("loads every message of a thread so the latest and unanswered state never comes from a slice", () => {
+    expect(inboxThreadInclude.messages).toEqual({ orderBy: { sentAt: "asc" } });
+    expect(inboxThreadInclude.messages).not.toHaveProperty("take");
+    expect(inboxThreadInclude.messages).not.toHaveProperty("skip");
   });
 });

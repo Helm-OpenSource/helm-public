@@ -662,3 +662,307 @@ export async function getMemoryData(
     distillationDecisions: distillationDecisions.map(buildMemoryDistillationCandidateReadout),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Object-first memory facts (2026-10-15 wave 4).
+//
+// MemoryFact is polymorphic (objectType + objectId, sourceType + sourceId) and
+// has no Prisma relations, so the timeline used to print 「对象：联系人」 and
+// never showed where a fact came from. These helpers resolve, in a few bounded
+// workspace-scoped batches, the object's own name and — where a resolver
+// exists — the source's original text (email message body, meeting note).
+// Other sources fall back to their type plus a link.
+//
+// MemoryFact 是多态记录，没有 Prisma 关系。这里按工作区分批查出对象名，以及能解析的
+// 来源原文（邮件正文、会议纪要）；解析不了的来源只给类型和链接。
+// ---------------------------------------------------------------------------
+
+export type MemoryFactObjectRef = {
+  name: string;
+  href: string | null;
+};
+
+/**
+ * What the page knows about a fact's object:
+ * - `resolved`: the object row was loaded (`object` carries its name and page);
+ * - `not_loaded`: the id is beyond the per-type lookup cap, so it was never
+ *   queried — render the type and id with 「未加载」, never as deleted;
+ * - `missing`: the id was queried and no row came back — the object is gone;
+ * - `unsupported`: the object type has no name resolver (action item, approval
+ *   task, policy rule) — render the type only.
+ */
+export type MemoryFactObjectState = "resolved" | "not_loaded" | "missing" | "unsupported";
+
+export type MemoryFactSourceRef = {
+  kind: "EMAIL_MESSAGE" | "MEETING_NOTE" | "EMAIL_THREAD" | "MEETING" | "OTHER";
+  title: string | null;
+  author: string | null;
+  occurredAt: Date | null;
+  text: string | null;
+  href: string | null;
+};
+
+type MemoryFactContextInput = {
+  objectType: ObjectType | string;
+  objectId: string;
+  sourceType: string;
+  sourceId: string;
+};
+
+/** Per object / source type; ids beyond it are reported as `not_loaded`. */
+export const MEMORY_FACT_CONTEXT_ID_LIMIT = 500;
+
+function uniqueIds(values: Array<string | null | undefined>) {
+  return Array.from(
+    new Set(values.filter((value): value is string => Boolean(value?.trim()))),
+  ).slice(0, MEMORY_FACT_CONTEXT_ID_LIMIT);
+}
+
+function idsFor<T extends MemoryFactContextInput>(
+  facts: readonly T[],
+  pick: (fact: T) => string | null,
+) {
+  return uniqueIds(facts.map(pick));
+}
+
+function pickMeetingNoteText(note: {
+  summary: string | null;
+  keyDecisions: string | null;
+  liveTranscript: string | null;
+}) {
+  return note.summary?.trim() || note.keyDecisions?.trim() || note.liveTranscript?.trim() || null;
+}
+
+/**
+ * Resolves each fact's object name and source original text. Returns maps keyed
+ * by `${objectType}:${objectId}` and `${sourceType}:${sourceId}`.
+ */
+export async function resolveMemoryFactContext<T extends MemoryFactContextInput>(
+  workspaceId: string,
+  facts: readonly T[],
+) {
+  const objectIds = (type: string) =>
+    idsFor(facts, (fact) => (fact.objectType === type ? fact.objectId : null));
+  const sourceIds = (type: string) =>
+    idsFor(facts, (fact) => (fact.sourceType === type ? fact.sourceId : null));
+
+  const contactIds = objectIds("CONTACT");
+  const companyIds = objectIds("COMPANY");
+  const opportunityIds = objectIds("OPPORTUNITY");
+  const emailThreadObjectIds = objectIds("EMAIL_THREAD");
+  const emailMessageIds = sourceIds("EMAIL_MESSAGE");
+  const meetingNoteSourceIds = sourceIds("MEETING_NOTE");
+  const emailThreadSourceIds = sourceIds("EMAIL_THREAD");
+  // MEETING_NOTE facts point at meeting.id (fact extraction, meeting memory
+  // workflow) or at meetingNote.id (CRM warm-up), so both are looked up.
+  const meetingIds = uniqueIds([
+    ...objectIds("MEETING"),
+    ...sourceIds("MEETING"),
+    ...meetingNoteSourceIds,
+  ]);
+  const threadIds = uniqueIds([...emailThreadObjectIds, ...emailThreadSourceIds]);
+
+  const [contacts, companies, opportunities, meetings, threads, messages, notes] =
+    await Promise.all([
+      contactIds.length
+        ? db.contact.findMany({
+            where: { workspaceId, id: { in: contactIds } },
+            select: { id: true, name: true },
+          })
+        : Promise.resolve([]),
+      companyIds.length
+        ? db.company.findMany({
+            where: { workspaceId, id: { in: companyIds } },
+            select: { id: true, name: true },
+          })
+        : Promise.resolve([]),
+      opportunityIds.length
+        ? db.opportunity.findMany({
+            where: { workspaceId, id: { in: opportunityIds } },
+            select: { id: true, title: true },
+          })
+        : Promise.resolve([]),
+      meetingIds.length
+        ? db.meeting.findMany({
+            where: { workspaceId, id: { in: meetingIds } },
+            select: { id: true, title: true, startsAt: true },
+          })
+        : Promise.resolve([]),
+      threadIds.length
+        ? db.emailThread.findMany({
+            where: { workspaceId, id: { in: threadIds } },
+            select: { id: true, subject: true },
+          })
+        : Promise.resolve([]),
+      emailMessageIds.length
+        ? db.emailMessage.findMany({
+            // EmailMessage has no workspaceId; scope through its thread.
+            where: { id: { in: emailMessageIds }, thread: { workspaceId } },
+            select: {
+              id: true,
+              sender: true,
+              senderEmail: true,
+              body: true,
+              sentAt: true,
+              threadId: true,
+              thread: { select: { subject: true } },
+            },
+          })
+        : Promise.resolve([]),
+      meetingNoteSourceIds.length
+        ? db.meetingNote.findMany({
+            where: {
+              workspaceId,
+              OR: [
+                { id: { in: meetingNoteSourceIds } },
+                { meetingId: { in: meetingNoteSourceIds } },
+              ],
+            },
+            select: {
+              id: true,
+              meetingId: true,
+              summary: true,
+              keyDecisions: true,
+              liveTranscript: true,
+              updatedAt: true,
+              meeting: { select: { title: true, startsAt: true } },
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+
+  const objects = new Map<string, MemoryFactObjectRef>();
+  for (const contact of contacts) {
+    objects.set(`CONTACT:${contact.id}`, { name: contact.name, href: `/contacts/${contact.id}` });
+  }
+  for (const company of companies) {
+    objects.set(`COMPANY:${company.id}`, { name: company.name, href: `/companies/${company.id}` });
+  }
+  for (const opportunity of opportunities) {
+    objects.set(`OPPORTUNITY:${opportunity.id}`, {
+      name: opportunity.title,
+      href: `/opportunities?opportunityId=${encodeURIComponent(opportunity.id)}`,
+    });
+  }
+  for (const meeting of meetings) {
+    objects.set(`MEETING:${meeting.id}`, { name: meeting.title, href: `/meetings/${meeting.id}` });
+  }
+  for (const thread of threads) {
+    objects.set(`EMAIL_THREAD:${thread.id}`, { name: thread.subject, href: `/inbox/${thread.id}` });
+  }
+
+  const sources = new Map<string, MemoryFactSourceRef>();
+  for (const message of messages) {
+    sources.set(`EMAIL_MESSAGE:${message.id}`, {
+      kind: "EMAIL_MESSAGE",
+      title: message.thread.subject,
+      author: message.sender || message.senderEmail,
+      occurredAt: message.sentAt,
+      text: message.body,
+      href: `/inbox/${message.threadId}`,
+    });
+  }
+  const meetingById = new Map(meetings.map((meeting) => [meeting.id, meeting]));
+  for (const sourceId of meetingNoteSourceIds) {
+    const note = notes.find((item) => item.id === sourceId || item.meetingId === sourceId);
+    const meeting = note ? null : meetingById.get(sourceId);
+    if (note) {
+      sources.set(`MEETING_NOTE:${sourceId}`, {
+        kind: "MEETING_NOTE",
+        title: note.meeting.title,
+        author: null,
+        occurredAt: note.meeting.startsAt,
+        text: pickMeetingNoteText(note),
+        href: `/meetings/${note.meetingId}`,
+      });
+    } else if (meeting) {
+      sources.set(`MEETING_NOTE:${sourceId}`, {
+        kind: "MEETING_NOTE",
+        title: meeting.title,
+        author: null,
+        occurredAt: meeting.startsAt,
+        text: null,
+        href: `/meetings/${meeting.id}`,
+      });
+    }
+  }
+  for (const sourceId of sourceIds("MEETING")) {
+    const meeting = meetingById.get(sourceId);
+    if (meeting) {
+      sources.set(`MEETING:${sourceId}`, {
+        kind: "MEETING",
+        title: meeting.title,
+        author: null,
+        occurredAt: meeting.startsAt,
+        text: null,
+        href: `/meetings/${meeting.id}`,
+      });
+    }
+  }
+  const threadById = new Map(threads.map((thread) => [thread.id, thread]));
+  for (const sourceId of emailThreadSourceIds) {
+    const thread = threadById.get(sourceId);
+    if (thread) {
+      sources.set(`EMAIL_THREAD:${sourceId}`, {
+        kind: "EMAIL_THREAD",
+        title: thread.subject,
+        author: null,
+        occurredAt: null,
+        text: null,
+        href: `/inbox/${thread.id}`,
+      });
+    }
+  }
+
+  // Exactly the ids each object lookup queried, so an id beyond the cap is told
+  // apart from an id that was queried and did not come back.
+  const queriedObjectIds = new Map<string, ReadonlySet<string>>([
+    ["CONTACT", new Set(contactIds)],
+    ["COMPANY", new Set(companyIds)],
+    ["OPPORTUNITY", new Set(opportunityIds)],
+    ["MEETING", new Set(meetingIds)],
+    ["EMAIL_THREAD", new Set(threadIds)],
+  ]);
+
+  return { objects, sources, queriedObjectIds };
+}
+
+/**
+ * Attaches `object` (its own name and page) and `source` (original text where a
+ * resolver exists, otherwise type + link) to every fact.
+ */
+export async function attachMemoryFactContext<T extends MemoryFactContextInput>(
+  workspaceId: string,
+  facts: readonly T[],
+): Promise<
+  Array<
+    T & {
+      object: MemoryFactObjectRef | null;
+      objectState: MemoryFactObjectState;
+      source: MemoryFactSourceRef | null;
+    }
+  >
+> {
+  if (!facts.length) return [];
+  const { objects, sources, queriedObjectIds } = await resolveMemoryFactContext(
+    workspaceId,
+    facts,
+  );
+  return facts.map((fact) => {
+    const object = objects.get(`${fact.objectType}:${fact.objectId}`) ?? null;
+    const queried = queriedObjectIds.get(String(fact.objectType));
+    const objectState: MemoryFactObjectState = object
+      ? "resolved"
+      : !queried
+        ? "unsupported"
+        : queried.has(fact.objectId)
+          ? "missing"
+          : "not_loaded";
+    return {
+      ...fact,
+      object,
+      objectState,
+      source: sources.get(`${fact.sourceType}:${fact.sourceId}`) ?? null,
+    };
+  });
+}

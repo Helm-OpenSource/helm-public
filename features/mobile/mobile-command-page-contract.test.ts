@@ -17,4 +17,15 @@ describe("mobile command page China-first UX contract", () => {
     expect(mobilePageSource).toContain("我的复核");
     expect(mobilePageSource).toContain("今日推进");
   });
+
+  it("takes urgent and pressure totals from the read model, counted before the display slice", () => {
+    expect(mobilePageSource).toContain(
+      "topAlert: formatMobileUrgentAlert(readModel.urgentCount, english)",
+    );
+    expect(mobilePageSource).toContain(
+      "const highPressureCount = readModel.highPressureCount;",
+    );
+    expect(mobilePageSource).not.toContain('"1 项紧急"');
+    expect(mobilePageSource).not.toMatch(/mustPushItems\.filter\(\s*\(item\) => item\.severity === "critical"/);
+  });
 });

@@ -25,8 +25,8 @@ import { RecommendationJudgementCard } from "@/components/recommendations/recomm
 import { useWorkspaceUi } from "@/components/providers/workspace-ui-provider";
 import { BlockerCard } from "@/components/shared/blocker-card";
 import { BoundaryBar } from "@/components/shared/boundary-bar";
+import { BusinessLoopGapReadoutLines } from "@/components/shared/business-loop-gap-readout-lines";
 import { CommitmentCard } from "@/components/shared/commitment-card";
-import { CustomerAssetFocusStrip } from "@/components/shared/customer-asset-focus-strip";
 import { EmptyState } from "@/components/shared/empty-state";
 import { FirstLoopSurfaceSummary } from "@/components/shared/first-loop-surface-summary";
 import {
@@ -38,6 +38,10 @@ import { ProactiveMechanismPanel } from "@/components/shared/proactive-mechanism
 import { ReportingProtocolPanel } from "@/components/shared/reporting-protocol-panel";
 import { RiskBadge } from "@/components/shared/risk-badge";
 import { ApprovalBadge } from "@/components/shared/status-badges";
+import {
+  SystemJudgementSummary,
+  systemJudgementDetailsClassName,
+} from "@/components/shared/system-judgement-summary";
 import type { RejectionReasonCode } from "@prisma/client";
 import {
   REJECTION_REASON_CODES,
@@ -103,9 +107,6 @@ import {
 } from "@/lib/utils";
 import {
   buildApprovalBoundaryModel,
-  buildMeetingMemoryBundle,
-  buildMeetingMemoryGovernanceSummary,
-  buildMeetingMemoryLoopSummary,
   buildApprovalTaskReasonChain,
   type BusinessLoopGapSummary,
   type WorkspaceFirstLoopModel,
@@ -168,10 +169,14 @@ type ApprovalsClientProps = {
     reasoning: string | null;
     editableContent: string | null;
     resultPreview: string | null;
+    decisionReason: string | null;
+    rejectionReasonCode: RejectionReasonCode | null;
     createdAt: Date;
     updatedAt: Date;
     reviewedAt: Date | null;
     reviewedBy: { name: string } | null;
+    /** The email thread the action was created from, when the viewer may open it. */
+    originThread: { id: string; subject: string } | null;
     biSource: {
       decisionId: string | null;
       signalId: string | null;
@@ -194,6 +199,7 @@ type ApprovalsClientProps = {
       title: string;
       actionType: keyof typeof actionTypeLabels;
       description: string | null;
+      draftContent: string | null;
       riskLevel: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
       suggestedExecutionAt: Date | null;
       executionMode: string;
@@ -215,6 +221,8 @@ type ApprovalsClientProps = {
       } | null;
       contact: { id: string; name: string } | null;
       meeting: { id: string; title: string } | null;
+      /** Who the action was created on behalf of (the initiator). */
+      createdBy: { id: string; name: string; email: string } | null;
       decisionWorkPacketClaim: {
         decisionRecordId: string;
       } | null;
@@ -347,6 +355,9 @@ type HandoffExecutionComposerState = {
 };
 
 type BiBoardAccessState = "checking" | "available" | "unavailable";
+
+/** Queue cards show the draft in full up to this many characters, then state the cut. */
+const APPROVAL_CARD_DRAFT_LIMIT = 600;
 
 function isExpectedBiBoardUnavailableStatus(status: number) {
   return status === 403 || status === 404;
@@ -531,9 +542,21 @@ export function ApprovalsClient({
         biSource: previewed.biSource,
       })
     : null;
+  const selectedTargetLabel =
+    selected?.actionItem.contact?.name ??
+    approvalOptionalTitle(selected?.actionItem.opportunity?.title) ??
+    approvalOptionalTitle(selected?.actionItem.meeting?.title) ??
+    (english ? "Unlinked object" : "未关联对象");
+  const selectedTargetHref = selected
+    ? resolveApprovalObjectDetailHref({
+        contact: selected.actionItem.contact,
+        opportunity: selected.actionItem.opportunity,
+        meeting: selected.actionItem.meeting,
+        biSource: selected.biSource,
+      })
+    : null;
   const selectedApprovalHashTargetId = selected?.id ?? null;
   const selectedActionType = selected?.actionItem.actionType ?? null;
-  const previewedActionType = previewed?.actionItem.actionType ?? null;
   const recentSimilarActions =
     selectedApprovalHashTargetId && selectedActionType
       ? tasks
@@ -547,9 +570,6 @@ export function ApprovalsClient({
       : [];
   const selectedLearningPanel = selectedActionType
     ? (learningPanels[selectedActionType] ?? null)
-    : null;
-  const previewedLearningPanel = previewedActionType
-    ? (learningPanels[previewedActionType] ?? null)
     : null;
   const canReviewGovernedActions = actionGovernance.canReview;
   const canChangeActionPolicy = actionGovernance.canChangePolicy;
@@ -801,7 +821,9 @@ export function ApprovalsClient({
       const matchesSearch =
         !search ||
         task.actionItem.title.toLowerCase().includes(search.toLowerCase()) ||
-        task.reasoning?.toLowerCase().includes(search.toLowerCase()) ||
+        getApprovalDraftText(task)
+          .toLowerCase()
+          .includes(search.toLowerCase()) ||
         task.actionItem.contact?.name
           .toLowerCase()
           .includes(search.toLowerCase()) ||
@@ -874,13 +896,6 @@ export function ApprovalsClient({
     ) ??
     meetingLinkedPendingTasks[0] ??
     null;
-  const meetingLinkedBoundarySummary = meetingLinkedApprovalFocus
-    ? english
-      ? `First up: "${meetingLinkedApprovalFocus.actionItem.title}". Draft and evidence are ready — your call.`
-      : `先看「${approvalTitle(meetingLinkedApprovalFocus.actionItem.title)}」。草稿和证据已就绪，等你拍板。`
-    : english
-      ? "No meeting-triggered reviews waiting."
-      : "没有会议触发的复核在等。";
   const approvalEvidenceFocus =
     selected ??
     previewed ??
@@ -1109,13 +1124,19 @@ export function ApprovalsClient({
     : approvalCandidate?.actionItem.meeting
       ? (["delivery", "operator"] as const)
       : (["founder", "operator"] as const);
-  const approvalFocusTitle = approvalCandidate
-    ? english
-      ? `Review “${approvalCandidate.actionItem.title}” first`
-      : `先复核“${approvalTitle(approvalCandidate.actionItem.title)}”`
-    : english
-      ? "No customer-visible draft is waiting right now"
-      : "当前没有客户可见草稿在等待";
+  const approvalCandidateObjectLine = approvalCandidate
+    ? [
+        approvalCandidate.actionItem.contact?.name,
+        approvalOptionalTitle(approvalCandidate.actionItem.opportunity?.title),
+        approvalCandidate.actionItem.opportunity?.company?.name,
+        approvalOptionalTitle(approvalCandidate.actionItem.meeting?.title),
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : "";
+  const approvalCandidateDraftLine = approvalCandidate
+    ? getFirstDraftLine(getApprovalDraftText(approvalCandidate))
+    : "";
   const approvalFocusSummary = approvalCandidate
     ? english
       ? `${summary.pending} pending · ${summary.highRisk} high-risk · ${summary.external} external-facing. Decide whether the top draft can leave the boundary.`
@@ -1210,10 +1231,6 @@ export function ApprovalsClient({
           : english
           ? "No evidence bundle is active yet."
           : "当前还没有活跃证据包。",
-        businessLoopGapReadout.pendingDecision ??
-          (english
-            ? "No gap attached to this review."
-            : "当前复核没有挂上缺口。"),
         english
           ? "Replay, audit and memory drill-down stay available before anyone lets the action through."
           : "在任何人放行动作前，回放、审计和记忆下钻都保持可用。",
@@ -1489,784 +1506,47 @@ export function ApprovalsClient({
 
   return (
     <div className="workspace-surface-stack">
-      <div
-        data-frontstage-block="decision-request"
-        data-page-decision-request="true"
-      >
-        <PageHeader
-          eyebrow={pageStory.eyebrow}
-          title={english ? "Actions waiting for you" : "待确认动作"}
-          description={
-            english
-              ? "Start with the draft most likely to affect a customer."
-              : "先处理最可能影响客户的一条草稿。"
-          }
-        />
-      </div>
-
-      <BoundaryBar
-        english={english}
-        copy={{
-          observed: {
-            zh: "等待你确认的草稿与动作队列。",
-            en: "The queue of drafts and actions waiting for your confirmation.",
-          },
-          wontDo: {
-            zh: "在你点击确认之前，系统不会通过、发送或结算任何一条。",
-            en: "Until you click confirm, the system passes, sends, or settles nothing.",
-          },
-          decider: {
-            zh: "每一条的最终决定权都在你。",
-            en: "The final decision on every item is yours.",
-          },
-          negatives: [
-            { zh: "无自动通过", en: "No auto-approve" },
-            { zh: "无自动外发", en: "No auto-send" },
-            { zh: "无自动结算", en: "No auto-settle" },
-          ],
-        }}
+      <PageHeader
+        eyebrow={pageStory.eyebrow}
+        title={english ? "Actions waiting for you" : "待确认动作"}
       />
 
-      <CustomerAssetFocusStrip
-        eyebrow={english ? "Customer-visible draft" : "客户可见草稿"}
-        title={approvalFocusTitle}
-        summary={approvalFocusSummary}
-        primaryAction={
-          approvalCandidate
-            ? {
-                label: english ? "Open draft" : "打开草稿",
-                href: buildApprovalDrawerHref(approvalCandidate.id),
-              }
-            : {
-                label: english ? "Back to dashboard" : "回到首页",
-                href: "/dashboard",
-              }
-        }
-        secondaryAction={
-          approvalCandidate
-            ? {
-                label: english ? "Open evidence" : "查看依据",
-                href: approvalCandidateMemoryHref,
-              }
-            : null
-        }
-        items={[
-          {
-            label: english ? "Object" : "对象",
-            value: approvalTarget,
-            detail: approvalCandidate
-              ? formatApprovalQueueStatus(approvalCandidate.status, english)
-              : undefined,
-            tone: "info",
-          },
-          {
-            label: english ? "Pressure" : "当前压力",
-            value: approvalFocusPressure,
-            tone: approvalCandidate?.isHighRisk ? "danger" : "warning",
-          },
-          {
-            label: english ? "Decision" : "需要你判断",
-            value: approvalCandidate
-              ? english
-                ? "Approve, rewrite, reject, or move to manual handling."
-                : "通过、改写、拒绝，或转人工处理。"
-              : english
-                ? "No decision required."
-                : "暂无需要判断。",
-            detail: approvalCandidate?.reasoning
-              ? approvalText(approvalCandidate.reasoning)
-              : null,
-            href: approvalCandidate
-              ? buildApprovalDrawerHref(approvalCandidate.id)
-              : null,
-            tone: "success",
-          },
-        ]}
-      />
-
-      <details className="order-last rounded-lg border border-[color:var(--border)] bg-[color:var(--background-elevated)] px-4 py-3 text-sm text-[color:var(--muted)]">
-        <summary className="cursor-pointer list-none font-semibold text-[color:var(--foreground)] marker:content-none [&::-webkit-details-marker]:hidden">
-          {english ? "Reference rules" : "引用规则"}
-        </summary>
-        <div className="mt-4 space-y-4">
-          <HomeSurfaceArrivalBanner
-            kind="approvals"
-            english={english}
-            contract={{
-              ownership: english
-                ? "Approvals owns trust-sensitive draft review, boundary checks and release posture."
-                : "复核页负责信任敏感草稿、边界检查和是否放行的判断姿态。",
-              nextStep: english
-                ? "Start in the approval preview, then decide whether the draft should be approved, rewritten, rejected or converted to manual handling."
-                : "先看复核预览，再决定草稿是通过、改写、拒绝还是转人工处理。",
-              boundary: english
-                ? "Approving a draft here still does not create autonomous send or commitment authority."
-                : "在这里通过草稿，也不意味着系统获得了自动发送或自动承诺权限。",
-            }}
-          />
-
-          {!approvalHomeArrival.isHomeSurfaceArrival ? (
-            <FirstLoopSurfaceSummary
-              model={approvalFirstLoopDisplayModel}
-              english={english}
-              eyebrow={english ? "Review path" : "确认路径"}
-              compact
-            />
-          ) : null}
-
-          <ReportingProtocolPanel protocol={approvalsProtocol} english={english} />
-
-          <ProactiveMechanismPanel
-            title={
-              english
-                ? "Approval collaboration raised proactively"
-                : "主动抬出的审批协作"
-            }
-            description={
-              english
-                ? "When a worker finishes a trust-sensitive draft, it should not stay as a queue row. This page should raise a clean review request with boundary, evidence and the next human decision."
-                : "当协作者完成一条信任敏感草稿时，它不该只留成一行队列，而应该把边界、证据和下一步人工判断一起主动送出来。"
-            }
-            flows={[approvalProactiveFlow]}
-            english={english}
-          />
-        </div>
-      </details>
-
-      {biBoardAccessState === "available" && biBoardContribution ? (
-        <Card className="order-8 workspace-panel border-[color:var(--mode-card-border)]">
-          <CardHeader className="pb-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <CardTitle>
-                  {english ? "BI signal board" : "经营信号看板"}
-                </CardTitle>
-                <CardDescription>
-                  {english
-                    ? biBoardContribution.descriptionEnglish
-                    : biBoardContribution.descriptionChinese}
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <Button asChild size="sm" variant="secondary">
-              <Link href={biBoardContribution.ctaHref}>
-                {english
-                  ? biBoardContribution.ctaLabelEnglish
-                  : biBoardContribution.ctaLabelChinese}
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      <details
-        className="order-2 rounded-[24px] border border-[color:var(--border)] bg-[color:var(--background-elevated)]"
-        data-testid="approval-load-disclosure"
-      >
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
-          <span className="min-w-0">
-            <span className="block text-sm font-semibold text-[color:var(--foreground)]">
-              {english ? "Review load" : "复核负载"}
-            </span>
-            <span className="mt-1 block text-xs leading-5 text-[color:var(--muted-foreground)]">
-              {english
-                ? `${summary.pending} pending · ${summary.highRisk} high risk · ${summary.external} external waiting`
-                : `${summary.pending} 条待复核 · ${summary.highRisk} 条高风险 · ${summary.external} 条待处理外发`}
-            </span>
-          </span>
-          <span className="rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-1.5 text-xs font-medium text-[color:var(--foreground)]">
-            {english ? "Open load" : "展开负载"}
-          </span>
-        </summary>
-        <div className="grid gap-4 px-4 pb-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard
-            label={english ? "Pending" : "待复核"}
-            value={summary.pending}
-            tone="approval"
-            active={activeView === "pending" && activeFilter === "PENDING"}
-            onClick={() => {
-              setActiveView("pending");
-              setActiveFilter("PENDING");
-            }}
-          />
-          <MetricCard
-            label={english ? "High risk" : "高风险"}
-            value={summary.highRisk}
-            tone="danger"
-            active={activeView === "pending" && activeFilter === "highRisk"}
-            onClick={() => {
-              setActiveView("pending");
-              setActiveFilter("highRisk");
-            }}
-          />
-          <MetricCard
-            label={english ? "External waiting" : "待处理外发"}
-            value={summary.external}
-            tone="info"
-            active={activeView === "pending" && activeFilter === "external"}
-            onClick={() => {
-              setActiveView("pending");
-              setActiveFilter("external");
-            }}
-          />
-          <MetricCard
-            label={english ? "Executed history" : "已执行历史"}
-            value={summary.executed}
-            tone="success"
-            active={activeView === "history" && activeFilter === "EXECUTED"}
-            onClick={() => {
-              setActiveView("history");
-              setActiveFilter("EXECUTED");
-            }}
-          />
-        </div>
-      </details>
-
-      <details
-        id="meeting-follow-through-review"
-        className="order-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--background-elevated)]"
-      >
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 marker:content-none [&::-webkit-details-marker]:hidden">
-          <span className="min-w-0">
-            <span className="block text-sm font-semibold text-[color:var(--foreground)]">
-              {english ? "Other meeting drafts" : "其他会议草稿"}
-            </span>
-            <span className="mt-1 block text-xs leading-5 text-[color:var(--muted-foreground)]">
-              {meetingLinkedReviewItems.length
-                ? english
-                  ? `${meetingLinkedReviewItems.length} meeting-derived drafts are available when you need the full queue.`
-                  : `${meetingLinkedReviewItems.length} 条会议衍生草稿在这里，需要时再展开。`
-                : english
-                  ? "No meeting-derived draft is waiting right now."
-                  : "当前没有会议衍生草稿在等待。"}
-            </span>
-          </span>
-          <span className="rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-1.5 text-xs font-medium text-[color:var(--foreground)]">
-            {english ? "Open drafts" : "展开草稿"}
-          </span>
-        </summary>
-        <div className="space-y-4 px-4 pb-4">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="space-y-2">
-              <Badge variant="approval">
-                {english
-                  ? "Meeting follow-through review"
-                  : "会议会后动作确认"}
-              </Badge>
-              <p className="text-lg font-semibold text-[color:var(--foreground)]">
-                {english
-                  ? "Start with the customer action that came out of the meeting."
-                  : "先看从会议带出来的客户动作。"}
+      {approvalCandidate ? (
+        <section
+          data-approval-draft-focus="true"
+          className="workspace-panel flex flex-wrap items-center justify-between gap-4 rounded-[24px] px-5 py-4"
+        >
+          <div className="min-w-0 flex-1 space-y-1">
+            {approvalCandidateObjectLine ? (
+              <p className="text-xs text-[color:var(--muted-foreground)]">
+                {approvalCandidateObjectLine}
               </p>
-              <details className="max-w-3xl rounded-lg border border-[color:var(--border)] bg-[color:var(--background-elevated)] px-3 py-2 text-xs leading-6 text-[color:var(--muted)]">
-                <summary className="cursor-pointer list-none font-semibold marker:content-none [&::-webkit-details-marker]:hidden">
-                  {english ? "Review notes" : "处理口径"}
-                </summary>
-                <p className="mt-2">{meetingLinkedBoundarySummary}</p>
-                <p>
-                  {english
-                    ? "Drafts, reason chains and evidence stay here for the human decision."
-                    : "草稿、理由链和证据留在这里，等人做判断。"}
-                </p>
-              </details>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {meetingLinkedApprovalFocus ? (
-                <Button
-                  size="sm"
-                  onClick={() => openApprovalDrawer(meetingLinkedApprovalFocus)}
-                >
-                  {english ? "Open first draft" : "打开第一条草稿"}
-                </Button>
-              ) : null}
-              {meetingLinkedApprovalFocus?.actionItem.meeting ? (
-                <Button size="sm" variant="secondary" asChild>
-                  <Link
-                    href={`/meetings/${meetingLinkedApprovalFocus.actionItem.meeting.id}`}
-                  >
-                    {english ? "Back to meeting" : "回到会议"}
-                  </Link>
-                </Button>
-              ) : null}
-              <Button size="sm" variant="secondary" asChild>
-                <Link href="/diagnostics#meeting-workflow-readiness">
-                  {english ? "Open readiness view" : "查看协同就绪度"}
-                </Link>
-              </Button>
-            </div>
-          </div>
-
-          {meetingLinkedReviewItems.length ? (
-            <div className="grid gap-4 xl:grid-cols-3">
-              {meetingLinkedReviewItems.map((task) => {
-                const posture = getMeetingFollowThroughBoundaryPosture(
-                  task,
-                  english,
-                );
-                const meetingMemoryBundle = buildMeetingMemoryBundle(
-                  {
-                    meeting: {
-                      id: task.actionItem.meeting?.id ?? task.id,
-                      title: approvalTitle(
-                        task.actionItem.meeting?.title ?? task.actionItem.title,
-                      ),
-                      summary: approvalText(task.reasoning ?? ""),
-                    },
-                    memoryFacts: task.recommendationFacts.map((fact) => ({
-                      ...fact,
-                      objectType: "MEETING" as const,
-                      objectId: task.actionItem.meeting?.id ?? task.id,
-                      sourceType: "APPROVAL_REVIEW_FACT",
-                      sourceId: fact.id,
-                    })),
-                    commitments: task.recommendationCommitments,
-                    blockers: task.recommendationBlockers,
-                    affectedObjects: [
-                      ...(task.actionItem.meeting
-                        ? [
-                            {
-                              id: task.actionItem.meeting.id,
-                              objectType: "MEETING" as const,
-                              label: approvalTitle(
-                                task.actionItem.meeting.title,
-                              ),
-                            },
-                          ]
-                        : []),
-                      ...(task.actionItem.opportunity
-                        ? [
-                            {
-                              id: task.actionItem.opportunity.id,
-                              objectType: "OPPORTUNITY" as const,
-                              label: approvalTitle(
-                                task.actionItem.opportunity.title,
-                              ),
-                            },
-                          ]
-                        : []),
-                      ...(task.actionItem.opportunity?.company
-                        ? [
-                            {
-                              id: task.actionItem.opportunity.company.id,
-                              objectType: "COMPANY" as const,
-                              label: task.actionItem.opportunity.company.name,
-                            },
-                          ]
-                        : []),
-                      ...(task.actionItem.contact
-                        ? [
-                            {
-                              id: task.actionItem.contact.id,
-                              objectType: "CONTACT" as const,
-                              label: task.actionItem.contact.name,
-                            },
-                          ]
-                        : []),
-                    ],
-                  },
-                  english,
-                );
-                const meetingMemorySummary = buildMeetingMemoryLoopSummary(
-                  meetingMemoryBundle,
-                  english,
-                );
-                const meetingMemoryGovernance =
-                  buildMeetingMemoryGovernanceSummary(
-                    meetingMemoryBundle,
-                    english,
-                  );
-                const meetingIngressThreadPointer =
-                  meetingMemoryBundle.sourcePointers.find((pointer) =>
-                    pointer.id.startsWith("thread:"),
-                  ) ?? null;
-                const meetingIngressCalendarPointer =
-                  meetingMemoryBundle.sourcePointers.find((pointer) =>
-                    pointer.id.startsWith("calendar:"),
-                  ) ?? null;
-                const ingressFollowThroughLine = task.actionItem.meeting
-                  ? english
-                    ? `This review is the visible handoff from "${task.actionItem.meeting.title}" into downstream follow-through, so the boundary check belongs here instead of being hidden inside the meeting note.`
-                    : `这条复核正是从“${approvalTitle(task.actionItem.meeting.title)}”进入下游推进的显性交接，所以边界检查应留在这里，而不是藏回会议纪要里。`
-                  : english
-                    ? "This review item still belongs to the meeting follow-through chain, even when the source meeting label is thin."
-                    : "即使来源会议标签较薄，这条复核项也仍属于会议后续推进链路。";
-                const ingressParticipantLine =
-                  (task.actionItem.contact?.name ??
-                  task.actionItem.opportunity?.company?.name)
-                    ? english
-                      ? `The continuity cue is currently being carried by ${[
-                          task.actionItem.contact?.name,
-                          task.actionItem.opportunity?.company?.name,
-                        ]
-                          .filter(Boolean)
-                          .join(" / ")}.`
-                      : `当前连续性线索主要由 ${[
-                          task.actionItem.contact?.name,
-                          task.actionItem.opportunity?.company?.name,
-                        ]
-                          .filter(Boolean)
-                          .join(" / ")} 承接。`
-                    : english
-                      ? "No strong participant or company continuity cue is visible yet, so the review still leans mainly on meeting memory and boundary posture."
-                      : "当前还没有显著的参与者或公司连续性线索，所以这条复核主要仍靠会议记忆和边界姿态支撑。";
-                const visibleReasonChain = buildApprovalTaskReasonChain(
-                  task,
-                  english,
-                ).slice(0, 3);
-                return (
-                  <div
-                    key={task.id}
-                    className="rounded-[24px] border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="approval">
-                        {english ? "Review item" : "复核项"}
-                      </Badge>
-                      <Badge variant="info">
-                        {getMeetingFollowThroughTypeLabel(task, english)}
-                      </Badge>
-                      <Badge variant={posture.variant}>{posture.label}</Badge>
-                    </div>
-                    <div className="mt-3 flex items-start justify-between gap-3">
-                      <div className="space-y-2">
-                        <p className="font-semibold text-[color:var(--foreground)]">
-                          {approvalTitle(task.actionItem.title)}
-                        </p>
-                        <p className="text-sm leading-6 text-[color:var(--muted)]">
-                          {trimText(approvalText(task.reasoning ?? ""), 92)}
-                        </p>
-                      </div>
-                      <RiskBadge risk={task.actionItem.riskLevel} />
-                    </div>
-                    <details className="mt-4 rounded-lg border border-[color:var(--border)] bg-[color:var(--background-elevated)] px-3 py-2 text-xs text-[color:var(--muted)]">
-                      <summary className="cursor-pointer list-none font-semibold marker:content-none [&::-webkit-details-marker]:hidden">
-                        {english ? "More evidence" : "更多依据"}
-                      </summary>
-                      <div className="mt-3 grid gap-3">
-                        <div className="theme-surface-panel-soft rounded-2xl px-4 py-3">
-                        <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                          {english ? "Boundary posture" : "边界姿态"}
-                        </p>
-                        <p className="mt-2 text-sm font-medium leading-6 text-[color:var(--foreground)]">
-                          {posture.summary}
-                        </p>
-                      </div>
-                      <div className="theme-surface-panel-soft rounded-2xl px-4 py-3">
-                        <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                          {english
-                            ? "Meeting memory relationship"
-                            : "会议记忆关系"}
-                        </p>
-                        <p className="mt-2 text-sm font-medium leading-6 text-[color:var(--foreground)]">
-                          {meetingMemorySummary.lifecycleLabel}
-                        </p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          <Badge variant="neutral">
-                            {meetingMemoryGovernance.visibilityLabel}
-                          </Badge>
-                          <Badge
-                            variant={
-                              meetingMemoryGovernance.reviewState === "conflict"
-                                ? "danger"
-                                : meetingMemoryGovernance.reviewState ===
-                                    "pending-review"
-                                  ? "approval"
-                                  : meetingMemoryGovernance.reviewState ===
-                                      "missing-clarity"
-                                    ? "warning"
-                                    : "success"
-                            }
-                          >
-                            {meetingMemoryGovernance.reviewStateLabel}
-                          </Badge>
-                        </div>
-                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                          {approvalText(
-                            meetingMemorySummary.affectedObjectsLine,
-                          )}
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                          {approvalText(meetingMemoryGovernance.reviewSummary)}
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                          {meetingMemorySummary.blockingLifecycle
-                            ? english
-                              ? `This review item is still blocked here because the linked meeting memory is ${meetingMemorySummary.blockingLabel.toLowerCase()}, so it should stay review-only instead of pretending it already belongs to settled object state.`
-                              : `这条复核项之所以还停在这里，是因为相关会议记忆当前仍是“${meetingMemorySummary.blockingLabel}”，所以它需要继续保留在仅复核视野里，而不是假装已经属于稳定对象状态。`
-                            : english
-                              ? `The memory itself is already promoted, but this action still remains boundary-limited, so approvals should stay the formal review surface.`
-                              : `这层记忆本身虽然已经提升成功，但该动作仍受边界限制，所以审批页依然是正式复核面。`}
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                          {approvalText(
-                            meetingMemoryGovernance.eligibilitySummary,
-                          )}
-                        </p>
-                      </div>
-                      <div className="theme-surface-panel-soft rounded-2xl px-4 py-3">
-                        <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                          {english ? "Reason chain first view" : "首屏理由链"}
-                        </p>
-                        <div className="mt-2 space-y-2">
-                          {visibleReasonChain.map((item) => (
-                            <p
-                              key={item.id}
-                              className="text-sm leading-6 text-[color:var(--muted)]"
-                            >
-                              {approvalText(item.label)}：
-                              {approvalText(item.summary)}
-                            </p>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="theme-surface-panel-soft rounded-2xl px-4 py-3">
-                        <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                          {english ? "Ingress cue" : "入口线索"}
-                        </p>
-                        <p className="mt-2 text-sm font-medium leading-6 text-[color:var(--foreground)]">
-                          {task.actionItem.meeting
-                            ? english
-                              ? `Source meeting: ${task.actionItem.meeting.title}`
-                              : `来源会议：${approvalTitle(task.actionItem.meeting.title)}`
-                            : english
-                              ? "No explicit source meeting label"
-                              : "当前没有显式来源会议标签"}
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                          {meetingIngressCalendarPointer?.summary
-                            ? approvalText(
-                                meetingIngressCalendarPointer.summary,
-                              )
-                            : english
-                              ? "This review is still anchored mainly to visible meeting/event context."
-                              : "这条复核当前主要仍锚定在可见的会议 / 事件上下文上。"}
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                          {meetingIngressThreadPointer
-                            ? approvalText(meetingIngressThreadPointer.summary)
-                            : english
-                              ? "No strong related thread cue is visible, so the review boundary is being held mainly by meeting memory and downstream object pressure."
-                              : "当前没有显著相关线程线索，所以这条边界主要还是由会议记忆和下游对象压力撑住。"}
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                          {ingressParticipantLine}
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                          {ingressFollowThroughLine}
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                          {meetingMemorySummary.blockingLifecycle
-                            ? english
-                              ? `Review is still required because the ingress context is flowing into memory as ${meetingMemorySummary.blockingLabel.toLowerCase()}, not as a settled reusable writeback.`
-                              : `当前仍需复核，是因为入口上下文进入记忆层后仍表现为“${meetingMemorySummary.blockingLabel}”，而不是已经稳定可复用的写回。`
-                            : english
-                              ? "Even when ingress context is already readable, the action still needs formal review here before it can leave the boundary."
-                              : "即使入口上下文已经可读，这条动作也仍需要先在这里经过正式复核，才能离开边界。"}
-                        </p>
-                      </div>
-                      <div className="theme-surface-panel-soft rounded-2xl px-4 py-3">
-                        <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                          {english ? "Evidence preview" : "证据预览"}
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                          {formatApprovalEvidencePreview(task, english)}
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                          {english
-                            ? "Open the draft first, then decide whether it should stay behind review or go back for rewrite."
-                            : "先打开草稿，再决定它是继续留在复核边界后面，还是退回改写。"}
-                        </p>
-                        </div>
-                      </div>
-                    </details>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => openApprovalDrawer(task)}
-                      >
-                        {english ? "Open draft" : "打开草稿"}
-                      </Button>
-                      {task.actionItem.meeting ? (
-                        <Button size="sm" variant="secondary" asChild>
-                          <Link
-                            href={`/meetings/${task.actionItem.meeting.id}`}
-                          >
-                            {english ? "Go to meeting" : "回到会议"}
-                          </Link>
-                        </Button>
-                      ) : null}
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => openApprovalDrawer(task)}
-                      >
-                        {english ? "Enter human review" : "进入人工复核"}
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <EmptyState
-              title={
-                english
-                  ? "No meeting follow-through waiting in review"
-                  : "当前没有会议会后动作停在复核"
-              }
-              description={
-                english
-                  ? "Once a meeting-derived draft crosses the trust boundary, it should appear here first instead of being buried inside the generic queue."
-                  : "只要会议衍生出的草稿跨过信任边界，它会出现在这里，而不是被淹没在泛队列里。"
-              }
-            />
-          )}
-        </div>
-      </details>
-
-      <Card className="order-3 workspace-panel">
-        <CardContent className="grid gap-4 py-5 xl:grid-cols-[1.2fr_repeat(3,minmax(0,0.92fr))]">
-          <div className="space-y-2">
-            <Badge variant="approval">
-              {english ? "Action state" : "动作状态"}
-            </Badge>
-            <p className="text-lg font-semibold text-[color:var(--foreground)]">
-              {english
-                ? "Which drafts need your confirmation?"
-                : "哪些草稿需要你确认？"}
+            ) : null}
+            <p className="font-semibold text-[color:var(--foreground)]">
+              {approvalTitle(approvalCandidate.actionItem.title)}
             </p>
-            <details className="rounded-lg border border-[color:var(--border)] bg-[color:var(--background-elevated)] px-3 py-2 text-xs leading-6 text-[color:var(--muted)]">
-              <summary className="cursor-pointer list-none font-semibold marker:content-none [&::-webkit-details-marker]:hidden">
-                {english ? "Decision basis" : "处理依据"}
-              </summary>
-              <p className="mt-2">{boundaryModel.summaryLine}</p>
-            </details>
-            <div className="flex flex-wrap gap-2 pt-1">
-              {boundaryModel.topSkillIds.map((skillId) => (
-                <Badge key={skillId} variant="info">
-                  {getOperatingSkillById(skillId)?.name ?? skillId}
-                </Badge>
-              ))}
-            </div>
+            {approvalCandidateDraftLine ? (
+              <p
+                data-approval-draft-first-line="true"
+                className="truncate text-sm text-[color:var(--muted)]"
+              >
+                {approvalText(approvalCandidateDraftLine)}
+              </p>
+            ) : null}
           </div>
-          <Item
-            label={english ? "Can move now" : "可直接处理"}
-            tone="sky"
-            value={String(boundaryModel.autoEligibleCount)}
-          />
-          <Item
-            label={english ? "Need confirmation" : "需确认"}
-            tone="amber"
-            value={String(boundaryModel.approvalRequiredCount)}
-          />
-          <details className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-subtle)] px-4 py-4">
-            <summary className="cursor-pointer list-none text-xs font-medium text-[color:var(--muted-foreground)] marker:content-none [&::-webkit-details-marker]:hidden">
-              {english ? "Reason chain" : "理由链"}
-            </summary>
-            <div className="mt-3 space-y-2 text-sm leading-6 text-[color:var(--muted)]">
-              {[
-                english
-                  ? "First read why the action is blocked behind the boundary."
-                  : "先看这条动作为什么会被拦在边界后面。",
-                english
-                  ? "Then read why the system is surfacing it now instead of later."
-                  : "再看系统为什么现在把它抬出来，而不是继续往后放。",
-                english
-                  ? "Finally read what will update after approval, rewrite or manual takeover."
-                  : "最后看批准、改写或转人工之后，哪些对象和回放会被联动更新。",
-              ].map((line) => (
-                <p key={line}>{line}</p>
-              ))}
-            </div>
-          </details>
-        </CardContent>
-      </Card>
-
-      {demoMode ? (
-        <Card className="order-4 workspace-panel-muted">
-          <CardContent className="grid gap-4 py-5 xl:grid-cols-[1.2fr_repeat(3,minmax(0,0.9fr))]">
-            <div className="space-y-2">
-              <Badge variant="approval">
-                {english
-                  ? "Why these actions were stopped"
-                  : "动作卡住原因"}
-              </Badge>
-              <p className="text-lg font-semibold text-[color:var(--foreground)]">
-                {english
-                  ? "The approval center makes the trust boundary between AI recommendations and real execution explicit."
-                  : "先确认草稿、证据和风险，再决定是否继续推进。"}
-              </p>
-              <p className="text-sm leading-6 text-[color:var(--muted-foreground)]">
-                {english
-                  ? "External messages are reviewed by default, internal actions execute under policy, and high-risk items always require a human check. Every approval, rejection and auto-execution leaves a replayable record."
-                  : "对外消息默认先审，内部动作按策略执行，高风险事项始终需要人工确认。每次批准、拒绝和自动处理都会留下回放记录。"}
-              </p>
-            </div>
-            <Item
-              label={english ? "Approval rule" : "审批原则"}
-              tone="amber"
-              value={
-                english
-                  ? "External first, high risk always reviewed"
-                  : "外发先审，高风险必审"
-              }
-            />
-            <Item
-              label={english ? "Downstream result" : "联动结果"}
-              tone="sky"
-              value={
-                english
-                  ? "Opportunity, contact, meeting and timeline update together"
-                  : "机会、联系人、会议、时间线同步变化"
-              }
-            />
-            <Item
-              label={english ? "Rule shortcut" : "规则入口"}
-              tone="violet"
-              value={
-                english
-                  ? "Turn this action type into future auto-handling in one click"
-                  : "可一键把同类动作改成以后自动处理"
-              }
-            />
-          </CardContent>
-        </Card>
+          <Button size="sm" onClick={() => openApprovalDrawer(approvalCandidate)}>
+            <FilePenLine className="h-4 w-4" />
+            {english ? "Open draft" : "打开草稿"}
+          </Button>
+        </section>
       ) : null}
 
-      {candidateGovernance.canReview || candidateGovernance.canPromote ? (
-        <GovernedCandidateReviewPanel
-          items={governedCandidates}
-          governance={candidateGovernance}
-        />
-      ) : null}
-
-      {candidateGovernance.canReview || candidateGovernance.canPromote ? (
-        <MemberSignalCandidateReviewPanel
-          items={memberSignalCandidates}
-          governance={candidateGovernance}
-        />
-      ) : null}
-
-      <Card id="approval-queue" className="order-6 workspace-panel">
+      <Card id="approval-queue" className="workspace-panel">
         <CardContent className="space-y-5 py-5">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-            <div className="space-y-2">
-              <p className="workspace-eyebrow">
-                {english ? "Queue controls" : "队列控制"}
-              </p>
-              <p className="text-lg font-semibold tracking-tight text-[color:var(--foreground)]">
-                {english
-                  ? "Read the queue by urgency, channel and execution mode instead of scanning raw cards."
-                  : "按紧迫度、渠道和执行方式读队列，而不是在原始卡片里反复扫。"}
-              </p>
-              <p className="max-w-2xl text-sm leading-6 text-[color:var(--muted)]">
-                {english
-                  ? "Search first, narrow by action type and automation mode, then use the status chips to reduce the queue to one review context."
-                  : "先搜索，再按动作类型和自动化方式收窄，最后用状态标签把队列压到一个清晰的复核场景。"}
-              </p>
-            </div>
+            <p className="workspace-eyebrow">
+              {english ? "Queue controls" : "队列控制"}
+            </p>
             <Tabs
               value={activeView}
               onValueChange={(value) =>
@@ -2297,8 +1577,8 @@ export function ApprovalsClient({
                   className="pl-9"
                   placeholder={
                     english
-                      ? "Search action, object or AI reasoning"
-                      : "搜索动作、对象或判断原因"
+                      ? "Search action, object or draft"
+                      : "搜索动作、对象或草稿"
                   }
                 />
               </div>
@@ -2383,7 +1663,7 @@ export function ApprovalsClient({
         </CardContent>
       </Card>
 
-      <div className="order-7 grid gap-4 lg:grid-cols-[1fr_420px]">
+      <div className="grid gap-4 lg:grid-cols-[1fr_420px]">
         <div className="space-y-4">
           {filtered.length ? (
             filtered.map((task) => {
@@ -2398,6 +1678,11 @@ export function ApprovalsClient({
                 meeting: task.actionItem.meeting,
                 biSource: task.biSource,
               });
+              const draftText = getApprovalDraftText(task);
+              const draftCut =
+                draftText.length > APPROVAL_CARD_DRAFT_LIMIT
+                  ? draftText.length - APPROVAL_CARD_DRAFT_LIMIT
+                  : 0;
 
               return (
                 <article
@@ -2436,25 +1721,65 @@ export function ApprovalsClient({
                     ) : null}
                   </div>
                   <div className="mt-3 flex items-start justify-between gap-4">
-                    <div className="space-y-2">
+                    <div className="min-w-0 space-y-2">
                       <p className="text-lg font-semibold text-[color:var(--foreground)]">
                         {approvalTitle(task.actionItem.title)}
                       </p>
                       <p className="text-sm text-[color:var(--muted-foreground)]">
                         {english ? "Target" : "作用对象"}：{targetLabel}
                       </p>
+                      <ApprovalProvenance task={task} english={english} />
                       {task.dingtalkSource ? (
                         <p className="text-xs text-[color:var(--muted-foreground)]">
                           {english ? "Evidence" : "证据来源"}：
                           {` ${task.dingtalkSource.scope ?? "UNKNOWN"} / ${task.dingtalkSource.sourceType ?? "unknown_type"} / ${task.dingtalkSource.sourceId ?? "n/a"}`}
                         </p>
                       ) : null}
-                      <p className="text-sm leading-6 text-[color:var(--muted)]">
-                        {trimText(approvalText(task.reasoning ?? ""), 110)}
-                      </p>
                     </div>
                     <RiskBadge risk={task.actionItem.riskLevel} />
                   </div>
+                  <div
+                    data-approval-draft-body={task.id}
+                    className="mt-4 workspace-panel-muted rounded-2xl px-4 py-3"
+                  >
+                    {draftText ? (
+                      <>
+                        <p className="whitespace-pre-wrap break-words text-sm leading-7 text-[color:var(--foreground)]">
+                          {approvalText(
+                            draftCut
+                              ? `${draftText.slice(0, APPROVAL_CARD_DRAFT_LIMIT)}…`
+                              : draftText,
+                          )}
+                        </p>
+                        {draftCut ? (
+                          <button
+                            type="button"
+                            onClick={() => openApprovalDrawer(task)}
+                            className="mt-2 inline-flex min-h-7 items-center rounded-lg px-1.5 text-xs font-medium text-[color:var(--accent)] hover:bg-[color:var(--surface-subtle)]"
+                          >
+                            {english
+                              ? `${draftCut} more characters · read the full draft`
+                              : `还有 ${draftCut} 字 · 打开看全文`}
+                          </button>
+                        ) : null}
+                      </>
+                    ) : (
+                      <p className="text-sm text-[color:var(--muted-foreground)]">
+                        {english ? "No draft text on this action." : "这条动作没有草稿正文。"}
+                      </p>
+                    )}
+                  </div>
+                  {task.decisionReason || task.rejectionReasonCode ? (
+                    <p
+                      data-approval-decision-reason="true"
+                      className="mt-3 break-words text-sm leading-6 text-[color:var(--muted)]"
+                    >
+                      <span className="font-medium text-[color:var(--foreground)]">
+                        {english ? "Decision note: " : "处理说明："}
+                      </span>
+                      {formatApprovalDecisionNote(task, english, approvalText)}
+                    </p>
+                  ) : null}
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                     <Item
                       label={
@@ -2477,45 +1802,14 @@ export function ApprovalsClient({
                       }
                     />
                     <Item
-                      label={english ? "Approval reason" : "审批理由"}
-                      value={trimText(approvalText(task.reasoning ?? ""), 32)}
+                      label={english ? "Requested at" : "发起时间"}
+                      value={approvalDateLabel(task.createdAt)}
                     />
                     <Item
                       label={english ? "Last updated" : "最近更新时间"}
                       value={formatRelative(task.updatedAt)}
                     />
                   </div>
-                  {task.actionItem.recommendationLog ? (
-                    <div className="mt-4 workspace-panel rounded-2xl px-4 py-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="warning">
-                          {english
-                            ? `Score ${task.actionItem.recommendationLog.score}`
-                            : `建议分 ${task.actionItem.recommendationLog.score}`}
-                        </Badge>
-                        <Badge variant="approval">
-                          {formatRecommendationPolicyResult(
-                            task.actionItem.recommendationLog.policyResult,
-                            english,
-                          )}
-                        </Badge>
-                      </div>
-                      <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                        {trimText(
-                          approvalText(
-                            task.actionItem.recommendationLog.explanation,
-                          ),
-                          96,
-                        )}
-                      </p>
-                      <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
-                        {formatApprovalRecommendationLogEvidence(
-                          task.actionItem.recommendationLog,
-                          english,
-                        )}
-                      </p>
-                    </div>
-                  ) : null}
                   <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-[color:var(--muted-foreground)]">
                     {targetHref ? (
                       <Link
@@ -2598,11 +1892,6 @@ export function ApprovalsClient({
             <CardTitle>
               {english ? "Action waiting on you" : "需要你处理的动作"}
             </CardTitle>
-            <CardDescription>
-              {english
-                ? "Select one item, confirm the linked business object, then approve, rewrite or hand it off."
-                : "先选中一条，看清它关联的经营对象，再决定通过、改写还是转人工。"}
-            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {previewed ? (
@@ -2628,9 +1917,14 @@ export function ApprovalsClient({
                   <p className="mt-3 font-medium text-[color:var(--foreground)]">
                     {approvalTitle(previewed.actionItem.title)}
                   </p>
-                  <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                    {trimText(approvalText(previewed.reasoning ?? ""), 100)}
-                  </p>
+                  <div className="mt-2">
+                    <ApprovalProvenance task={previewed} english={english} />
+                  </div>
+                  {getApprovalDraftText(previewed) ? (
+                    <p className="mt-2 line-clamp-6 whitespace-pre-wrap break-words text-sm leading-6 text-[color:var(--foreground)]">
+                      {approvalText(getApprovalDraftText(previewed))}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="grid gap-3">
                   {previewedTargetHref ? (
@@ -2654,26 +1948,6 @@ export function ApprovalsClient({
                       approvalText(previewed.resultPreview ?? ""),
                       42,
                     )}
-                  />
-                  <Item
-                    label={english ? "Impact after approval" : "批准后影响"}
-                    value={
-                      english
-                        ? "Synchronize related objects, timeline and audit records"
-                        : "同步相关对象状态、时间线与审计记录"
-                    }
-                  />
-                  <Item
-                    label={english ? "Recommendation source" : "推荐来源"}
-                    value={
-                      previewed.actionItem.recommendationLog
-                        ? english
-                          ? `Review-backed recommendation · score ${previewed.actionItem.recommendationLog.score}`
-                          : `复核依据建议 · 分数 ${previewed.actionItem.recommendationLog.score}`
-                        : english
-                          ? "This action was not triggered directly by recommendation"
-                          : "当前动作不是由判断建议直接触发"
-                    }
                   />
                 </div>
                 {previewed.recommendationBlockers[0] ? (
@@ -2727,12 +2001,6 @@ export function ApprovalsClient({
                     compact
                   />
                 ) : null}
-                {previewedLearningPanel ? (
-                  <ApprovalLearningPanel
-                    panel={previewedLearningPanel}
-                    compact
-                  />
-                ) : null}
                 <Button
                   className="w-full"
                   onClick={() => openApprovalDrawer(previewed)}
@@ -2756,6 +2024,440 @@ export function ApprovalsClient({
         </Card>
       </div>
 
+      <details
+        className="rounded-[24px] border border-[color:var(--border)] bg-[color:var(--background-elevated)]"
+        data-testid="approval-load-disclosure"
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold text-[color:var(--foreground)]">
+              {english ? "Review load" : "复核负载"}
+            </span>
+            <span className="mt-1 block text-xs leading-5 text-[color:var(--muted-foreground)]">
+              {english
+                ? `${summary.pending} pending · ${summary.highRisk} high risk · ${summary.external} external waiting`
+                : `${summary.pending} 条待复核 · ${summary.highRisk} 条高风险 · ${summary.external} 条待处理外发`}
+            </span>
+          </span>
+          <span className="rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-1.5 text-xs font-medium text-[color:var(--foreground)]">
+            {english ? "Open load" : "展开负载"}
+          </span>
+        </summary>
+        <div className="grid gap-4 px-4 pb-4 md:grid-cols-2 xl:grid-cols-4">
+          <MetricCard
+            label={english ? "Pending" : "待复核"}
+            value={summary.pending}
+            tone="approval"
+            active={activeView === "pending" && activeFilter === "PENDING"}
+            onClick={() => {
+              setActiveView("pending");
+              setActiveFilter("PENDING");
+            }}
+          />
+          <MetricCard
+            label={english ? "High risk" : "高风险"}
+            value={summary.highRisk}
+            tone="danger"
+            active={activeView === "pending" && activeFilter === "highRisk"}
+            onClick={() => {
+              setActiveView("pending");
+              setActiveFilter("highRisk");
+            }}
+          />
+          <MetricCard
+            label={english ? "External waiting" : "待处理外发"}
+            value={summary.external}
+            tone="info"
+            active={activeView === "pending" && activeFilter === "external"}
+            onClick={() => {
+              setActiveView("pending");
+              setActiveFilter("external");
+            }}
+          />
+          <MetricCard
+            label={english ? "Executed history" : "已执行历史"}
+            value={summary.executed}
+            tone="success"
+            active={activeView === "history" && activeFilter === "EXECUTED"}
+            onClick={() => {
+              setActiveView("history");
+              setActiveFilter("EXECUTED");
+            }}
+          />
+        </div>
+      </details>
+
+      <details
+        id="meeting-follow-through-review"
+        className="rounded-lg border border-[color:var(--border)] bg-[color:var(--background-elevated)]"
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 marker:content-none [&::-webkit-details-marker]:hidden">
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold text-[color:var(--foreground)]">
+              {english ? "Other meeting drafts" : "其他会议草稿"}
+            </span>
+            <span className="mt-1 block text-xs leading-5 text-[color:var(--muted-foreground)]">
+              {meetingLinkedPendingTasks.length
+                ? english
+                  ? `${meetingLinkedPendingTasks.length} meeting-derived ${meetingLinkedPendingTasks.length === 1 ? "draft" : "drafts"} waiting`
+                  : `${meetingLinkedPendingTasks.length} 条会议衍生草稿在等`
+                : english
+                  ? "No meeting-derived draft waiting"
+                  : "没有会议衍生草稿在等"}
+            </span>
+          </span>
+          <span className="rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-1.5 text-xs font-medium text-[color:var(--foreground)]">
+            {english ? "Open drafts" : "展开草稿"}
+          </span>
+        </summary>
+        <div className="space-y-4 px-4 pb-4">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="space-y-2">
+              <Badge variant="approval">
+                {english
+                  ? "Meeting follow-through review"
+                  : "会议会后动作确认"}
+              </Badge>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {meetingLinkedApprovalFocus ? (
+                <Button
+                  size="sm"
+                  onClick={() => openApprovalDrawer(meetingLinkedApprovalFocus)}
+                >
+                  {english ? "Open first draft" : "打开第一条草稿"}
+                </Button>
+              ) : null}
+              {meetingLinkedApprovalFocus?.actionItem.meeting ? (
+                <Button size="sm" variant="secondary" asChild>
+                  <Link
+                    href={`/meetings/${meetingLinkedApprovalFocus.actionItem.meeting.id}`}
+                  >
+                    {english ? "Back to meeting" : "回到会议"}
+                  </Link>
+                </Button>
+              ) : null}
+              <Button size="sm" variant="secondary" asChild>
+                <Link href="/diagnostics#meeting-workflow-readiness">
+                  {english ? "Open readiness view" : "查看协同就绪度"}
+                </Link>
+              </Button>
+            </div>
+          </div>
+
+          {meetingLinkedReviewItems.length ? (
+            <div className="grid gap-4 xl:grid-cols-3">
+              {meetingLinkedReviewItems.map((task) => {
+                const posture = getMeetingFollowThroughBoundaryPosture(
+                  task,
+                  english,
+                );
+                const draftLine = getFirstDraftLine(getApprovalDraftText(task));
+                return (
+                  <div
+                    key={task.id}
+                    className="rounded-[24px] border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="approval">
+                        {english ? "Review item" : "复核项"}
+                      </Badge>
+                      <Badge variant="info">
+                        {getMeetingFollowThroughTypeLabel(task, english)}
+                      </Badge>
+                      <Badge variant={posture.variant}>{posture.label}</Badge>
+                    </div>
+                    <div className="mt-3 flex items-start justify-between gap-3">
+                      <div className="min-w-0 space-y-2">
+                        <p className="font-semibold text-[color:var(--foreground)]">
+                          {approvalTitle(task.actionItem.title)}
+                        </p>
+                        {task.actionItem.meeting ? (
+                          <p className="text-xs text-[color:var(--muted-foreground)]">
+                            {english
+                              ? `From meeting: ${task.actionItem.meeting.title}`
+                              : `来自会议：${approvalTitle(task.actionItem.meeting.title)}`}
+                          </p>
+                        ) : null}
+                        {draftLine ? (
+                          <p className="line-clamp-2 text-sm leading-6 text-[color:var(--foreground)]">
+                            {approvalText(draftLine)}
+                          </p>
+                        ) : null}
+                      </div>
+                      <RiskBadge risk={task.actionItem.riskLevel} />
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => openApprovalDrawer(task)}
+                      >
+                        {english ? "Open draft" : "打开草稿"}
+                      </Button>
+                      {task.actionItem.meeting ? (
+                        <Button size="sm" variant="secondary" asChild>
+                          <Link
+                            href={`/meetings/${task.actionItem.meeting.id}`}
+                          >
+                            {english ? "Go to meeting" : "回到会议"}
+                          </Link>
+                        </Button>
+                      ) : null}
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => openApprovalDrawer(task)}
+                      >
+                        {english ? "Enter human review" : "进入人工复核"}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <EmptyState
+              title={
+                english
+                  ? "No meeting follow-through waiting in review"
+                  : "当前没有会议会后动作停在复核"
+              }
+              description={
+                english
+                  ? "Once a meeting-derived draft crosses the trust boundary, it should appear here first instead of being buried inside the generic queue."
+                  : "只要会议衍生出的草稿跨过信任边界，它会出现在这里，而不是被淹没在泛队列里。"
+              }
+            />
+          )}
+        </div>
+      </details>
+
+      {candidateGovernance.canReview || candidateGovernance.canPromote ? (
+        <GovernedCandidateReviewPanel
+          items={governedCandidates}
+          governance={candidateGovernance}
+        />
+      ) : null}
+
+      {candidateGovernance.canReview || candidateGovernance.canPromote ? (
+        <MemberSignalCandidateReviewPanel
+          items={memberSignalCandidates}
+          governance={candidateGovernance}
+        />
+      ) : null}
+
+      {biBoardAccessState === "available" && biBoardContribution ? (
+        <Card className="workspace-panel border-[color:var(--mode-card-border)]">
+          <CardHeader className="pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle>
+                  {english ? "BI signal board" : "经营信号看板"}
+                </CardTitle>
+                <CardDescription>
+                  {english
+                    ? biBoardContribution.descriptionEnglish
+                    : biBoardContribution.descriptionChinese}
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Button asChild size="sm" variant="secondary">
+              <Link href={biBoardContribution.ctaHref}>
+                {english
+                  ? biBoardContribution.ctaLabelEnglish
+                  : biBoardContribution.ctaLabelChinese}
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <details className={systemJudgementDetailsClassName} data-system-judgement>
+        <SystemJudgementSummary english={english} />
+        <div className="space-y-4 px-4 pb-5">
+          <BoundaryBar
+            english={english}
+            copy={{
+              observed: {
+                zh: "等待你确认的草稿与动作队列。",
+                en: "The queue of drafts and actions waiting for your confirmation.",
+              },
+              wontDo: {
+                zh: "在你点击确认之前，系统不会通过、发送或结算任何一条。",
+                en: "Until you click confirm, the system passes, sends, or settles nothing.",
+              },
+              decider: {
+                zh: "每一条的最终决定权都在你。",
+                en: "The final decision on every item is yours.",
+              },
+              negatives: [
+                { zh: "无自动通过", en: "No auto-approve" },
+                { zh: "无自动外发", en: "No auto-send" },
+                { zh: "无自动结算", en: "No auto-settle" },
+              ],
+            }}
+          />
+
+          {approvalCandidate ? (
+            <dl
+              data-approval-focus-judgement="true"
+              className="grid gap-3 rounded-2xl border border-[color:var(--border)] px-4 py-3 text-sm md:grid-cols-2"
+            >
+              <div>
+                <dt className="text-xs text-[color:var(--muted-foreground)]">
+                  {english ? "Pressure" : "当前压力"}
+                </dt>
+                <dd className="mt-1 text-[color:var(--foreground)]">
+                  {approvalFocusPressure}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-[color:var(--muted-foreground)]">
+                  {english ? "Decision" : "需要你判断"}
+                </dt>
+                <dd className="mt-1 text-[color:var(--foreground)]">
+                  {english
+                    ? "Approve, rewrite, reject, or move to manual handling."
+                    : "通过、改写、拒绝，或转人工处理。"}
+                </dd>
+                {approvalCandidate.reasoning ? (
+                  <dd className="mt-1 text-[color:var(--muted)]">
+                    {approvalText(approvalCandidate.reasoning)}
+                  </dd>
+                ) : null}
+              </div>
+              <p className="text-[color:var(--muted)] md:col-span-2">
+                {approvalFocusSummary}
+              </p>
+            </dl>
+          ) : null}
+
+          <BusinessLoopGapReadoutLines
+            readout={businessLoopGapReadout}
+            english={english}
+          />
+
+          <section
+            data-approval-boundary-model="true"
+            className="space-y-2 rounded-2xl border border-[color:var(--border)] px-4 py-3 text-sm"
+          >
+            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+              {english ? "Review boundary" : "复核边界"}
+            </p>
+            <p className="text-[color:var(--muted)]">{boundaryModel.summaryLine}</p>
+            <p className="text-[color:var(--foreground)]">
+              {english
+                ? `Can move now ${boundaryModel.autoEligibleCount} · Need confirmation ${boundaryModel.approvalRequiredCount}`
+                : `可直接处理 ${boundaryModel.autoEligibleCount} · 需确认 ${boundaryModel.approvalRequiredCount}`}
+            </p>
+            {boundaryModel.topSkillIds.length ? (
+              <div className="flex flex-wrap gap-2">
+                {boundaryModel.topSkillIds.map((skillId) => (
+                  <Badge key={skillId} variant="info">
+                    {getOperatingSkillById(skillId)?.name ?? skillId}
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
+          </section>
+
+          {demoMode ? (
+            <Card className="workspace-panel-muted">
+              <CardContent className="grid gap-4 py-5 xl:grid-cols-[1.2fr_repeat(3,minmax(0,0.9fr))]">
+                <div className="space-y-2">
+                  <Badge variant="approval">
+                    {english
+                      ? "Why these actions were stopped"
+                      : "动作卡住原因"}
+                  </Badge>
+                  <p className="text-lg font-semibold text-[color:var(--foreground)]">
+                    {english
+                      ? "The approval center makes the trust boundary between AI recommendations and real execution explicit."
+                      : "先确认草稿、证据和风险，再决定是否继续推进。"}
+                  </p>
+                  <p className="text-sm leading-6 text-[color:var(--muted-foreground)]">
+                    {english
+                      ? "External messages are reviewed by default, internal actions execute under policy, and high-risk items always require a human check. Every approval, rejection and auto-execution leaves a replayable record."
+                      : "对外消息默认先审，内部动作按策略执行，高风险事项始终需要人工确认。每次批准、拒绝和自动处理都会留下回放记录。"}
+                  </p>
+                </div>
+                <Item
+                  label={english ? "Approval rule" : "审批原则"}
+                  tone="amber"
+                  value={
+                    english
+                      ? "External first, high risk always reviewed"
+                      : "外发先审，高风险必审"
+                  }
+                />
+                <Item
+                  label={english ? "Downstream result" : "联动结果"}
+                  tone="sky"
+                  value={
+                    english
+                      ? "Opportunity, contact, meeting and timeline update together"
+                      : "机会、联系人、会议、时间线同步变化"
+                  }
+                />
+                <Item
+                  label={english ? "Rule shortcut" : "规则入口"}
+                  tone="violet"
+                  value={
+                    english
+                      ? "Turn this action type into future auto-handling in one click"
+                      : "可一键把同类动作改成以后自动处理"
+                  }
+                />
+              </CardContent>
+            </Card>
+          ) : null}
+
+          <HomeSurfaceArrivalBanner
+            kind="approvals"
+            english={english}
+            contract={{
+              ownership: english
+                ? "Approvals owns trust-sensitive draft review, boundary checks and release posture."
+                : "复核页负责信任敏感草稿、边界检查和是否放行的判断姿态。",
+              nextStep: english
+                ? "Start in the approval preview, then decide whether the draft should be approved, rewritten, rejected or converted to manual handling."
+                : "先看复核预览，再决定草稿是通过、改写、拒绝还是转人工处理。",
+              boundary: english
+                ? "Approving a draft here still does not create autonomous send or commitment authority."
+                : "在这里通过草稿，也不意味着系统获得了自动发送或自动承诺权限。",
+            }}
+          />
+
+          {!approvalHomeArrival.isHomeSurfaceArrival ? (
+            <FirstLoopSurfaceSummary
+              model={approvalFirstLoopDisplayModel}
+              english={english}
+              eyebrow={english ? "Review path" : "确认路径"}
+              compact
+            />
+          ) : null}
+
+          <ReportingProtocolPanel protocol={approvalsProtocol} english={english} />
+
+          <ProactiveMechanismPanel
+            title={
+              english
+                ? "Approval collaboration raised proactively"
+                : "主动抬出的审批协作"
+            }
+            description={
+              english
+                ? "When a worker finishes a trust-sensitive draft, it should not stay as a queue row. This page should raise a clean review request with boundary, evidence and the next human decision."
+                : "当协作者完成一条信任敏感草稿时，它不该只留成一行队列，而应该把边界、证据和下一步人工判断一起主动送出来。"
+            }
+            flows={[approvalProactiveFlow]}
+            english={english}
+          />
+        </div>
+      </details>
+
       <Sheet
         open={Boolean(selected)}
         onOpenChange={(open) => !open && closeSelectedApproval()}
@@ -2771,30 +2473,66 @@ export function ApprovalsClient({
                   {approvalTitle(selected.actionItem.title)}
                 </SheetTitle>
                 <SheetDescription>
-                  {english
-                    ? "Read the reason chain and draft, then approve, approve after edit, reject or convert to manual handling. Every path leaves an audit record."
-                    : "先读理由链和草稿，再选择批准、编辑后批准、拒绝或转人工。每条路径都会留下审计记录。"}
+                  {`${actionLabels[selected.actionItem.actionType]} · ${selectedTargetLabel}`}
                 </SheetDescription>
               </SheetHeader>
               <div className="space-y-4 p-5">
-                <section className="space-y-2">
-                  <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                    {english ? "Reason chain" : "理由链"}
-                  </p>
-                  <div className="space-y-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-subtle)] px-4 py-4">
-                    {buildApprovalTaskReasonChain(selected, english).map(
-                      (item) => (
-                        <div key={item.id} className="space-y-1">
-                          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                            {approvalText(item.label)}
-                          </p>
-                          <p className="text-sm leading-6 text-[color:var(--muted)]">
-                            {approvalText(item.summary)}
-                          </p>
-                        </div>
-                      ),
+                <section data-approval-drawer-object="true" className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <ApprovalBadge status={selected.status} />
+                    <RiskBadge risk={selected.actionItem.riskLevel} />
+                    {selected.isHighRisk ? (
+                      <Badge variant="danger">
+                        <ShieldAlert className="mr-1 h-3 w-3" />
+                        {english ? "High risk" : "高风险"}
+                      </Badge>
+                    ) : null}
+                    {selectedTargetHref ? (
+                      <Link
+                        href={selectedTargetHref}
+                        className="inline-flex min-h-7 items-center rounded-lg px-1.5 text-sm font-medium text-[color:var(--accent)] underline-offset-4 hover:underline"
+                      >
+                        {selectedTargetLabel}
+                      </Link>
+                    ) : (
+                      <span className="text-sm text-[color:var(--muted-foreground)]">
+                        {selectedTargetLabel}
+                      </span>
                     )}
                   </div>
+                  <ApprovalProvenance task={selected} english={english} />
+                  {selected.reviewedAt ||
+                  selected.decisionReason ||
+                  selected.rejectionReasonCode ? (
+                    <div
+                      data-approval-decision-record="true"
+                      className="workspace-panel-muted space-y-1 rounded-2xl px-4 py-3 text-sm"
+                    >
+                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                        {english ? "Decision record" : "处理记录"}
+                      </p>
+                      <p className="text-[color:var(--foreground)]">
+                        {[
+                          selected.reviewedBy?.name ??
+                            (english ? "System" : "系统"),
+                          selected.reviewedAt
+                            ? approvalDateLabel(selected.reviewedAt)
+                            : null,
+                          formatApprovalQueueStatus(selected.status, english),
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                      {selected.decisionReason || selected.rejectionReasonCode ? (
+                        <p
+                          data-approval-decision-reason="true"
+                          className="break-words text-[color:var(--muted)]"
+                        >
+                          {formatApprovalDecisionNote(selected, english, approvalText)}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </section>
                 <section
                   id={APPROVAL_PAGE_ANCHORS.fullActionContent}
@@ -2807,10 +2545,12 @@ export function ApprovalsClient({
                     className="workspace-note-card px-4 py-4"
                     data-tone="slate"
                   >
-                    <p className="workspace-note-body text-sm leading-7">
+                    <p
+                      data-approval-drawer-draft="true"
+                      className="workspace-note-body whitespace-pre-wrap break-words text-sm leading-7"
+                    >
                       {approvalText(
-                        selected.editableContent ??
-                          selected.actionItem.description ??
+                        getApprovalDraftText(selected) ||
                           (english ? "No action content yet" : "暂无动作全文"),
                       )}
                     </p>
@@ -2833,73 +2573,59 @@ export function ApprovalsClient({
                   </div>
                 </section>
                 <section
-                  id={APPROVAL_PAGE_ANCHORS.aiReasoning}
+                  id={APPROVAL_PAGE_ANCHORS.editableDraft}
+                  className="space-y-2"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-[color:var(--foreground)]">
+                      {draftEditCopy.sectionTitle}
+                    </p>
+                    <span
+                      className="workspace-note-chip"
+                      data-tone={isDraftEdited ? "amber" : "slate"}
+                    >
+                      {draftEditCopy.statusLabel}
+                    </span>
+                  </div>
+                  <Textarea
+                    aria-label={draftEditCopy.sectionTitle}
+                    disabled={!canReviewGovernedActions}
+                    value={editableDraft}
+                    onChange={(event) => setDraft(event.target.value)}
+                  />
+                  {isDraftEdited ? (
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDraft(null)}
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                        {draftEditCopy.restoreLabel}
+                      </Button>
+                    </div>
+                  ) : null}
+                </section>
+                <section
+                  id={APPROVAL_PAGE_ANCHORS.resultPreview}
                   className="space-y-2"
                 >
                   <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                    {english
-                      ? "Why this should be handled now"
-                      : "为什么建议现在处理"}
+                    {english ? "After-execution preview" : "执行后结果预览"}
                   </p>
                   <div
-                    className="workspace-note-card px-4 py-4"
-                    data-tone="emerald"
+                    className="workspace-note-card px-4 py-4 text-sm leading-7 text-[color:var(--foreground)]"
+                    data-tone="slate"
                   >
-                    <p className="workspace-note-body text-sm leading-7">
-                      {selected.reasoning
-                        ? approvalText(selected.reasoning)
-                        : english
-                          ? "No explanation yet"
-                          : "暂无说明"}
-                    </p>
+                    {approvalText(
+                      selected.resultPreview ??
+                        (english
+                          ? "Execution will write an audit record and synchronize related timelines."
+                          : "执行后会写入审计日志并同步相关时间线。"),
+                    )}
                   </div>
                 </section>
-                {selected.actionItem.recommendationLog ? (
-                  <section className="space-y-2">
-                    <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                      {english
-                        ? "Why the system recommended handling it this way"
-                        : "为什么建议这样处理"}
-                    </p>
-                    <RecommendationJudgementCard
-                      recommendation={{
-                        recommendationId:
-                          selected.actionItem.recommendationLog.id,
-                        title: selected.actionItem.recommendationLog.title,
-                        description: selected.actionItem.description ?? "",
-                        score: selected.actionItem.recommendationLog.score,
-                        policyResult:
-                          selected.actionItem.recommendationLog.policyResult,
-                        explanation:
-                          selected.actionItem.recommendationLog.explanation,
-                        supportingFactIds:
-                          selected.actionItem.recommendationLog
-                            .supportingFactIds,
-                        blockerIds:
-                          selected.actionItem.recommendationLog.blockerIds,
-                        commitmentIds:
-                          selected.actionItem.recommendationLog.commitmentIds,
-                        recommendationPayload:
-                          selected.actionItem.recommendationLog
-                            .recommendationPayload,
-                      }}
-                      emphasis="featured"
-                      summaryLabel={
-                        english
-                          ? "Recommendation awaiting approval"
-                          : "待复核判断建议"
-                      }
-                      sourcePage="/approvals"
-                      footer={
-                        <p className="text-xs text-[color:var(--muted-foreground)]">
-                          {english
-                            ? "Your decision is recorded as review evidence, so future recommendations stay aligned with this boundary."
-                            : "你的决定会作为复核证据记录下来，让后续建议继续贴合这条边界。"}
-                        </p>
-                      }
-                    />
-                  </section>
-                ) : null}
                 {selected.recommendationBlockers.length ||
                 selected.recommendationCommitments.length ||
                 selected.recommendationFacts.length ? (
@@ -3028,168 +2754,6 @@ export function ApprovalsClient({
                     ) : null}
                   </section>
                 ) : null}
-                {recentSimilarActions.length || selectedLearningPanel ? (
-                  <details
-                    className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-subtle)] px-4 py-3"
-                    open={decisionSupportOpen}
-                    onToggle={(event) =>
-                      setDecisionSupportOpen(event.currentTarget.open)
-                    }
-                  >
-                    <summary className="cursor-pointer text-sm font-semibold text-[color:var(--foreground)]">
-                      {english ? "Decision support details" : "辅助判断材料"}
-                    </summary>
-                    <div className="mt-4 space-y-4">
-                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
-                        <div className="min-w-0 space-y-1">
-                          <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                            {english ? "Evidence timeline" : "证据时间线"}
-                          </p>
-                          <p className="text-xs leading-5 text-[color:var(--muted-foreground)]">
-                            {english
-                              ? "Open the object memory behind this review before changing the draft posture."
-                              : "改草稿姿态前，先打开这条复核背后的对象记忆。"}
-                          </p>
-                        </div>
-                        <Button asChild size="sm" variant="secondary">
-                          <Link
-                            href={buildApprovalMemoryHref(selected)}
-                            data-approval-drawer-evidence-link="true"
-                          >
-                            {english ? "Open evidence" : "打开证据"}
-                          </Link>
-                        </Button>
-                      </div>
-                      {recentSimilarActions.length ? (
-                        <section
-                          id={APPROVAL_PAGE_ANCHORS.recentOutcomes}
-                          className="space-y-2"
-                        >
-                          <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                            {english
-                              ? "Recent similar action outcomes"
-                              : "最近同类动作结果"}
-                          </p>
-                          <div className="space-y-3">
-                            {recentSimilarActions.map((task) => (
-                              <div
-                                key={task.id}
-                                id={buildApprovalItemAnchor("outcome", task.id)}
-                                className="workspace-note-card px-4 py-4"
-                                data-tone="slate"
-                              >
-                                <div className="flex items-center justify-between gap-3">
-                                  <p className="text-sm font-medium text-[color:var(--foreground)]">
-                                    {approvalTitle(task.actionItem.title)}
-                                  </p>
-                                  <ApprovalBadge status={task.status} />
-                                </div>
-                                <p className="mt-2 text-sm leading-7 text-[color:var(--foreground)]">
-                                  {trimText(
-                                    approvalText(task.reasoning ?? ""),
-                                    84,
-                                  )}
-                                </p>
-                                <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
-                                  {english ? "Handled on" : "处理于"}{" "}
-                                  {approvalDateLabel(
-                                    task.reviewedAt ?? task.updatedAt,
-                                  )}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                        </section>
-                      ) : null}
-                      {selectedLearningPanel ? (
-                        <section className="space-y-2">
-                          <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                            {english
-                              ? "Similar review signals"
-                              : "同类动作参考"}
-                          </p>
-                          <ApprovalLearningPanel
-                            panel={selectedLearningPanel}
-                          />
-                        </section>
-                      ) : null}
-                    </div>
-                  </details>
-                ) : null}
-                <section
-                  id={APPROVAL_PAGE_ANCHORS.editableDraft}
-                  className="space-y-2"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                      {draftEditCopy.sectionTitle}
-                    </p>
-                    <span
-                      className="workspace-note-chip"
-                      data-tone={isDraftEdited ? "amber" : "slate"}
-                    >
-                      {draftEditCopy.statusLabel}
-                    </span>
-                  </div>
-                  <Textarea
-                    aria-label={draftEditCopy.sectionTitle}
-                    disabled={!canReviewGovernedActions}
-                    value={editableDraft}
-                    onChange={(event) => setDraft(event.target.value)}
-                  />
-                  {isDraftEdited ? (
-                    <div className="flex justify-end">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setDraft(null)}
-                      >
-                        <RotateCcw className="h-4 w-4" />
-                        {draftEditCopy.restoreLabel}
-                      </Button>
-                    </div>
-                  ) : null}
-                </section>
-                <section
-                  id={APPROVAL_PAGE_ANCHORS.riskNote}
-                  className="space-y-2"
-                >
-                  <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                    {english ? "Risk note" : "风险提示"}
-                  </p>
-                  <div
-                    className={`workspace-note-card px-4 py-4 text-sm leading-7 ${selected.isHighRisk ? "text-[color:var(--foreground)]" : "text-[color:var(--foreground)]"}`}
-                    data-tone={selected.isHighRisk ? "rose" : "amber"}
-                  >
-                    {selected.isHighRisk
-                      ? english
-                        ? "This action is classified as high risk and must be manually confirmed before execution."
-                        : "当前动作被判定为高风险，必须由人工确认后执行。"
-                      : english
-                        ? "Risk is controllable, but it is still worth confirming the object, timing and wording."
-                        : "该动作风险可控，但仍建议你确认对象、时机和措辞。"}
-                  </div>
-                </section>
-                <section
-                  id={APPROVAL_PAGE_ANCHORS.resultPreview}
-                  className="space-y-2"
-                >
-                  <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                    {english ? "After-execution preview" : "执行后结果预览"}
-                  </p>
-                  <div
-                    className="workspace-note-card px-4 py-4 text-sm leading-7 text-[color:var(--foreground)]"
-                    data-tone="slate"
-                  >
-                    {approvalText(
-                      selected.resultPreview ??
-                        (english
-                          ? "Execution will write an audit record and synchronize related timelines."
-                          : "执行后会写入审计日志并同步相关时间线。"),
-                    )}
-                  </div>
-                </section>
                 {selected.biSource ? (
                   <section className="space-y-4">
                     <div className="space-y-2">
@@ -3424,18 +2988,6 @@ export function ApprovalsClient({
                     </div>
                   </section>
                 ) : null}
-                <div
-                  className="workspace-note-card p-4 text-sm leading-7 text-[color:var(--foreground)]"
-                  data-tone="sky"
-                >
-                  {selected.actionItem.recommendationLog
-                    ? english
-                      ? "If you approve after editing, the system will treat this as valid feedback and later recommendations of the same type will move closer to your approval style."
-                      : "如果你编辑后批准，这次改动会被视为一次有效反馈，后续同类建议会更贴近你的审批习惯。"
-                    : english
-                      ? "Even though this action was not triggered directly by recommendation, your approval result will still affect the automation boundary for later actions of the same kind."
-                      : "这条动作虽然不是直接由建议链触发，但你的审批结果仍会影响后续同类动作的自动化边界。"}
-                </div>
                 {!canReviewGovernedActions ? (
                   <div
                     className="workspace-note-card p-4 text-sm leading-7 text-[color:var(--foreground)]"
@@ -3671,6 +3223,252 @@ export function ApprovalsClient({
                     </>
                   )}
                 </div>
+                <details
+                  data-approval-drawer-reason-chain="true"
+                  className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-subtle)] px-4 py-3"
+                >
+                  <summary className="cursor-pointer text-sm font-semibold text-[color:var(--foreground)]">
+                    {english ? "Reason chain" : "理由链"}
+                  </summary>
+                  <div className="mt-3 space-y-3">
+                    {buildApprovalTaskReasonChain(selected, english).map(
+                      (item) => (
+                        <div key={item.id} className="space-y-1">
+                          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                            {approvalText(item.label)}
+                          </p>
+                          <p className="text-sm leading-6 text-[color:var(--muted)]">
+                            {approvalText(item.summary)}
+                          </p>
+                        </div>
+                      ),
+                    )}
+                    <p className="text-xs text-[color:var(--muted-foreground)]">
+                      {formatApprovalEvidencePreview(selected, english)}
+                    </p>
+                    {selected.actionItem.recommendationLog ? (
+                      <div className="workspace-panel rounded-2xl px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="warning">
+                            {english
+                              ? `Score ${selected.actionItem.recommendationLog.score}`
+                              : `建议分 ${selected.actionItem.recommendationLog.score}`}
+                          </Badge>
+                          <Badge variant="approval">
+                            {formatRecommendationPolicyResult(
+                              selected.actionItem.recommendationLog.policyResult,
+                              english,
+                            )}
+                          </Badge>
+                        </div>
+                        <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
+                          {formatApprovalRecommendationLogEvidence(
+                            selected.actionItem.recommendationLog,
+                            english,
+                          )}
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                </details>
+                <details
+                  id={APPROVAL_PAGE_ANCHORS.aiReasoning}
+                  className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-subtle)] px-4 py-3"
+                >
+                  <summary className="cursor-pointer text-sm font-semibold text-[color:var(--foreground)]">
+                    {english
+                      ? "Why this should be handled now"
+                      : "为什么建议现在处理"}
+                  </summary>
+                  <div className="mt-3 space-y-4">
+                    <div
+                      className="workspace-note-card px-4 py-4"
+                      data-tone="emerald"
+                    >
+                      <p className="workspace-note-body text-sm leading-7">
+                        {selected.reasoning
+                          ? approvalText(selected.reasoning)
+                          : english
+                            ? "No explanation yet"
+                            : "暂无说明"}
+                      </p>
+                    </div>
+                    {selected.actionItem.recommendationLog ? (
+                      <section className="space-y-2">
+                        <p className="text-sm font-semibold text-[color:var(--foreground)]">
+                          {english
+                            ? "Why the system recommended handling it this way"
+                            : "为什么建议这样处理"}
+                        </p>
+                        <RecommendationJudgementCard
+                          recommendation={{
+                            recommendationId:
+                              selected.actionItem.recommendationLog.id,
+                            title: selected.actionItem.recommendationLog.title,
+                            description: selected.actionItem.description ?? "",
+                            score: selected.actionItem.recommendationLog.score,
+                            policyResult:
+                              selected.actionItem.recommendationLog.policyResult,
+                            explanation:
+                              selected.actionItem.recommendationLog.explanation,
+                            supportingFactIds:
+                              selected.actionItem.recommendationLog
+                                .supportingFactIds,
+                            blockerIds:
+                              selected.actionItem.recommendationLog.blockerIds,
+                            commitmentIds:
+                              selected.actionItem.recommendationLog.commitmentIds,
+                            recommendationPayload:
+                              selected.actionItem.recommendationLog
+                                .recommendationPayload,
+                          }}
+                          emphasis="featured"
+                          summaryLabel={
+                            english
+                              ? "Recommendation awaiting approval"
+                              : "待复核判断建议"
+                          }
+                          sourcePage="/approvals"
+                          footer={
+                            <p className="text-xs text-[color:var(--muted-foreground)]">
+                              {english
+                                ? "Your decision is recorded as review evidence, so future recommendations stay aligned with this boundary."
+                                : "你的决定会作为复核证据记录下来，让后续建议继续贴合这条边界。"}
+                            </p>
+                          }
+                        />
+                      </section>
+                    ) : null}
+                    <div
+                      className="workspace-note-card p-4 text-sm leading-7 text-[color:var(--foreground)]"
+                      data-tone="sky"
+                    >
+                      {selected.actionItem.recommendationLog
+                        ? english
+                          ? "If you approve after editing, the system will treat this as valid feedback and later recommendations of the same type will move closer to your approval style."
+                          : "如果你编辑后批准，这次改动会被视为一次有效反馈，后续同类建议会更贴近你的审批习惯。"
+                        : english
+                          ? "Even though this action was not triggered directly by recommendation, your approval result will still affect the automation boundary for later actions of the same kind."
+                          : "这条动作虽然不是直接由建议链触发，但你的审批结果仍会影响后续同类动作的自动化边界。"}
+                    </div>
+                  </div>
+                </details>
+                <details
+                  id={APPROVAL_PAGE_ANCHORS.riskNote}
+                  className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-subtle)] px-4 py-3"
+                >
+                  <summary className="cursor-pointer text-sm font-semibold text-[color:var(--foreground)]">
+                    {english ? "Risk note" : "风险提示"}
+                  </summary>
+                  <div
+                    className="workspace-note-card mt-3 px-4 py-4 text-sm leading-7 text-[color:var(--foreground)]"
+                    data-tone={selected.isHighRisk ? "rose" : "amber"}
+                  >
+                    {selected.isHighRisk
+                      ? english
+                        ? "This action is classified as high risk and must be manually confirmed before execution."
+                        : "当前动作被判定为高风险，必须由人工确认后执行。"
+                      : english
+                        ? "Risk is controllable, but it is still worth confirming the object, timing and wording."
+                        : "该动作风险可控，但仍建议你确认对象、时机和措辞。"}
+                  </div>
+                </details>
+                {recentSimilarActions.length || selectedLearningPanel ? (
+                  <details
+                    className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-subtle)] px-4 py-3"
+                    open={decisionSupportOpen}
+                    onToggle={(event) =>
+                      setDecisionSupportOpen(event.currentTarget.open)
+                    }
+                  >
+                    <summary className="cursor-pointer text-sm font-semibold text-[color:var(--foreground)]">
+                      {english ? "Decision support details" : "辅助判断材料"}
+                    </summary>
+                    <div className="mt-4 space-y-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
+                        <div className="min-w-0 space-y-1">
+                          <p className="text-sm font-semibold text-[color:var(--foreground)]">
+                            {english ? "Evidence timeline" : "证据时间线"}
+                          </p>
+                          <p className="text-xs leading-5 text-[color:var(--muted-foreground)]">
+                            {english
+                              ? "Open the object memory behind this review before changing the draft posture."
+                              : "改草稿姿态前，先打开这条复核背后的对象记忆。"}
+                          </p>
+                        </div>
+                        <Button asChild size="sm" variant="secondary">
+                          <Link
+                            href={buildApprovalMemoryHref(selected)}
+                            data-approval-drawer-evidence-link="true"
+                          >
+                            {english ? "Open evidence" : "打开证据"}
+                          </Link>
+                        </Button>
+                      </div>
+                      {recentSimilarActions.length ? (
+                        <section
+                          id={APPROVAL_PAGE_ANCHORS.recentOutcomes}
+                          className="space-y-2"
+                        >
+                          <p className="text-sm font-semibold text-[color:var(--foreground)]">
+                            {english
+                              ? "Recent similar action outcomes"
+                              : "最近同类动作结果"}
+                          </p>
+                          <div className="space-y-3">
+                            {recentSimilarActions.map((task) => (
+                              <div
+                                key={task.id}
+                                id={buildApprovalItemAnchor("outcome", task.id)}
+                                className="workspace-note-card px-4 py-4"
+                                data-tone="slate"
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <p className="text-sm font-medium text-[color:var(--foreground)]">
+                                    {approvalTitle(task.actionItem.title)}
+                                  </p>
+                                  <ApprovalBadge status={task.status} />
+                                </div>
+                                {task.decisionReason ||
+                                task.rejectionReasonCode ? (
+                                  <p
+                                    data-approval-decision-reason="true"
+                                    className="mt-2 break-words text-sm leading-7 text-[color:var(--foreground)]"
+                                  >
+                                    {english ? "Decision note: " : "处理说明："}
+                                    {formatApprovalDecisionNote(
+                                      task,
+                                      english,
+                                      approvalText,
+                                    )}
+                                  </p>
+                                ) : null}
+                                <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
+                                  {english ? "Handled on" : "处理于"}{" "}
+                                  {approvalDateLabel(
+                                    task.reviewedAt ?? task.updatedAt,
+                                  )}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+                      ) : null}
+                      {selectedLearningPanel ? (
+                        <section className="space-y-2">
+                          <p className="text-sm font-semibold text-[color:var(--foreground)]">
+                            {english
+                              ? "Similar review signals"
+                              : "同类动作参考"}
+                          </p>
+                          <ApprovalLearningPanel
+                            panel={selectedLearningPanel}
+                          />
+                        </section>
+                      ) : null}
+                    </div>
+                  </details>
+                ) : null}
                 <details className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-subtle)] px-4 py-3">
                   <summary className="cursor-pointer text-sm font-semibold text-[color:var(--foreground)]">
                     {english ? "Future auto-handling rule (within threshold)" : "后续自动处理规则（阈值内）"}
@@ -3918,6 +3716,88 @@ function buildApprovalDrawerHref(
   anchorId: string = APPROVAL_PAGE_ANCHORS.preview,
 ) {
   return buildSectionHref(`/approvals?approvalId=${approvalId}`, anchorId);
+}
+
+/**
+ * The text a reviewer approves: the editable copy on the review task, else the
+ * action's own draft, else its description.
+ */
+function getApprovalDraftText(task: ApprovalsClientProps["tasks"][number]) {
+  return (
+    task.editableContent?.trim() ||
+    task.actionItem.draftContent?.trim() ||
+    task.actionItem.description?.trim() ||
+    ""
+  );
+}
+
+function getFirstDraftLine(text: string) {
+  return (
+    text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find(Boolean) ?? ""
+  );
+}
+
+/** The reviewer's recorded reason, with the classified rejection reason when there is one. */
+function formatApprovalDecisionNote(
+  task: Pick<
+    ApprovalsClientProps["tasks"][number],
+    "decisionReason" | "rejectionReasonCode"
+  >,
+  english: boolean,
+  displayText: (text: string) => string,
+) {
+  return [
+    task.rejectionReasonCode
+      ? getRejectionReasonShortLabel(task.rejectionReasonCode, english)
+      : null,
+    task.decisionReason?.trim() ? displayText(task.decisionReason.trim()) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/**
+ * Who asked for the action and the email thread it came from. Renders nothing
+ * when neither is recorded; there is no generic stand-in label.
+ */
+function ApprovalProvenance({
+  task,
+  english,
+}: {
+  task: ApprovalsClientProps["tasks"][number];
+  english: boolean;
+}) {
+  const initiator = task.actionItem.createdBy?.name.trim() ?? "";
+  if (!initiator && !task.originThread) {
+    return null;
+  }
+
+  return (
+    <p
+      data-approval-provenance="true"
+      className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[color:var(--muted-foreground)]"
+    >
+      {initiator ? (
+        <span data-approval-initiator="true">
+          {english ? `Requested by ${initiator}` : `发起人：${initiator}`}
+        </span>
+      ) : null}
+      {task.originThread ? (
+        <Link
+          href={`/inbox/${task.originThread.id}`}
+          data-approval-origin-thread="true"
+          className="inline-flex min-h-7 items-center rounded-lg px-1.5 font-medium text-[color:var(--accent)] underline-offset-4 hover:underline"
+        >
+          {english
+            ? `From email: ${task.originThread.subject}`
+            : `来自邮件：${task.originThread.subject}`}
+        </Link>
+      ) : null}
+    </p>
+  );
 }
 
 function hasValue<T>(value: T | null | undefined): value is T {

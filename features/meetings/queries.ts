@@ -1,6 +1,7 @@
 import { ActorType } from "@prisma/client";
 import { endOfDay, startOfDay } from "date-fns";
 import { db } from "@/lib/db";
+import { safeUserSelect } from "@/lib/auth/safe-user-select";
 import {
   getMeetingConnectorIngestionRetrievalSummary,
   syncMeetingConnectorIngestionRetrievalRuntime,
@@ -29,7 +30,7 @@ export async function getMeetingDetailData(workspaceId: string, meetingId: strin
     },
     include: {
       company: true,
-      owner: true,
+      owner: { select: safeUserSelect },
       opportunity: {
         include: {
           contacts: true,
@@ -43,7 +44,7 @@ export async function getMeetingDetailData(workspaceId: string, meetingId: strin
         include: {
           approvalTask: true,
           contact: true,
-          owner: true,
+          owner: { select: safeUserSelect },
         },
       },
       memoryEntries: {
@@ -115,7 +116,7 @@ export async function getMeetingDetailData(workspaceId: string, meetingId: strin
         relatedContact: true,
         relatedCompany: true,
         relatedOpportunity: true,
-        ownerUser: true,
+        ownerUser: { select: safeUserSelect },
       },
       orderBy: [{ dueDate: "asc" }, { updatedAt: "desc" }],
     }),
@@ -384,6 +385,12 @@ export async function getMeetingsOverviewData(workspaceId: string) {
     db.meeting.findMany({
       where: { workspaceId },
       include: {
+        owner: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         company: {
           select: {
             id: true,
@@ -406,6 +413,11 @@ export async function getMeetingsOverviewData(workspaceId: string) {
           orderBy: { name: "asc" },
           take: 4,
         },
+        _count: {
+          select: {
+            contacts: true,
+          },
+        },
         note: {
           select: {
             id: true,
@@ -422,8 +434,16 @@ export async function getMeetingsOverviewData(workspaceId: string) {
           },
           select: {
             id: true,
+            title: true,
+            dueDate: true,
             status: true,
             executionMode: true,
+            owner: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
         commitments: {
@@ -434,7 +454,15 @@ export async function getMeetingsOverviewData(workspaceId: string) {
           },
           select: {
             id: true,
+            title: true,
+            dueDate: true,
             overdueFlag: true,
+            ownerUser: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
         blockers: {

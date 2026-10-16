@@ -134,15 +134,26 @@ describe("page component hierarchy spec", () => {
     }
   });
 
-  it("keeps shell and nested object headers subordinate to the route-level h1", () => {
+  it("keeps the object header as the only route-level h1 once the chain shell folds away", () => {
     const sidebar = read("components/layout/sidebar.tsx");
     const pageHeader = read("components/shared/page-header.tsx");
-    const contactDetailClient = read("features/contacts/contact-detail-client.tsx");
-    const companyDetailClient = read("features/companies/company-detail-client.tsx");
+    const mountWhenOpen = read("components/shared/mount-when-open.tsx");
+    const detailClients = [
+      read("features/contacts/contact-detail-client.tsx"),
+      read("features/companies/company-detail-client.tsx"),
+      read("features/meetings/meeting-detail-client.tsx"),
+    ];
 
     expect(sidebar.match(/<h2\b/g) ?? []).toHaveLength(0);
     expect(pageHeader).toContain('titleAs?: "h1" | "h2"');
-    expect(contactDetailClient).toContain('titleAs="h2"');
-    expect(companyDetailClient).toContain('titleAs="h2"');
+    // Object first (2026-10-15): the chain shell (which brings its own h1 and
+    // breadcrumb) mounts only when the closing system judgement block opens,
+    // so the object header is the page's h1.
+    expect(mountWhenOpen).toContain('closest("details")');
+    for (const client of detailClients) {
+      expect(client).not.toContain('titleAs="h2"');
+      expect(client).not.toContain("showBreadcrumb={false}");
+      expect(client).toContain("<MountWhenOpen>{supplementary}</MountWhenOpen>");
+    }
   });
 });

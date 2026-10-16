@@ -85,10 +85,10 @@ export type DashboardHomeWorkEntryModel = {
    */
   showCrossRoleReviewQueue?: boolean | undefined;
   state: DashboardHomeWorkEntryState;
-  title: string;
-  summary: string;
   topWorkItems: DashboardHomeWorkEntryCard[];
   reviewItems: DashboardHomeWorkEntryCard[];
+  /** Pending review total from a count query; reviewItems is capped at 3. */
+  pendingReviewCount?: number | undefined;
   reviewItemsArePrimary: boolean;
   assignmentItems: DashboardHomeWorkEntryCard[];
   resumeItem: DashboardHomeWorkEntryCard;
@@ -121,6 +121,8 @@ type BuildDashboardHomeWorkEntryInput = {
   firstLoopModel: WorkspaceFirstLoopModel;
   goalDrivenHome: GoalDrivenHomeModel;
   pendingApprovals: PendingApprovalPreview[];
+  /** Real pending approval count; `pendingApprovals` is a capped preview. */
+  pendingApprovalCount?: number;
   assignmentItems?: DashboardCaseAssignmentActionPreview[];
   setupFirstLoopHandoff: DashboardSetupFirstLoopHandoffModel | null;
 };
@@ -405,61 +407,6 @@ function buildBlockerCard(
   };
 }
 
-function buildTitle(state: DashboardHomeWorkEntryState, english: boolean) {
-  switch (state) {
-    case "empty-new":
-      return english
-        ? "Start from one live customer signal."
-        : "先从一条真实客户信号开始。";
-    case "first-loop":
-      return english
-        ? "Move the first loop forward."
-        : "继续推进第一条闭环。";
-    case "returning-active":
-      return english
-        ? "Resume the most important work first."
-        : "回来先接上最重要的工作。";
-    case "review-heavy":
-      return english
-        ? "Review is the main work entry right now."
-        : "现在最该先进入的是复核。";
-  }
-}
-
-function buildSummary(
-  state: DashboardHomeWorkEntryState,
-  input: BuildDashboardHomeWorkEntryInput,
-) {
-  switch (state) {
-    case "empty-new":
-      return input.english
-        ? "Pick the first real signal, name the business object, and decide the next move."
-        : "先挑第一条真实信号，确认它指向哪个经营对象，再决定下一步。";
-    case "first-loop":
-      if (!input.canReviewGovernedActions) {
-        return input.english
-          ? "Current loop progress and the next work routed to your role."
-          : "当前闭环进度，以及分配给本角色的下一步工作。";
-      }
-      return input.english
-        ? "Current loop progress, review pressure and the next move."
-        : "当前闭环进度、复核压力和下一步动作。";
-    case "returning-active":
-      if (!input.canReviewGovernedActions) {
-        return input.english
-          ? "The top item, resume point and blockers route into work available to your role."
-          : "最重要事项、恢复起点和阻塞都会指向本角色可处理的工作。";
-      }
-      return input.english
-        ? "The top item, review pressure, resume point and blocker now route into the business object you can act on."
-        : "最重要事项、复核压力、恢复起点和阻塞都会直接指向可处理的经营对象。";
-    case "review-heavy":
-      return input.english
-        ? "Customer-visible work should outrank explanation, browsing and broad reporting when multiple approvals are waiting."
-        : "当待确认事项积起来时，客户可见动作必须排在浏览和宽汇报前面。";
-  }
-}
-
 export function getDashboardHomeSecondaryVisibility(
   state: DashboardHomeWorkEntryState,
 ): DashboardHomeSecondaryVisibility {
@@ -563,10 +510,11 @@ export function buildDashboardHomeWorkEntry(
     canReviewGovernedActions: input.canReviewGovernedActions,
     showCrossRoleReviewQueue: input.canReviewGovernedActions,
     state,
-    title: buildTitle(state, input.english),
-    summary: buildSummary(state, input),
     topWorkItems,
     reviewItems,
+    pendingReviewCount: input.canReviewGovernedActions
+      ? input.pendingApprovalCount
+      : undefined,
     reviewItemsArePrimary,
     assignmentItems,
     resumeItem: roleSafeResumeItem,

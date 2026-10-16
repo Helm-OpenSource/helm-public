@@ -256,7 +256,7 @@ ASR 支持两个 provider：默认 `openai`（transcription path），以及 `AS
 
 | 入口 | 作用 |
 |---|---|
-| `/dashboard` | 今天必须由你拍板的 3 件事 |
+| `/dashboard` | 今天的工作：推进、复核与继续入口 |
 | `/mobile` | 移动端窄屏经营推进入口 + Ask Helm |
 | `/operating` | 经营总盘：判断 / 决策 / 边界三层 |
 | `/approvals` | 客户可见草稿、CRM 阶段变更全部在这里等你点 |

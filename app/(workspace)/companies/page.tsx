@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ArrowRight, Building2, Search, Users2 } from "lucide-react";
+import type { Prisma } from "@prisma/client";
+import { ArrowRight, Building2, Search } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
@@ -8,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -34,55 +34,59 @@ export default async function CompaniesPage() {
   });
   const english = uiConfig.locale === "en-US";
   const pageStory = getWorkspaceStory("companies", uiConfig.locale, uiConfig.demoMode);
-  const companies = await db.company.findMany({
-    where: {
-      workspaceId: workspace.id,
-    },
-    include: {
-      contacts: {
-        orderBy: { lastInteractionAt: "desc" },
-        take: 3,
-      },
-      opportunities: {
-        where: {
-          stage: {
-            notIn: ["DONE", "LOST"],
+  const workspaceCompanyWhere: Prisma.CompanyWhereInput = {
+    workspaceId: workspace.id,
+  };
+  const activeContactWhere: Prisma.ContactWhereInput = { archivedAt: null };
+  const openOpportunityWhere: Prisma.OpportunityWhereInput = {
+    stage: { notIn: ["DONE", "LOST"] },
+  };
+  const [companies, total, withContacts, withOpenOpportunity, needsDefinition] =
+    await Promise.all([
+      db.company.findMany({
+        where: workspaceCompanyWhere,
+        include: {
+          meetings: {
+            orderBy: { startsAt: "desc" },
+            take: 1,
+          },
+          _count: {
+            select: {
+              contacts: { where: activeContactWhere },
+              opportunities: { where: openOpportunityWhere },
+            },
           },
         },
-        orderBy: { updatedAt: "desc" },
-        take: 3,
-      },
-      meetings: {
-        orderBy: { startsAt: "desc" },
-        take: 1,
-      },
-    },
-    orderBy: [{ lastInteractionAt: "desc" }, { updatedAt: "desc" }],
-    take: 24,
-  });
-  const total = await db.company.count({
-    where: { workspaceId: workspace.id },
-  });
-  const withContacts = companies.filter(
-    (company) => company.contacts.length > 0,
-  ).length;
-  const withOpenOpportunity = companies.filter(
-    (company) => company.opportunities.length > 0,
-  ).length;
-  const needsDefinition = companies.filter(
-    (company) => !company.cooperationMaturity && !company.recommendedPath,
-  ).length;
+        orderBy: [{ lastInteractionAt: "desc" }, { updatedAt: "desc" }],
+        take: 24,
+      }),
+      db.company.count({ where: workspaceCompanyWhere }),
+      db.company.count({
+        where: {
+          ...workspaceCompanyWhere,
+          contacts: { some: activeContactWhere },
+        },
+      }),
+      db.company.count({
+        where: {
+          ...workspaceCompanyWhere,
+          opportunities: { some: openOpportunityWhere },
+        },
+      }),
+      db.company.count({
+        where: {
+          ...workspaceCompanyWhere,
+          cooperationMaturity: null,
+          recommendedPath: null,
+        },
+      }),
+    ]);
 
   return (
     <div className="space-y-6" data-source-page="/companies">
       <PageHeader
         eyebrow={pageStory.eyebrow}
-        title={
-          english
-            ? "Which account is going to slip if you don't touch it this week"
-            : "这周不动一下、就要凉的客户在这里"
-        }
-        description={pageStory.description}
+        title={english ? "Companies" : "公司"}
         actions={
           <>
             <Button variant="secondary" asChild>
@@ -105,22 +109,18 @@ export default async function CompaniesPage() {
         <StatCard
           label={english ? "Customer accounts" : "客户账户"}
           value={total}
-          detail={english ? "Accounts available to act on" : "可直接进入推进"}
         />
         <StatCard
           label={english ? "With contacts" : "有关联联系人"}
           value={withContacts}
-          detail={english ? "Loaded in this view" : "当前列表内"}
         />
         <StatCard
           label={english ? "With open opportunity" : "带活跃机会"}
           value={withOpenOpportunity}
-          detail={english ? "Revenue motion is already attached" : "已有收入推进线"}
         />
         <StatCard
-          label={english ? "Need next touch" : "待补下一步"}
+          label={english ? "No maturity or path set" : "未填成熟度与路径"}
           value={needsDefinition}
-          detail={english ? "No clear next contact path yet" : "还没写清下一次触达"}
         />
       </div>
 
@@ -132,11 +132,6 @@ export default async function CompaniesPage() {
               {english ? "Company directory" : "公司目录"}
             </CardTitle>
           </div>
-          <CardDescription>
-            {english
-              ? "Top of the list needs you most."
-              : "最上面那家最需要你介入。"}
-          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 lg:grid-cols-2">
           {companies.length ? (
@@ -156,39 +151,44 @@ export default async function CompaniesPage() {
                     <p className="font-semibold text-[color:var(--foreground)]">
                       {company.name}
                     </p>
-                    <p className="mt-1 text-sm leading-6 text-[color:var(--muted)]">
-                      {trimText(
-                        [
-                          company.industry,
-                          company.cooperationMaturity ??
-                            (english ? "Maturity needs review" : "成熟度待判断"),
-                          company.recommendedPath,
-                        ]
-                          .filter(Boolean)
-                          .join(" · "),
-                        104,
-                      )}
-                    </p>
+                    {company.industry ||
+                    company.website ||
+                    company.cooperationMaturity ? (
+                      <p className="mt-1 text-sm leading-6 text-[color:var(--muted)]">
+                        {trimText(
+                          [
+                            company.industry,
+                            company.website,
+                            company.cooperationMaturity,
+                          ]
+                            .filter(Boolean)
+                            .join(" · "),
+                          104,
+                        )}
+                      </p>
+                    ) : null}
                   </div>
                   <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-[color:var(--muted-foreground)]" />
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <Badge variant={company.contacts.length ? "info" : "neutral"}>
+                  <Badge variant={company._count.contacts ? "info" : "neutral"}>
                     {english
-                      ? `${company.contacts.length} key contacts`
-                      : `${company.contacts.length} 位关键联系人`}
+                      ? `${company._count.contacts} contacts`
+                      : `${company._count.contacts} 位联系人`}
                   </Badge>
-                  <Badge variant={company.opportunities.length ? "success" : "neutral"}>
+                  <Badge variant={company._count.opportunities ? "success" : "neutral"}>
                     {english
-                      ? `${company.opportunities.length} open opportunities`
-                      : `${company.opportunities.length} 条活跃机会`}
+                      ? `${company._count.opportunities} open opportunities`
+                      : `${company._count.opportunities} 条活跃机会`}
                   </Badge>
-                  {company.meetings[0] ? (
-                    <Badge variant="approval">
-                      {english ? "Recent meeting" : "已有近期会议"}
-                    </Badge>
-                  ) : null}
                 </div>
+                {company.meetings[0] ? (
+                  <p className="mt-3 text-sm leading-6 text-[color:var(--foreground)]">
+                    {english
+                      ? `Latest meeting: ${company.meetings[0].title} · ${formatLocalizedDateLabel(company.meetings[0].startsAt, true)}`
+                      : `最近会议：${company.meetings[0].title} · ${formatLocalizedDateLabel(company.meetings[0].startsAt, false)}`}
+                  </p>
+                ) : null}
                 <p className="mt-3 text-xs text-[color:var(--muted-foreground)]">
                   {company.lastInteractionAt
                     ? english
@@ -210,27 +210,6 @@ export default async function CompaniesPage() {
               }
             />
           )}
-        </CardContent>
-      </Card>
-
-      <Card className="workspace-panel-muted">
-        <CardContent className="flex flex-col gap-3 py-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-[color:var(--foreground)]">
-              {english ? "Next account action" : "下一步处理客户"}
-            </p>
-            <p className="mt-1 text-sm leading-6 text-[color:var(--muted)]">
-              {english
-                ? "Open the pipeline only after the account that needs contact today is clear."
-                : "先确定今天要碰哪家客户，再进入机会面处理金额、阶段和负责人。"}
-            </p>
-          </div>
-          <Button variant="secondary" asChild>
-            <Link href="/opportunities">
-              <Users2 className="h-4 w-4" />
-              {english ? "Open the deal pipeline" : "打开销售管线"}
-            </Link>
-          </Button>
         </CardContent>
       </Card>
     </div>

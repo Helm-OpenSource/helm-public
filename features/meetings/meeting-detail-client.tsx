@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
@@ -22,13 +22,22 @@ import { ControlledDisclosure } from "@/components/shared/controlled-disclosure"
 import { CommitmentCard } from "@/components/shared/commitment-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { HomeSurfaceArrivalBanner } from "@/components/shared/home-surface-arrival-banner";
+import { MountWhenOpen } from "@/components/shared/mount-when-open";
 import { PageHeader } from "@/components/shared/page-header";
+import {
+  RelatedObjectLinks,
+  type RelatedObjectLink,
+} from "@/components/shared/related-object-links";
 import { RiskBadge } from "@/components/shared/risk-badge";
 import {
   ActionModeBadge,
   ApprovalBadge,
   StageBadge,
 } from "@/components/shared/status-badges";
+import {
+  SystemJudgementSummary,
+  systemJudgementDetailsClassName,
+} from "@/components/shared/system-judgement-summary";
 import { WorkspaceGuidancePanel } from "@/components/shared/workspace-guidance-panel";
 import { WorkspaceSurfacePreferences } from "@/components/shared/workspace-surface-preferences";
 import { Badge } from "@/components/ui/badge";
@@ -84,7 +93,10 @@ import {
   updateOpportunityFromMeetingAction,
 } from "@/features/meetings/actions";
 import { formatMeetingDisplayText } from "@/features/meetings/display-copy";
-import { formatMeetingDetailDateLabel } from "@/features/meetings/meeting-detail-date-labels";
+import {
+  formatMeetingDetailDateLabel,
+  formatMeetingDetailTimeRange,
+} from "@/features/meetings/meeting-detail-date-labels";
 import { MeetingV2RuntimeCard } from "@/features/meetings/meeting-v2-runtime-card";
 import type { MeetingConnectorIngestionRetrievalSummary } from "@/lib/helm-v2/connector-ingestion-retrieval-runtime";
 import { generateMeetingBriefingAction } from "@/features/memory/actions";
@@ -140,12 +152,21 @@ type MeetingDetailClientProps = {
     id: string;
     title: string;
     agenda: string | null;
+    postMeetingSummary: string | null;
     startsAt: Date;
+    endsAt: Date;
     location: string | null;
     companyId: string | null;
     opportunityId: string | null;
+    owner: { id: string; name: string } | null;
     company: { id: string; name: string } | null;
-    contacts: Array<{ id: string; name: string; title: string | null }>;
+    contacts: Array<{
+      id: string;
+      name: string;
+      title: string | null;
+      email: string | null;
+      phone: string | null;
+    }>;
     opportunity: {
       id: string;
       title: string;
@@ -276,6 +297,9 @@ type MeetingDetailClientProps = {
     }>;
   };
   memberships: Array<{ user: { id: string; name: string } }>;
+  relatedLinks: RelatedObjectLink[];
+  /** Route-level judgement (chain shell and first-loop summary), mounted inside the closing system judgement block. */
+  supplementary?: ReactNode;
   auditLogs: Array<{
     id: string;
     actor: string;
@@ -360,6 +384,8 @@ export function MeetingDetailClient({
   runtimeGovernance,
   meeting,
   memberships,
+  relatedLinks,
+  supplementary,
   auditLogs,
   recommendations,
 }: MeetingDetailClientProps) {
@@ -1006,115 +1032,6 @@ export function MeetingDetailClient({
     });
   };
 
-  const meetingSecondaryContext = (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_360px]">
-      <WorkspaceGuidancePanel
-        eyebrow={english ? "Meeting guidance" : "会议引导"}
-        title={
-          english
-            ? "Use the meeting surface to connect context, review posture and the next formal move."
-            : "把会议页面当成连接上下文、复核状态和正式下一步的主回路。"
-        }
-        summary={
-          english
-            ? "This page should explain what changed, what already wrote back into memory, and what still needs explicit review before any follow-through becomes real execution."
-            : "直接确认这场会改变了什么、哪些内容已经回写进记忆、以及哪些会后动作在变成真实执行前仍需要显式复核。"
-        }
-        recommendations={displayMeetingGuidanceRecommendations}
-        reminders={meetingGuidanceReminders}
-        recommendationsLabel={english ? "Recommended next moves" : "建议先处理"}
-        remindersLabel={english ? "Meeting reminders" : "会议提醒"}
-        boundaryLabel={english ? "Boundary" : "边界"}
-        boundary={
-          canManageGovernedActions
-            ? english
-              ? `${primaryBoundaryLine} This surface can prepare, review and route follow-through, but it still does not grant autonomous send authority.`
-              : `${primaryBoundaryLine} 这个页面可以准备、复核并路由后续推进，但它仍不代表获得了自动发送权限。`
-            : actionGovernance.manageDeniedMessage
-        }
-      />
-      <div className="workspace-surface-stack">
-        <WorkspaceSurfacePreferences />
-        <Card className="workspace-form-assist workspace-panel-muted">
-          <CardContent className="space-y-3 py-5">
-            <p className="workspace-eyebrow">
-              {english ? "Meeting assist" : "会议辅助"}
-            </p>
-            <p className="text-lg font-semibold tracking-tight text-[color:var(--foreground)]">
-              {english
-                ? "Move from context to follow-through without losing the review boundary."
-                : "在不丢失复核边界的前提下，把上下文更快推到后续推进。"}
-            </p>
-            <p className="text-sm leading-7 text-[color:var(--muted-foreground)]">
-              {english
-                ? "Refresh memory, regenerate next steps, route the summary when ready."
-                : "刷新记忆、重新生成下一步、草稿好了再送审。"}
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() =>
-                  runAction(
-                    () => processMeetingMemoryAction(meeting.id),
-                    english
-                      ? "Meeting memory reprocessed"
-                      : "会议记忆已重新处理",
-                  )
-                }
-              >
-                {english ? "Process memory" : "处理记忆"}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() =>
-                  runAction(
-                    () => generateMeetingBriefingAction(meeting.id),
-                    english ? "Briefing snapshot refreshed" : "已刷新简报快照",
-                  )
-                }
-              >
-                {english ? "Refresh briefing" : "刷新简报"}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={governedActionDisabled}
-                onClick={() =>
-                  runAction(
-                    () => generateMeetingActionItemsAction(meeting.id),
-                    english
-                      ? "Post-meeting action items generated"
-                      : "已生成会后动作项",
-                  )
-                }
-              >
-                {english ? "Generate action items" : "生成会后动作"}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={governedActionDisabled}
-                onClick={() =>
-                  runAction(
-                    () => sendMeetingSummaryAction(meeting.id),
-                    english
-                      ? "Summary draft created and routed to approvals"
-                      : "已生成纪要并进入审批",
-                    "/approvals",
-                  )
-                }
-              >
-                {english ? "Route summary to approvals" : "送纪要到审批"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-
   const saveActionItem = () => {
     if (!editingAction) return;
 
@@ -1143,8 +1060,7 @@ export function MeetingDetailClient({
       <PageHeader
         eyebrow={pageStory.eyebrow}
         title={meeting.title}
-        titleAs="h2"
-        description={`${pageStory.description} · ${formatMeetingDetailDateLabel(meeting.startsAt, english)} · ${meeting.company?.name ?? (english ? "No linked company" : "未关联公司")}`}
+        english={english}
         actions={
           <>
             <StartRecordingButton
@@ -1250,146 +1166,104 @@ export function MeetingDetailClient({
         }
       />
 
-      <HomeSurfaceArrivalBanner
-        kind="detail"
-        english={english}
-        contract={{
-          ownership: english
-            ? "Meeting detail owns live context, follow-through review posture and the meeting workspace."
-            : "会议详情负责现场上下文、会后动作复核姿态和会议工作区。",
-          nextStep: english
-            ? "Start in the meeting workspace, then decide whether the next move belongs in follow-through, memory, or approvals."
-            : "先从会议工作区开始，再决定下一步应该落在会后推进、记忆还是审批。",
-          boundary: english
-            ? "This page can prepare, review and route follow-through, but it still does not grant autonomous send authority."
-            : "这个页面可以准备、复核并路由会后推进，但不会获得自动发送权限。",
-        }}
-      />
-
-      {meeting.dingtalkSignalSummary?.total ? (
-        <Card className="workspace-panel-muted border-[color:var(--border)]">
-          <CardHeader>
-            <CardTitle className="text-base tracking-tight text-[color:var(--foreground)]">
-              {english ? "DingTalk signal routing" : "钉钉信号流转"}
-            </CardTitle>
-            <CardDescription className="text-sm leading-6 text-[color:var(--muted-foreground)]">
-              {english
-                ? `${meeting.dingtalkSignalSummary.total} DingTalk signals linked to this meeting.`
-                : `${meeting.dingtalkSignalSummary.total} 条钉钉信号关联到这场会议。`}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(meeting.dingtalkSignalSummary.byScope).map(
-                ([scope, count]) => (
-                  <Badge key={scope} variant="info">
-                    {scope}: {count}
-                  </Badge>
-                ),
+      <Card data-meeting-facts="true">
+        <CardHeader>
+          <CardTitle>{english ? "Meeting" : "会议信息"}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <MeetingFact
+              label={english ? "Time" : "时间"}
+              value={formatMeetingDetailTimeRange(
+                meeting.startsAt,
+                meeting.endsAt,
+                english,
               )}
-            </div>
-            <div className="space-y-2">
-              {meeting.dingtalkSignalSummary.items.slice(0, 4).map((item) => (
-                <div
-                  key={item.id}
-                  className="rounded-2xl border border-[color:var(--border)] px-3 py-2 text-sm"
-                >
-                  <p className="font-medium text-[color:var(--foreground)]">
-                    {item.scope} · {item.flowModule} · {item.businessDomain}
-                  </p>
-                  <p className="text-[color:var(--muted-foreground)]">
-                    {trimText(item.summary, 120)}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {meeting.dingtalkWorkProgress?.length ? (
-        <Card className="workspace-panel-muted border-[color:var(--border)]">
-          <CardHeader>
-            <CardTitle className="text-base tracking-tight text-[color:var(--foreground)]">
-              {english ? "DingTalk work progress" : "钉钉工作进度"}
-            </CardTitle>
-            <CardDescription className="text-sm leading-6 text-[color:var(--muted-foreground)]">
-              {english
-                ? "Read-only progress stream from DingTalk — reporter and department included."
-                : "钉钉只读工作进度——附带汇报人和部门信息。"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {meeting.dingtalkWorkProgress.map((item) => (
-              <div
-                key={item.reportId}
-                className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-3"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="info">
-                    {item.templateName ??
-                      (english ? "Work report" : "工作汇报")}
-                  </Badge>
-                  <Badge variant="neutral">
-                    {item.reporterName ??
-                      (english ? "Unknown reporter" : "未知汇报人")}
-                  </Badge>
-                  <Badge variant="neutral">
-                    {item.departmentName ??
-                      (english ? "Unknown dept" : "未知部门")}
-                  </Badge>
-                </div>
-                <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
-                  {(english ? "Reported at: " : "汇报时间：") +
-                    formatMeetingDetailDateLabel(item.createdAt, english)}
-                </p>
-                {item.weeklySummary ? (
-                  <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
-                    {english ? "Summary: " : "总结："}
-                    {trimText(item.weeklySummary, 220)}
-                  </p>
+            />
+            <MeetingFact
+              label={english ? "Location" : "地点"}
+              value={meeting.location ?? (english ? "Not set" : "未填写")}
+            />
+            <MeetingFact
+              label={english ? "Owner" : "负责人"}
+              value={meeting.owner?.name ?? (english ? "Unassigned" : "未分配")}
+            />
+            <div className="workspace-panel rounded-2xl px-4 py-3">
+              <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                {english ? "Company / opportunity" : "公司 / 机会"}
+              </p>
+              <div className="mt-2 space-y-1 text-sm font-medium">
+                {meeting.company ? (
+                  <Link
+                    href={`/companies/${meeting.company.id}`}
+                    className="block break-words text-[color:var(--accent)] underline-offset-4 hover:underline"
+                  >
+                    {meeting.company.name}
+                  </Link>
                 ) : null}
-                {item.nextWeekPlan ? (
-                  <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                    {english ? "Next plan: " : "下周计划："}
-                    {trimText(item.nextWeekPlan, 220)}
-                  </p>
+                {meeting.opportunity && linkedOpportunityAssetHref ? (
+                  <Link
+                    href={linkedOpportunityAssetHref}
+                    className="block break-words text-[color:var(--accent)] underline-offset-4 hover:underline"
+                  >
+                    {meeting.opportunity.title}
+                  </Link>
                 ) : null}
-                {item.needHelp ? (
-                  <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                    {english ? "Need help: " : "需协同："}
-                    {trimText(item.needHelp, 220)}
+                {!meeting.company && !meeting.opportunity ? (
+                  <p className="text-[color:var(--foreground)]">
+                    {english ? "Not linked" : "未关联"}
                   </p>
-                ) : null}
-                {item.sections.length ? (
-                  <details className="mt-2">
-                    <summary className="cursor-pointer text-xs text-[color:var(--muted-foreground)]">
-                      {english
-                        ? "View full report details"
-                        : "查看完整汇报内容"}
-                    </summary>
-                    <div className="mt-2 space-y-2">
-                      {item.sections.map((section, index) => (
-                        <div
-                          key={`${item.reportId}-section-${index}`}
-                          className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-subtle)] px-2 py-2"
-                        >
-                          <p className="text-xs font-medium text-[color:var(--foreground)]">
-                            {section.key ?? (english ? "Section" : "分段")}
-                          </p>
-                          <pre className="mt-1 whitespace-pre-wrap text-xs leading-6 text-[color:var(--muted-foreground)]">
-                            {section.value}
-                          </pre>
-                        </div>
-                      ))}
-                    </div>
-                  </details>
                 ) : null}
               </div>
-            ))}
-          </CardContent>
-        </Card>
-      ) : null}
+            </div>
+          </div>
+          {meeting.contacts.length ? (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                {english
+                  ? `Participants · ${meeting.contacts.length}`
+                  : `参与人 · ${meeting.contacts.length}`}
+              </p>
+              <ul className="grid gap-2 md:grid-cols-2">
+                {meeting.contacts.map((contact) => (
+                  <li
+                    key={contact.id}
+                    className="theme-surface-panel-soft rounded-2xl px-4 py-3"
+                  >
+                    <Link
+                      href={`/contacts/${contact.id}`}
+                      className="text-sm font-semibold text-[color:var(--foreground)] underline-offset-4 hover:underline"
+                    >
+                      {contact.name}
+                    </Link>
+                    {contact.title ? (
+                      <span className="ml-2 text-sm text-[color:var(--muted-foreground)]">
+                        {contact.title}
+                      </span>
+                    ) : null}
+                    {contact.phone || contact.email ? (
+                      <p className="mt-1 break-words text-sm text-[color:var(--muted-foreground)]">
+                        {[contact.phone, contact.email].filter(Boolean).join(" · ")}
+                      </p>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {meeting.agenda ? (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                {english ? "Agenda" : "议程"}
+              </p>
+              <p className="whitespace-pre-wrap break-words text-sm leading-7 text-[color:var(--foreground)]">
+                {text(meeting.agenda)}
+              </p>
+            </div>
+          ) : null}
+          <RelatedObjectLinks links={relatedLinks} english={english} />
+        </CardContent>
+      </Card>
 
       {!canManageGovernedActions ? (
         <div
@@ -1399,1325 +1273,6 @@ export function MeetingDetailClient({
           {actionGovernance.manageDeniedMessage}
         </div>
       ) : null}
-
-      <Card id="meeting-workspace" className="workspace-panel">
-        <CardContent className="grid gap-4 py-5 xl:grid-cols-[1.12fr_0.88fr]">
-          <div className="min-w-0 space-y-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="info">
-                {english ? "Meeting OS wedge" : "会议推进主线"}
-              </Badge>
-              <Badge variant="neutral">{meetingTemplateSummary.label}</Badge>
-              <Badge
-                variant={
-                  meetingWorkspaceLightSummary.visibilityCue === "review-only"
-                    ? "approval"
-                    : meetingWorkspaceLightSummary.visibilityCue ===
-                        "promoted-to-object-state"
-                      ? "success"
-                      : "neutral"
-                }
-              >
-                {meetingWorkspaceLightSummary.visibilityLabel}
-              </Badge>
-              {meeting.opportunity ? (
-                <StageBadge stage={meeting.opportunity.stage} />
-              ) : null}
-              {meeting.opportunity ? (
-                <RiskBadge risk={meeting.opportunity.riskLevel} />
-              ) : null}
-              {pendingApprovalCount > 0 ? (
-                <Badge variant="approval">
-                  {english
-                    ? `${pendingApprovalCount} waiting review`
-                    : `${pendingApprovalCount} 条待复核`}
-                </Badge>
-              ) : null}
-            </div>
-            <div className="space-y-2">
-              <p className="text-lg font-semibold text-[color:var(--foreground)]">
-                {english
-                  ? "This meeting is the shortest path from context to action, approval and memory writeback."
-                  : "这场会负责把现场上下文接回目标推进链，判断它改变了哪些经营状态、下一步和复核边界。"}
-              </p>
-              <p className="text-sm leading-6 text-[color:var(--muted)]">
-                {text(meetingTemplateSummary.summary)}
-              </p>
-              <p className="text-sm leading-7 text-[color:var(--muted)]">
-                {meetingImpactLine}
-              </p>
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                  {english ? "Related object state" : "受影响的经营状态"}
-                </p>
-                <p className="mt-2 font-medium text-[color:var(--foreground)]">
-                  {linkedObjectSummary ||
-                    (english ? "No linked object yet" : "当前还没有关联对象")}
-                </p>
-                <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                  {text(meetingTemplateSummary.objectEmphasisLine)}
-                </p>
-                <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                  {english
-                    ? "Linked items keep updating the briefing and what's flagged after the meeting."
-                    : "这些关联会继续更新简报和会后要追的事。"}
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {linkedOpportunityAssetHref ? (
-                    <Button asChild size="sm" variant="secondary">
-                      <Link href={linkedOpportunityAssetHref}>
-                        {english ? "Open opportunity asset" : "打开机会资产"}
-                        <ArrowRight className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                  ) : null}
-                  {linkedCustomerAssetHref ? (
-                    <Button asChild size="sm" variant="ghost">
-                      <Link href={linkedCustomerAssetHref}>
-                        {english ? "Open customer asset" : "打开客户资产"}
-                        <ArrowRight className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-              <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                  {english ? "Current next move" : "当前最该推进的一步"}
-                </p>
-                <p className="mt-2 font-medium text-[color:var(--foreground)]">
-                  {primaryNextStepTitle}
-                </p>
-                <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                  {text(meetingTemplateSummary.nextStepLine)}
-                </p>
-                <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                  {primaryBoundaryLine}
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-1">
-            <div data-meeting-review-snapshot="true">
-              <ControlledDisclosure
-                className="theme-surface-panel-soft rounded-2xl"
-                defaultExpanded={false}
-                summaryClassName="flex cursor-pointer list-none items-start justify-between gap-3 px-4 py-4"
-                bodyClassName="border-t border-[color:var(--border)] px-4 py-4"
-                summary={
-                  <>
-                    <div className="min-w-0 space-y-2">
-                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                        {english ? "Review snapshot" : "复核快照"}
-                      </p>
-                      <p className="text-sm leading-6 text-[color:var(--muted)]">
-                        {displayMeetingReviewSnapshotSummary}
-                      </p>
-                    </div>
-                    <div className="inline-flex shrink-0 items-center gap-2 text-xs text-[color:var(--muted-foreground)]">
-                      <span>{english ? "Open" : "展开"}</span>
-                      <ChevronDown className="h-4 w-4" />
-                    </div>
-                  </>
-                }
-              >
-                <div className="grid grid-cols-2 gap-3 text-sm text-[color:var(--muted)]">
-                  <div>
-                    <p className="text-lg font-semibold text-[color:var(--foreground)]">
-                      {meeting.memoryFacts.length}
-                    </p>
-                    <p>{english ? "supporting facts" : "支持事实"}</p>
-                  </div>
-                  <div>
-                    <p className="text-lg font-semibold text-[color:var(--foreground)]">
-                      {meeting.commitments.length}
-                    </p>
-                    <p>{english ? "commitments" : "承诺"}</p>
-                  </div>
-                  <div>
-                    <p className="text-lg font-semibold text-[color:var(--foreground)]">
-                      {meeting.blockers.length}
-                    </p>
-                    <p>{english ? "blockers" : "阻塞"}</p>
-                  </div>
-                  <div>
-                    <p className="text-lg font-semibold text-[color:var(--foreground)]">
-                      {pendingApprovalCount}
-                    </p>
-                    <p>{english ? "review gates" : "需人工复核"}</p>
-                  </div>
-                </div>
-                {activeRetrievalPackTrace ? (
-                  <div className="mt-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="info">
-                        {english ? "Retrieval pack" : "检索包"}
-                      </Badge>
-                      <Badge variant="neutral">
-                        {english
-                          ? `Selected ${activeRetrievalPackTrace.trace.selectedCount}`
-                          : `入选 ${activeRetrievalPackTrace.trace.selectedCount}`}
-                      </Badge>
-                      <Badge variant="neutral">
-                        {english
-                          ? `Omitted ${activeRetrievalPackTrace.trace.omittedCount}`
-                          : `省略 ${activeRetrievalPackTrace.trace.omittedCount}`}
-                      </Badge>
-                      {activeRetrievalPackTrace.fallback.used ? (
-                        <Badge variant="warning">
-                          {english ? "Fallback" : "回退"}
-                        </Badge>
-                      ) : null}
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                      {english
-                        ? activeRetrievalPackTrace.trace.boundaryNote
-                        : text(
-                            "检索资料只做证据打包；不会改变建议排序、审批负责人或承诺权限。",
-                          )}
-                    </p>
-                  </div>
-                ) : null}
-                <p className="mt-3 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                  {displayMeetingReviewPostureLine}
-                </p>
-                <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                  {text(meetingWorkspaceLightSummary.summary)}
-                </p>
-                {manualReviewHoldCount > 0 ? (
-                  <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                    {english
-                      ? `${manualReviewHoldCount} promoted meeting-memory item(s) are currently being held back behind review on this page, so the visible writeback stays explicit and reversible.`
-                      : `当前有 ${manualReviewHoldCount} 条已提升会议记忆在这个页面里被人工保留在复核之后，所以可见写回仍然保持显式且可逆。`}
-                  </p>
-                ) : null}
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={exportMeetingMemoryBundle}
-                  >
-                    <Download className="h-4 w-4" />
-                    {english
-                      ? "Export meeting memory bundle"
-                      : "导出会议记忆包"}
-                  </Button>
-                </div>
-              </ControlledDisclosure>
-            </div>
-            <div className="space-y-3 rounded-2xl border border-[color:var(--border)] bg-[color:color-mix(in_oklab,var(--surface)_94%,white_6%)] px-4 py-4">
-              <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                {english ? "Go next" : "现在继续往下走"}
-              </p>
-              <Button
-                className="w-full justify-start"
-                disabled={governedActionDisabled}
-                onClick={() =>
-                  runAction(
-                    () => sendMeetingSummaryAction(meeting.id),
-                    english ? "Summary action created" : "纪要动作已生成",
-                    "/approvals#meeting-follow-through-review",
-                  )
-                }
-              >
-                <FileText className="h-4 w-4" />
-                {english
-                  ? "Send summary draft to approvals"
-                  : "把纪要草稿送进复核与边界"}
-              </Button>
-              <Button
-                variant="secondary"
-                className="w-full justify-start"
-                asChild
-              >
-                <Link
-                  href={`/memory?objectType=MEETING&objectId=${meeting.id}`}
-                >
-                  {english ? "Open meeting memory" : "打开会议记忆"}
-                </Link>
-              </Button>
-              <Button
-                variant="secondary"
-                className="w-full justify-start"
-                onClick={exportMeetingMemoryBundle}
-              >
-                <Download className="h-4 w-4" />
-                {english ? "Export bundle" : "导出记忆包"}
-              </Button>
-              <Button
-                variant="secondary"
-                className="w-full justify-start"
-                asChild
-              >
-                <Link href="/approvals#meeting-follow-through-review">
-                  {english ? "Open review boundary" : "打开复核与边界"}
-                </Link>
-              </Button>
-              <Button
-                variant="secondary"
-                className="w-full justify-start"
-                asChild
-              >
-                <Link href="/diagnostics#meeting-workflow-readiness">
-                  {english ? "See workflow readiness" : "查看协同就绪度"}
-                </Link>
-              </Button>
-              <Button
-                variant="secondary"
-                className="w-full justify-start"
-                asChild
-              >
-                <Link href="/dashboard">
-                  {english ? "Back to dashboard arbitration" : "回到目标推进台"}
-                </Link>
-              </Button>
-              {meeting.opportunity ? (
-                <Button
-                  variant="secondary"
-                  className="w-full justify-start"
-                  disabled={governedActionDisabled}
-                  onClick={() =>
-                    runAction(
-                      () => updateOpportunityFromMeetingAction(meeting.id),
-                      english
-                        ? "Opportunity-sync action created"
-                        : "机会同步动作已生成",
-                      "/approvals#meeting-follow-through-review",
-                    )
-                  }
-                >
-                  <Zap className="h-4 w-4" />
-                  {english
-                    ? "Sync opportunity after meeting"
-                    : "把会议结论同步回机会"}
-                </Button>
-              ) : null}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {meetingSecondaryContext}
-
-      <Card className="workspace-panel-muted">
-        <CardContent className="grid gap-4 py-5 xl:grid-cols-[1.15fr_repeat(3,minmax(0,0.78fr))]">
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="approval">
-                {english ? "Meeting memory bundle" : "会议记忆包"}
-              </Badge>
-              <Badge variant="info">
-                {english ? "Reusable operating memory" : "可复用经营记忆"}
-              </Badge>
-            </div>
-            <p className="text-lg font-semibold text-[color:var(--foreground)]">
-              {english
-                ? "This meeting only becomes reusable when the page shows what already wrote back, what is ready for promotion, and what should stay behind review."
-                : "只有当这页说明哪些内容已沉淀为经营状态、哪些仍待复核、哪些仍存在冲突时，这场会议才会变成可复用经营记忆。"}
-            </p>
-            <p className="text-sm leading-6 text-[color:var(--muted)]">
-              {text(meetingMemoryBundle.summary)}
-            </p>
-            <p className="text-sm leading-6 text-[color:var(--muted-foreground)]">
-              {text(meetingMemoryBundle.lifecycleSummary)}
-            </p>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="theme-surface-panel rounded-2xl px-4 py-3">
-                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                  {english ? "Affected objects" : "受影响对象"}
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {meetingMemoryBundle.affectedObjects
-                    .slice(0, 5)
-                    .map((item) => (
-                      <Badge
-                        key={`${item.objectType}:${item.id}`}
-                        variant="info"
-                      >
-                        {item.label}
-                      </Badge>
-                    ))}
-                </div>
-              </div>
-              <div className="theme-surface-panel rounded-2xl px-4 py-3">
-                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                  {english ? "Source pointers" : "来源使用说明"}
-                </p>
-                <div className="mt-2 space-y-2">
-                  {meetingMemoryBundle.sourcePointers
-                    .slice(0, 3)
-                    .map((pointer) => (
-                      <div key={pointer.id} className="space-y-1">
-                        <p className="text-sm font-medium text-[color:var(--foreground)]">
-                          {text(pointer.label)}
-                        </p>
-                        <p className="text-sm leading-6 text-[color:var(--muted-foreground)]">
-                          {text(pointer.summary)}
-                        </p>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="theme-surface-panel rounded-2xl px-4 py-4">
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-              {english ? "Already wrote back" : "已经写回的部分"}
-            </p>
-            <p className="mt-2 text-3xl font-semibold text-[color:var(--foreground)]">
-              {meetingMemoryBundle.promotedCount}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-              {english
-                ? `${meetingMemoryBundle.facts.length} facts, ${meetingMemoryBundle.commitments.length} commitments and ${meetingMemoryBundle.blockers.length} blockers are already visible in structured memory or downstream object state.`
-                : `当前已有 ${meetingMemoryBundle.facts.length} 条事实、${meetingMemoryBundle.commitments.length} 条承诺和 ${meetingMemoryBundle.blockers.length} 条阻塞进入结构化记忆或下游对象状态。`}
-            </p>
-          </div>
-          <div className="theme-surface-panel rounded-2xl px-4 py-4">
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-              {english ? "Ready for promotion" : "准备提升"}
-            </p>
-            <p className="mt-2 text-3xl font-semibold text-[color:var(--foreground)]">
-              {meetingMemoryBundle.readyCount}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-              {english
-                ? `${meetingMemoryBundle.decisions.length} decisions and ${meetingMemoryBundle.openQuestions.length} open questions are the main promotion candidates from this meeting.`
-                : `当前最主要的提升候选来自这场会议里的 ${meetingMemoryBundle.decisions.length} 条决策和 ${meetingMemoryBundle.openQuestions.length} 条待确认问题。`}
-            </p>
-          </div>
-          <div className="theme-surface-panel rounded-2xl px-4 py-4">
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-              {english ? "Still pending review" : "仍待复核"}
-            </p>
-            <p className="mt-2 text-sm font-semibold text-[color:var(--foreground)]">
-              {meetingMemoryBundle.conflictCount > 0
-                ? english
-                  ? `${meetingMemoryBundle.conflictCount} conflict cues visible`
-                  : `当前有 ${meetingMemoryBundle.conflictCount} 条冲突线索`
-                : english
-                  ? `${meetingMemoryBundle.pendingReviewCount} items should stay visible behind review`
-                  : `当前有 ${meetingMemoryBundle.pendingReviewCount} 条项目应继续留在复核之后`}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-              {english
-                ? "Anything unresolved here should stay explainable instead of silently overwriting current object state."
-                : "这里仍未解决的部分都应该保持可解释，而不是静默覆盖当前对象状态。"}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="workspace-panel-muted">
-        <CardContent className="grid gap-4 py-5 xl:grid-cols-[1.2fr_repeat(4,minmax(0,0.82fr))]">
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="info">
-                {english ? "Meeting ingress context" : "会议入口上下文"}
-              </Badge>
-              <Badge variant="neutral">{english ? "Read-only" : "只读"}</Badge>
-            </div>
-            <p className="text-lg font-semibold text-[color:var(--foreground)]">
-              {english
-                ? "Use this as the pre-meeting operating entry: why this event is on the calendar, which thread/object pressure is attached to it, and what it should release into follow-through."
-                : "把这里读成会前 operating 入口：这场会议为什么会出现在日程里、它接着哪条线程/对象压力、以及它应该释放哪一步会后推进。"}
-            </p>
-            <p className="text-sm leading-6 text-[color:var(--muted)]">
-              {calendarIngressPointer?.summary
-                ? text(calendarIngressPointer.summary)
-                : english
-                  ? "Calendar/event context is still thin, so this readout relies more on meeting memory and object continuity."
-                  : "当前日程 / 会议上下文还比较薄，所以这条读数主要依赖会议记忆和对象连续性来理解这场会。"}
-            </p>
-          </div>
-          <div className="theme-surface-panel rounded-2xl px-4 py-4">
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-              {english ? "Calendar / event" : "日程 / 事件"}
-            </p>
-            <p className="mt-2 text-sm font-medium leading-6 text-[color:var(--foreground)]">
-              {calendarIngressPointer?.label ??
-                (english ? "Current meeting event" : "当前会议事件")}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-              {calendarIngressPointer?.summary
-                ? text(calendarIngressPointer.summary)
-                : english
-                  ? "This meeting currently enters the loop mainly through its visible event slot."
-                  : "这场会议当前主要通过可见事件时段进入主回路。"}
-            </p>
-          </div>
-          <div className="theme-surface-panel rounded-2xl px-4 py-4">
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-              {english ? "Participants" : "参与者"}
-            </p>
-            <p className="mt-2 text-sm font-medium leading-6 text-[color:var(--foreground)]">
-              {meeting.contacts.length
-                ? english
-                  ? `${meeting.contacts.length} linked attendees`
-                  : `${meeting.contacts.length} 位已关联参与者`
-                : english
-                  ? "Attendee context is thin"
-                  : "参与者上下文较薄"}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-              {meetingIngressAttendeeLine}
-            </p>
-          </div>
-          <div className="theme-surface-panel rounded-2xl px-4 py-4">
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-              {english ? "Related thread / inbox" : "相关线程 / 收件箱"}
-            </p>
-            <p className="mt-2 text-sm font-medium leading-6 text-[color:var(--foreground)]">
-              {threadIngressPointer
-                ? english
-                  ? "Thread pressure visible"
-                  : "线程压力可见"
-                : english
-                  ? "No strong thread cue"
-                  : "当前没有显著线程线索"}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-              {threadIngressPointer?.summary
-                ? text(threadIngressPointer.summary)
-                : english
-                  ? "No visible inbox-pressure cue is currently being pulled into this meeting."
-                  : "当前还没有把显著的收件箱压力线索拉进这场会议。"}
-            </p>
-          </div>
-          <div className="theme-surface-panel rounded-2xl px-4 py-4">
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-              {english ? "Continuity + pressure" : "连续性 + 压力"}
-            </p>
-            <p className="mt-2 text-sm font-medium leading-6 text-[color:var(--foreground)]">
-              {affectedObjectsPointer?.label ??
-                (english ? "Object continuity in view" : "对象连续性已接入")}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-              {meetingIngressContinuityLine}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-              {displayMeetingIngressPressureLine}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-              {displayMeetingIngressFollowThroughLine}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="workspace-panel">
-        <CardContent className="space-y-4 py-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="info">
-                  {english ? "Meeting workspace" : "这场会议工作台"}
-                </Badge>
-                <Badge variant="approval">
-                  {english ? "Meeting-scoped only" : "仅限这场会议"}
-                </Badge>
-                <Badge variant="neutral">{meetingTemplateSummary.label}</Badge>
-                <Badge variant="neutral">
-                  {meetingWorkspaceLightSummary.visibilityLabel}
-                </Badge>
-              </div>
-              <p className="text-lg font-semibold text-[color:var(--foreground)]">
-                {english
-                  ? "Read this as the operating workspace for one meeting: what changed, what already wrote back, what still needs review, and what should move next."
-                  : "把这里读成一场会议的经营工作台：发生了什么、什么已经写回、什么仍待复核、下一步该怎么动。"}
-              </p>
-              <p className="max-w-4xl text-sm leading-6 text-[color:var(--muted)]">
-                {displayMeetingWorkspaceSummary}
-              </p>
-              <p className="max-w-4xl text-sm leading-6 text-[color:var(--muted-foreground)]">
-                {text(meetingWorkspaceLightSummary.collaborationLine)}
-              </p>
-              {manualReviewHoldCount > 0 ? (
-                <p className="max-w-4xl text-sm leading-6 text-[color:var(--muted-foreground)]">
-                  {english
-                    ? `${manualReviewHoldCount} previously promoted item(s) are now being kept behind review by manual governance hold in this meeting workspace.`
-                    : `当前有 ${manualReviewHoldCount} 条原本已提升的内容，正在这场会议工作台里被人工治理保持留在复核之后。`}
-                </p>
-              ) : null}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={exportMeetingMemoryBundle}
-              >
-                <Download className="h-4 w-4" />
-                {english ? "Export bundle" : "导出记忆包"}
-              </Button>
-              <Button size="sm" variant="secondary" asChild>
-                <Link
-                  href={`/memory?objectType=MEETING&objectId=${meeting.id}`}
-                >
-                  {english ? "Open meeting memory" : "打开会议记忆"}
-                </Link>
-              </Button>
-              <Button size="sm" variant="secondary" asChild>
-                <Link href="/approvals#meeting-follow-through-review">
-                  {english ? "Open review boundary" : "打开复核与边界"}
-                </Link>
-              </Button>
-            </div>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="theme-surface-panel-soft rounded-2xl px-4 py-4">
-              <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                {english ? "Template frame" : "模板框架"}
-              </p>
-              <p className="mt-2 font-medium text-[color:var(--foreground)]">
-                {meetingTemplateSummary.label}
-              </p>
-              <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                {text(meetingTemplateSummary.objectEmphasisLine)}
-              </p>
-              <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                {text(meetingTemplateSummary.reviewLine)}
-              </p>
-            </div>
-            <div className="theme-surface-panel-soft rounded-2xl px-4 py-4">
-              <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                {english ? "Workspace visibility" : "工作台可见性"}
-              </p>
-              <p className="mt-2 font-medium text-[color:var(--foreground)]">
-                {meetingWorkspaceLightSummary.visibilityLabel}
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Badge variant="neutral">
-                  {english
-                    ? `Personal ${meetingWorkspaceLightSummary.personalCount}`
-                    : `个人 ${meetingWorkspaceLightSummary.personalCount}`}
-                </Badge>
-                <Badge variant="neutral">
-                  {english
-                    ? `Shared ${meetingWorkspaceLightSummary.sharedCount}`
-                    : `共享 ${meetingWorkspaceLightSummary.sharedCount}`}
-                </Badge>
-                <Badge variant="neutral">
-                  {english
-                    ? `Promoted ${meetingWorkspaceLightSummary.promotedCount}`
-                    : `已提升 ${meetingWorkspaceLightSummary.promotedCount}`}
-                </Badge>
-                <Badge variant="neutral">
-                  {english
-                    ? `Review-only ${meetingWorkspaceLightSummary.reviewOnlyCount}`
-                    : `仅复核 ${meetingWorkspaceLightSummary.reviewOnlyCount}`}
-                </Badge>
-              </div>
-              <p className="mt-3 text-sm leading-6 text-[color:var(--muted)]">
-                {text(meetingWorkspaceLightSummary.summary)}
-              </p>
-            </div>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-[1.08fr_0.92fr]">
-            <div className="min-w-0 space-y-4">
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                  <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                    {english ? "Current meeting summary" : "当前会议摘要"}
-                  </p>
-                  <p className="mt-2 font-medium text-[color:var(--foreground)]">
-                    {meeting.note?.summary
-                      ? text(meeting.note.summary)
-                      : english
-                        ? "This meeting is currently being read through its connected objects and follow-through pressure."
-                        : "当前这场会议主要通过关联对象和会后推进压力来被理解。"}
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                    {meetingImpactLine}
-                  </p>
-                </div>
-                <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                  <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                    {english ? "Connected objects" : "关联对象"}
-                  </p>
-                  <p className="mt-2 font-medium text-[color:var(--foreground)]">
-                    {linkedObjectSummary ||
-                      (english
-                        ? "No connected object yet"
-                        : "当前还没有连接对象")}
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                    {meetingMemoryLoopSummary.affectedObjectsLine}
-                  </p>
-                </div>
-                <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                  <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                    {english ? "Next-step workspace" : "下一步工作台"}
-                  </p>
-                  <p className="mt-2 font-medium text-[color:var(--foreground)]">
-                    {primaryNextStepTitle}
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                    {meetingMemoryLoopSummary.nextStepLine}
-                  </p>
-                </div>
-                <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                  <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                    {english ? "Current review posture" : "当前复核状态"}
-                  </p>
-                  <p className="mt-2 font-medium text-[color:var(--foreground)]">
-                    {meetingMemoryGovernanceSummary.reviewStateLabel}
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                    {displayMeetingReviewPostureLine}
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                    {meetingMemoryGovernanceSummary.reviewSummary}
-                  </p>
-                  {manualReviewHoldCount > 0 ? (
-                    <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                      {english
-                        ? `Manual governance hold is currently keeping ${manualReviewHoldCount} promoted item(s) review-only on this page.`
-                        : `当前有 ${manualReviewHoldCount} 条已提升内容在这个页面里被人工治理保持为仅复核。`}
-                    </p>
-                  ) : null}
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Badge variant="info">
-                      {meetingMemoryGovernanceSummary.visibilityLabel}
-                    </Badge>
-                    {meetingMemoryGovernanceSummary.sourceClassLabels.map(
-                      (label) => (
-                        <Badge key={label} variant="neutral">
-                          {label}
-                        </Badge>
-                      ),
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="theme-surface-panel-soft rounded-2xl px-4 py-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="neutral">
-                    {english ? "Source-use ledger" : "来源使用台账"}
-                  </Badge>
-                  <Badge variant="approval">
-                    {english ? "Readable only" : "仅做可读说明"}
-                  </Badge>
-                </div>
-                <p className="mt-3 text-sm leading-6 text-[color:var(--muted)]">
-                  {text(meetingMemorySourceUseLedger.summary)}
-                </p>
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  {meetingMemorySourceUseLedger.entries
-                    .slice(0, 4)
-                    .map((entry) => (
-                      <div
-                        key={entry.id}
-                        className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-3"
-                      >
-                        <div className="flex flex-wrap gap-2">
-                          <Badge variant="neutral">
-                            {entry.sourceClassLabel}
-                          </Badge>
-                          <Badge
-                            variant={
-                              entry.reviewState === "conflict"
-                                ? "danger"
-                                : entry.reviewState === "pending-review"
-                                  ? "approval"
-                                  : entry.reviewState === "missing-clarity"
-                                    ? "warning"
-                                    : "success"
-                            }
-                          >
-                            {entry.reviewStateLabel}
-                          </Badge>
-                          <Badge variant="info">{entry.visibilityLabel}</Badge>
-                        </div>
-                        <p className="mt-2 font-medium text-[color:var(--foreground)]">
-                          {text(entry.title)}
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                          {text(entry.sourcePointerLabel)}：
-                          {text(entry.sourcePointerSummary)}
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                          {text(entry.eligibilitySummary)}
-                        </p>
-                      </div>
-                    ))}
-                </div>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="theme-surface-panel-soft rounded-2xl px-4 py-4">
-                  <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                    {english ? "Promoted meeting memory" : "已提升的会议记忆"}
-                  </p>
-                  <div className="mt-3 space-y-3">
-                    {promotedMeetingMemoryEntries.length ? (
-                      promotedMeetingMemoryEntries.map(
-                        ({ item, governance }) => (
-                          <div
-                            key={item.id}
-                            className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-3"
-                          >
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Badge variant="success">
-                                {formatMeetingMemoryLifecycle(
-                                  item.lifecycle,
-                                  english,
-                                )}
-                              </Badge>
-                              <Badge variant="info">
-                                {formatMeetingMemoryKind(item.kind, english)}
-                              </Badge>
-                              <Badge variant="neutral">
-                                {governance.visibilityLabel}
-                              </Badge>
-                              <Badge variant="neutral">
-                                {governance.sourceClassLabel}
-                              </Badge>
-                            </div>
-                            <p className="mt-2 font-medium text-[color:var(--foreground)]">
-                              {text(item.title)}
-                            </p>
-                            <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                              {text(trimText(item.summary, 110))}
-                            </p>
-                            <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                              {text(governance.eligibilitySummary)}
-                            </p>
-                            <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                              {text(governance.sourceSummary)}
-                            </p>
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                onClick={() =>
-                                  movePromotedItemBackToReview(
-                                    item.id,
-                                    item.title,
-                                  )
-                                }
-                              >
-                                {english ? "Move back to review" : "回退到复核"}
-                              </Button>
-                            </div>
-                          </div>
-                        ),
-                      )
-                    ) : (
-                      <p className="text-sm leading-6 text-[color:var(--muted)]">
-                        {english
-                          ? "No meeting-derived item has fully promoted yet."
-                          : "当前还没有完全提升成功的会议记忆项。"}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="theme-surface-panel-soft rounded-2xl px-4 py-4">
-                  <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                    {english
-                      ? "Still pending review or conflict"
-                      : "仍待复核 / 冲突"}
-                  </p>
-                  <div className="mt-3 space-y-3">
-                    {pendingMeetingMemoryEntries.length ? (
-                      pendingMeetingMemoryEntries.map(
-                        ({ item, governance }) => (
-                          <div
-                            key={item.id}
-                            className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-3"
-                          >
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Badge
-                                variant={
-                                  item.lifecycle === "conflict"
-                                    ? "danger"
-                                    : item.lifecycle === "pending-review"
-                                      ? "approval"
-                                      : "warning"
-                                }
-                              >
-                                {formatMeetingMemoryLifecycle(
-                                  item.lifecycle,
-                                  english,
-                                )}
-                              </Badge>
-                              <Badge variant="info">
-                                {formatMeetingMemoryKind(item.kind, english)}
-                              </Badge>
-                              <Badge variant="neutral">
-                                {governance.visibilityLabel}
-                              </Badge>
-                              <Badge variant="neutral">
-                                {governance.sourceClassLabel}
-                              </Badge>
-                              {meetingReviewHoldItemIds.includes(item.id) ? (
-                                <Badge variant="approval">
-                                  {english
-                                    ? "Manual review hold"
-                                    : "人工保留复核"}
-                                </Badge>
-                              ) : null}
-                            </div>
-                            <p className="mt-2 font-medium text-[color:var(--foreground)]">
-                              {text(item.title)}
-                            </p>
-                            <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                              {text(trimText(item.reasonChainSummary, 120))}
-                            </p>
-                            <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                              {text(governance.eligibilitySummary)}
-                            </p>
-                            <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                              {text(governance.sourceSummary)}
-                            </p>
-                            {meetingReviewHoldItemIds.includes(item.id) ? (
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="secondary"
-                                  onClick={() =>
-                                    restorePromotedItemPosture(
-                                      item.id,
-                                      item.title,
-                                    )
-                                  }
-                                >
-                                  {english
-                                    ? "Restore promoted posture"
-                                    : "恢复已提升姿态"}
-                                </Button>
-                              </div>
-                            ) : null}
-                          </div>
-                        ),
-                      )
-                    ) : (
-                      <p className="text-sm leading-6 text-[color:var(--muted)]">
-                        {english
-                          ? "No pending-review or conflict cue is dominating this meeting right now."
-                          : "当前没有待复核或冲突项在主导这场会议。"}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="min-w-0 space-y-4">
-              <div className="theme-surface-panel rounded-2xl px-4 py-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="info">
-                    {english
-                      ? "Ask within this meeting"
-                      : "基于当前会议上下文提问"}
-                  </Badge>
-                  <Badge variant="approval">
-                    {english ? "Read-only scope" : "只读范围"}
-                  </Badge>
-                </div>
-                <p className="mt-3 text-sm leading-6 text-[color:var(--muted)]">
-                  {english
-                    ? "Answers here stay limited to this meeting, its connected objects, promoted meeting memory, linked blockers / commitments / decisions, and any recent related-meeting continuity already visible inside this local workspace context. This block does not search the whole workspace or execute anything."
-                    : "这里的回答只会基于这场会议、它关联的对象、已提升的会议记忆，以及相关阻塞、承诺和决策；如果当前页面已经可见最近相关会议的连续性，也只会在这个本地工作台上下文里引用。这里不会搜索整个工作台，也不会执行任何动作。"}
-                </p>
-                <div className="mt-4 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-4">
-                  <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                    {english ? "Source posture" : "来源状态"}
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {askHelmAnswer.sourceClassLabels.map((label) => (
-                      <Badge key={label} variant="neutral">
-                        {label}
-                      </Badge>
-                    ))}
-                    {localRecentMeetingContext ? (
-                      <Badge variant="neutral">
-                        {localRecentMeetingContext.label}
-                      </Badge>
-                    ) : null}
-                  </div>
-                  <p className="mt-3 text-sm leading-6 text-[color:var(--muted)]">
-                    {askHelmAnswer.sourcePostureLine}
-                  </p>
-                  {localRecentMeetingContext ? (
-                    <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                      {text(localRecentMeetingContext.summary)}
-                    </p>
-                  ) : null}
-                  <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                    {text(askHelmAnswer.reviewAwareLine)}
-                  </p>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {askHelmPrompts.map((prompt) => (
-                    <Button
-                      key={prompt}
-                      size="sm"
-                      variant={
-                        askHelmQuery === prompt ? "default" : "secondary"
-                      }
-                      onClick={() => {
-                        setAskHelmQuery(prompt);
-                        setActiveAskHelmQuery(prompt);
-                      }}
-                    >
-                      {prompt}
-                    </Button>
-                  ))}
-                </div>
-                <div className="mt-4 flex gap-2">
-                  <Input
-                    value={askHelmQuery}
-                    onChange={(event) => setAskHelmQuery(event.target.value)}
-                    placeholder={
-                      english
-                        ? "Ask only about this meeting and its connected objects"
-                        : "只询问这场会议及其关联对象"
-                    }
-                  />
-                  <Button
-                    variant="secondary"
-                    onClick={() =>
-                      setActiveAskHelmQuery(
-                        askHelmQuery.trim() || askHelmPrompts[0] || "",
-                      )
-                    }
-                  >
-                    {english ? "Ask" : "提问"}
-                  </Button>
-                </div>
-                <div className="mt-4 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-4">
-                  <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                    {english ? "Meeting answer" : "会议回答"}
-                  </p>
-                  <p className="mt-2 font-medium text-[color:var(--foreground)]">
-                    {text(askHelmAnswer.headline)}
-                  </p>
-                  <p className="mt-3 text-sm leading-7 text-[color:var(--muted)]">
-                    {text(askHelmAnswer.answer)}
-                  </p>
-                  <div className="mt-4 space-y-2">
-                    <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                      {english
-                        ? "Why this answer is available"
-                        : "这条回答为什么可用"}
-                    </p>
-                    {askHelmAnswer.sources.map((source, index) => (
-                      <p
-                        key={`${source}-${index}`}
-                        className="text-sm leading-6 text-[color:var(--muted)]"
-                      >
-                        {text(source)}
-                      </p>
-                    ))}
-                  </div>
-                  <div className="mt-4 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-subtle)] px-3 py-3">
-                    <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                      {english ? "Boundary note" : "边界说明"}
-                    </p>
-                    <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                      {text(askHelmAnswer.boundaryLine)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {meeting.opportunity ? (
-        <Card className="workspace-panel-muted">
-          <CardContent className="flex flex-col gap-4 py-5 md:flex-row md:items-center md:justify-between">
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="info">
-                  {english ? "Linked opportunity" : "关联机会"}
-                </Badge>
-                <StageBadge stage={meeting.opportunity.stage} />
-                <RiskBadge risk={meeting.opportunity.riskLevel} />
-              </div>
-              <p className="font-semibold text-[color:var(--foreground)]">
-                {meeting.opportunity.title}
-              </p>
-              <p className="text-sm text-[color:var(--muted-foreground)]">
-                {english ? "Current next step" : "当前下一步"}：
-                {text(
-                  meeting.opportunity.nextAction ??
-                    (english ? "To be filled" : "待补充"),
-                )}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button asChild variant="secondary">
-                <Link href={linkedOpportunityAssetHref ?? "#"}>
-                  {english ? "Open opportunity asset" : "打开机会资产"}
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
-              <Button
-                variant="secondary"
-                disabled={governedActionDisabled}
-                onClick={() =>
-                  runAction(
-                    () => updateOpportunityFromMeetingAction(meeting.id),
-                    english
-                      ? "Opportunity-sync action created"
-                      : "已生成机会状态同步动作",
-                    "/approvals",
-                  )
-                }
-              >
-                <Zap className="h-4 w-4" />
-                {english ? "Update opportunity stage" : "更新机会阶段"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      <Card className="border-[color:var(--status-danger-border)] bg-[color:var(--status-danger-bg)]/70">
-        <CardContent className="flex flex-col gap-3 py-5 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-1">
-            <Badge variant="danger">
-              {english ? "If we do not push today" : "如果今天不推进"}
-            </Badge>
-            <p className="text-base font-semibold text-[color:var(--foreground)]">
-              {noPushRisk}
-            </p>
-            <p className="text-sm leading-6 text-[color:var(--muted)]">
-              {english
-                ? "This is why summary, approvals and opportunity-state sync must stay on one follow-through chain instead of remaining buried in post-meeting notes."
-                : "这也是为什么纪要、审批和机会状态同步需要被放在同一条链路里，而不是留在一份会后记录里。"}
-            </p>
-          </div>
-          <Button
-            variant="secondary"
-            disabled={governedActionDisabled}
-            onClick={() =>
-              runAction(
-                () => sendMeetingSummaryAction(meeting.id),
-                english
-                  ? "Summary draft created and routed to approvals"
-                  : "已生成纪要并进入审批",
-                "/approvals",
-              )
-            }
-          >
-            <FileText className="h-4 w-4" />
-            {english ? "Send summary to approvals first" : "先把纪要送审"}
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card className="workspace-panel-muted">
-        <CardContent className="grid gap-4 py-5 md:grid-cols-4">
-          <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-              {english ? "Memory generation" : "记忆生成状态"}
-            </p>
-            <p className="mt-2 text-2xl font-semibold text-[color:var(--foreground)]">
-              {meeting.memoryFacts.length}
-            </p>
-            <p className="text-sm text-[color:var(--muted-foreground)]">
-              {english
-                ? "Supporting facts available for this meeting"
-                : "本次会议可引用的支持事实"}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-              {english ? "Open commitments" : "开放承诺"}
-            </p>
-            <p className="mt-2 text-2xl font-semibold text-[color:var(--foreground)]">
-              {meeting.commitments.length}
-            </p>
-            <p className="text-sm text-[color:var(--muted-foreground)]">
-              {english
-                ? "Commitments that still need follow-through after the meeting"
-                : "会后需要继续兑现的承诺"}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-              {english ? "Current blockers" : "当前卡点"}
-            </p>
-            <p className="mt-2 text-2xl font-semibold text-[color:var(--foreground)]">
-              {meeting.blockers.length}
-            </p>
-            <p className="text-sm text-[color:var(--muted-foreground)]">
-              {english
-                ? "Blockers that need explicit follow-up after the meeting"
-                : "需要在会后显式处理的卡点"}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-              {english ? "Briefing snapshot" : "简报快照"}
-            </p>
-            <p className="mt-2 text-2xl font-semibold text-[color:var(--foreground)]">
-              {meeting.briefingSnapshot
-                ? english
-                  ? "Ready"
-                  : "已生成"
-                : english
-                  ? "Pending"
-                  : "待生成"}
-            </p>
-            <p className="text-sm text-[color:var(--muted-foreground)]">
-              {english
-                ? "This keeps the structured judgement visible both before and after the meeting."
-                : "会前、会后都能回看这次会议的结构化判断"}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      <section
-        className="space-y-3"
-        data-testid="meeting-runtime-evidence-disclosure"
-      >
-        <details className="group rounded-2xl border border-[color:var(--border)] bg-[color:color-mix(in_oklab,var(--surface)_88%,var(--surface-subtle)_12%)] px-4 py-4">
-          <summary
-            aria-label={
-              english ? "Open supporting evidence summary" : "展开补充依据摘要"
-            }
-            className="cursor-pointer list-none"
-          >
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
-                  {english ? "Supporting evidence" : "补充依据摘要"}
-                </p>
-                <h2 className="mt-2 text-lg font-semibold text-[color:var(--foreground)]">
-                  {english
-                    ? "Open review evidence and saved-state context"
-                    : "展开复核依据与恢复点资料"}
-                </h2>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--muted)]">
-                  {english
-                    ? "These cards keep the supporting evidence available without making the default meeting flow read like a system console."
-                    : "这些卡片只保留必要依据，不打断会议判断和下一步操作。"}
-                </p>
-              </div>
-              <Badge variant="neutral">
-                <span className="group-open:hidden">
-                  {english ? "Expand when needed" : "需要时展开"}
-                </span>
-                <span className="hidden group-open:inline">
-                  {english ? "Hide summary" : "收起摘要"}
-                </span>
-              </Badge>
-            </div>
-          </summary>
-          <div className="mt-4">
-            <Card className="workspace-shell-panel border-[color:var(--mode-card-border)]">
-              <CardHeader>
-                <CardTitle className="text-lg tracking-tight text-[color:var(--foreground)]">
-                  {english ? "Evidence summary" : "依据摘要"}
-                </CardTitle>
-                <CardDescription className="text-sm leading-7 text-[color:var(--muted)]">
-                  {english
-                    ? "Facts, actions, blockers — and what still needs review before going out."
-                    : "事实、动作、阻塞——以及对外之前还要复核的部分。"}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-5">
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {[
-                    {
-                      label: english ? "Facts" : "事实",
-                      value: meeting.memoryFacts.length,
-                      note: english ? "available for review" : "可供复核引用",
-                    },
-                    {
-                      label: english ? "Actions" : "动作",
-                      value: meeting.actionItems.length,
-                      note: english
-                        ? "visible follow-through"
-                        : "已进入后续推进",
-                    },
-                    {
-                      label: english ? "Blockers" : "阻塞",
-                      value: meeting.blockers.length,
-                      note: english ? "need explicit handling" : "需要显式处理",
-                    },
-                    {
-                      label: english ? "Commitments" : "承诺",
-                      value: meeting.commitments.length,
-                      note: english ? "must stay bounded" : "必须保留边界",
-                    },
-                  ].map((item) => (
-                    <div
-                      key={item.label}
-                      className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-4"
-                    >
-                      <p className="text-xs font-semibold text-[color:var(--muted-foreground)]">
-                        {item.label}
-                      </p>
-                      <p className="mt-2 text-3xl font-semibold tracking-tight text-[color:var(--foreground)]">
-                        {item.value}
-                      </p>
-                      <p className="mt-1 text-xs leading-5 text-[color:var(--muted-foreground)]">
-                        {item.note}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-                  <div className="space-y-2">
-                    <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                      {english ? "Suggested next handling" : "建议下一步处理"}
-                    </p>
-                    <p className="text-sm leading-7 text-[color:var(--muted)]">
-                      {meeting.blockers.length > 0
-                        ? english
-                          ? "Resolve the visible blockers before turning the meeting into an external follow-up."
-                          : "先处理当前卡点，再决定是否进入客户可见的后续跟进。"
-                        : english
-                          ? "The meeting can move to review or follow-through without opening engineering diagnostics."
-                          : "这场会议可以继续进入复核或后续推进，不需要展开工程诊断。"}
-                    </p>
-                    <p className="text-xs leading-6 text-[color:var(--muted-foreground)]">
-                      {runtimeGovernance.canReview
-                        ? english
-                          ? "Review authority is available for this workspace; use the review queue for any commitment-sensitive wording."
-                          : "当前工作区具备复核权限；任何可能形成承诺的表述，都先进入复核队列。"
-                        : english
-                          ? "You can read the evidence here, but review authority is not available for this account."
-                          : "你可以查看依据，但当前账号没有复核权限。"}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button asChild>
-                      <Link href="/approvals">
-                        {english ? "Open review queue" : "打开复核队列"}
-                      </Link>
-                    </Button>
-                    <Button asChild variant="secondary">
-                      <Link href="/meetings">
-                        {english ? "Back to meetings" : "返回会议列表"}
-                      </Link>
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </details>
-      </section>
-
-      <MeetingV2RuntimeCard
-        meetingId={meeting.id}
-        runtime={meeting.meetingRuntime}
-        canManageRuntime={runtimeGovernance.canManage}
-        canReviewRuntime={runtimeGovernance.canReview}
-      />
 
       <Tabs defaultValue="briefing" className="space-y-4">
         <TabsList>
@@ -2755,34 +1310,8 @@ export function MeetingDetailClient({
                 <CardTitle>
                   {english ? "Pre-meeting briefing" : "会前简报"}
                 </CardTitle>
-                <CardDescription>
-                  {english
-                    ? "Relationships, prior conclusions, goals, risks — all in one screen."
-                    : "关系、过往结论、目标、风险——一屏看完。"}
-                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  {meeting.contacts.map((contact) => (
-                    <div
-                      key={contact.id}
-                      className="theme-surface-panel-soft rounded-2xl px-4 py-4"
-                    >
-                      <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                        {contact.name}
-                      </p>
-                      <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-                        {contact.title ??
-                          (english ? "No title yet" : "未填写职位")}
-                      </p>
-                      <p className="mt-3 text-xs text-[color:var(--muted-foreground)]">
-                        {english
-                          ? "The contact timeline and meeting context have already been attached automatically."
-                          : "已自动关联联系人时间线与会议上下文。"}
-                      </p>
-                    </div>
-                  ))}
-                </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <InfoBlock
                     title={english ? "Attendee summary" : "与会人摘要"}
@@ -2856,28 +1385,6 @@ export function MeetingDetailClient({
             </Card>
 
             <div className="space-y-6">
-              <Card className="workspace-panel-muted">
-                <CardHeader>
-                  <CardTitle>
-                    {english
-                      ? "Why this meeting matters"
-                      : "这场会议值得讲的点"}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm leading-6 text-[color:var(--muted)]">
-                  <div className="workspace-panel rounded-2xl px-4 py-3">
-                    {english
-                      ? "Historical relationship context, the previous conclusion and this meeting goal are compressed into one pre-meeting brief, so sales or advisory users do not need to search through email and notes again."
-                      : "历史关系、上次结论和本次目标已经压成会前简报，销售或顾问不需要再自己翻邮件和纪要。"}
-                  </div>
-                  <div className="workspace-panel rounded-2xl px-4 py-3">
-                    {english
-                      ? "Post-meeting actions are prepared as drafts first, then risk and policy decide whether they stay in review or move into a bounded execution path."
-                      : "会后动作先生成草案，再由风险和策略判断是留在复核，还是进入有边界的执行路径。"}
-                  </div>
-                </CardContent>
-              </Card>
-
               <Card>
                 <CardHeader>
                   <CardTitle>
@@ -3005,11 +1512,6 @@ export function MeetingDetailClient({
             <Card>
               <CardHeader>
                 <CardTitle>{english ? "Meeting notes" : "会议记录"}</CardTitle>
-                <CardDescription>
-                  {english
-                    ? "The first version still uses structured mock notes so real transcription can be connected later."
-                    : "第一版采用真实结构的 mock 记录，方便后续接入真实会议转写。"}
-                </CardDescription>
               </CardHeader>
               <CardContent>
                 <pre className="whitespace-pre-wrap rounded-2xl bg-[color:var(--dark-inset-bg)] px-4 py-4 text-sm leading-7 text-[color:var(--dark-inset-foreground)]">
@@ -3020,6 +1522,21 @@ export function MeetingDetailClient({
             </Card>
 
             <div className="space-y-6">
+              {meeting.postMeetingSummary ? (
+                <Card data-meeting-post-summary="true">
+                  <CardHeader>
+                    <CardTitle>
+                      {english ? "Post-meeting summary" : "会后纪要"}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="whitespace-pre-wrap break-words text-sm leading-7 text-[color:var(--foreground)]">
+                      {text(meeting.postMeetingSummary)}
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : null}
+
               <Card>
                 <CardHeader>
                   <CardTitle>{english ? "Key summary" : "重点摘要"}</CardTitle>
@@ -3102,11 +1619,6 @@ export function MeetingDetailClient({
             <Card>
               <CardHeader>
                 <CardTitle>{english ? "Action items" : "会后动作项"}</CardTitle>
-                <CardDescription>
-                  {english
-                    ? "Each action can be edited for owner, due date and execution mode. This page is the core operating surface for post-meeting follow-through."
-                    : "每个动作都可以直接改责任人、截止时间和审批方式，这一页就是会后闭环的核心操作台。"}
-                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 {meeting.actionItems.length ? (
@@ -3210,11 +1722,6 @@ export function MeetingDetailClient({
                       ? "Commitments created by this meeting"
                       : "本次会议形成的承诺"}
                   </CardTitle>
-                  <CardDescription>
-                    {english
-                      ? "These are the promises that must be fulfilled after the meeting so you can decide what to close before pushing again."
-                      : "这里优先显示会后必须兑现的承诺，帮助你判断先补什么、再推什么。"}
-                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {meeting.commitments.length ? (
@@ -3259,11 +1766,6 @@ export function MeetingDetailClient({
                   <CardTitle>
                     {english ? "Current blockers" : "当前卡点"}
                   </CardTitle>
-                  <CardDescription>
-                    {english
-                      ? "These blockers directly influence recommendation ranking and post-meeting execution mode."
-                      : "这些阻塞会直接影响判断建议排序和会后动作方式。"}
-                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {meeting.blockers.length ? (
@@ -3294,71 +1796,6 @@ export function MeetingDetailClient({
                 </CardContent>
               </Card>
 
-              <Card className="border-[color:var(--status-warning-border)] bg-[color:var(--status-warning-bg)]/60">
-                <CardHeader>
-                  <CardTitle>
-                    {english
-                      ? "The 24-hour post-meeting window"
-                      : "会后 24 小时黄金推进窗口"}
-                  </CardTitle>
-                  <CardDescription>
-                    {english
-                      ? "This is not just a reminder. It explains why some actions rank first, and why others must close commitments or clear blockers before anything else."
-                      : "这块不是提醒而已，而是在告诉你为什么把某些动作排到前面，为什么有些动作要先补承诺、先解阻塞。"}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm leading-7 text-[color:var(--foreground)]">
-                  <p>{meetingImpactLine}</p>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div className="rounded-2xl border border-[color:var(--status-warning-border)] bg-[color:color-mix(in_oklab,var(--surface)_88%,white_12%)] px-4 py-3">
-                      <p className="text-xs font-medium text-[color:var(--status-warning-text)]">
-                        {english
-                          ? "Main post-meeting pressure"
-                          : "当前最大会后压力"}
-                      </p>
-                      <p className="mt-2 font-medium text-[color:var(--foreground)]">
-                        {topCommitment
-                          ? topCommitment.title
-                          : topBlocker
-                            ? topBlocker.title
-                            : english
-                              ? "No major pressure"
-                              : "暂无显著压力"}
-                      </p>
-                      <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                        {followUpPressureLine}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border border-[color:var(--status-warning-border)] bg-[color:color-mix(in_oklab,var(--surface)_88%,white_12%)] px-4 py-3">
-                      <p className="text-xs font-medium text-[color:var(--status-warning-text)]">
-                        {english ? "Current ranking basis" : "当前排序依据"}
-                      </p>
-                      <p className="mt-2 font-medium text-[color:var(--foreground)]">
-                        {overdueCommitmentCount > 0
-                          ? english
-                            ? `${overdueCommitmentCount} overdue commitments first`
-                            : `${overdueCommitmentCount} 条逾期承诺优先`
-                          : topBlocker
-                            ? english
-                              ? "Clear blockers before adding new actions"
-                              : "先处理阻塞，再推进新动作"
-                            : english
-                              ? "Turn meeting conclusions into actions first"
-                              : "优先把会后决定落成动作"}
-                      </p>
-                      <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                        {english
-                          ? "Recommendation simultaneously looks at facts formed in this meeting, open commitments, active blockers and the current policy boundary."
-                          : "判断建议会同时参考本次会议形成的事实、未完成承诺、当前卡点和当前策略边界。"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="rounded-2xl border border-[color:var(--status-warning-border)] bg-[color:color-mix(in_oklab,var(--surface)_84%,white_16%)] px-4 py-3 text-[color:var(--status-warning-text)]">
-                    {noPushRisk}
-                  </div>
-                </CardContent>
-              </Card>
-
               <Card className="theme-judgement-panel">
                 <CardHeader>
                   <CardTitle>
@@ -3373,19 +1810,6 @@ export function MeetingDetailClient({
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="theme-judgement-panel-inset rounded-2xl px-4 py-3 text-sm leading-6 text-[color:var(--muted)]">
-                    {topCommitment
-                      ? english
-                        ? `The system will first recommend actions that digest commitments like "${topCommitment.title}" before deciding whether to add more follow-up pushes.`
-                        : `当前先选择能消化“${topCommitment.title}”这类会后承诺的动作，再决定要不要继续追加新的推进动作。`
-                      : topBlocker
-                        ? english
-                          ? `The system will first recommend actions that remove blockers like "${topBlocker.title}" instead of stacking more post-meeting tasks.`
-                          : `当前先选择能解除“${topBlocker.title}”这类阻塞的动作，而不是直接堆更多会后任务。`
-                        : english
-                          ? "Current recommendation will prioritize turning this meeting’s conclusions into immediately executable next steps."
-                          : "当前判断建议会优先把这场会议里的结论变成可以立即执行的下一步。"}
-                  </div>
                   {recommendations.length
                     ? recommendations.slice(0, 2).map((item, index) => (
                         <RecommendationJudgementCard
@@ -3494,11 +1918,6 @@ export function MeetingDetailClient({
                   <CardTitle>
                     {english ? "Quick actions" : "快捷动作"}
                   </CardTitle>
-                  <CardDescription>
-                    {english
-                      ? "Keep “generate summary, send to approvals, sync opportunity and create follow-up meeting” on one smooth path."
-                      : "把“生成纪要、送审、更新机会、创建后续会议”压缩成一条顺滑链路。"}
-                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <Button
@@ -3618,21 +2037,193 @@ export function MeetingDetailClient({
         </TabsContent>
       </Tabs>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <History className="h-4 w-4" />
-            {english ? "Activity history" : "操作历史"}
-          </CardTitle>
-          <CardDescription>
-            {english
-              ? "This keeps a replay of AI suggestions, approvals, execution and manual edits."
-              : "这里会记录建议、复核、执行和人工编辑等完整回放。"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {auditLogs.length ? (
-            auditLogs.map((log) => (
+      <MeetingV2RuntimeCard
+        meetingId={meeting.id}
+        runtime={meeting.meetingRuntime}
+        canManageRuntime={runtimeGovernance.canManage}
+        canReviewRuntime={runtimeGovernance.canReview}
+      />
+
+      {meeting.dingtalkSignalSummary?.total ? (
+        <Card className="workspace-panel-muted border-[color:var(--border)]">
+          <CardHeader>
+            <CardTitle className="text-base tracking-tight text-[color:var(--foreground)]">
+              {english ? "DingTalk signal routing" : "钉钉信号流转"}
+            </CardTitle>
+            <CardDescription className="text-sm leading-6 text-[color:var(--muted-foreground)]">
+              {english
+                ? `${meeting.dingtalkSignalSummary.total} DingTalk signals linked to this meeting.`
+                : `${meeting.dingtalkSignalSummary.total} 条钉钉信号关联到这场会议。`}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(meeting.dingtalkSignalSummary.byScope).map(
+                ([scope, count]) => (
+                  <Badge key={scope} variant="info">
+                    {scope}: {count}
+                  </Badge>
+                ),
+              )}
+            </div>
+            <div className="space-y-2">
+              {meeting.dingtalkSignalSummary.items.slice(0, 4).map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-2xl border border-[color:var(--border)] px-3 py-2 text-sm"
+                >
+                  <p className="font-medium text-[color:var(--foreground)]">
+                    {item.scope} · {item.flowModule} · {item.businessDomain}
+                  </p>
+                  <p className="text-[color:var(--muted-foreground)]">
+                    {trimText(item.summary, 120)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {meeting.dingtalkWorkProgress?.length ? (
+        <Card className="workspace-panel-muted border-[color:var(--border)]">
+          <CardHeader>
+            <CardTitle className="text-base tracking-tight text-[color:var(--foreground)]">
+              {english ? "DingTalk work progress" : "钉钉工作进度"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {meeting.dingtalkWorkProgress.map((item) => (
+              <div
+                key={item.reportId}
+                className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-3"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="info">
+                    {item.templateName ??
+                      (english ? "Work report" : "工作汇报")}
+                  </Badge>
+                  <Badge variant="neutral">
+                    {item.reporterName ??
+                      (english ? "Unknown reporter" : "未知汇报人")}
+                  </Badge>
+                  <Badge variant="neutral">
+                    {item.departmentName ??
+                      (english ? "Unknown dept" : "未知部门")}
+                  </Badge>
+                </div>
+                <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
+                  {(english ? "Reported at: " : "汇报时间：") +
+                    formatMeetingDetailDateLabel(item.createdAt, english)}
+                </p>
+                {item.weeklySummary ? (
+                  <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
+                    {english ? "Summary: " : "总结："}
+                    {trimText(item.weeklySummary, 220)}
+                  </p>
+                ) : null}
+                {item.nextWeekPlan ? (
+                  <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
+                    {english ? "Next plan: " : "下周计划："}
+                    {trimText(item.nextWeekPlan, 220)}
+                  </p>
+                ) : null}
+                {item.needHelp ? (
+                  <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
+                    {english ? "Need help: " : "需协同："}
+                    {trimText(item.needHelp, 220)}
+                  </p>
+                ) : null}
+                {item.sections.length ? (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs text-[color:var(--muted-foreground)]">
+                      {english
+                        ? "View full report details"
+                        : "查看完整汇报内容"}
+                    </summary>
+                    <div className="mt-2 space-y-2">
+                      {item.sections.map((section, index) => (
+                        <div
+                          key={`${item.reportId}-section-${index}`}
+                          className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-subtle)] px-2 py-2"
+                        >
+                          <p className="text-xs font-medium text-[color:var(--foreground)]">
+                            {section.key ?? (english ? "Section" : "分段")}
+                          </p>
+                          <pre className="mt-1 whitespace-pre-wrap text-xs leading-6 text-[color:var(--muted-foreground)]">
+                            {section.value}
+                          </pre>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                ) : null}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {meeting.opportunity ? (
+        <Card className="workspace-panel-muted">
+          <CardContent className="flex flex-col gap-4 py-5 md:flex-row md:items-center md:justify-between">
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="info">
+                  {english ? "Linked opportunity" : "关联机会"}
+                </Badge>
+                <StageBadge stage={meeting.opportunity.stage} />
+                <RiskBadge risk={meeting.opportunity.riskLevel} />
+              </div>
+              <p className="font-semibold text-[color:var(--foreground)]">
+                {meeting.opportunity.title}
+              </p>
+              <p className="text-sm text-[color:var(--muted-foreground)]">
+                {english ? "Current next step" : "当前下一步"}：
+                {text(
+                  meeting.opportunity.nextAction ??
+                    (english ? "To be filled" : "待补充"),
+                )}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="secondary">
+                <Link href={linkedOpportunityAssetHref ?? "#"}>
+                  {english ? "Open opportunity asset" : "打开机会资产"}
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+              <Button
+                variant="secondary"
+                disabled={governedActionDisabled}
+                onClick={() =>
+                  runAction(
+                    () => updateOpportunityFromMeetingAction(meeting.id),
+                    english
+                      ? "Opportunity-sync action created"
+                      : "已生成机会状态同步动作",
+                    "/approvals",
+                  )
+                }
+              >
+                <Zap className="h-4 w-4" />
+                {english ? "Update opportunity stage" : "更新机会阶段"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {auditLogs.length ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <History className="h-4 w-4" />
+              {english ? "Activity history" : "操作历史"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {auditLogs.map((log) => (
               <div
                 key={log.id}
                 className="theme-surface-panel rounded-2xl px-4 py-4"
@@ -3650,21 +2241,1465 @@ export function MeetingDetailClient({
                   {formatMeetingDetailDateLabel(log.createdAt, english)}
                 </p>
               </div>
-            ))
-          ) : (
-            <EmptyState
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <details className={systemJudgementDetailsClassName} data-system-judgement>
+        <SystemJudgementSummary english={english} />
+        <div className="space-y-6 px-4 pb-5">
+          <HomeSurfaceArrivalBanner
+            kind="detail"
+            english={english}
+            contract={{
+              ownership: english
+                ? "Meeting detail owns live context, follow-through review posture and the meeting workspace."
+                : "会议详情负责现场上下文、会后动作复核姿态和会议工作区。",
+              nextStep: english
+                ? "Start in the meeting workspace, then decide whether the next move belongs in follow-through, memory, or approvals."
+                : "先从会议工作区开始，再决定下一步应该落在会后推进、记忆还是审批。",
+              boundary: english
+                ? "This page can prepare, review and route follow-through, but it still does not grant autonomous send authority."
+                : "这个页面可以准备、复核并路由会后推进，但不会获得自动发送权限。",
+            }}
+          />
+
+          <Card id="meeting-workspace" className="workspace-panel">
+            <CardContent className="grid gap-4 py-5 xl:grid-cols-[1.12fr_0.88fr]">
+              <div className="min-w-0 space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="info">
+                    {english ? "Meeting OS wedge" : "会议推进主线"}
+                  </Badge>
+                  <Badge variant="neutral">{meetingTemplateSummary.label}</Badge>
+                  <Badge
+                    variant={
+                      meetingWorkspaceLightSummary.visibilityCue === "review-only"
+                        ? "approval"
+                        : meetingWorkspaceLightSummary.visibilityCue ===
+                            "promoted-to-object-state"
+                          ? "success"
+                          : "neutral"
+                    }
+                  >
+                    {meetingWorkspaceLightSummary.visibilityLabel}
+                  </Badge>
+                  {meeting.opportunity ? (
+                    <StageBadge stage={meeting.opportunity.stage} />
+                  ) : null}
+                  {meeting.opportunity ? (
+                    <RiskBadge risk={meeting.opportunity.riskLevel} />
+                  ) : null}
+                  {pendingApprovalCount > 0 ? (
+                    <Badge variant="approval">
+                      {english
+                        ? `${pendingApprovalCount} waiting review`
+                        : `${pendingApprovalCount} 条待复核`}
+                    </Badge>
+                  ) : null}
+                </div>
+                <div className="space-y-2">
+                  <p className="text-lg font-semibold text-[color:var(--foreground)]">
+                    {english
+                      ? "This meeting is the shortest path from context to action, approval and memory writeback."
+                      : "这场会负责把现场上下文接回目标推进链，判断它改变了哪些经营状态、下一步和复核边界。"}
+                  </p>
+                  <p className="text-sm leading-6 text-[color:var(--muted)]">
+                    {text(meetingTemplateSummary.summary)}
+                  </p>
+                  <p className="text-sm leading-7 text-[color:var(--muted)]">
+                    {meetingImpactLine}
+                  </p>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="theme-surface-panel rounded-2xl px-4 py-4">
+                    <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                      {english ? "Related object state" : "受影响的经营状态"}
+                    </p>
+                    <p className="mt-2 font-medium text-[color:var(--foreground)]">
+                      {linkedObjectSummary ||
+                        (english ? "No linked object yet" : "当前还没有关联对象")}
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                      {text(meetingTemplateSummary.objectEmphasisLine)}
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
+                      {english
+                        ? "Linked items keep updating the briefing and what's flagged after the meeting."
+                        : "这些关联会继续更新简报和会后要追的事。"}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {linkedOpportunityAssetHref ? (
+                        <Button asChild size="sm" variant="secondary">
+                          <Link href={linkedOpportunityAssetHref}>
+                            {english ? "Open opportunity asset" : "打开机会资产"}
+                            <ArrowRight className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                      ) : null}
+                      {linkedCustomerAssetHref ? (
+                        <Button asChild size="sm" variant="ghost">
+                          <Link href={linkedCustomerAssetHref}>
+                            {english ? "Open customer asset" : "打开客户资产"}
+                            <ArrowRight className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="theme-surface-panel rounded-2xl px-4 py-4">
+                    <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                      {english ? "Current next move" : "当前最该推进的一步"}
+                    </p>
+                    <p className="mt-2 font-medium text-[color:var(--foreground)]">
+                      {primaryNextStepTitle}
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                      {text(meetingTemplateSummary.nextStepLine)}
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
+                      {primaryBoundaryLine}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                <div data-meeting-review-snapshot="true">
+                  <ControlledDisclosure
+                    className="theme-surface-panel-soft rounded-2xl"
+                    defaultExpanded={false}
+                    summaryClassName="flex cursor-pointer list-none items-start justify-between gap-3 px-4 py-4"
+                    bodyClassName="border-t border-[color:var(--border)] px-4 py-4"
+                    summary={
+                      <>
+                        <div className="min-w-0 space-y-2">
+                          <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                            {english ? "Review snapshot" : "复核快照"}
+                          </p>
+                          <p className="text-sm leading-6 text-[color:var(--muted)]">
+                            {displayMeetingReviewSnapshotSummary}
+                          </p>
+                        </div>
+                        <div className="inline-flex shrink-0 items-center gap-2 text-xs text-[color:var(--muted-foreground)]">
+                          <span>{english ? "Open" : "展开"}</span>
+                          <ChevronDown className="h-4 w-4" />
+                        </div>
+                      </>
+                    }
+                  >
+                    <div className="grid grid-cols-2 gap-3 text-sm text-[color:var(--muted)]">
+                      <div>
+                        <p className="text-lg font-semibold text-[color:var(--foreground)]">
+                          {meeting.memoryFacts.length}
+                        </p>
+                        <p>{english ? "supporting facts" : "支持事实"}</p>
+                      </div>
+                      <div>
+                        <p className="text-lg font-semibold text-[color:var(--foreground)]">
+                          {meeting.commitments.length}
+                        </p>
+                        <p>{english ? "commitments" : "承诺"}</p>
+                      </div>
+                      <div>
+                        <p className="text-lg font-semibold text-[color:var(--foreground)]">
+                          {meeting.blockers.length}
+                        </p>
+                        <p>{english ? "blockers" : "阻塞"}</p>
+                      </div>
+                      <div>
+                        <p className="text-lg font-semibold text-[color:var(--foreground)]">
+                          {pendingApprovalCount}
+                        </p>
+                        <p>{english ? "review gates" : "需人工复核"}</p>
+                      </div>
+                    </div>
+                    {activeRetrievalPackTrace ? (
+                      <div className="mt-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="info">
+                            {english ? "Retrieval pack" : "检索包"}
+                          </Badge>
+                          <Badge variant="neutral">
+                            {english
+                              ? `Selected ${activeRetrievalPackTrace.trace.selectedCount}`
+                              : `入选 ${activeRetrievalPackTrace.trace.selectedCount}`}
+                          </Badge>
+                          <Badge variant="neutral">
+                            {english
+                              ? `Omitted ${activeRetrievalPackTrace.trace.omittedCount}`
+                              : `省略 ${activeRetrievalPackTrace.trace.omittedCount}`}
+                          </Badge>
+                          {activeRetrievalPackTrace.fallback.used ? (
+                            <Badge variant="warning">
+                              {english ? "Fallback" : "回退"}
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
+                          {english
+                            ? activeRetrievalPackTrace.trace.boundaryNote
+                            : text(
+                                "检索资料只做证据打包；不会改变建议排序、审批负责人或承诺权限。",
+                              )}
+                        </p>
+                      </div>
+                    ) : null}
+                    <p className="mt-3 text-sm leading-6 text-[color:var(--muted-foreground)]">
+                      {displayMeetingReviewPostureLine}
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
+                      {text(meetingWorkspaceLightSummary.summary)}
+                    </p>
+                    {manualReviewHoldCount > 0 ? (
+                      <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
+                        {english
+                          ? `${manualReviewHoldCount} promoted meeting-memory item(s) are currently being held back behind review on this page, so the visible writeback stays explicit and reversible.`
+                          : `当前有 ${manualReviewHoldCount} 条已提升会议记忆在这个页面里被人工保留在复核之后，所以可见写回仍然保持显式且可逆。`}
+                      </p>
+                    ) : null}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={exportMeetingMemoryBundle}
+                      >
+                        <Download className="h-4 w-4" />
+                        {english
+                          ? "Export meeting memory bundle"
+                          : "导出会议记忆包"}
+                      </Button>
+                    </div>
+                  </ControlledDisclosure>
+                </div>
+                <div className="space-y-3 rounded-2xl border border-[color:var(--border)] bg-[color:color-mix(in_oklab,var(--surface)_94%,white_6%)] px-4 py-4">
+                  <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                    {english ? "Go next" : "现在继续往下走"}
+                  </p>
+                  <Button
+                    className="w-full justify-start"
+                    disabled={governedActionDisabled}
+                    onClick={() =>
+                      runAction(
+                        () => sendMeetingSummaryAction(meeting.id),
+                        english ? "Summary action created" : "纪要动作已生成",
+                        "/approvals#meeting-follow-through-review",
+                      )
+                    }
+                  >
+                    <FileText className="h-4 w-4" />
+                    {english
+                      ? "Send summary draft to approvals"
+                      : "把纪要草稿送进复核与边界"}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="w-full justify-start"
+                    asChild
+                  >
+                    <Link
+                      href={`/memory?objectType=MEETING&objectId=${meeting.id}`}
+                    >
+                      {english ? "Open meeting memory" : "打开会议记忆"}
+                    </Link>
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="w-full justify-start"
+                    onClick={exportMeetingMemoryBundle}
+                  >
+                    <Download className="h-4 w-4" />
+                    {english ? "Export bundle" : "导出记忆包"}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="w-full justify-start"
+                    asChild
+                  >
+                    <Link href="/approvals#meeting-follow-through-review">
+                      {english ? "Open review boundary" : "打开复核与边界"}
+                    </Link>
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="w-full justify-start"
+                    asChild
+                  >
+                    <Link href="/diagnostics#meeting-workflow-readiness">
+                      {english ? "See workflow readiness" : "查看协同就绪度"}
+                    </Link>
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="w-full justify-start"
+                    asChild
+                  >
+                    <Link href="/dashboard">
+                      {english ? "Back to dashboard arbitration" : "回到目标推进台"}
+                    </Link>
+                  </Button>
+                  {meeting.opportunity ? (
+                    <Button
+                      variant="secondary"
+                      className="w-full justify-start"
+                      disabled={governedActionDisabled}
+                      onClick={() =>
+                        runAction(
+                          () => updateOpportunityFromMeetingAction(meeting.id),
+                          english
+                            ? "Opportunity-sync action created"
+                            : "机会同步动作已生成",
+                          "/approvals#meeting-follow-through-review",
+                        )
+                      }
+                    >
+                      <Zap className="h-4 w-4" />
+                      {english
+                        ? "Sync opportunity after meeting"
+                        : "把会议结论同步回机会"}
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_360px]">
+            <WorkspaceGuidancePanel
+              eyebrow={english ? "Meeting guidance" : "会议引导"}
               title={
-                english ? "No meeting history yet" : "当前还没有会议相关历史"
-              }
-              description={
                 english
-                  ? "Once notes, approvals or post-meeting task updates happen, the replay will fill in automatically."
-                  : "一旦生成纪要、审批动作或更新会后任务，这里会自动补齐回放。"
+                  ? "Use the meeting surface to connect context, review posture and the next formal move."
+                  : "把会议页面当成连接上下文、复核状态和正式下一步的主回路。"
+              }
+              summary={
+                english
+                  ? "This page should explain what changed, what already wrote back into memory, and what still needs explicit review before any follow-through becomes real execution."
+                  : "直接确认这场会改变了什么、哪些内容已经回写进记忆、以及哪些会后动作在变成真实执行前仍需要显式复核。"
+              }
+              recommendations={displayMeetingGuidanceRecommendations}
+              reminders={meetingGuidanceReminders}
+              recommendationsLabel={english ? "Recommended next moves" : "建议先处理"}
+              remindersLabel={english ? "Meeting reminders" : "会议提醒"}
+              boundaryLabel={english ? "Boundary" : "边界"}
+              boundary={
+                canManageGovernedActions
+                  ? english
+                    ? `${primaryBoundaryLine} This surface can prepare, review and route follow-through, but it still does not grant autonomous send authority.`
+                    : `${primaryBoundaryLine} 这个页面可以准备、复核并路由后续推进，但它仍不代表获得了自动发送权限。`
+                  : actionGovernance.manageDeniedMessage
               }
             />
-          )}
-        </CardContent>
-      </Card>
+            <div className="workspace-surface-stack">
+              <WorkspaceSurfacePreferences />
+              <Card className="workspace-form-assist workspace-panel-muted">
+                <CardContent className="space-y-3 py-5">
+                  <p className="workspace-eyebrow">
+                    {english ? "Meeting assist" : "会议辅助"}
+                  </p>
+                  <p className="text-lg font-semibold tracking-tight text-[color:var(--foreground)]">
+                    {english
+                      ? "Move from context to follow-through without losing the review boundary."
+                      : "在不丢失复核边界的前提下，把上下文更快推到后续推进。"}
+                  </p>
+                  <p className="text-sm leading-7 text-[color:var(--muted-foreground)]">
+                    {english
+                      ? "Refresh memory, regenerate next steps, route the summary when ready."
+                      : "刷新记忆、重新生成下一步、草稿好了再送审。"}
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() =>
+                        runAction(
+                          () => processMeetingMemoryAction(meeting.id),
+                          english
+                            ? "Meeting memory reprocessed"
+                            : "会议记忆已重新处理",
+                        )
+                      }
+                    >
+                      {english ? "Process memory" : "处理记忆"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() =>
+                        runAction(
+                          () => generateMeetingBriefingAction(meeting.id),
+                          english ? "Briefing snapshot refreshed" : "已刷新简报快照",
+                        )
+                      }
+                    >
+                      {english ? "Refresh briefing" : "刷新简报"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={governedActionDisabled}
+                      onClick={() =>
+                        runAction(
+                          () => generateMeetingActionItemsAction(meeting.id),
+                          english
+                            ? "Post-meeting action items generated"
+                            : "已生成会后动作项",
+                        )
+                      }
+                    >
+                      {english ? "Generate action items" : "生成会后动作"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={governedActionDisabled}
+                      onClick={() =>
+                        runAction(
+                          () => sendMeetingSummaryAction(meeting.id),
+                          english
+                            ? "Summary draft created and routed to approvals"
+                            : "已生成纪要并进入审批",
+                          "/approvals",
+                        )
+                      }
+                    >
+                      {english ? "Route summary to approvals" : "送纪要到审批"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+
+          <Card className="workspace-panel-muted">
+            <CardContent className="grid gap-4 py-5 xl:grid-cols-[1.15fr_repeat(3,minmax(0,0.78fr))]">
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="approval">
+                    {english ? "Meeting memory bundle" : "会议记忆包"}
+                  </Badge>
+                  <Badge variant="info">
+                    {english ? "Reusable operating memory" : "可复用经营记忆"}
+                  </Badge>
+                </div>
+                <p className="text-lg font-semibold text-[color:var(--foreground)]">
+                  {english
+                    ? "This meeting only becomes reusable when the page shows what already wrote back, what is ready for promotion, and what should stay behind review."
+                    : "只有当这页说明哪些内容已沉淀为经营状态、哪些仍待复核、哪些仍存在冲突时，这场会议才会变成可复用经营记忆。"}
+                </p>
+                <p className="text-sm leading-6 text-[color:var(--muted)]">
+                  {text(meetingMemoryBundle.summary)}
+                </p>
+                <p className="text-sm leading-6 text-[color:var(--muted-foreground)]">
+                  {text(meetingMemoryBundle.lifecycleSummary)}
+                </p>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="theme-surface-panel rounded-2xl px-4 py-3">
+                    <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                      {english ? "Affected objects" : "受影响对象"}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {meetingMemoryBundle.affectedObjects
+                        .slice(0, 5)
+                        .map((item) => (
+                          <Badge
+                            key={`${item.objectType}:${item.id}`}
+                            variant="info"
+                          >
+                            {item.label}
+                          </Badge>
+                        ))}
+                    </div>
+                  </div>
+                  <div className="theme-surface-panel rounded-2xl px-4 py-3">
+                    <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                      {english ? "Source pointers" : "来源使用说明"}
+                    </p>
+                    <div className="mt-2 space-y-2">
+                      {meetingMemoryBundle.sourcePointers
+                        .slice(0, 3)
+                        .map((pointer) => (
+                          <div key={pointer.id} className="space-y-1">
+                            <p className="text-sm font-medium text-[color:var(--foreground)]">
+                              {text(pointer.label)}
+                            </p>
+                            <p className="text-sm leading-6 text-[color:var(--muted-foreground)]">
+                              {text(pointer.summary)}
+                            </p>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="theme-surface-panel rounded-2xl px-4 py-4">
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                  {english ? "Already wrote back" : "已经写回的部分"}
+                </p>
+                <p className="mt-2 text-3xl font-semibold text-[color:var(--foreground)]">
+                  {meetingMemoryBundle.promotedCount}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                  {english
+                    ? `${meetingMemoryBundle.facts.length} facts, ${meetingMemoryBundle.commitments.length} commitments and ${meetingMemoryBundle.blockers.length} blockers are already visible in structured memory or downstream object state.`
+                    : `当前已有 ${meetingMemoryBundle.facts.length} 条事实、${meetingMemoryBundle.commitments.length} 条承诺和 ${meetingMemoryBundle.blockers.length} 条阻塞进入结构化记忆或下游对象状态。`}
+                </p>
+              </div>
+              <div className="theme-surface-panel rounded-2xl px-4 py-4">
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                  {english ? "Ready for promotion" : "准备提升"}
+                </p>
+                <p className="mt-2 text-3xl font-semibold text-[color:var(--foreground)]">
+                  {meetingMemoryBundle.readyCount}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                  {english
+                    ? `${meetingMemoryBundle.decisions.length} decisions and ${meetingMemoryBundle.openQuestions.length} open questions are the main promotion candidates from this meeting.`
+                    : `当前最主要的提升候选来自这场会议里的 ${meetingMemoryBundle.decisions.length} 条决策和 ${meetingMemoryBundle.openQuestions.length} 条待确认问题。`}
+                </p>
+              </div>
+              <div className="theme-surface-panel rounded-2xl px-4 py-4">
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                  {english ? "Still pending review" : "仍待复核"}
+                </p>
+                <p className="mt-2 text-sm font-semibold text-[color:var(--foreground)]">
+                  {meetingMemoryBundle.conflictCount > 0
+                    ? english
+                      ? `${meetingMemoryBundle.conflictCount} conflict cues visible`
+                      : `当前有 ${meetingMemoryBundle.conflictCount} 条冲突线索`
+                    : english
+                      ? `${meetingMemoryBundle.pendingReviewCount} items should stay visible behind review`
+                      : `当前有 ${meetingMemoryBundle.pendingReviewCount} 条项目应继续留在复核之后`}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                  {english
+                    ? "Anything unresolved here should stay explainable instead of silently overwriting current object state."
+                    : "这里仍未解决的部分都应该保持可解释，而不是静默覆盖当前对象状态。"}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="workspace-panel-muted">
+            <CardContent className="grid gap-4 py-5 xl:grid-cols-[1.2fr_repeat(4,minmax(0,0.82fr))]">
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="info">
+                    {english ? "Meeting ingress context" : "会议入口上下文"}
+                  </Badge>
+                  <Badge variant="neutral">{english ? "Read-only" : "只读"}</Badge>
+                </div>
+                <p className="text-lg font-semibold text-[color:var(--foreground)]">
+                  {english
+                    ? "Use this as the pre-meeting operating entry: why this event is on the calendar, which thread/object pressure is attached to it, and what it should release into follow-through."
+                    : "把这里读成会前 operating 入口：这场会议为什么会出现在日程里、它接着哪条线程/对象压力、以及它应该释放哪一步会后推进。"}
+                </p>
+                <p className="text-sm leading-6 text-[color:var(--muted)]">
+                  {calendarIngressPointer?.summary
+                    ? text(calendarIngressPointer.summary)
+                    : english
+                      ? "Calendar/event context is still thin, so this readout relies more on meeting memory and object continuity."
+                      : "当前日程 / 会议上下文还比较薄，所以这条读数主要依赖会议记忆和对象连续性来理解这场会。"}
+                </p>
+              </div>
+              <div className="theme-surface-panel rounded-2xl px-4 py-4">
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                  {english ? "Calendar / event" : "日程 / 事件"}
+                </p>
+                <p className="mt-2 text-sm font-medium leading-6 text-[color:var(--foreground)]">
+                  {calendarIngressPointer?.label ??
+                    (english ? "Current meeting event" : "当前会议事件")}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                  {calendarIngressPointer?.summary
+                    ? text(calendarIngressPointer.summary)
+                    : english
+                      ? "This meeting currently enters the loop mainly through its visible event slot."
+                      : "这场会议当前主要通过可见事件时段进入主回路。"}
+                </p>
+              </div>
+              <div className="theme-surface-panel rounded-2xl px-4 py-4">
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                  {english ? "Participants" : "参与者"}
+                </p>
+                <p className="mt-2 text-sm font-medium leading-6 text-[color:var(--foreground)]">
+                  {meeting.contacts.length
+                    ? english
+                      ? `${meeting.contacts.length} linked attendees`
+                      : `${meeting.contacts.length} 位已关联参与者`
+                    : english
+                      ? "Attendee context is thin"
+                      : "参与者上下文较薄"}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                  {meetingIngressAttendeeLine}
+                </p>
+              </div>
+              <div className="theme-surface-panel rounded-2xl px-4 py-4">
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                  {english ? "Related thread / inbox" : "相关线程 / 收件箱"}
+                </p>
+                <p className="mt-2 text-sm font-medium leading-6 text-[color:var(--foreground)]">
+                  {threadIngressPointer
+                    ? english
+                      ? "Thread pressure visible"
+                      : "线程压力可见"
+                    : english
+                      ? "No strong thread cue"
+                      : "当前没有显著线程线索"}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                  {threadIngressPointer?.summary
+                    ? text(threadIngressPointer.summary)
+                    : english
+                      ? "No visible inbox-pressure cue is currently being pulled into this meeting."
+                      : "当前还没有把显著的收件箱压力线索拉进这场会议。"}
+                </p>
+              </div>
+              <div className="theme-surface-panel rounded-2xl px-4 py-4">
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                  {english ? "Continuity + pressure" : "连续性 + 压力"}
+                </p>
+                <p className="mt-2 text-sm font-medium leading-6 text-[color:var(--foreground)]">
+                  {affectedObjectsPointer?.label ??
+                    (english ? "Object continuity in view" : "对象连续性已接入")}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                  {meetingIngressContinuityLine}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
+                  {displayMeetingIngressPressureLine}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
+                  {displayMeetingIngressFollowThroughLine}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="workspace-panel">
+            <CardContent className="space-y-4 py-5">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="info">
+                      {english ? "Meeting workspace" : "这场会议工作台"}
+                    </Badge>
+                    <Badge variant="approval">
+                      {english ? "Meeting-scoped only" : "仅限这场会议"}
+                    </Badge>
+                    <Badge variant="neutral">{meetingTemplateSummary.label}</Badge>
+                    <Badge variant="neutral">
+                      {meetingWorkspaceLightSummary.visibilityLabel}
+                    </Badge>
+                  </div>
+                  <p className="text-lg font-semibold text-[color:var(--foreground)]">
+                    {english
+                      ? "Read this as the operating workspace for one meeting: what changed, what already wrote back, what still needs review, and what should move next."
+                      : "把这里读成一场会议的经营工作台：发生了什么、什么已经写回、什么仍待复核、下一步该怎么动。"}
+                  </p>
+                  <p className="max-w-4xl text-sm leading-6 text-[color:var(--muted)]">
+                    {displayMeetingWorkspaceSummary}
+                  </p>
+                  <p className="max-w-4xl text-sm leading-6 text-[color:var(--muted-foreground)]">
+                    {text(meetingWorkspaceLightSummary.collaborationLine)}
+                  </p>
+                  {manualReviewHoldCount > 0 ? (
+                    <p className="max-w-4xl text-sm leading-6 text-[color:var(--muted-foreground)]">
+                      {english
+                        ? `${manualReviewHoldCount} previously promoted item(s) are now being kept behind review by manual governance hold in this meeting workspace.`
+                        : `当前有 ${manualReviewHoldCount} 条原本已提升的内容，正在这场会议工作台里被人工治理保持留在复核之后。`}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={exportMeetingMemoryBundle}
+                  >
+                    <Download className="h-4 w-4" />
+                    {english ? "Export bundle" : "导出记忆包"}
+                  </Button>
+                  <Button size="sm" variant="secondary" asChild>
+                    <Link
+                      href={`/memory?objectType=MEETING&objectId=${meeting.id}`}
+                    >
+                      {english ? "Open meeting memory" : "打开会议记忆"}
+                    </Link>
+                  </Button>
+                  <Button size="sm" variant="secondary" asChild>
+                    <Link href="/approvals#meeting-follow-through-review">
+                      {english ? "Open review boundary" : "打开复核与边界"}
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="theme-surface-panel-soft rounded-2xl px-4 py-4">
+                  <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                    {english ? "Template frame" : "模板框架"}
+                  </p>
+                  <p className="mt-2 font-medium text-[color:var(--foreground)]">
+                    {meetingTemplateSummary.label}
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                    {text(meetingTemplateSummary.objectEmphasisLine)}
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
+                    {text(meetingTemplateSummary.reviewLine)}
+                  </p>
+                </div>
+                <div className="theme-surface-panel-soft rounded-2xl px-4 py-4">
+                  <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                    {english ? "Workspace visibility" : "工作台可见性"}
+                  </p>
+                  <p className="mt-2 font-medium text-[color:var(--foreground)]">
+                    {meetingWorkspaceLightSummary.visibilityLabel}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Badge variant="neutral">
+                      {english
+                        ? `Personal ${meetingWorkspaceLightSummary.personalCount}`
+                        : `个人 ${meetingWorkspaceLightSummary.personalCount}`}
+                    </Badge>
+                    <Badge variant="neutral">
+                      {english
+                        ? `Shared ${meetingWorkspaceLightSummary.sharedCount}`
+                        : `共享 ${meetingWorkspaceLightSummary.sharedCount}`}
+                    </Badge>
+                    <Badge variant="neutral">
+                      {english
+                        ? `Promoted ${meetingWorkspaceLightSummary.promotedCount}`
+                        : `已提升 ${meetingWorkspaceLightSummary.promotedCount}`}
+                    </Badge>
+                    <Badge variant="neutral">
+                      {english
+                        ? `Review-only ${meetingWorkspaceLightSummary.reviewOnlyCount}`
+                        : `仅复核 ${meetingWorkspaceLightSummary.reviewOnlyCount}`}
+                    </Badge>
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-[color:var(--muted)]">
+                    {text(meetingWorkspaceLightSummary.summary)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-[1.08fr_0.92fr]">
+                <div className="min-w-0 space-y-4">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="theme-surface-panel rounded-2xl px-4 py-4">
+                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                        {english ? "Current meeting summary" : "当前会议摘要"}
+                      </p>
+                      <p className="mt-2 font-medium text-[color:var(--foreground)]">
+                        {meeting.note?.summary
+                          ? text(meeting.note.summary)
+                          : english
+                            ? "This meeting is currently being read through its connected objects and follow-through pressure."
+                            : "当前这场会议主要通过关联对象和会后推进压力来被理解。"}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                        {meetingImpactLine}
+                      </p>
+                    </div>
+                    <div className="theme-surface-panel rounded-2xl px-4 py-4">
+                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                        {english ? "Connected objects" : "关联对象"}
+                      </p>
+                      <p className="mt-2 font-medium text-[color:var(--foreground)]">
+                        {linkedObjectSummary ||
+                          (english
+                            ? "No connected object yet"
+                            : "当前还没有连接对象")}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                        {meetingMemoryLoopSummary.affectedObjectsLine}
+                      </p>
+                    </div>
+                    <div className="theme-surface-panel rounded-2xl px-4 py-4">
+                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                        {english ? "Next-step workspace" : "下一步工作台"}
+                      </p>
+                      <p className="mt-2 font-medium text-[color:var(--foreground)]">
+                        {primaryNextStepTitle}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                        {meetingMemoryLoopSummary.nextStepLine}
+                      </p>
+                    </div>
+                    <div className="theme-surface-panel rounded-2xl px-4 py-4">
+                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                        {english ? "Current review posture" : "当前复核状态"}
+                      </p>
+                      <p className="mt-2 font-medium text-[color:var(--foreground)]">
+                        {meetingMemoryGovernanceSummary.reviewStateLabel}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                        {displayMeetingReviewPostureLine}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
+                        {meetingMemoryGovernanceSummary.reviewSummary}
+                      </p>
+                      {manualReviewHoldCount > 0 ? (
+                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
+                          {english
+                            ? `Manual governance hold is currently keeping ${manualReviewHoldCount} promoted item(s) review-only on this page.`
+                            : `当前有 ${manualReviewHoldCount} 条已提升内容在这个页面里被人工治理保持为仅复核。`}
+                        </p>
+                      ) : null}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Badge variant="info">
+                          {meetingMemoryGovernanceSummary.visibilityLabel}
+                        </Badge>
+                        {meetingMemoryGovernanceSummary.sourceClassLabels.map(
+                          (label) => (
+                            <Badge key={label} variant="neutral">
+                              {label}
+                            </Badge>
+                          ),
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="theme-surface-panel-soft rounded-2xl px-4 py-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="neutral">
+                        {english ? "Source-use ledger" : "来源使用台账"}
+                      </Badge>
+                      <Badge variant="approval">
+                        {english ? "Readable only" : "仅做可读说明"}
+                      </Badge>
+                    </div>
+                    <p className="mt-3 text-sm leading-6 text-[color:var(--muted)]">
+                      {text(meetingMemorySourceUseLedger.summary)}
+                    </p>
+                    <div className="mt-4 grid gap-3 md:grid-cols-2">
+                      {meetingMemorySourceUseLedger.entries
+                        .slice(0, 4)
+                        .map((entry) => (
+                          <div
+                            key={entry.id}
+                            className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-3"
+                          >
+                            <div className="flex flex-wrap gap-2">
+                              <Badge variant="neutral">
+                                {entry.sourceClassLabel}
+                              </Badge>
+                              <Badge
+                                variant={
+                                  entry.reviewState === "conflict"
+                                    ? "danger"
+                                    : entry.reviewState === "pending-review"
+                                      ? "approval"
+                                      : entry.reviewState === "missing-clarity"
+                                        ? "warning"
+                                        : "success"
+                                }
+                              >
+                                {entry.reviewStateLabel}
+                              </Badge>
+                              <Badge variant="info">{entry.visibilityLabel}</Badge>
+                            </div>
+                            <p className="mt-2 font-medium text-[color:var(--foreground)]">
+                              {text(entry.title)}
+                            </p>
+                            <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                              {text(entry.sourcePointerLabel)}：
+                              {text(entry.sourcePointerSummary)}
+                            </p>
+                            <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
+                              {text(entry.eligibilitySummary)}
+                            </p>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="theme-surface-panel-soft rounded-2xl px-4 py-4">
+                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                        {english ? "Promoted meeting memory" : "已提升的会议记忆"}
+                      </p>
+                      <div className="mt-3 space-y-3">
+                        {promotedMeetingMemoryEntries.length ? (
+                          promotedMeetingMemoryEntries.map(
+                            ({ item, governance }) => (
+                              <div
+                                key={item.id}
+                                className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-3"
+                              >
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge variant="success">
+                                    {formatMeetingMemoryLifecycle(
+                                      item.lifecycle,
+                                      english,
+                                    )}
+                                  </Badge>
+                                  <Badge variant="info">
+                                    {formatMeetingMemoryKind(item.kind, english)}
+                                  </Badge>
+                                  <Badge variant="neutral">
+                                    {governance.visibilityLabel}
+                                  </Badge>
+                                  <Badge variant="neutral">
+                                    {governance.sourceClassLabel}
+                                  </Badge>
+                                </div>
+                                <p className="mt-2 font-medium text-[color:var(--foreground)]">
+                                  {text(item.title)}
+                                </p>
+                                <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                                  {text(trimText(item.summary, 110))}
+                                </p>
+                                <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
+                                  {text(governance.eligibilitySummary)}
+                                </p>
+                                <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
+                                  {text(governance.sourceSummary)}
+                                </p>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() =>
+                                      movePromotedItemBackToReview(
+                                        item.id,
+                                        item.title,
+                                      )
+                                    }
+                                  >
+                                    {english ? "Move back to review" : "回退到复核"}
+                                  </Button>
+                                </div>
+                              </div>
+                            ),
+                          )
+                        ) : (
+                          <p className="text-sm leading-6 text-[color:var(--muted)]">
+                            {english
+                              ? "No meeting-derived item has fully promoted yet."
+                              : "当前还没有完全提升成功的会议记忆项。"}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="theme-surface-panel-soft rounded-2xl px-4 py-4">
+                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                        {english
+                          ? "Still pending review or conflict"
+                          : "仍待复核 / 冲突"}
+                      </p>
+                      <div className="mt-3 space-y-3">
+                        {pendingMeetingMemoryEntries.length ? (
+                          pendingMeetingMemoryEntries.map(
+                            ({ item, governance }) => (
+                              <div
+                                key={item.id}
+                                className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-3"
+                              >
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge
+                                    variant={
+                                      item.lifecycle === "conflict"
+                                        ? "danger"
+                                        : item.lifecycle === "pending-review"
+                                          ? "approval"
+                                          : "warning"
+                                    }
+                                  >
+                                    {formatMeetingMemoryLifecycle(
+                                      item.lifecycle,
+                                      english,
+                                    )}
+                                  </Badge>
+                                  <Badge variant="info">
+                                    {formatMeetingMemoryKind(item.kind, english)}
+                                  </Badge>
+                                  <Badge variant="neutral">
+                                    {governance.visibilityLabel}
+                                  </Badge>
+                                  <Badge variant="neutral">
+                                    {governance.sourceClassLabel}
+                                  </Badge>
+                                  {meetingReviewHoldItemIds.includes(item.id) ? (
+                                    <Badge variant="approval">
+                                      {english
+                                        ? "Manual review hold"
+                                        : "人工保留复核"}
+                                    </Badge>
+                                  ) : null}
+                                </div>
+                                <p className="mt-2 font-medium text-[color:var(--foreground)]">
+                                  {text(item.title)}
+                                </p>
+                                <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                                  {text(trimText(item.reasonChainSummary, 120))}
+                                </p>
+                                <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
+                                  {text(governance.eligibilitySummary)}
+                                </p>
+                                <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
+                                  {text(governance.sourceSummary)}
+                                </p>
+                                {meetingReviewHoldItemIds.includes(item.id) ? (
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="secondary"
+                                      onClick={() =>
+                                        restorePromotedItemPosture(
+                                          item.id,
+                                          item.title,
+                                        )
+                                      }
+                                    >
+                                      {english
+                                        ? "Restore promoted posture"
+                                        : "恢复已提升姿态"}
+                                    </Button>
+                                  </div>
+                                ) : null}
+                              </div>
+                            ),
+                          )
+                        ) : (
+                          <p className="text-sm leading-6 text-[color:var(--muted)]">
+                            {english
+                              ? "No pending-review or conflict cue is dominating this meeting right now."
+                              : "当前没有待复核或冲突项在主导这场会议。"}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="min-w-0 space-y-4">
+                  <div className="theme-surface-panel rounded-2xl px-4 py-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="info">
+                        {english
+                          ? "Ask within this meeting"
+                          : "基于当前会议上下文提问"}
+                      </Badge>
+                      <Badge variant="approval">
+                        {english ? "Read-only scope" : "只读范围"}
+                      </Badge>
+                    </div>
+                    <p className="mt-3 text-sm leading-6 text-[color:var(--muted)]">
+                      {english
+                        ? "Answers here stay limited to this meeting, its connected objects, promoted meeting memory, linked blockers / commitments / decisions, and any recent related-meeting continuity already visible inside this local workspace context. This block does not search the whole workspace or execute anything."
+                        : "这里的回答只会基于这场会议、它关联的对象、已提升的会议记忆，以及相关阻塞、承诺和决策；如果当前页面已经可见最近相关会议的连续性，也只会在这个本地工作台上下文里引用。这里不会搜索整个工作台，也不会执行任何动作。"}
+                    </p>
+                    <div className="mt-4 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-4">
+                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                        {english ? "Source posture" : "来源状态"}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {askHelmAnswer.sourceClassLabels.map((label) => (
+                          <Badge key={label} variant="neutral">
+                            {label}
+                          </Badge>
+                        ))}
+                        {localRecentMeetingContext ? (
+                          <Badge variant="neutral">
+                            {localRecentMeetingContext.label}
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <p className="mt-3 text-sm leading-6 text-[color:var(--muted)]">
+                        {askHelmAnswer.sourcePostureLine}
+                      </p>
+                      {localRecentMeetingContext ? (
+                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
+                          {text(localRecentMeetingContext.summary)}
+                        </p>
+                      ) : null}
+                      <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
+                        {text(askHelmAnswer.reviewAwareLine)}
+                      </p>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {askHelmPrompts.map((prompt) => (
+                        <Button
+                          key={prompt}
+                          size="sm"
+                          variant={
+                            askHelmQuery === prompt ? "default" : "secondary"
+                          }
+                          onClick={() => {
+                            setAskHelmQuery(prompt);
+                            setActiveAskHelmQuery(prompt);
+                          }}
+                        >
+                          {prompt}
+                        </Button>
+                      ))}
+                    </div>
+                    <div className="mt-4 flex gap-2">
+                      <Input
+                        value={askHelmQuery}
+                        onChange={(event) => setAskHelmQuery(event.target.value)}
+                        placeholder={
+                          english
+                            ? "Ask only about this meeting and its connected objects"
+                            : "只询问这场会议及其关联对象"
+                        }
+                      />
+                      <Button
+                        variant="secondary"
+                        onClick={() =>
+                          setActiveAskHelmQuery(
+                            askHelmQuery.trim() || askHelmPrompts[0] || "",
+                          )
+                        }
+                      >
+                        {english ? "Ask" : "提问"}
+                      </Button>
+                    </div>
+                    <div className="mt-4 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-4">
+                      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                        {english ? "Meeting answer" : "会议回答"}
+                      </p>
+                      <p className="mt-2 font-medium text-[color:var(--foreground)]">
+                        {text(askHelmAnswer.headline)}
+                      </p>
+                      <p className="mt-3 text-sm leading-7 text-[color:var(--muted)]">
+                        {text(askHelmAnswer.answer)}
+                      </p>
+                      <div className="mt-4 space-y-2">
+                        <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                          {english
+                            ? "Why this answer is available"
+                            : "这条回答为什么可用"}
+                        </p>
+                        {askHelmAnswer.sources.map((source, index) => (
+                          <p
+                            key={`${source}-${index}`}
+                            className="text-sm leading-6 text-[color:var(--muted)]"
+                          >
+                            {text(source)}
+                          </p>
+                        ))}
+                      </div>
+                      <div className="mt-4 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-subtle)] px-3 py-3">
+                        <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                          {english ? "Boundary note" : "边界说明"}
+                        </p>
+                        <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                          {text(askHelmAnswer.boundaryLine)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-[color:var(--status-danger-border)] bg-[color:var(--status-danger-bg)]/70">
+            <CardContent className="flex flex-col gap-3 py-5 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-1">
+                <Badge variant="danger">
+                  {english ? "If we do not push today" : "如果今天不推进"}
+                </Badge>
+                <p className="text-base font-semibold text-[color:var(--foreground)]">
+                  {noPushRisk}
+                </p>
+                <p className="text-sm leading-6 text-[color:var(--muted)]">
+                  {english
+                    ? "This is why summary, approvals and opportunity-state sync must stay on one follow-through chain instead of remaining buried in post-meeting notes."
+                    : "这也是为什么纪要、审批和机会状态同步需要被放在同一条链路里，而不是留在一份会后记录里。"}
+                </p>
+              </div>
+              <Button
+                variant="secondary"
+                disabled={governedActionDisabled}
+                onClick={() =>
+                  runAction(
+                    () => sendMeetingSummaryAction(meeting.id),
+                    english
+                      ? "Summary draft created and routed to approvals"
+                      : "已生成纪要并进入审批",
+                    "/approvals",
+                  )
+                }
+              >
+                <FileText className="h-4 w-4" />
+                {english ? "Send summary to approvals first" : "先把纪要送审"}
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="workspace-panel-muted">
+            <CardContent className="grid gap-4 py-5 md:grid-cols-4">
+              <div>
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                  {english ? "Memory generation" : "记忆生成状态"}
+                </p>
+                <p className="mt-2 text-2xl font-semibold text-[color:var(--foreground)]">
+                  {meeting.memoryFacts.length}
+                </p>
+                <p className="text-sm text-[color:var(--muted-foreground)]">
+                  {english
+                    ? "Supporting facts available for this meeting"
+                    : "本次会议可引用的支持事实"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                  {english ? "Open commitments" : "开放承诺"}
+                </p>
+                <p className="mt-2 text-2xl font-semibold text-[color:var(--foreground)]">
+                  {meeting.commitments.length}
+                </p>
+                <p className="text-sm text-[color:var(--muted-foreground)]">
+                  {english
+                    ? "Commitments that still need follow-through after the meeting"
+                    : "会后需要继续兑现的承诺"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                  {english ? "Current blockers" : "当前卡点"}
+                </p>
+                <p className="mt-2 text-2xl font-semibold text-[color:var(--foreground)]">
+                  {meeting.blockers.length}
+                </p>
+                <p className="text-sm text-[color:var(--muted-foreground)]">
+                  {english
+                    ? "Blockers that need explicit follow-up after the meeting"
+                    : "需要在会后显式处理的卡点"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                  {english ? "Briefing snapshot" : "简报快照"}
+                </p>
+                <p className="mt-2 text-2xl font-semibold text-[color:var(--foreground)]">
+                  {meeting.briefingSnapshot
+                    ? english
+                      ? "Ready"
+                      : "已生成"
+                    : english
+                      ? "Pending"
+                      : "待生成"}
+                </p>
+                <p className="text-sm text-[color:var(--muted-foreground)]">
+                  {english
+                    ? "This keeps the structured judgement visible both before and after the meeting."
+                    : "会前、会后都能回看这次会议的结构化判断"}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <section
+            className="space-y-3"
+            data-testid="meeting-runtime-evidence-disclosure"
+          >
+            <details className="group rounded-2xl border border-[color:var(--border)] bg-[color:color-mix(in_oklab,var(--surface)_88%,var(--surface-subtle)_12%)] px-4 py-4">
+              <summary
+                aria-label={
+                  english ? "Open supporting evidence summary" : "展开补充依据摘要"
+                }
+                className="cursor-pointer list-none"
+              >
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                      {english ? "Supporting evidence" : "补充依据摘要"}
+                    </p>
+                    <h2 className="mt-2 text-lg font-semibold text-[color:var(--foreground)]">
+                      {english
+                        ? "Open review evidence and saved-state context"
+                        : "展开复核依据与恢复点资料"}
+                    </h2>
+                    <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--muted)]">
+                      {english
+                        ? "These cards keep the supporting evidence available without making the default meeting flow read like a system console."
+                        : "这些卡片只保留必要依据，不打断会议判断和下一步操作。"}
+                    </p>
+                  </div>
+                  <Badge variant="neutral">
+                    <span className="group-open:hidden">
+                      {english ? "Expand when needed" : "需要时展开"}
+                    </span>
+                    <span className="hidden group-open:inline">
+                      {english ? "Hide summary" : "收起摘要"}
+                    </span>
+                  </Badge>
+                </div>
+              </summary>
+              <div className="mt-4">
+                <Card className="workspace-shell-panel border-[color:var(--mode-card-border)]">
+                  <CardHeader>
+                    <CardTitle className="text-lg tracking-tight text-[color:var(--foreground)]">
+                      {english ? "Evidence summary" : "依据摘要"}
+                    </CardTitle>
+                    <CardDescription className="text-sm leading-7 text-[color:var(--muted)]">
+                      {english
+                        ? "Facts, actions, blockers — and what still needs review before going out."
+                        : "事实、动作、阻塞——以及对外之前还要复核的部分。"}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-5">
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      {[
+                        {
+                          label: english ? "Facts" : "事实",
+                          value: meeting.memoryFacts.length,
+                          note: english ? "available for review" : "可供复核引用",
+                        },
+                        {
+                          label: english ? "Actions" : "动作",
+                          value: meeting.actionItems.length,
+                          note: english
+                            ? "visible follow-through"
+                            : "已进入后续推进",
+                        },
+                        {
+                          label: english ? "Blockers" : "阻塞",
+                          value: meeting.blockers.length,
+                          note: english ? "need explicit handling" : "需要显式处理",
+                        },
+                        {
+                          label: english ? "Commitments" : "承诺",
+                          value: meeting.commitments.length,
+                          note: english ? "must stay bounded" : "必须保留边界",
+                        },
+                      ].map((item) => (
+                        <div
+                          key={item.label}
+                          className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-4"
+                        >
+                          <p className="text-xs font-semibold text-[color:var(--muted-foreground)]">
+                            {item.label}
+                          </p>
+                          <p className="mt-2 text-3xl font-semibold tracking-tight text-[color:var(--foreground)]">
+                            {item.value}
+                          </p>
+                          <p className="mt-1 text-xs leading-5 text-[color:var(--muted-foreground)]">
+                            {item.note}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                      <div className="space-y-2">
+                        <p className="text-sm font-semibold text-[color:var(--foreground)]">
+                          {english ? "Suggested next handling" : "建议下一步处理"}
+                        </p>
+                        <p className="text-sm leading-7 text-[color:var(--muted)]">
+                          {meeting.blockers.length > 0
+                            ? english
+                              ? "Resolve the visible blockers before turning the meeting into an external follow-up."
+                              : "先处理当前卡点，再决定是否进入客户可见的后续跟进。"
+                            : english
+                              ? "The meeting can move to review or follow-through without opening engineering diagnostics."
+                              : "这场会议可以继续进入复核或后续推进，不需要展开工程诊断。"}
+                        </p>
+                        <p className="text-xs leading-6 text-[color:var(--muted-foreground)]">
+                          {runtimeGovernance.canReview
+                            ? english
+                              ? "Review authority is available for this workspace; use the review queue for any commitment-sensitive wording."
+                              : "当前工作区具备复核权限；任何可能形成承诺的表述，都先进入复核队列。"
+                            : english
+                              ? "You can read the evidence here, but review authority is not available for this account."
+                              : "你可以查看依据，但当前账号没有复核权限。"}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button asChild>
+                          <Link href="/approvals">
+                            {english ? "Open review queue" : "打开复核队列"}
+                          </Link>
+                        </Button>
+                        <Button asChild variant="secondary">
+                          <Link href="/meetings">
+                            {english ? "Back to meetings" : "返回会议列表"}
+                          </Link>
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </details>
+          </section>
+
+          <Card className="border-[color:var(--status-warning-border)] bg-[color:var(--status-warning-bg)]/60">
+            <CardHeader>
+              <CardTitle>
+                {english
+                  ? "The 24-hour post-meeting window"
+                  : "会后 24 小时黄金推进窗口"}
+              </CardTitle>
+              <CardDescription>
+                {english
+                  ? "This is not just a reminder. It explains why some actions rank first, and why others must close commitments or clear blockers before anything else."
+                  : "这块不是提醒而已，而是在告诉你为什么把某些动作排到前面，为什么有些动作要先补承诺、先解阻塞。"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm leading-7 text-[color:var(--foreground)]">
+              <p>{meetingImpactLine}</p>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-2xl border border-[color:var(--status-warning-border)] bg-[color:color-mix(in_oklab,var(--surface)_88%,white_12%)] px-4 py-3">
+                  <p className="text-xs font-medium text-[color:var(--status-warning-text)]">
+                    {english
+                      ? "Main post-meeting pressure"
+                      : "当前最大会后压力"}
+                  </p>
+                  <p className="mt-2 font-medium text-[color:var(--foreground)]">
+                    {topCommitment
+                      ? topCommitment.title
+                      : topBlocker
+                        ? topBlocker.title
+                        : english
+                          ? "No major pressure"
+                          : "暂无显著压力"}
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                    {followUpPressureLine}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-[color:var(--status-warning-border)] bg-[color:color-mix(in_oklab,var(--surface)_88%,white_12%)] px-4 py-3">
+                  <p className="text-xs font-medium text-[color:var(--status-warning-text)]">
+                    {english ? "Current ranking basis" : "当前排序依据"}
+                  </p>
+                  <p className="mt-2 font-medium text-[color:var(--foreground)]">
+                    {overdueCommitmentCount > 0
+                      ? english
+                        ? `${overdueCommitmentCount} overdue commitments first`
+                        : `${overdueCommitmentCount} 条逾期承诺优先`
+                      : topBlocker
+                        ? english
+                          ? "Clear blockers before adding new actions"
+                          : "先处理阻塞，再推进新动作"
+                        : english
+                          ? "Turn meeting conclusions into actions first"
+                          : "优先把会后决定落成动作"}
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                    {english
+                      ? "Recommendation simultaneously looks at facts formed in this meeting, open commitments, active blockers and the current policy boundary."
+                      : "判断建议会同时参考本次会议形成的事实、未完成承诺、当前卡点和当前策略边界。"}
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-[color:var(--status-warning-border)] bg-[color:color-mix(in_oklab,var(--surface)_84%,white_16%)] px-4 py-3 text-[color:var(--status-warning-text)]">
+                {noPushRisk}
+              </div>
+            </CardContent>
+          </Card>
+
+          <MountWhenOpen>{supplementary}</MountWhenOpen>
+        </div>
+      </details>
 
       <Sheet
         open={Boolean(editingAction)}
@@ -3840,6 +3875,19 @@ export function MeetingDetailClient({
           ) : null}
         </SheetContent>
       </Sheet>
+    </div>
+  );
+}
+
+function MeetingFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="workspace-panel rounded-2xl px-4 py-3">
+      <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+        {label}
+      </p>
+      <p className="mt-2 break-words text-sm font-medium text-[color:var(--foreground)]">
+        {value}
+      </p>
     </div>
   );
 }

@@ -14,7 +14,14 @@ export default async function CompanyDetailPage({
 
   if (!detail) return notFound();
 
-  const { approvalTasks, company, english, recommendations, stageLabels } = detail;
+  const {
+    company,
+    emailThreads,
+    english,
+    pendingReviewRequestId,
+    recommendations,
+    stageLabels,
+  } = detail;
 
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -22,33 +29,31 @@ export default async function CompanyDetailPage({
     [...company.meetings.map((meeting) => meeting.startsAt), ...company.memoryEntries.map((entry) => entry.createdAt)]
       .filter((date) => date.getTime() >= thirtyDaysAgo.getTime()).length;
 
-  const companyOpportunityIds = new Set(company.opportunities.map((item) => item.id));
-  const pendingReviewRequest =
-    approvalTasks.find(
-      (task) =>
-        task.status === "PENDING" &&
-        task.actionItem.opportunity?.id &&
-        companyOpportunityIds.has(task.actionItem.opportunity.id),
-    ) ?? null;
   const customerSuccessOpportunityId = company.opportunities[0]?.id ?? null;
 
   const chainModel = buildCompanyConversationChainExtensionModel({
     company,
     english,
     stageLabels,
-    pendingReviewRequestId: pendingReviewRequest?.id ?? null,
+    pendingReviewRequestId,
     customerSuccessOpportunityId,
   });
   const companyRouteIdentity = { sourcePage: `/companies/${company.id}` as const };
 
+  // Object first: the company client owns the page header and renders the
+  // chain shell inside its single closing system judgement block.
   return (
     <div className="space-y-6" data-source-page={companyRouteIdentity.sourcePage}>
-      <ConversationChainExtensionDetailView model={chainModel} english={english} />
       <div data-conversation-chain-object-detail="company-detail">
         <CompanyDetailClient
           company={company}
+          emailThreads={emailThreads}
           recentInteractionCount={recentInteractionCount}
           recommendations={recommendations}
+          relatedLinks={chainModel.actions}
+          supplementary={
+            <ConversationChainExtensionDetailView model={chainModel} english={english} />
+          }
         />
       </div>
     </div>

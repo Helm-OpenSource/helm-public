@@ -8,7 +8,7 @@ import {
   getRequestUiLocaleCandidate,
 } from "@/lib/i18n/request-locale.server";
 import { getWorkspaceFirstLoopModel } from "@/lib/operating-system/first-loop-query";
-import { getMemoryData } from "@/features/memory/queries";
+import { attachMemoryFactContext, getMemoryData } from "@/features/memory/queries";
 import {
   canManageWorkspaceRuntime,
   canReviewWorkspaceRuntime,
@@ -74,8 +74,12 @@ export async function loadMemoryPageData(searchParams: MemorySearchParams) {
   // Pack/Overlay-registered display labels for the audit codes on this page
   // (zh + en pairs; the client picks by its own locale).
   const auditDisplayLabels = resolveAuditDisplayLabels();
+  // Object-first: each fact carries its object's own name and, where a resolver
+  // exists, the source's original text (email body / meeting note).
+  const memoryFacts = await attachMemoryFactContext(workspace.id, memoryData.memoryFacts);
   const data = {
     ...memoryData,
+    memoryFacts,
     auditLogs: memoryData.auditLogs.map((log) => ({
       ...log,
       displayLabels: resolveAuditLogDisplayLabels(log, auditDisplayLabels),

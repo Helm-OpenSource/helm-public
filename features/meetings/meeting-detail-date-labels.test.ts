@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { formatMeetingDetailDateLabel } from "./meeting-detail-date-labels";
+import {
+  formatMeetingDetailDateLabel,
+  formatMeetingDetailTimeRange,
+} from "./meeting-detail-date-labels";
 
 describe("formatMeetingDetailDateLabel", () => {
   beforeEach(() => {
@@ -27,5 +30,30 @@ describe("formatMeetingDetailDateLabel", () => {
 
   it("uses an English missing-value fallback", () => {
     expect(formatMeetingDetailDateLabel(null, true)).toBe("Not set");
+  });
+});
+
+describe("formatMeetingDetailTimeRange", () => {
+  it("shows only the end time when the meeting ends the same day", () => {
+    const start = new Date(2026, 6, 6, 10, 0);
+    const end = new Date(2026, 6, 6, 11, 30);
+
+    expect(formatMeetingDetailTimeRange(start, end, true)).toBe("Jul 6 10:00 – 11:30");
+  });
+
+  it("shows the full end label when the meeting crosses days", () => {
+    const start = new Date(2026, 6, 6, 23, 0);
+    const end = new Date(2026, 6, 7, 1, 0);
+
+    expect(formatMeetingDetailTimeRange(start, end, true)).toBe(
+      "Jul 6 23:00 – Jul 7 01:00",
+    );
+  });
+
+  it("falls back to the start label when the end is missing or not after the start", () => {
+    const start = new Date(2026, 6, 6, 10, 0);
+
+    expect(formatMeetingDetailTimeRange(start, null, true)).toBe("Jul 6 10:00");
+    expect(formatMeetingDetailTimeRange(start, start, true)).toBe("Jul 6 10:00");
   });
 });
