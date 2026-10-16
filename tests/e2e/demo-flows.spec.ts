@@ -364,12 +364,14 @@ test("机会高级筛选可用", async ({ page }) => {
   await page.goto("/opportunities");
   await waitForWorkspaceUiHydration(page);
 
-  await expect(page.locator('[data-proactive-flow="sales-delivery-package-window"]')).toBeVisible();
+  // Customer-first layout (owner-approved 2026-10-15): inline count row, no
+  // proactive / suggested-order panels.
+  await expect(page.locator("[data-opportunity-counts]")).toBeVisible();
   await page.getByTestId("opportunity-filter-disclosure").locator("summary").click();
   await page.getByTestId("opportunity-risk-filter").click();
   await page.getByRole("option", { name: "高风险" }).click();
-  await expect(page.getByText(/系统建议推进顺序|建议推进顺序/, { exact: true })).toBeVisible();
-  await expect(page.getByText("高风险机会", { exact: true })).toBeVisible();
+  await expect(page.getByText(/^共 \d+ 条$/)).toBeVisible();
+  await expect(page.getByText("建议推进顺序", { exact: true })).toHaveCount(0);
 });
 
 test("主路径首屏先给对象：复核队列和客户线程在前，系统判断折在末尾", async ({ page }) => {
@@ -399,13 +401,10 @@ test("主路径首屏先给对象：复核队列和客户线程在前，系统�
   await loginAs(page, "saleslead@demo.com");
   await page.goto("/opportunities");
   await waitForWorkspaceUiHydration(page);
-  const opportunitiesFocus = page
-    .locator('[data-customer-asset-focus="true"]')
-    .first();
-  await expect(opportunitiesFocus).toBeVisible();
-  await expect(opportunitiesFocus).toContainText("客户资产");
-  await expect(opportunitiesFocus).toContainText("当前状态");
-  await expect(opportunitiesFocus).toContainText("下一步判断");
+  // The opportunities page is customer-first (owner-approved 2026-10-15): the
+  // focus strip is gone and the inline count row leads the page.
+  await expect(page.locator('[data-customer-asset-focus="true"]')).toHaveCount(0);
+  await expect(page.locator("[data-opportunity-counts]")).toBeVisible();
 });
 
 test("可以载入本地阿里邮箱示例数据并在收件箱看到真实来源标识", async ({ page }) => {

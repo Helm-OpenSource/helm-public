@@ -312,15 +312,17 @@ const workspaceViews: readonly WorkspaceView[] = [
     leadingObjectMarkers: ["<SettingsOrganizationCard", "<Tabs "],
   },
   {
-    // PR #463 (feat/opportunities-customer-first) reworks this view; it still
-    // renders pageStory.description, so it is enabled after #463 lands.
+    // Reworked by PR #463 (customer card → original demand → handling card,
+    // one trailing system-judgement block).
     id: "opportunities",
     route: "/opportunities",
-    status: "pending",
-    wave: 2,
-    reason:
-      "由 PR #463 改造，合并后启用 / reworked by PR #463, enabled once it lands",
+    status: "enforced",
     files: ["features/opportunities/opportunities-client.tsx"],
+    leadingObjectMarkers: [
+      "<OpportunityCustomerCard",
+      "<OpportunityOriginalDemand",
+      "<OpportunityHandlingCard",
+    ],
   },
 ];
 
@@ -331,14 +333,7 @@ const workspaceStoryPages: ReadonlyArray<{ page: StoryPage } & ViewStatus> = [
   { page: "meetings", status: "enforced" },
   { page: "contacts", status: "enforced" },
   { page: "companies", status: "enforced" },
-  {
-    page: "opportunities",
-    status: "pending",
-    wave: 2,
-    // PR #463 still renders pageStory.description and leaves it non-empty.
-    reason:
-      "PR #463 仍渲染页头描述，合并后再清空 / PR #463 still renders the header description",
-  },
+  { page: "opportunities", status: "enforced" },
   { page: "approvals", status: "enforced" },
   { page: "reports", status: "enforced" },
   { page: "memory", status: "enforced" },

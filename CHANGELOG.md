@@ -6,6 +6,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 ## 未发布 / Unreleased
 
+- 客户推进页（`/opportunities`）改为客户与原始需求优先（owner 2026-10-15 批准原型）：列表卡片只显示客户、原话摘要、下一步与负责人；详情改为「客户 / 客户原话 / 处理」三张卡，系统判断折叠到处理卡末尾，页面级判断面板下线。查询改为显式字段选择，负责人、成员与公司只下发 id / 名称，个人 Gmail 线程不在本页展示。
 - 继续收口底层 UI select / switch primitive 的双语 aria fallback；本批只改缺省无障碍标签文案，不改视觉样式、Radix 行为、调用方传入 label 或表单状态。
 - 继续收口共享 guidance preferences 控件双语化；本批只改系统说明偏好设置的标题、描述、状态、开关、按钮和提示说明文案，不改偏好 localStorage key、默认开关状态或工作区偏好事件。
 - Added the Signal First Mile public template, quickstart, method doc, offline selector, first-change proof package, customer materials request, quality eval, HSI fixture converter, and review-packet generator for delivery-engineer first-run proof without customer data.
