@@ -1,7 +1,7 @@
 import { revalidatePath } from "next/cache";
 import type { z } from "zod";
 
-import { getCurrentWorkspaceSession } from "@/lib/auth/session";
+import { getCurrentCaioOperatorSession } from "@/lib/auth/session";
 import {
   executeCaioOperation,
   type CaioOperationSummary,
@@ -26,7 +26,7 @@ export async function runOwnerOperation<S extends z.ZodTypeAny>(args: {
   invoke: (ctx: CaioOperatorContext, input: z.infer<S>) => Promise<unknown>;
   revalidate?: readonly string[];
 }): Promise<CaioOperatorResult<CaioOperationSummary>> {
-  const { user, membership, workspace } = await getCurrentWorkspaceSession();
+  const { user, membership, workspace } = await getCurrentCaioOperatorSession();
   const result = await executeCaioOperation({
     access: args.access,
     membershipRole: membership.role,

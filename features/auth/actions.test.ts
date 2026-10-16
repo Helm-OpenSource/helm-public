@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthCodeChannel, AuthCodePurpose, MembershipStatus, WorkspaceRole } from "@prisma/client";
-import { hashVerificationCode } from "@/lib/auth/formal-auth";
+import { hashPassword, hashVerificationCode } from "@/lib/auth/formal-auth";
 import { writePublicOauthSignupPrefillCookie } from "@/lib/auth/public-oauth";
 
 const mocks = vi.hoisted(() => {
@@ -1530,6 +1530,60 @@ describe("forged OAuth signup prefill cookie", () => {
 });
 
 describe("password login action", () => {
+  it("selects only the identity fields needed to verify credentials and establish an active membership", async () => {
+    const passwordHash = hashPassword("Password123");
+    const user = {
+      id: "user-1",
+      email: "owner@example.com",
+      phone: null,
+      passwordHash,
+      lastLoginAt: new Date("2026-05-02T08:00:00.000Z"),
+      memberships: [
+        {
+          workspaceId: "workspace-1",
+          role: WorkspaceRole.OWNER,
+          status: MembershipStatus.ACTIVE,
+          workspace: {
+            id: "workspace-1",
+            name: "Acme",
+            profileType: "startup",
+          },
+        },
+      ],
+    };
+    mocks.db.user.findFirst.mockResolvedValue(user);
+
+    const result = await passwordLoginAction({
+      identifier: "owner@example.com",
+      password: "Password123",
+      locale: "en-US",
+    });
+
+    expect(mocks.db.user.findFirst).toHaveBeenCalledWith({
+      where: { email: "owner@example.com" },
+      select: {
+        id: true,
+        email: true,
+        phone: true,
+        passwordHash: true,
+        lastLoginAt: true,
+        memberships: {
+          where: { status: { not: MembershipStatus.INACTIVE } },
+          orderBy: { createdAt: "asc" },
+          include: { workspace: true },
+        },
+      },
+    });
+    expect(result).toMatchObject({ ok: true, redirectTo: "/dashboard" });
+    expect(mocks.session.createSession).toHaveBeenCalledWith({
+      userId: "user-1",
+      email: "owner@example.com",
+      workspaceId: "workspace-1",
+      sourcePage: "/login",
+      providerType: "PASSWORD",
+    });
+  });
+
   it("returns a user-facing unavailable error when user lookup fails", async () => {
     mocks.db.user.findFirst.mockRejectedValue(new Error("database unavailable"));
 
