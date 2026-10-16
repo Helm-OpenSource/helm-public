@@ -42,11 +42,7 @@ type SettingsOverviewNavLabels = {
 type SettingsOverviewPanelsProps = {
   applyRecommendedPilotPreset: () => void;
   canApplyRecommendedPilotPreset: boolean;
-  connectorBannerMessage: string | null;
-  connectorBannerTone: "success" | "warning" | null;
-  diagnosticsEnabled: boolean;
   english: boolean;
-  navLabels: SettingsOverviewNavLabels;
   onReviewAuthControls: () => void;
   operatingReadiness: SettingsOperatingReadiness;
   recommendations: GuidanceItem[];
@@ -54,21 +50,22 @@ type SettingsOverviewPanelsProps = {
   stats: SettingsOverviewStats;
 };
 
+/**
+ * The settings guidance, safe-posture card, rule counts and operating
+ * readiness. Object-first (wave 4): these are system judgement, so the
+ * settings page renders this component only inside its single closing
+ * system judgement block (see CLAUDE.md "Object-first").
+ */
 export function SettingsOverviewPanels({
   applyRecommendedPilotPreset,
   canApplyRecommendedPilotPreset,
-  connectorBannerMessage,
-  connectorBannerTone,
-  diagnosticsEnabled,
   english,
-  navLabels,
   onReviewAuthControls,
   operatingReadiness,
   recommendations,
   reminders,
   stats,
 }: SettingsOverviewPanelsProps) {
-  const [preferencesOpen, setPreferencesOpen] = useState(false);
   const operatingCards = [
     {
       title: english ? "Ingress online" : "入口在线",
@@ -203,21 +200,6 @@ export function SettingsOverviewPanels({
               ) : null}
             </CardContent>
           </Card>
-          <details
-            className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 text-sm text-[color:var(--muted)]"
-            onToggle={(event) =>
-              setPreferencesOpen((event.currentTarget as HTMLDetailsElement).open)
-            }
-          >
-            <summary className="cursor-pointer list-none font-medium text-[color:var(--foreground)] marker:content-none [&::-webkit-details-marker]:hidden">
-              {english ? "Display options" : "显示选项"}
-            </summary>
-            {preferencesOpen ? (
-              <div className="mt-3">
-                <WorkspaceSurfacePreferences />
-              </div>
-            ) : null}
-          </details>
         </div>
       </div>
 
@@ -306,6 +288,26 @@ export function SettingsOverviewPanels({
         </CardContent>
       </Card>
 
+    </>
+  );
+}
+
+type SettingsCommonEntriesProps = {
+  diagnosticsEnabled: boolean;
+  english: boolean;
+  navLabels: SettingsOverviewNavLabels;
+};
+
+/** Links to the settings sub-surfaces and the per-viewer display options. */
+export function SettingsCommonEntries({
+  diagnosticsEnabled,
+  english,
+  navLabels,
+}: SettingsCommonEntriesProps) {
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
+
+  return (
+    <div className="workspace-surface-stack">
       <Card>
         <CardContent className="flex flex-col gap-4 py-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-2">
@@ -332,19 +334,46 @@ export function SettingsOverviewPanels({
         </CardContent>
       </Card>
 
-      {connectorBannerMessage && connectorBannerTone ? (
-        <Card
-          className={
-            connectorBannerTone === "success"
-              ? "border-[color:var(--status-success-border)] bg-[color:var(--status-success-bg)]/70"
-              : "border-[color:var(--status-warning-border)] bg-[color:var(--status-warning-bg)]/70"
-          }
-        >
-          <CardContent className="py-4 text-sm text-[color:var(--foreground)]">
-            {connectorBannerMessage}
-          </CardContent>
-        </Card>
-      ) : null}
-    </>
+      <details
+        className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 text-sm text-[color:var(--muted)]"
+        onToggle={(event) =>
+          setPreferencesOpen((event.currentTarget as HTMLDetailsElement).open)
+        }
+      >
+        <summary className="cursor-pointer list-none font-medium text-[color:var(--foreground)] marker:content-none [&::-webkit-details-marker]:hidden">
+          {english ? "Display options" : "显示选项"}
+        </summary>
+        {preferencesOpen ? (
+          <div className="mt-3">
+            <WorkspaceSurfacePreferences />
+          </div>
+        ) : null}
+      </details>
+    </div>
+  );
+}
+
+/** The OAuth callback result for the connector the viewer just returned from. */
+export function SettingsConnectorBanner({
+  message,
+  tone,
+}: {
+  message: string | null;
+  tone: "success" | "warning" | null;
+}) {
+  if (!message || !tone) return null;
+
+  return (
+    <Card
+      className={
+        tone === "success"
+          ? "border-[color:var(--status-success-border)] bg-[color:var(--status-success-bg)]/70"
+          : "border-[color:var(--status-warning-border)] bg-[color:var(--status-warning-bg)]/70"
+      }
+    >
+      <CardContent className="py-4 text-sm text-[color:var(--foreground)]">
+        {message}
+      </CardContent>
+    </Card>
   );
 }

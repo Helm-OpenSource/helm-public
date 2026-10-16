@@ -58,10 +58,8 @@ export function getWorkspaceStory(
       description: "",
     },
     memory: {
-      eyebrow: english ? "Customer asset trail" : "客户资产脉络",
-      description: english
-        ? "Every customer fact, promise, blocker and correction stays traceable."
-        : "客户事实、承诺、阻塞和修正都留在同一条脉络里。",
+      eyebrow: english ? "Customer memory" : "客户记忆",
+      description: "",
     },
     reports: {
       eyebrow: english ? "Weekly read" : "周复盘",
@@ -70,9 +68,7 @@ export function getWorkspaceStory(
     },
     settings: {
       eyebrow: english ? "Workspace settings" : "工作区设置",
-      description: english
-        ? "Ingress, review queue, team access, cost — check these so today doesn't get blocked."
-        : "入口、复核队列、团队权限、成本——先看一眼，免得今天被卡住。",
+      description: "",
     },
   };
 

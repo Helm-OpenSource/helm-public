@@ -55,12 +55,12 @@ const broaderOperationalSurfaces = [
   "app/(workspace)/meetings/page.tsx",
 ] as const;
 
-// /reports left this list in object-first wave 3: its focus strip is gone and the
-// object-first guard (object-first-workspace-guard.test.ts) now pins the page.
-// /settings stays until wave 4 reworks it.
+// /reports left this list in object-first wave 3 and /settings in wave 4: their
+// focus strips are gone from the first screen (settings keeps its strip only
+// inside the closing system judgement block) and the object-first guard
+// (object-first-workspace-guard.test.ts) now pins both pages.
 const sitewideCustomerAssetFocusSurfaces = [
   "features/imports/imports-client.tsx",
-  "features/settings/settings-client.tsx",
   "features/diagnostics/diagnostics-client.tsx",
   "features/analytics/analytics-client.tsx",
 ] as const;
@@ -1493,20 +1493,29 @@ describe("shared surface hierarchy guards", () => {
     expect(approvals).toContain('id="approval-queue"');
     expect(approvals).not.toContain("<BusinessFirstSurfaceSummary");
     expect(approvals).not.toContain("<WorkspaceGuidancePanel");
+    // Object-first (wave 4): the memory arrival contract and the meeting-memory
+    // wedge fold into the single closing data-system-judgement block; review
+    // candidates stay one plain disclosure after the timeline.
     expect(memory).toContain("<HomeSurfaceArrivalBanner");
-    expect(memory).toContain("<HomeSurfaceSecondaryDisclosure");
     expect(memory).toContain('kind="memory"');
     expect(memory).toContain("contract={{");
-    expect(memory).toContain('useHomeSurfaceArrival("memory")');
     expect(memory).toContain("ctaHref: `#${memoryLandingAnchor}`");
-    expect(memory).toContain("memoryHomeArrival.isHomeSurfaceArrival ? (");
     expect(memory).toContain("const memoryLandingDeferredContext = (");
     expect(memory).toContain(
       "const memoryMeetingWorkspaceContext = meetingStateSnapshot ? (",
     );
-    expect(memory).toContain('data-memory-home-meeting-secondary="true"');
-    expect(memory).toContain(
-      "Open meeting follow-through, governance and replay context only when needed",
+    expect(memory).toContain('data-memory-review-candidates="true"');
+    expect(memory).not.toContain("<HomeSurfaceSecondaryDisclosure");
+    const memoryJudgementStart = memory.indexOf("data-system-judgement");
+    expect(memoryJudgementStart).toBeGreaterThan(-1);
+    expect(memory.indexOf("<HomeSurfaceArrivalBanner")).toBeGreaterThan(
+      memoryJudgementStart,
+    );
+    expect(memory.indexOf("{memoryMeetingWorkspaceContext}")).toBeGreaterThan(
+      memoryJudgementStart,
+    );
+    expect(memory.indexOf("{memoryLandingDeferredContext}")).toBeLessThan(
+      memoryJudgementStart,
     );
     expect(contacts).toContain("<HomeSurfaceArrivalBanner");
     expect(contacts).toContain('kind="detail"');

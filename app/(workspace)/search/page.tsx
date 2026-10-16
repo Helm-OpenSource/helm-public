@@ -21,7 +21,10 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { RiskBadge } from "@/components/shared/risk-badge";
 import { StageBadge } from "@/components/shared/status-badges";
-import { SupportSurfaceNote } from "@/components/shared/support-surface-note";
+import {
+  SystemJudgementSummary,
+  systemJudgementDetailsClassName,
+} from "@/components/shared/system-judgement-summary";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -67,7 +70,9 @@ import {
 } from "@/features/search/display-copy";
 import {
   buildEmptySearchWorkspaceEntitiesResult,
+  loadRecentSearchObjects,
   searchWorkspaceEntities,
+  type SearchWorkspaceEntitiesResult,
 } from "@/features/search/queries";
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
 import { resolveWorkspaceUiLocaleForRequest } from "@/lib/i18n/request-locale.server";
@@ -119,6 +124,20 @@ export default async function SearchPage({
       )
     : { data: fallbackResults, degraded: false, reason: "ready" as const };
   const results = searchReadModel.data;
+  // Object-first: an empty object-mode query shows recently touched objects.
+  const recentObjectsReadModel =
+    !askMode && !q.trim()
+      ? await resolveOptionalSearchReadModel(
+          loadRecentSearchObjects(workspace.id),
+          fallbackResults,
+        )
+      : { data: fallbackResults, degraded: false, reason: "ready" as const };
+  const recentObjects = recentObjectsReadModel.data;
+  const recentObjectCount =
+    recentObjects.contacts.length +
+    recentObjects.companies.length +
+    recentObjects.opportunities.length +
+    recentObjects.meetings.length;
   const searchRelatedObjects = buildAskHelmRelatedObjectsFromSearchResults(results);
   const focusAreas = parseWorkspaceStringList(workspace.focusAreas);
   const shouldLoadAskBusinessContext = askMode && Boolean(q.trim());
@@ -221,8 +240,6 @@ export default async function SearchPage({
           memoryCandidates: memorySummaries,
         })
       : null;
-  const displayText = (value: string | null | undefined) =>
-    formatRoleDetailDisplayText(value, english);
   const total =
     results.contacts.length +
     results.companies.length +
@@ -246,11 +263,7 @@ export default async function SearchPage({
               ? "Find customers, opportunities, meetings, or ask for the next step"
               : "找客户、机会、会议；需要判断就提问"
         }
-        description={
-          english
-            ? "Search opens the source page. Questions return sources and a next step; nothing is sent or changed here."
-            : "先定位对象，再进入对应页面处理；提问只返回来源和下一步，不外发、不改状态。"
-        }
+        english={english}
       />
 
       <SearchModeForm
@@ -260,43 +273,16 @@ export default async function SearchPage({
         english={english}
       />
 
-      {searchReadModel.degraded ? (
-        <SearchReadModelStatus reason={searchReadModel.reason} english={english} />
+      {searchReadModel.degraded || recentObjectsReadModel.degraded ? (
+        <SearchReadModelStatus
+          reason={
+            searchReadModel.degraded
+              ? searchReadModel.reason
+              : recentObjectsReadModel.reason
+          }
+          english={english}
+        />
       ) : null}
-
-      <SupportSurfaceNote
-        label={english ? "Path note" : "路径附注"}
-        title={
-          english
-            ? "Pick the path by what you need next."
-            : "按你下一步要做什么来选。"
-        }
-        summary={
-          english
-            ? "Know the object? Search. Need a judgement? Ask, then open the linked business page."
-            : "知道对象就搜索；需要判断就提问，然后进入给出的业务页面。"
-        }
-        items={[
-          {
-            label: english ? "Object search" : "对象搜索",
-            value: english
-              ? "Contacts, companies, opportunities, meetings — straight to the right page."
-              : "联系人 · 公司 · 机会 · 会议——一步到达对应页面。",
-          },
-          {
-            label: english ? "Ask" : "提问",
-            value: english
-              ? "Read-only answers with citations. Never sends, never modifies, never decides for you."
-              : "只读回答，附引用来源。绝不发送、绝不改写、绝不替你决策。",
-          },
-          {
-            label: english ? "Where to actually act" : "真正动手在哪",
-            value: english
-              ? "Search and Ask both end in a link. Click through to the page where the work happens."
-              : "搜索和提问最后都会给一个链接。点进去那个页面才是真正做事的地方。",
-          },
-        ]}
-      />
 
       {askMode ? (
         <AskHelmMode
@@ -315,15 +301,28 @@ export default async function SearchPage({
           signalError={signalError}
         />
       ) : !q ? (
-        <EmptyState
-          icon={Search}
-          title={english ? "Type a name, a deal, or a question" : "输入名字、机会，或者一句问题"}
-          description={
-            english
-              ? "Vivian, Acme renewal, last week's product call — or 'who's gone cold this week?'"
-              : "「Vivian」、「Acme 续约」、「上周的产品会」——或者直接问「这周哪些客户在沉默」。"
-          }
-        />
+        recentObjectCount ? (
+          <section data-search-recent-objects className="space-y-3">
+            <p className="text-sm font-semibold text-[color:var(--foreground)]">
+              {english ? "Recently updated" : "最近更新的对象"}
+            </p>
+            <SearchResultSections
+              results={recentObjects}
+              english={english}
+              opportunityTypeLabels={opportunityTypeLabels}
+            />
+          </section>
+        ) : (
+          <EmptyState
+            icon={Search}
+            title={english ? "Type a name, a deal, or a question" : "输入名字、机会，或者一句问题"}
+            description={
+              english
+                ? "Vivian, Acme renewal, last week's product call — or 'who's gone cold this week?'"
+                : "「Vivian」、「Acme 续约」、「上周的产品会」——或者直接问「这周哪些客户在沉默」。"
+            }
+          />
+        )
       ) : total === 0 ? (
         <EmptyState
           icon={Search}
@@ -335,231 +334,294 @@ export default async function SearchPage({
           }
         />
       ) : (
-        <>
+        <section data-search-results className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <ResultStat
-              label={english ? "Contacts" : "联系人"}
-              value={results.contacts.length}
-              href="#search-contacts"
-            />
-            <ResultStat
-              label={english ? "Companies" : "公司"}
-              value={results.companies.length}
-              href="#search-companies"
-            />
-            <ResultStat
-              label={english ? "Opportunities" : "机会"}
-              value={results.opportunities.length}
-              href="#search-opportunities"
-            />
-            <ResultStat
-              label={english ? "Meetings" : "会议"}
-              value={results.meetings.length}
-              href="#search-meetings"
-            />
+            {results.contacts.length ? (
+              <ResultStat
+                label={english ? "Contacts" : "联系人"}
+                value={results.contacts.length}
+                href="#search-contacts"
+              />
+            ) : null}
+            {results.companies.length ? (
+              <ResultStat
+                label={english ? "Companies" : "公司"}
+                value={results.companies.length}
+                href="#search-companies"
+              />
+            ) : null}
+            {results.opportunities.length ? (
+              <ResultStat
+                label={english ? "Opportunities" : "机会"}
+                value={results.opportunities.length}
+                href="#search-opportunities"
+              />
+            ) : null}
+            {results.meetings.length ? (
+              <ResultStat
+                label={english ? "Meetings" : "会议"}
+                value={results.meetings.length}
+                href="#search-meetings"
+              />
+            ) : null}
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-2">
-            <Card id="search-contacts">
-              <CardHeader>
-                <CardTitle>{english ? "Contacts" : "联系人"}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {results.contacts.length ? (
-                  results.contacts.map((contact) => (
-                    <Link
-                      key={contact.id}
-                      href={`/contacts/${contact.id}`}
-                      aria-label={
-                        english
-                          ? `Open contact: ${contact.name}`
-                          : `打开联系人：${contact.name}`
-                      }
-                      className="block rounded-2xl border border-[color:var(--border)] px-4 py-4 transition hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-subtle)]"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Users className="h-4 w-4 text-[color:var(--muted-foreground)]" />
-                        <p className="font-medium text-[color:var(--foreground)]">
-                          {contact.name}
-                        </p>
-                      </div>
-                      <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-                        {displayText(contact.title) ||
-                          (english ? "No title" : "未填写职位")}{" "}
-                        ·{" "}
-                        {contact.company?.name ??
-                          (english ? "Independent contact" : "独立联系人")}
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {contact.opportunities
-                          .slice(0, 2)
-                          .map((opportunity) => (
-                            <Badge key={opportunity.id} variant="info">
-                              {opportunity.title}
-                            </Badge>
-                          ))}
-                      </div>
-                    </Link>
-                  ))
-                ) : (
-                  <InlineEmpty
-                    label={
-                      english ? "No matching contacts" : "没有匹配的联系人"
-                    }
-                  />
-                )}
-              </CardContent>
-            </Card>
-
-            <Card id="search-companies">
-              <CardHeader>
-                <CardTitle>{english ? "Companies" : "公司"}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {results.companies.length ? (
-                  results.companies.map((company) => (
-                    <Link
-                      key={company.id}
-                      href={`/companies/${company.id}`}
-                      aria-label={
-                        english
-                          ? `Open company: ${company.name}`
-                          : `打开公司：${company.name}`
-                      }
-                      className="block rounded-2xl border border-[color:var(--border)] px-4 py-4 transition hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-subtle)]"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Building2 className="h-4 w-4 text-[color:var(--muted-foreground)]" />
-                        <p className="font-medium text-[color:var(--foreground)]">
-                          {company.name}
-                        </p>
-                      </div>
-                      <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-                        {company.industry ??
-                          (english ? "No industry yet" : "未填写行业")}
-                      </p>
-                      <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-                        {trimText(
-                          formatSeededBusinessCopy(
-                            company.description,
-                            english,
-                          ),
-                        )}
-                      </p>
-                    </Link>
-                  ))
-                ) : (
-                  <InlineEmpty
-                    label={english ? "No matching companies" : "没有匹配的公司"}
-                  />
-                )}
-              </CardContent>
-            </Card>
-
-            <Card id="search-opportunities">
-              <CardHeader>
-                <CardTitle>{english ? "Opportunities" : "机会"}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {results.opportunities.length ? (
-                  results.opportunities.map((opportunity) => (
-                    <Link
-                      key={opportunity.id}
-                      href={`/opportunities?opportunityId=${opportunity.id}`}
-                      aria-label={
-                        english
-                          ? `Open opportunity: ${opportunity.title}`
-                          : `打开机会：${opportunity.title}`
-                      }
-                      className="block rounded-2xl border border-[color:var(--border)] px-4 py-4 transition hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-subtle)]"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            <Orbit className="h-4 w-4 text-[color:var(--muted-foreground)]" />
-                            <p className="font-medium text-[color:var(--foreground)]">
-                              {opportunity.title}
-                            </p>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Badge variant="default">
-                              {opportunityTypeLabels[opportunity.type]}
-                            </Badge>
-                            <StageBadge stage={opportunity.stage} />
-                          </div>
-                        </div>
-                        <RiskBadge risk={opportunity.riskLevel} />
-                      </div>
-                      <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-                        {trimText(
-                          formatSeededBusinessCopy(
-                            opportunity.nextAction,
-                            english,
-                          ),
-                        )}
-                      </p>
-                    </Link>
-                  ))
-                ) : (
-                  <InlineEmpty
-                    label={
-                      english ? "No matching opportunities" : "没有匹配的机会"
-                    }
-                  />
-                )}
-              </CardContent>
-            </Card>
-
-            <Card id="search-meetings">
-              <CardHeader>
-                <CardTitle>{english ? "Meetings" : "会议"}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {results.meetings.length ? (
-                  results.meetings.map((meeting) => (
-                    <Link
-                      key={meeting.id}
-                      href={`/meetings/${meeting.id}`}
-                      aria-label={
-                        english
-                          ? `Open meeting: ${meeting.title}`
-                          : `打开会议：${meeting.title}`
-                      }
-                      className="block rounded-2xl border border-[color:var(--border)] px-4 py-4 transition hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-subtle)]"
-                    >
-                      <div className="flex items-center gap-2">
-                        <CalendarDays className="h-4 w-4 text-[color:var(--muted-foreground)]" />
-                        <p className="font-medium text-[color:var(--foreground)]">
-                          {meeting.title}
-                        </p>
-                      </div>
-                      <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-                        {meeting.agenda
-                          ? formatSeededBusinessCopy(
-                              formatMeetingDisplayText(meeting.agenda, english),
-                              english,
-                            )
-                          : english
-                            ? "Open the meeting for briefing and post-meeting actions"
-                            : "查看会前简报与会后行动"}
-                      </p>
-                      <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
-                        {formatDateLabel(meeting.startsAt)}
-                      </p>
-                    </Link>
-                  ))
-                ) : (
-                  <InlineEmpty
-                    label={english ? "No matching meetings" : "没有匹配的会议"}
-                  />
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </>
+          <SearchResultSections
+            results={results}
+            english={english}
+            opportunityTypeLabels={opportunityTypeLabels}
+          />
+        </section>
       )}
+
+      <details className={systemJudgementDetailsClassName} data-system-judgement>
+        <SystemJudgementSummary english={english} />
+        <div className="space-y-4 px-5 pb-5" data-search-path-note>
+          <p className="text-sm leading-6 text-[color:var(--muted)]">
+            {english
+              ? "Know the object? Search. Need a judgement? Ask, then open the linked business page. Search opens the source page. Questions return sources and a next step; nothing is sent or changed here."
+              : "知道对象就搜索；需要判断就提问，然后进入给出的业务页面。先定位对象，再进入对应页面处理；提问只返回来源和下一步，不外发、不改状态。"}
+          </p>
+          <div className="grid gap-3 md:grid-cols-3">
+            {[
+              {
+                label: english ? "Object search" : "对象搜索",
+                value: english
+                  ? "Contacts, companies, opportunities, meetings — straight to the right page."
+                  : "联系人 · 公司 · 机会 · 会议——一步到达对应页面。",
+              },
+              {
+                label: english ? "Ask" : "提问",
+                value: english
+                  ? "Read-only answers with citations. Never sends, never modifies, never decides for you."
+                  : "只读回答，附引用来源。绝不发送、绝不改写、绝不替你决策。",
+              },
+              {
+                label: english ? "Where to actually act" : "真正动手在哪",
+                value: english
+                  ? "Search and Ask both end in a link. Click through to the page where the work happens."
+                  : "搜索和提问最后都会给一个链接。点进去那个页面才是真正做事的地方。",
+              },
+            ].map((item) => (
+              <div key={item.label} className="workspace-panel rounded-lg px-4 py-4">
+                <p className="text-xs font-medium text-[color:var(--muted-foreground)]">
+                  {item.label}
+                </p>
+                <p className="mt-2 text-sm leading-7 text-[color:var(--foreground)]">
+                  {item.value}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </details>
     </div>
   );
+}
+
+/**
+ * One list per object type for search results and for the recent objects shown
+ * on an empty query. Object types without a hit are not rendered.
+ */
+function SearchResultSections({
+  results,
+  english,
+  opportunityTypeLabels,
+}: {
+  results: SearchWorkspaceEntitiesResult;
+  english: boolean;
+  opportunityTypeLabels: ReturnType<typeof getLocalizedOpportunityTypeLabels>;
+}) {
+  const displayText = (value: string | null | undefined) =>
+    formatRoleDetailDisplayText(value, english);
+
+  return (
+    <div className="grid gap-6 xl:grid-cols-2">
+      {results.contacts.length ? (
+        <Card id="search-contacts">
+          <CardHeader>
+            <CardTitle>{english ? "Contacts" : "联系人"}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {results.contacts.map((contact) => (
+              <Link
+                key={contact.id}
+                href={`/contacts/${contact.id}`}
+                aria-label={
+                  english
+                    ? `Open contact: ${contact.name}`
+                    : `打开联系人：${contact.name}`
+                }
+                className="block rounded-2xl border border-[color:var(--border)] px-4 py-4 transition hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-subtle)]"
+              >
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-[color:var(--muted-foreground)]" />
+                  <p className="font-medium text-[color:var(--foreground)]">
+                    {contact.name}
+                  </p>
+                </div>
+                {contact.email ? (
+                  <p
+                    className="mt-1 text-sm text-[color:var(--muted-foreground)]"
+                    data-search-contact-email
+                  >
+                    {contact.email}
+                  </p>
+                ) : null}
+                <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
+                  {displayText(contact.title) ||
+                    (english ? "No title" : "未填写职位")}{" "}
+                  ·{" "}
+                  {contact.company?.name ??
+                    (english ? "Independent contact" : "独立联系人")}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {contact.opportunities
+                    .slice(0, 2)
+                    .map((opportunity) => (
+                      <Badge key={opportunity.id} variant="info">
+                        {opportunity.title}
+                      </Badge>
+                    ))}
+                </div>
+              </Link>
+            ))}
+        </CardContent>
+      </Card>
+    ) : null}
+
+    {results.companies.length ? (
+      <Card id="search-companies">
+        <CardHeader>
+          <CardTitle>{english ? "Companies" : "公司"}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {results.companies.map((company) => (
+              <Link
+                key={company.id}
+                href={`/companies/${company.id}`}
+                aria-label={
+                  english
+                    ? `Open company: ${company.name}`
+                    : `打开公司：${company.name}`
+                }
+                className="block rounded-2xl border border-[color:var(--border)] px-4 py-4 transition hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-subtle)]"
+              >
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-[color:var(--muted-foreground)]" />
+                  <p className="font-medium text-[color:var(--foreground)]">
+                    {company.name}
+                  </p>
+                </div>
+                <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
+                  {company.industry ??
+                    (english ? "No industry yet" : "未填写行业")}
+                </p>
+                <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
+                  {trimText(
+                    formatSeededBusinessCopy(
+                      company.description,
+                      english,
+                    ),
+                  )}
+                </p>
+              </Link>
+            ))}
+        </CardContent>
+      </Card>
+    ) : null}
+
+    {results.opportunities.length ? (
+      <Card id="search-opportunities">
+        <CardHeader>
+          <CardTitle>{english ? "Opportunities" : "机会"}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {results.opportunities.map((opportunity) => (
+              <Link
+                key={opportunity.id}
+                href={`/opportunities?opportunityId=${opportunity.id}`}
+                aria-label={
+                  english
+                    ? `Open opportunity: ${opportunity.title}`
+                    : `打开机会：${opportunity.title}`
+                }
+                className="block rounded-2xl border border-[color:var(--border)] px-4 py-4 transition hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-subtle)]"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Orbit className="h-4 w-4 text-[color:var(--muted-foreground)]" />
+                      <p className="font-medium text-[color:var(--foreground)]">
+                        {opportunity.title}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="default">
+                        {opportunityTypeLabels[opportunity.type]}
+                      </Badge>
+                      <StageBadge stage={opportunity.stage} />
+                    </div>
+                  </div>
+                  <RiskBadge risk={opportunity.riskLevel} />
+                </div>
+                <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
+                  {trimText(
+                    formatSeededBusinessCopy(
+                      opportunity.nextAction,
+                      english,
+                    ),
+                  )}
+                </p>
+              </Link>
+            ))}
+        </CardContent>
+      </Card>
+    ) : null}
+
+    {results.meetings.length ? (
+      <Card id="search-meetings">
+        <CardHeader>
+          <CardTitle>{english ? "Meetings" : "会议"}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {results.meetings.map((meeting) => (
+              <Link
+                key={meeting.id}
+                href={`/meetings/${meeting.id}`}
+                aria-label={
+                  english
+                    ? `Open meeting: ${meeting.title}`
+                    : `打开会议：${meeting.title}`
+                }
+                className="block rounded-2xl border border-[color:var(--border)] px-4 py-4 transition hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-subtle)]"
+              >
+                <div className="flex items-center gap-2">
+                  <CalendarDays className="h-4 w-4 text-[color:var(--muted-foreground)]" />
+                  <p className="font-medium text-[color:var(--foreground)]">
+                    {meeting.title}
+                  </p>
+                </div>
+                <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
+                  {meeting.agenda
+                    ? formatSeededBusinessCopy(
+                        formatMeetingDisplayText(meeting.agenda, english),
+                        english,
+                      )
+                    : english
+                      ? "Open the meeting for briefing and post-meeting actions"
+                      : "查看会前简报与会后行动"}
+                </p>
+                <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
+                  {formatDateLabel(meeting.startsAt)}
+                </p>
+              </Link>
+            ))}
+        </CardContent>
+      </Card>
+    ) : null}
+  </div>
+);
 }
 
 function parseWorkspaceStringList(value?: string | null) {
@@ -944,34 +1006,11 @@ function AskHelmMode({
 
   return (
     <div data-testid="ask-helm-mode" className="space-y-5">
-      <AskHelmLayeredAnswerPanel
-        response={response}
-        businessSignals={businessSignals}
-        businessContextDegraded={businessContextDegraded}
-        runtimeContext={runtimeContext}
-        english={english}
-      />
-
-      <AskHelmSignalIntakePanel
-        sourceQuery={q}
-        response={response}
-        recentSignalCandidates={recentSignalCandidates}
-        signalCandidatesDegraded={signalCandidatesDegraded}
-        signalSubmitted={signalSubmitted}
-        signalError={signalError}
-        english={english}
-      />
-
       <section data-testid="ask-helm-related-objects" className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-[color:var(--foreground)]">
               {english ? "Related objects" : "相关对象"}
-            </p>
-            <p className="text-sm text-[color:var(--muted-foreground)]">
-              {english
-                ? "Objects stay first when the question points to real workspace records."
-                : "问题指向真实工作区对象时，对象结果优先展示。"}
             </p>
           </div>
           <Badge variant="neutral">
@@ -1043,6 +1082,24 @@ function AskHelmMode({
           </div>
         )}
       </section>
+
+      <AskHelmLayeredAnswerPanel
+        response={response}
+        businessSignals={businessSignals}
+        businessContextDegraded={businessContextDegraded}
+        runtimeContext={runtimeContext}
+        english={english}
+      />
+
+      <AskHelmSignalIntakePanel
+        sourceQuery={q}
+        response={response}
+        recentSignalCandidates={recentSignalCandidates}
+        signalCandidatesDegraded={signalCandidatesDegraded}
+        signalSubmitted={signalSubmitted}
+        signalError={signalError}
+        english={english}
+      />
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div
@@ -2368,13 +2425,5 @@ function ResultStat({
         </CardContent>
       </Card>
     </Link>
-  );
-}
-
-function InlineEmpty({ label }: { label: string }) {
-  return (
-    <div className="theme-surface-panel-dashed rounded-2xl px-4 py-6 text-sm text-[color:var(--muted-foreground)]">
-      {label}
-    </div>
   );
 }

@@ -23,7 +23,7 @@ import {
   formatSettingsPromptVersion,
 } from "@/features/settings/display-copy";
 import { formatAccountDateLabel } from "./account-date-labels";
-import { Info, StatusHint } from "./settings-display";
+import { Info } from "./settings-display";
 
 type AccountTabData = Pick<
   SettingsClientProps["data"],
@@ -46,11 +46,8 @@ type OrganizationDraft = {
 type AccountSettingsTabProps = {
   createOrganization: () => void;
   crmSources: SettingsClientProps["data"]["importSources"];
-  currentAccessStateLabel: string;
   data: AccountTabData;
-  defaultStrategiesSummary: string;
   english: boolean;
-  focusAreasSummary: string;
   llmDraft: LlmDraft;
   llmConfig: LlmConfig;
   organizationDraft: OrganizationDraft;
@@ -67,11 +64,8 @@ type AccountSettingsTabProps = {
 export function AccountSettingsTab({
   createOrganization,
   crmSources,
-  currentAccessStateLabel,
   data,
-  defaultStrategiesSummary,
   english,
-  focusAreasSummary,
   llmDraft,
   llmConfig,
   organizationDraft,
@@ -85,6 +79,7 @@ export function AccountSettingsTab({
   switchOrganization,
 }: AccountSettingsTabProps) {
   const canManageWorkspaceSetup = data.organizationSummary.canManageWorkspaceSetup;
+  const settingsAdminView = data.organizationSummary.settingsAdminView ?? true;
   const selectedModelIds = [
     llmDraft.defaultModel,
     llmDraft.extractionModel,
@@ -107,63 +102,37 @@ export function AccountSettingsTab({
 
   return (
     <TabsContent value="account">
-      <div className="grid gap-6 lg:grid-cols-[1fr_0.9fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>{english ? "Organization info" : "组织信息"}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Info
-              label={english ? "Workspace name" : "工作区名称"}
-              value={data.workspace?.name ?? (english ? "Not set" : "未设置")}
+      <Card>
+        <CardHeader>
+          <CardTitle>{english ? "Recent notifications" : "最近通知"}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {data.notifications.length ? (
+            data.notifications.map((notification) => (
+              <div key={notification.id} className="theme-surface-panel rounded-2xl px-4 py-4">
+                <p className="font-medium text-[color:var(--foreground)]">
+                  {formatShellAlertText(notification.title, english)}
+                </p>
+                <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
+                  {formatShellAlertText(notification.body, english)}
+                </p>
+                <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
+                  {formatAccountDateLabel(notification.createdAt, english)}
+                </p>
+              </div>
+            ))
+          ) : (
+            <EmptyState
+              title={english ? "No notifications yet" : "还没有通知"}
+              description={
+                english
+                  ? "Approval reminders, high-risk opportunities and meeting prompts will accumulate here."
+                  : "审批提醒、高风险机会和会议提醒会在这里沉淀。"
+              }
             />
-            <Info label={english ? "Current state" : "当前状态"} value={currentAccessStateLabel} />
-            <Info
-              label={english ? "Default persona" : "默认身份"}
-              value={data.workspace?.profileType ?? (english ? "Not set" : "未设置")}
-            />
-            <Info
-              label={english ? "Focus areas" : "关注目标"}
-              value={focusAreasSummary}
-            />
-            <Info
-              label={english ? "Default strategies" : "默认策略"}
-              value={defaultStrategiesSummary}
-            />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>{english ? "Recent notifications" : "最近通知"}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {data.notifications.length ? (
-              data.notifications.map((notification) => (
-                <div key={notification.id} className="theme-surface-panel rounded-2xl px-4 py-4">
-                  <p className="font-medium text-[color:var(--foreground)]">
-                    {formatShellAlertText(notification.title, english)}
-                  </p>
-                  <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-                    {formatShellAlertText(notification.body, english)}
-                  </p>
-                  <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
-                    {formatAccountDateLabel(notification.createdAt, english)}
-                  </p>
-                </div>
-              ))
-            ) : (
-              <EmptyState
-                title={english ? "No notifications yet" : "还没有通知"}
-                description={
-                  english
-                    ? "Approval reminders, high-risk opportunities and meeting prompts will accumulate here."
-                    : "审批提醒、高风险机会和会议提醒会在这里沉淀。"
-                }
-              />
-            )}
-          </CardContent>
-        </Card>
-      </div>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_0.9fr]">
         <Card>
@@ -260,7 +229,7 @@ export function AccountSettingsTab({
         </Card>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+      {settingsAdminView ? (
         <Card>
           <CardHeader>
             <CardTitle>{english ? "Governance and compliance boundary" : "治理与合规边界"}</CardTitle>
@@ -327,58 +296,9 @@ export function AccountSettingsTab({
             </div>
           </CardContent>
         </Card>
+      ) : null}
 
-        <Card>
-          <CardHeader>
-            <CardTitle>{english ? "Walkthrough readiness prompts" : "走查前提醒"}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <StatusHint
-              tone={data.governanceSummary.pendingApprovals > 0 ? "warning" : "success"}
-              title={
-                data.governanceSummary.pendingApprovals > 0
-                  ? english
-                    ? "The approval queue still has waiting actions"
-                    : "复核队列里还有待处理动作"
-                  : english
-                    ? "The approval queue is currently clean"
-                    : "复核队列当前干净"
-              }
-              body={
-                data.governanceSummary.pendingApprovals > 0
-                  ? english
-                    ? "Before a live walkthrough, clear high-risk pending reviews so the dashboard and review center do not show unexpected red items."
-                    : "现场走查前建议先清掉高风险待复核项，避免首页和复核中心出现未预期的红点。"
-                  : english
-                    ? "The current approval boundary looks stable enough for a live demo or pilot walkthrough."
-                    : "当前复核边界比较稳定，适合直接进入演示或现场走查。"
-              }
-            />
-            <StatusHint
-              tone={data.governanceSummary.llmFallbacks7d > 0 ? "warning" : "success"}
-              title={
-                data.governanceSummary.llmFallbacks7d > 0
-                  ? english
-                    ? "Recent safe fallback occurred"
-                    : "最近出现过安全兜底"
-                  : english
-                    ? "No recent safe fallback"
-                    : "最近没有新的安全兜底"
-              }
-              body={
-                data.governanceSummary.llmFallbacks7d > 0
-                  ? english
-                    ? "This does not mean the whole chain failed, but service configuration and quota should be checked before a live walkthrough."
-                    : "这不代表链路失败，但现场走查前最好确认判断服务配置与调用额度。"
-                  : english
-                    ? "In the most recent data, the assisted flow has largely stayed usable."
-                    : "说明最近一轮数据里，辅助判断链路基本可用。"
-              }
-            />
-          </CardContent>
-        </Card>
-      </div>
-
+      {settingsAdminView ? (
       <details className="rounded-[28px] border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-4">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-[color:var(--foreground)] marker:content-none [&::-webkit-details-marker]:hidden">
           <span>
@@ -711,6 +631,75 @@ export function AccountSettingsTab({
         </CardContent>
       </Card>
       </details>
+      ) : null}
     </TabsContent>
+  );
+}
+
+type SettingsOrganizationCardProps = {
+  currentAccessStateLabel: string;
+  defaultStrategiesSummary: string;
+  english: boolean;
+  focusAreasSummary: string;
+  roleLabelsByLocale: Record<string, string>;
+  viewer: {
+    name: string;
+    email: string;
+    role: string;
+    title: string | null;
+  } | null;
+  workspace: SettingsClientProps["data"]["workspace"];
+};
+
+/**
+ * Object-first (wave 4): the organisation and the viewer's own identity open
+ * /settings, before any tab or system judgement.
+ */
+export function SettingsOrganizationCard({
+  currentAccessStateLabel,
+  defaultStrategiesSummary,
+  english,
+  focusAreasSummary,
+  roleLabelsByLocale,
+  viewer,
+  workspace,
+}: SettingsOrganizationCardProps) {
+  const notSet = english ? "Not set" : "未设置";
+
+  return (
+    <Card data-settings-organization-facts="true">
+      <CardHeader>
+        <CardTitle>{english ? "Organization info" : "组织信息"}</CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Info
+          label={english ? "Workspace name" : "工作区名称"}
+          value={workspace?.name ?? notSet}
+        />
+        <Info label={english ? "Current state" : "当前状态"} value={currentAccessStateLabel} />
+        {viewer ? (
+          <div data-settings-viewer-identity="true" className="contents">
+            <Info
+              label={english ? "You" : "你"}
+              value={viewer.title ? `${viewer.name} · ${viewer.title}` : viewer.name}
+            />
+            <Info label={english ? "Email" : "邮箱"} value={viewer.email} />
+            <Info
+              label={english ? "Your role" : "你的角色"}
+              value={roleLabelsByLocale[viewer.role] ?? viewer.role}
+            />
+          </div>
+        ) : null}
+        <Info
+          label={english ? "Default persona" : "默认身份"}
+          value={workspace?.profileType ?? notSet}
+        />
+        <Info label={english ? "Focus areas" : "关注目标"} value={focusAreasSummary} />
+        <Info
+          label={english ? "Default strategies" : "默认策略"}
+          value={defaultStrategiesSummary}
+        />
+      </CardContent>
+    </Card>
   );
 }

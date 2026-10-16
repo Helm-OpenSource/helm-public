@@ -66,6 +66,24 @@ export function resolveInitialSettingsTab(value: string | null | undefined): Set
   return "account";
 }
 
+/**
+ * Viewers who do not administer settings get the account and permissions tabs;
+ * reviewers additionally read the rules tab (owner decision on #467). The other
+ * tabs depend on workspace-wide loads that are skipped for them, so a deep link
+ * falls back to the account tab.
+ */
+export function resolveSettingsTabForView(
+  value: string | null | undefined,
+  settingsAdminView: boolean,
+  policyRulesReadable = false,
+): SettingsTab {
+  const tab = resolveInitialSettingsTab(value);
+  if (settingsAdminView || tab === "account" || tab === "permissions") {
+    return tab;
+  }
+  return tab === "policies" && policyRulesReadable ? tab : "account";
+}
+
 export type SettingsConnectorCallbackStatus =
   | "SUCCESS"
   | "FAILURE"

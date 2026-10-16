@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { WorkspaceRole } from "@prisma/client";
 import {
+  canAdministerWorkspaceSettings,
+  canReadWorkspacePolicyRules,
   canExportWorkspaceAdminSupportPack,
   canManageWorkspaceMembers,
   canManageWorkspaceOperationalControls,
@@ -13,6 +15,37 @@ import {
 } from "@/lib/auth/settings-governance";
 
 describe("settings governance auth seam", () => {
+  it("gives the full settings view to roles that administer any part of settings", () => {
+    for (const role of [
+      WorkspaceRole.OWNER,
+      WorkspaceRole.BILLING_ADMIN,
+      WorkspaceRole.ADMIN,
+      WorkspaceRole.OPERATOR,
+    ]) {
+      expect(canAdministerWorkspaceSettings(role)).toBe(true);
+    }
+
+    for (const role of [WorkspaceRole.REVIEWER, WorkspaceRole.MEMBER, null, undefined]) {
+      expect(canAdministerWorkspaceSettings(role)).toBe(false);
+    }
+  });
+
+  it("lets reviewers read policy rules without the admin view; members cannot", () => {
+    for (const role of [
+      WorkspaceRole.OWNER,
+      WorkspaceRole.BILLING_ADMIN,
+      WorkspaceRole.ADMIN,
+      WorkspaceRole.OPERATOR,
+      WorkspaceRole.REVIEWER,
+    ]) {
+      expect(canReadWorkspacePolicyRules(role)).toBe(true);
+    }
+
+    for (const role of [WorkspaceRole.MEMBER, null, undefined]) {
+      expect(canReadWorkspacePolicyRules(role)).toBe(false);
+    }
+  });
+
   it("keeps member management on owner, billing admin and admin roles", () => {
     for (const role of [WorkspaceRole.OWNER, WorkspaceRole.BILLING_ADMIN, WorkspaceRole.ADMIN]) {
       expect(canManageWorkspaceMembers(role)).toBe(true);

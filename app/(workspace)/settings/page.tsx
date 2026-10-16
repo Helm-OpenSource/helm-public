@@ -1,3 +1,5 @@
+import type { AccessState, WorkspaceRole } from "@prisma/client";
+import { canAdministerWorkspaceSettings } from "@/lib/auth/settings-governance";
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
 import { getSettingsData } from "@/features/settings/queries";
 import { SettingsClient } from "@/features/settings/settings-client";
@@ -16,7 +18,12 @@ import {
   getWorkspaceLLMConfig,
   isLLMProviderConfigured,
 } from "@/lib/llm/config";
-import { getDefaultLocalGemmaModel, getLLMModelCatalog, probeOpenAICompatibleModels } from "@/lib/llm/model-catalog";
+import {
+  getDefaultLocalGemmaModel,
+  getLLMModelCatalog,
+  probeOpenAICompatibleModels,
+  type LLMConnectionProbe,
+} from "@/lib/llm/model-catalog";
 import { getRegisteredPromptSummaries } from "@/lib/llm/prompt-registry";
 import { listRegisteredProviders } from "@/lib/llm/provider-registry";
 
@@ -38,6 +45,8 @@ export default async function SettingsPage({
   const props = await loadSettingsClientProps({
     workspaceId: session.workspace.id,
     userId: session.user.id,
+    viewerRole: session.membership.role,
+    viewerAccessState: session.accessState,
     searchParams,
   });
 
@@ -48,9 +57,26 @@ export default async function SettingsPage({
   </>;
 }
 
+// Members and reviewers do not see the judgement-service section, so the live
+// endpoint probe (a network call on every visit) only runs for viewers who
+// administer settings.
+function buildSkippedConnectionProbe(): LLMConnectionProbe {
+  return {
+    baseUrl: "",
+    hasCredential: false,
+    reachable: false,
+    availableModelIds: [],
+    errorMessage: null,
+    checkedAt: new Date().toISOString(),
+    probeMode: "healthz",
+  };
+}
+
 async function loadSettingsClientProps(input: {
   workspaceId: string;
   userId: string;
+  viewerRole: WorkspaceRole;
+  viewerAccessState: AccessState;
   searchParams: Promise<{
     tab?: string;
     connector?: string;
@@ -61,17 +87,23 @@ async function loadSettingsClientProps(input: {
   }>;
 }): Promise<SettingsClientProps> {
   try {
-    const data = await getSettingsData(input.workspaceId, input.userId);
+    const settingsAdminView = canAdministerWorkspaceSettings(input.viewerRole);
+    const data = await getSettingsData(input.workspaceId, input.userId, {
+      role: input.viewerRole,
+      accessState: input.viewerAccessState,
+    });
     const llmConfig = await getWorkspaceLLMConfig(input.workspaceId);
     const connectorState = await input.searchParams;
     const providerSummaries = listRegisteredProviders();
     const promptSummaries = getRegisteredPromptSummaries();
     const modelCatalog = getLLMModelCatalog();
-    const connectionProbe = await probeOpenAICompatibleModels({
-      provider: llmConfig.provider,
-      apiKey: getOpenAICompatibleApiKey(llmConfig.provider),
-      baseUrl: getOpenAICompatibleBaseUrl(llmConfig.provider),
-    });
+    const connectionProbe = settingsAdminView
+      ? await probeOpenAICompatibleModels({
+          provider: llmConfig.provider,
+          apiKey: getOpenAICompatibleApiKey(llmConfig.provider),
+          baseUrl: getOpenAICompatibleBaseUrl(llmConfig.provider),
+        })
+      : buildSkippedConnectionProbe();
 
     return {
       data,
