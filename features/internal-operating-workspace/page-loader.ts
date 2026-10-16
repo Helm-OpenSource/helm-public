@@ -18,14 +18,13 @@ import {
 import {
   getDingTalkWorkflowHealth,
   getInternalOperatingRuntimeOverview,
+  getInternalOperatingHomeWorkspaceData,
   getInternalOperatingRoleData,
-  getInternalOperatingWorkspaceData,
 } from "@/features/internal-operating-workspace/queries";
 import {
   internalOperatingRoles,
   type InternalOperatingRole,
 } from "@/lib/internal-operating-workspace";
-import { getWorkspaceFirstLoopModel } from "@/lib/operating-system/first-loop-query";
 import { getWorkspaceTenantResourceOperatingImpactReadout } from "@/lib/tenant-resources/workspace-operating-impact-query";
 
 export async function loadInternalOperatingHomePageData() {
@@ -48,27 +47,18 @@ export async function loadInternalOperatingHomePageData() {
     },
   });
   const [
-    model,
+    { model, reviewActions },
     runtimeOverview,
     dingtalkWorkflowHealth,
-    firstLoopModel,
     tenantResourceImpactReadout,
   ] = await Promise.all([
-    getInternalOperatingWorkspaceData(workspace.id, english, {
+    getInternalOperatingHomeWorkspaceData(workspace.id, english, {
       workspace,
       membershipRole: session.membership.role,
       groupScopeUserIds,
     }),
     getInternalOperatingRuntimeOverview(workspace.id),
     getDingTalkWorkflowHealth(workspace.id),
-    getWorkspaceFirstLoopModel({
-      workspaceId: workspace.id,
-      currentUserId: user.id,
-      locale,
-      membershipRole: session.membership.role,
-      profileType: workspace.profileType,
-      focusAreasJson: workspace.focusAreas,
-    }),
     getWorkspaceTenantResourceOperatingImpactReadout({
       workspaceId: workspace.id,
       actorUserId: user.id,
@@ -98,9 +88,9 @@ export async function loadInternalOperatingHomePageData() {
     accessState: session.accessState,
     canManageRuntime: canManageWorkspaceRuntime(session.membership.role),
     canReviewRuntime: canReviewWorkspaceRuntime(session.membership.role),
-    firstLoopModel,
     tenantResourceImpactReadout,
     model,
+    reviewActions,
     runtimeOverview,
     dingtalkWorkflowHealth,
   };

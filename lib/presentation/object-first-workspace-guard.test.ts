@@ -3,6 +3,10 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { DemoMode } from "@/lib/demo/demo-modes";
 import type { UiLocale } from "@/lib/i18n/config";
+import {
+  SYSTEM_JUDGEMENT_ATTRIBUTE,
+  splitSystemJudgementBlocks,
+} from "@/lib/presentation/system-judgement-blocks";
 import { getWorkspaceStory } from "@/lib/presentation/workspace-story";
 
 // 对象优先守卫（2026-10-15 起，见 CLAUDE.md「对象优先」）。
@@ -26,8 +30,6 @@ const root = path.resolve(__dirname, "..", "..");
 function read(relativePath: string) {
   return readFileSync(path.join(root, relativePath), "utf8");
 }
-
-const SYSTEM_JUDGEMENT_ATTRIBUTE = "data-system-judgement";
 
 const bannedJudgementPhrases =
   /当前压力|下一步判断|缺结果口径|Helm 提醒|人类主导|依据与来源|为什么现在需要处理|现在先改什么/;
@@ -177,47 +179,68 @@ const workspaceViews: readonly WorkspaceView[] = [
   {
     id: "inbox",
     route: "/inbox",
-    status: "pending",
-    wave: 3,
-    reason:
-      "第 3 波：删除「当前压力 / 下一步判断」条 / wave 3 removes the pressure strip",
+    status: "enforced",
     files: ["app/(workspace)/inbox/page.tsx", "features/inbox/inbox-client.tsx"],
+    regressionPatterns: [
+      /<CustomerAssetFocusStrip\b/,
+      /eyebrow=\{english \? "Customer thread"/,
+      /Reply, turn into an opportunity, or schedule a meeting|回复、升级成机会，或建会/,
+      /Thread judgement|线程判断/,
+      /Read full content|查看完整内容/,
+      /will not send or write back email|阿里邮箱不会回写或发送邮件/,
+      /trimText\(/,
+    ],
+    leadingObjectMarkers: [
+      "data-inbox-thread-facts",
+      "<EmailThreadTranscript",
+      "data-inbox-thread-actions",
+    ],
   },
   {
     id: "approvals",
     route: "/approvals",
-    status: "pending",
-    wave: 3,
-    reason:
-      "第 3 波：卡片改显示草稿正文和发起人 / wave 3 shows draft body and requester on cards",
+    status: "enforced",
     files: [
       "app/(workspace)/approvals/page.tsx",
       "features/approvals/approvals-client.tsx",
     ],
+    regressionPatterns: [
+      /<BoundaryBar\b/,
+      /<CustomerAssetFocusStrip\b/,
+      /"Action state"|"动作状态"/,
+      /Reason chain first view|首屏理由链/,
+    ],
+    leadingObjectMarkers: ['id="approval-queue"', "data-approval-draft-body"],
   },
   {
     id: "reports",
     route: "/reports",
-    status: "pending",
-    wave: 3,
-    reason:
-      "第 3 波：遗漏和高风险清单前置 / wave 3 moves the missed and high-risk lists first",
+    status: "enforced",
     files: [
       "app/(workspace)/reports/page.tsx",
       "features/reports/reports-client.tsx",
     ],
+    regressionPatterns: [
+      /<CustomerAssetFocusStrip\b/,
+      /All manager signals|汇报视角/,
+      /"Manager read"|负责人速读/,
+    ],
+    leadingObjectMarkers: ["data-reports-risk-lists"],
   },
   {
     id: "operating",
     route: "/operating",
-    status: "pending",
-    wave: 3,
-    reason:
-      "第 3 波：移走 fixture 信号流图，展开工作清单 / wave 3 drops the fixture flow map and opens the work list",
+    status: "enforced",
     files: [
       "app/(workspace)/operating/page.tsx",
       "features/internal-operating-workspace/internal-operating-home.tsx",
     ],
+    regressionPatterns: [
+      /<BoundaryBar\b/,
+      /<OperatingSignalFlowMap\b/,
+      /void businessLoopGapReadout/,
+    ],
+    leadingObjectMarkers: ["data-operating-work-list"],
   },
   {
     id: "memory",
@@ -266,18 +289,8 @@ const workspaceStoryPages: ReadonlyArray<{ page: StoryPage } & ViewStatus> = [
     reason:
       "由 feat/opportunities-customer-first 分支改造 / reworked on the opportunities customer-first branch",
   },
-  {
-    page: "approvals",
-    status: "pending",
-    wave: 3,
-    reason: "第 3 波 / wave 3",
-  },
-  {
-    page: "reports",
-    status: "pending",
-    wave: 3,
-    reason: "第 3 波 / wave 3",
-  },
+  { page: "approvals", status: "enforced" },
+  { page: "reports", status: "enforced" },
   {
     page: "memory",
     status: "pending",
@@ -299,61 +312,6 @@ const demoModes: ReadonlyArray<DemoMode | null> = [
   "sales",
   "recruiter",
 ];
-
-function findOpeningTagEnd(source: string, start: number) {
-  let braceDepth = 0;
-  for (let index = start; index < source.length; index += 1) {
-    const char = source[index];
-    if (char === "{") braceDepth += 1;
-    else if (char === "}") braceDepth -= 1;
-    else if (char === ">" && braceDepth === 0) return index;
-  }
-  return -1;
-}
-
-function findMatchingDetailsClose(source: string, start: number) {
-  const tokens = /<details\b|<\/details>/g;
-  tokens.lastIndex = start;
-  let depth = 0;
-  for (
-    let match = tokens.exec(source);
-    match !== null;
-    match = tokens.exec(source)
-  ) {
-    depth += match[0] === "</details>" ? -1 : 1;
-    if (depth === 0) return match.index + match[0].length;
-  }
-  return -1;
-}
-
-/**
- * Removes every `<details data-system-judgement …>…</details>` block and
- * returns what is left, how many blocks there were, and their opening tags.
- */
-function splitSystemJudgementBlocks(file: string, source: string) {
-  let outside = source;
-  const openingTags: string[] = [];
-  let attributeIndex = outside.indexOf(SYSTEM_JUDGEMENT_ATTRIBUTE);
-
-  while (attributeIndex >= 0) {
-    const start = outside.lastIndexOf("<details", attributeIndex);
-    if (start < 0 || outside.slice(start + 1, attributeIndex).includes("<")) {
-      throw new Error(
-        `${file}: ${SYSTEM_JUDGEMENT_ATTRIBUTE} must sit on a <details> element`,
-      );
-    }
-    const openingEnd = findOpeningTagEnd(outside, start);
-    const end = findMatchingDetailsClose(outside, start);
-    if (openingEnd < 0 || end < 0) {
-      throw new Error(`${file}: unbalanced system judgement <details> block`);
-    }
-    openingTags.push(outside.slice(start, openingEnd + 1));
-    outside = outside.slice(0, start) + outside.slice(end);
-    attributeIndex = outside.indexOf(SYSTEM_JUDGEMENT_ATTRIBUTE);
-  }
-
-  return { outside, count: openingTags.length, openingTags };
-}
 
 describe("object-first workspace guard", () => {
   it("keeps the view registry pointed at files that exist", () => {

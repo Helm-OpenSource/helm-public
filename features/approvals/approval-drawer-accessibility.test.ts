@@ -26,7 +26,7 @@ describe("approval drawer accessibility source contract", () => {
 
   it("keeps empty approval evidence copy explanatory instead of showing zero-count data noise", () => {
     expect(source).toContain("function formatApprovalEvidencePreview");
-    expect(source).toContain("formatApprovalEvidencePreview(task, english)");
+    expect(source).toContain("formatApprovalEvidencePreview(selected, english)");
     expect(source).toContain("function formatApprovalRecommendationLogEvidence");
     expect(source).toContain("暂无结构化事实、承诺或阻塞引用");
     expect(source).toContain("暂无结构化引用；先看解释和来源上下文");

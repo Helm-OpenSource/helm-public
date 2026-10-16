@@ -47,9 +47,7 @@ export function getWorkspaceStory(
     },
     approvals: {
       eyebrow: english ? "Review queue" : "复核队列",
-      description: english
-        ? "Drafts that touch your customer or your CRM stop here. Approve, edit, or hold — every choice lands an audit trace you can replay."
-        : "客户可见的草稿、客户关系系统阶段变更，全部停在这里等你点。通过 / 改写 / 保留——每一次都会落一条可回放的审计 trace。",
+      description: "",
     },
     contacts: {
       eyebrow: english ? "Relationships" : "关系视图",
@@ -67,12 +65,8 @@ export function getWorkspaceStory(
     },
     reports: {
       eyebrow: english ? "Weekly read" : "周复盘",
-      title: english
-        ? "Two weeks of movement and next week’s pressure points."
-        : "两周推进、风险和下周抓手，一页看清。",
-      description: english
-        ? "Which opportunities moved, which follow-ups slipped, and which risks still need an owner before the leadership 1:1."
-        : "哪些机会推进了、哪些回访掉了、哪些风险还没人接——为周一的领导 1:1 准备好。",
+      title: english ? "Weekly review" : "经营复盘",
+      description: "",
     },
     settings: {
       eyebrow: english ? "Workspace settings" : "工作区设置",
@@ -99,9 +93,7 @@ export function getWorkspaceStory(
       },
       approvals: {
         eyebrow: english ? "Founder demo · review" : "创始人模式 · 复核",
-        description: english
-          ? "Where AI runs free, where the founder must sign. The line is drawn — and it's never automatic on customer-facing moves."
-          : "AI 可自动跑的地方 vs 创始人必须亲自签的地方。线画得很清楚——客户可见的事永远不自动。",
+        description: "",
       },
     },
     sales: {

@@ -282,11 +282,17 @@ test("founder 主演示链路可以从首页进入会议再到审批", async ({ 
   await expect(submitSummaryButton).toBeVisible();
   await submitSummaryButton.click();
   await expect(page).toHaveURL(/\/approvals/);
-  await expect(page.locator("[data-page-decision-request]").first()).toBeVisible();
-  const approvalsFocus = page.locator('[data-customer-asset-focus="true"]').first();
+  // Object first: the pending draft leads; judgement sits in the closing block.
+  const approvalsFocus = page.locator('[data-approval-draft-focus="true"]');
   await expect(approvalsFocus).toBeVisible();
-  await expect(approvalsFocus).toContainText(/客户可见草稿|Customer-visible draft/);
-  await expect(approvalsFocus).toContainText(/需要你判断|Decision/);
+  await expect(
+    approvalsFocus.getByRole("button", { name: /打开草稿|Open draft/ }),
+  ).toBeVisible();
+  await expect(page.locator("[data-approval-draft-body]").first()).toBeVisible();
+  const approvalsJudgement = page.locator("details[data-system-judgement]");
+  await expect(approvalsJudgement).toHaveCount(1);
+  await expect(approvalsJudgement).not.toHaveAttribute("open", "");
+  await expect(page.locator("[data-page-decision-request]").first()).toBeHidden();
 
   const meetingDrafts = page.locator("#meeting-follow-through-review");
   await expect(meetingDrafts).toBeVisible();
@@ -366,24 +372,29 @@ test("机会高级筛选可用", async ({ page }) => {
   await expect(page.getByText("高风险机会", { exact: true })).toBeVisible();
 });
 
-test("主路径首屏先给客户资产焦点", async ({ page }) => {
+test("主路径首屏先给对象：复核队列和客户线程在前，系统判断折在末尾", async ({ page }) => {
   await loginAs(page, "founder@demo.com");
 
   await page.goto("/approvals");
   await waitForWorkspaceUiHydration(page);
-  const approvalsFocus = page
-    .locator('[data-customer-asset-focus="true"]')
-    .first();
-  await expect(approvalsFocus).toBeVisible();
-  await expect(approvalsFocus).toContainText("客户可见草稿");
-  await expect(approvalsFocus).toContainText("需要你判断");
+  await expect(page.locator("#approval-queue")).toBeVisible();
+  await expect(page.locator('[data-customer-asset-focus="true"]').first()).toBeHidden();
+  const approvalsJudgement = page.locator("details[data-system-judgement]");
+  await expect(approvalsJudgement).toHaveCount(1);
+  await expect(approvalsJudgement).not.toHaveAttribute("open", "");
 
   await page.goto("/inbox");
   await waitForWorkspaceUiHydration(page);
-  const inboxFocus = page.locator('[data-customer-asset-focus="true"]').first();
-  await expect(inboxFocus).toBeVisible();
-  await expect(inboxFocus).toContainText("客户线程");
-  await expect(inboxFocus).toContainText("下一步判断");
+  await expect(page.locator('[data-customer-asset-focus="true"]')).toHaveCount(0);
+  await expect(page.locator('[data-inbox-thread-facts="true"]')).toBeVisible();
+  await expect(
+    page.locator("[data-email-thread-transcript] [data-email-message]").first(),
+  ).toBeVisible();
+  await expect(page.locator('[data-inbox-thread-actions="true"]')).toBeVisible();
+  const inboxJudgement = page.locator("details[data-system-judgement]");
+  await expect(inboxJudgement).toHaveCount(1);
+  await expect(inboxJudgement).not.toHaveAttribute("open", "");
+  await expect(inboxJudgement.getByText(/线程判断|Thread judgement/).first()).toBeHidden();
 
   await loginAs(page, "saleslead@demo.com");
   await page.goto("/opportunities");
@@ -421,7 +432,11 @@ test("可以载入本地阿里邮箱示例数据并在收件箱看到真实来�
   await page.goto("/inbox");
   await expect(page.getByText("真实邮件数据").first()).toBeVisible();
   await page.getByRole("button", { name: /Acme 采购评估下一步|候选人 Leo 终面协调|Atlas 联合内容合作范围/ }).first().click();
-  await expect(page.getByText(/当前只读：阿里邮箱不会回写或发送邮件。/)).toBeVisible();
+  // Object first: the selected thread shows its facts and every message in full.
+  const threadFacts = page.locator('[data-inbox-thread-facts="true"]');
+  await expect(threadFacts).toBeVisible();
+  await expect(threadFacts.getByText("真实邮件数据")).toBeVisible();
+  await expect(page.locator("[data-email-thread-transcript] [data-email-message]").first()).toBeVisible();
 });
 
 test("desktop 下首个可见 heading 仍然是页面自己的 h1", async ({ page }, testInfo) => {

@@ -200,16 +200,13 @@ test("imports 首屏只保留 business-first 四类信息", async ({ page }, tes
   });
 });
 
-test("reports/imports/settings/diagnostics/analytics 首屏先暴露用户资产读数", async ({ page }, testInfo) => {
+// /reports left this check in object-first wave 3 (no focus strip; the missed and
+// high-risk lists come first). /settings stays until wave 4.
+test("imports/settings/diagnostics/analytics 首屏先暴露用户资产读数", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 1200 });
   await loginAs(page, "founder@demo.com");
 
   const targets = [
-    {
-      route: "/reports",
-      labels: [/当前资产|Current asset/, /当前压力|Pressure/, /待决策|Decision/, /下一步动作|Next action/],
-      reference: /引用：洞察权限|Reference: insight permission|引用：交付评审|Reference: delivery review/,
-    },
     {
       route: "/imports",
       labels: [/对象状态|Object state/, /阻塞|Blocker/, /待决策|Pending decision/, /下一步动作|Next action/],

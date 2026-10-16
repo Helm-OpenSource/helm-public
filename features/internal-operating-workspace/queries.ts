@@ -3,6 +3,7 @@ import "server-only";
 import {
   ActionType,
   PartnerProgramStatus,
+  type Prisma,
   ProgramTermsVersionStatus,
   type WorkspaceClass,
   type WorkspaceStatus,
@@ -24,20 +25,82 @@ import {
   type InternalOperatingRole,
 } from "@/lib/internal-operating-workspace";
 import { isOperationalHelmReservedWorkspace } from "@/lib/workspace-reserved";
+import { toOperatingReviewAction } from "@/features/internal-operating-workspace/review-actions";
+
+type InternalOperatingWorkspaceOptions = {
+  workspace?: {
+    status?: WorkspaceStatus | null;
+    workspaceClass?: WorkspaceClass | null;
+    systemKey?: string | null;
+  } | null;
+  membershipRole?: WorkspaceRole | null;
+  /** null/undefined = unrestricted (owner view); array = group members only. */
+  groupScopeUserIds?: string[] | null;
+};
+
+/**
+ * Approval tasks for the operating home: the action, the object it acts on
+ * (opportunity with its company, contact or meeting) and who started it.
+ */
+const operatingApprovalSelect = {
+  id: true,
+  status: true,
+  actionItem: {
+    select: {
+      id: true,
+      title: true,
+      opportunityId: true,
+      opportunity: {
+        select: {
+          id: true,
+          title: true,
+          company: { select: { id: true, name: true } },
+        },
+      },
+      contact: { select: { id: true, name: true } },
+      meeting: { select: { id: true, title: true } },
+      createdBy: { select: { id: true, name: true } },
+    },
+  },
+} satisfies Prisma.ApprovalTaskSelect;
 
 export async function getInternalOperatingWorkspaceData(
   workspaceId: string,
   english: boolean,
-  options?: {
-    workspace?: {
-      status?: WorkspaceStatus | null;
-      workspaceClass?: WorkspaceClass | null;
-      systemKey?: string | null;
-    } | null;
-    membershipRole?: WorkspaceRole | null;
-    /** null/undefined = unrestricted (owner view); array = group members only. */
-    groupScopeUserIds?: string[] | null;
-  },
+  options?: InternalOperatingWorkspaceOptions,
+) {
+  const { model } = await loadInternalOperatingWorkspace(
+    workspaceId,
+    english,
+    options,
+  );
+  return model;
+}
+
+/**
+ * The operating home's data: the workspace model plus the three most recently
+ * updated review actions, each with the object it acts on and its initiator.
+ */
+export async function getInternalOperatingHomeWorkspaceData(
+  workspaceId: string,
+  english: boolean,
+  options?: InternalOperatingWorkspaceOptions,
+) {
+  const { model, approvals } = await loadInternalOperatingWorkspace(
+    workspaceId,
+    english,
+    options,
+  );
+  return {
+    model,
+    reviewActions: approvals.slice(0, 3).map(toOperatingReviewAction),
+  };
+}
+
+async function loadInternalOperatingWorkspace(
+  workspaceId: string,
+  english: boolean,
+  options?: InternalOperatingWorkspaceOptions,
 ) {
   const gtmReadable =
     isOperationalHelmReservedWorkspace(options?.workspace) &&
@@ -93,9 +156,7 @@ export async function getInternalOperatingWorkspaceData(
       where: {
         workspaceId,
       },
-      include: {
-        actionItem: true,
-      },
+      select: operatingApprovalSelect,
       orderBy: [{ updatedAt: "desc" }],
       take: 12,
     }),
@@ -114,7 +175,7 @@ export async function getInternalOperatingWorkspaceData(
       : Promise.resolve(null),
   ]);
 
-  return buildInternalOperatingHomeModel({
+  const model = buildInternalOperatingHomeModel({
     opportunities,
     approvals,
     audits,
@@ -130,6 +191,8 @@ export async function getInternalOperatingWorkspaceData(
     internalCommercializationLifecycleReadout,
     english,
   });
+
+  return { model, approvals };
 }
 
 async function getReservedGtmCapabilityPlanSource(workspaceId: string) {

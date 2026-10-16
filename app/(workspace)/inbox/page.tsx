@@ -35,6 +35,7 @@ export default async function InboxPage({
     db.opportunity.findMany({
       where: { workspaceId: workspace.id },
       orderBy: { updatedAt: "desc" },
+      select: { id: true, title: true },
     }),
     getWorkspaceBusinessLoopGapReadout(workspace.id),
     db.connector.findUnique({
@@ -44,6 +45,15 @@ export default async function InboxPage({
           userId: user.id,
           provider: ConnectorProvider.GMAIL,
         },
+      },
+      // Only what the inbox shows; never ship stored credentials to the client.
+      select: {
+        id: true,
+        status: true,
+        externalAccountEmail: true,
+        lastSyncedAt: true,
+        lastSyncStatus: true,
+        lastSyncMessage: true,
       },
     }),
   ]);

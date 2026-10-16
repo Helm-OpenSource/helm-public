@@ -53,6 +53,21 @@ export async function getInboxViewerEmail(workspaceId: string, userId: string) {
   return connector?.externalAccountEmail ?? null;
 }
 
+/**
+ * Every message of every listed thread, in send order. The inbox reads "who
+ * spoke last" and "not answered yet" from this full list
+ * (summarizeEmailThreadLatest), so the message relation must never take a
+ * slice here.
+ */
+export const inboxThreadInclude = {
+  contact: true,
+  company: true,
+  opportunity: true,
+  messages: {
+    orderBy: { sentAt: "asc" },
+  },
+} satisfies Prisma.EmailThreadInclude;
+
 export async function getInboxData(
   workspaceId: string,
   options?: {
@@ -63,14 +78,7 @@ export async function getInboxData(
   const selectedThreadId = options?.selectedThreadId;
   const threads = await db.emailThread.findMany({
     where: buildInboxThreadWhere(workspaceId, options?.viewerEmail),
-    include: {
-      contact: true,
-      company: true,
-      opportunity: true,
-      messages: {
-        orderBy: { sentAt: "asc" },
-      },
-    },
+    include: inboxThreadInclude,
     orderBy: [{ updatedAt: "desc" }],
   });
 
