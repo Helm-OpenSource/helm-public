@@ -2,8 +2,12 @@ import "server-only";
 
 import { getCurrentWorkspace, requireCurrentUser } from "@/lib/auth/session";
 import { logPageViewEvent } from "@/lib/analytics/session-events";
-import { getApprovalTasksData } from "@/features/approvals/queries";
-import { getCompanyDetailData } from "@/features/companies/queries";
+import {
+  getCompanyDetailData,
+  getCompanyEmailThreads,
+  getCompanyPendingReviewRequestId,
+} from "@/features/companies/queries";
+import { getInboxViewerEmail } from "@/features/inbox/queries";
 import { generateRecommendationsForObject } from "@/lib/recommendations/recommendation.service";
 import { isWorkspaceServiceGovernanceError } from "@/lib/auth/service-governance";
 import { isEnglishLocale } from "@/lib/i18n/config";
@@ -17,7 +21,13 @@ export async function loadCompanyDetailPageData(companyId: string) {
     workspaceDefaultLocale: workspace.defaultLocale,
   });
   const english = isEnglishLocale(locale);
-  const [stageLabels, company, recommendations, approvalTasks] = await Promise.all([
+  const [
+    stageLabels,
+    company,
+    recommendations,
+    pendingReviewRequestId,
+    emailThreads,
+  ] = await Promise.all([
     getLocalizedStageLabels(locale),
     getCompanyDetailData(workspace.id, companyId),
     generateRecommendationsForObject({
@@ -36,7 +46,10 @@ export async function loadCompanyDetailPageData(companyId: string) {
       }
       throw error;
     }),
-    getApprovalTasksData(workspace.id),
+    getCompanyPendingReviewRequestId(workspace.id, companyId),
+    getInboxViewerEmail(workspace.id, user.id).then((viewerEmail) =>
+      getCompanyEmailThreads(workspace.id, companyId, viewerEmail),
+    ),
   ]);
 
   if (!company) {
@@ -51,9 +64,10 @@ export async function loadCompanyDetailPageData(companyId: string) {
   });
 
   return {
-    approvalTasks,
     company,
+    emailThreads,
     english,
+    pendingReviewRequestId,
     recommendations,
     stageLabels,
   };

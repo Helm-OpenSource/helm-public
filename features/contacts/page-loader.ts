@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentWorkspace, requireCurrentUser } from "@/lib/auth/session";
 import { logPageViewEvent } from "@/lib/analytics/session-events";
 import { getContactDetailData } from "@/features/contacts/queries";
+import { getInboxViewerEmail } from "@/features/inbox/queries";
 import { generateRecommendationsForObject } from "@/lib/recommendations/recommendation.service";
 import { isWorkspaceServiceGovernanceError } from "@/lib/auth/service-governance";
 import { isEnglishLocale } from "@/lib/i18n/config";
@@ -20,7 +21,9 @@ export async function loadContactDetailPageData(contactId: string) {
   const [stageLabels, contact, opportunities, contacts, recommendations] =
     await Promise.all([
       getLocalizedStageLabels(locale),
-      getContactDetailData(workspace.id, contactId),
+      getInboxViewerEmail(workspace.id, user.id).then((viewerEmail) =>
+        getContactDetailData(workspace.id, contactId, { viewerEmail }),
+      ),
       db.opportunity.findMany({
         where: { workspaceId: workspace.id },
         orderBy: { updatedAt: "desc" },

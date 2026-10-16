@@ -1,4 +1,4 @@
-import { type Prisma, RecordSource } from "@prisma/client";
+import { ConnectorProvider, type Prisma, RecordSource } from "@prisma/client";
 import { db } from "@/lib/db";
 
 export function buildInboxThreadWhere(
@@ -32,6 +32,25 @@ export function buildInboxThreadWhere(
       },
     ],
   };
+}
+
+/**
+ * The current user's connected mailbox address, which scopes which mailbox
+ * threads they may read (see buildInboxThreadWhere). Inbox, contact and
+ * company pages all read threads through this same rule.
+ */
+export async function getInboxViewerEmail(workspaceId: string, userId: string) {
+  const connector = await db.connector.findUnique({
+    where: {
+      workspaceId_userId_provider: {
+        workspaceId,
+        userId,
+        provider: ConnectorProvider.GMAIL,
+      },
+    },
+    select: { externalAccountEmail: true },
+  });
+  return connector?.externalAccountEmail ?? null;
 }
 
 export async function getInboxData(

@@ -28,14 +28,11 @@ export default async function MeetingDetailPage({
     detail;
   const meetingRouteIdentity = { sourcePage: `/meetings/${meeting.id}` as const };
 
+  // Object first: the meeting client owns the page header; the chain shell and
+  // the first-loop summary render inside its single closing system judgement
+  // block.
   return (
     <div className="space-y-6" data-source-page={meetingRouteIdentity.sourcePage}>
-      <ConversationChainExtensionDetailView model={chainModel} english={english} />
-      <FirstLoopSurfaceSummary
-        model={firstLoopModel}
-        english={english}
-        eyebrow={english ? "Meeting detail → first loop" : "会议详情 → 首轮闭环"}
-      />
       <div data-conversation-chain-object-detail="meeting-detail">
         <MeetingDetailClient
           actionGovernance={actionGovernance}
@@ -44,6 +41,17 @@ export default async function MeetingDetailPage({
           memberships={memberships}
           auditLogs={auditLogs}
           recommendations={recommendations}
+          relatedLinks={chainModel.actions}
+          supplementary={
+            <>
+              <ConversationChainExtensionDetailView model={chainModel} english={english} />
+              <FirstLoopSurfaceSummary
+                model={firstLoopModel}
+                english={english}
+                eyebrow={english ? "Meeting detail → first loop" : "会议详情 → 首轮闭环"}
+              />
+            </>
+          }
         />
       </div>
     </div>

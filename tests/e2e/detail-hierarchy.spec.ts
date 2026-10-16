@@ -101,6 +101,15 @@ async function openDashboardWorkEntryRail(page: Page) {
   return actionRail;
 }
 
+async function openSystemJudgement(page: Page) {
+  const block = page.locator("details[data-system-judgement]");
+  await expect(block).toHaveCount(1);
+  await expect(block).not.toHaveAttribute("open", "");
+  await block.locator(":scope > summary").click();
+  await expect(block).toHaveAttribute("open", "");
+  return block;
+}
+
 function buildHomeSurfaceEntryHref(href: string, focus: string) {
   const url = new URL(href, "http://localhost");
   url.searchParams.set("entry", "home-surface-detail");
@@ -142,6 +151,40 @@ test("contact 与 company detail 只保留一个主标题", async ({ page }, tes
     path: testInfo.outputPath("contact-detail-single-h1.png"),
     fullPage: true,
   });
+});
+
+test("company / contact / meeting / inbox detail 先给对象和原文，链路壳折在末尾系统判断里", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1200 });
+  await loginAs(page, "founder@demo.com");
+
+  const detailChecks: Array<{ list: "/companies" | "/contacts" | "/meetings"; facts: string }> = [
+    { list: "/companies", facts: '[data-company-facts="true"]' },
+    { list: "/contacts", facts: '[data-contact-facts="true"]' },
+    { list: "/meetings", facts: '[data-meeting-facts="true"]' },
+  ];
+
+  for (const check of detailChecks) {
+    const href = await openFirstDetailHrefFromList(page, check.list);
+    await page.goto(href);
+    await expect(page.locator(check.facts)).toBeVisible();
+    await expect(page.locator("h1")).toHaveCount(1);
+    await expect(page.locator('[data-breadcrumb-trail="true"]')).toHaveCount(1);
+    // The chain shell mounts only once the reader opens the system judgement.
+    await expect(page.locator("[data-conversation-chain-extension-page]")).toHaveCount(0);
+    await openSystemJudgement(page);
+    await expect(page.locator("[data-conversation-chain-extension-page]")).toHaveCount(1);
+  }
+
+  await page.goto("/inbox");
+  const inboxDetailHref = await readFirstLinkedHref(page, "/inbox");
+  await page.goto(inboxDetailHref);
+  await expect(page).toHaveURL(/\/inbox\//);
+  await expect(page.locator('[data-inbox-thread-messages="true"]')).toBeVisible();
+  await expect(page.locator('[data-inbox-thread-messages="true"] [data-email-message]').first()).toBeVisible();
+  await expect(page.locator("h1")).toHaveCount(1);
+  await expect(page.locator('[data-inbox-followup-review-request-page="true"]')).toHaveCount(0);
+  await openSystemJudgement(page);
+  await expect(page.locator('[data-inbox-followup-review-request-page="true"]').first()).toBeVisible();
 });
 
 test("imports 首屏只保留 business-first 四类信息", async ({ page }, testInfo) => {
@@ -257,42 +300,48 @@ test("dashboard work-entry action rail lands on dedicated work surfaces", async 
   });
 });
 
-test("contact / company / meeting detail home-entry keep guidance behind dedicated next-layer disclosure", async ({ page }, testInfo) => {
+test("contact / company / meeting detail home-entry keep guidance inside the closing system judgement block", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 1200 });
   await loginAs(page, "founder@demo.com");
 
   const companyDetailHref = await openFirstDetailHrefFromList(page, "/companies");
   await page.goto(buildHomeSurfaceEntryHref(companyDetailHref, "Company account"));
   await expect(page).toHaveURL(/entry=home-surface-detail/);
-  await expect(page.locator('[data-home-surface-arrival="detail"]')).toBeVisible();
+  await expect(page.locator('[data-company-facts="true"]')).toBeVisible();
+  await expect(page.locator('[data-home-surface-arrival="detail"]')).toBeHidden();
+  let judgement = await openSystemJudgement(page);
+  await expect(judgement.locator('[data-home-surface-arrival="detail"]')).toBeVisible();
   await expect(page.locator('[data-home-surface-secondary="detail"]')).toHaveCount(0);
   await expect(page.locator('[data-home-surface-arrival-cta="detail"]')).toHaveCount(0);
-  const companyGuidanceEyebrow = page
-    .locator(".workspace-eyebrow")
-    .filter({ hasText: /Account guidance|账户引导/ });
-  await expect(companyGuidanceEyebrow).toBeVisible();
+  await expect(
+    judgement.locator(".workspace-eyebrow").filter({ hasText: /Account guidance|账户引导/ }),
+  ).toBeVisible();
 
   const contactDetailHref = await openFirstDetailHrefFromList(page, "/contacts");
   await page.goto(buildHomeSurfaceEntryHref(contactDetailHref, "Relationship state"));
   await expect(page).toHaveURL(/entry=home-surface-detail/);
-  await expect(page.locator('[data-home-surface-arrival="detail"]')).toBeVisible();
+  await expect(page.locator('[data-contact-facts="true"]')).toBeVisible();
+  await expect(page.locator('[data-home-surface-arrival="detail"]')).toBeHidden();
+  judgement = await openSystemJudgement(page);
+  await expect(judgement.locator('[data-home-surface-arrival="detail"]')).toBeVisible();
   await expect(page.locator('[data-home-surface-secondary="detail"]')).toHaveCount(0);
   await expect(page.locator('[data-home-surface-arrival-cta="detail"]')).toHaveCount(0);
-  const contactGuidanceEyebrow = page
-    .locator(".workspace-eyebrow")
-    .filter({ hasText: /Relationship guidance|关系引导/ });
-  await expect(contactGuidanceEyebrow).toBeVisible();
+  await expect(
+    judgement.locator(".workspace-eyebrow").filter({ hasText: /Relationship guidance|关系引导/ }),
+  ).toBeVisible();
 
   const meetingDetailHref = await openFirstDetailHrefFromList(page, "/meetings");
   await page.goto(buildHomeSurfaceEntryHref(meetingDetailHref, "Meeting follow-through"));
   await expect(page).toHaveURL(/entry=home-surface-detail/);
-  await expect(page.locator('[data-home-surface-arrival="detail"]')).toBeVisible();
+  await expect(page.locator('[data-meeting-facts="true"]')).toBeVisible();
+  await expect(page.locator('[data-home-surface-arrival="detail"]')).toBeHidden();
+  judgement = await openSystemJudgement(page);
+  await expect(judgement.locator('[data-home-surface-arrival="detail"]')).toBeVisible();
   await expect(page.locator('[data-home-surface-secondary="detail"]')).toHaveCount(0);
   await expect(page.locator('[data-home-surface-arrival-cta="detail"]')).toHaveCount(0);
-  const meetingGuidanceEyebrow = page
-    .locator(".workspace-eyebrow")
-    .filter({ hasText: /Meeting guidance|会议引导/ });
-  await expect(meetingGuidanceEyebrow).toBeVisible();
+  await expect(
+    judgement.locator(".workspace-eyebrow").filter({ hasText: /Meeting guidance|会议引导/ }),
+  ).toBeVisible();
 
   await page.screenshot({
     path: testInfo.outputPath("detail-home-entry-next-layer-disclosures.png"),

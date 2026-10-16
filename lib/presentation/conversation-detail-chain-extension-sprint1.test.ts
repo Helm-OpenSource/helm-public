@@ -75,6 +75,15 @@ describe("conversation detail chain extension sprint 1", () => {
       expect(meetingRoute).toContain(snippet);
     }
 
+    // Object first (2026-10-15): routes hand the chain shell to the detail
+    // client, which folds it into its single closing system judgement block.
+    for (const route of [contactRoute, companyRoute, meetingRoute]) {
+      expect(route).toContain("supplementary={");
+      expect(route).toContain("relatedLinks={chainModel.actions}");
+      expect(route).not.toContain("data-system-judgement");
+    }
+    expect(meetingRoute).toContain("<FirstLoopSurfaceSummary");
+
     expect(meetingLoader).toContain("buildMeetingConversationChainExtensionModel");
     expect(deliveryReviewCompatibilityRoute).toContain(
       "redirect(`/conversations/${encodeURIComponent(id)}`)",

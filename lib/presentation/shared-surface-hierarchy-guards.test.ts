@@ -189,9 +189,16 @@ describe("shared surface hierarchy guards", () => {
     expect(sidebar).toContain("客户推进样例");
     expect(sidebar.match(/<h2\b/g) ?? []).toHaveLength(0);
     expect(pageHeader).toContain('titleAs?: "h1" | "h2"');
-    expect(contactDetailClient).toContain('titleAs="h2"');
-    expect(companyDetailClient).toContain('titleAs="h2"');
-    expect(meetingDetailClient).toContain('titleAs="h2"');
+    // Object first (2026-10-15): detail clients own the route-level h1; the
+    // folded chain shell mounts only inside the closing system judgement.
+    for (const client of [
+      contactDetailClient,
+      companyDetailClient,
+      meetingDetailClient,
+    ]) {
+      expect(client).not.toContain('titleAs="h2"');
+      expect(client).toContain("<MountWhenOpen>{supplementary}</MountWhenOpen>");
+    }
   });
 
   it("keeps disclosure trigger names short while preserving rich visible summaries", () => {
