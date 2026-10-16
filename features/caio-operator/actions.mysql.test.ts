@@ -12,7 +12,10 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 const { sessionMock } = vi.hoisted(() => ({ sessionMock: { getCurrentWorkspaceSession: vi.fn() } }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/auth/session", () => ({ getCurrentWorkspaceSession: sessionMock.getCurrentWorkspaceSession }));
+vi.mock("@/lib/auth/session", () => ({
+  getCurrentWorkspaceSession: sessionMock.getCurrentWorkspaceSession,
+  getCurrentCaioOperatorSession: sessionMock.getCurrentWorkspaceSession,
+}));
 
 import { db } from "@/lib/db";
 
