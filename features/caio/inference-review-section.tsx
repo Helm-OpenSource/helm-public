@@ -16,6 +16,41 @@ const SEVERITY_LABELS: Record<string, { zh: string; en: string }> = {
   low: { zh: "低", en: "Low" },
 };
 
+const CONFIDENCE_LABELS: Record<string, { zh: string; en: string }> = {
+  high: { zh: "高", en: "High" },
+  medium: { zh: "中", en: "Medium" },
+  low: { zh: "低", en: "Low" },
+  mixed: { zh: "不一", en: "Mixed" },
+  unknown: { zh: "未知", en: "Unknown" },
+};
+
+const TASK_CLASS_LABELS: Record<string, { zh: string; en: string }> = {
+  hourly_diagnosis: { zh: "小时复盘", en: "Hourly review" },
+  daily_review: { zh: "日复盘", en: "Daily review" },
+};
+
+const JOB_STATUS_LABELS: Record<string, { zh: string; en: string }> = {
+  queued: { zh: "排队中", en: "Queued" },
+  claimed: { zh: "处理中", en: "Claimed" },
+  completed: { zh: "已完成", en: "Completed" },
+  rejected: { zh: "被拒收", en: "Rejected" },
+  expired: { zh: "已过期", en: "Expired" },
+  dead_letter: { zh: "失败待查", en: "Dead letter" },
+};
+
+/**
+ * Judgements written before the Chinese-output default (Core #430) are English. They are bound to their content
+ * hash, so the text is shown as written, with a note, rather than rewritten.
+ */
+export function isMostlyNonChinese(texts: readonly string[]): boolean {
+  // Dotted/dashed identifiers (metric keys, evidence refs) are not prose in any language: drop them first.
+  const joined = texts.join(" ").replace(/[A-Za-z0-9_]+(?:[.:_-][A-Za-z0-9_]+)+/gu, "");
+  const letters = joined.match(/[\p{L}]/gu)?.length ?? 0;
+  if (letters === 0) return false;
+  const cjk = joined.match(/[\u4e00-\u9fff]/gu)?.length ?? 0;
+  return cjk / letters < 0.3;
+}
+
 const SUGGESTION_LABELS: Record<string, { zh: string; en: string }> = {
   rule_draft: { zh: "规则草案", en: "Rule draft" },
   dry_run_request: { zh: "干跑请求", en: "Dry-run request" },
@@ -33,6 +68,8 @@ export function InferenceReviewSection({
   english: boolean;
 }) {
   const t = (zh: string, en: string) => (english ? en : zh);
+  const label = (table: Record<string, { zh: string; en: string }>, key: string) =>
+    table[key] ? (english ? table[key].en : table[key].zh) : key;
 
   if (!readout.available) {
     return (
@@ -70,9 +107,21 @@ export function InferenceReviewSection({
           <p className="text-[color:var(--muted-foreground)]">
             {t("窗口", "Window")} {formatTime(judgement.windowStart, english)} – {formatTime(judgement.windowEnd, english)}
             {" · "}
-            {t("置信", "Confidence")} {judgement.confidenceBand}
+            {t("置信", "Confidence")} {label(CONFIDENCE_LABELS, judgement.confidenceBand)}
             {judgement.completedAt ? ` · ${formatTime(judgement.completedAt, english)}` : ""}
           </p>
+          {!english &&
+            isMostlyNonChinese([
+              ...judgement.facts,
+              ...judgement.inferences,
+              ...judgement.unknowns,
+              ...judgement.risks.map((risk) => risk.statement),
+              ...judgement.suggestions.map((suggestion) => suggestion.summary),
+            ]) && (
+              <p className="text-xs text-[color:var(--muted-foreground)]" data-caio-review-legacy-language="en">
+                （英文旧版输出：这轮判断生成于默认中文之前，按原文显示；之后的复盘为中文。）
+              </p>
+            )}
           <Layer title={t("事实", "Facts")} items={judgement.facts} empty={t("无", "None")} />
           <Layer title={t("推断", "Inferences")} items={judgement.inferences} empty={t("无", "None")} />
           <Layer
@@ -107,7 +156,7 @@ export function InferenceReviewSection({
             <div key={`${job.taskClass}-${job.windowStart}`} className="flex gap-2">
               <dt>{formatTime(job.windowStart, english)}</dt>
               <dd>
-                {job.taskClass} · {job.status}
+                {label(TASK_CLASS_LABELS, job.taskClass)} · {label(JOB_STATUS_LABELS, job.status)}
                 {job.rejectionCode ? ` · ${job.rejectionCode}` : ""}
                 {job.attempt > 1 ? ` · ${t("尝试", "attempt")} ${job.attempt}` : ""}
               </dd>
