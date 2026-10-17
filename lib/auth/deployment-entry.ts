@@ -15,7 +15,9 @@ type DeploymentEntryEnvironment = Partial<
     | "HELM_DEPLOYMENT_ENTRY_HOME_PATH"
     | "HELM_DEPLOYMENT_ALLOWED_WORKSPACE_SLUGS"
     | "HELM_DEPLOYMENT_ALLOWED_WORKSPACE_SYSTEM_KEYS"
-    | "HELM_DEPLOYMENT_SELF_SERVE_SIGNUP",
+    | "HELM_DEPLOYMENT_SELF_SERVE_SIGNUP"
+    | "HELM_DEPLOYMENT_ENTRY_ICP_FILING"
+    | "HELM_DEPLOYMENT_ENTRY_PSB_FILING",
     string | undefined
   >
 >;
@@ -35,6 +37,10 @@ export type DeploymentEntryConfig = {
   configurationValid: boolean;
   displayName: string;
   companyName: string | null;
+  /** ICP 备案号（如 沪ICP备XXXXXXXX号-1）；来自部署 env，页脚展示并链接工信部备案查询。 */
+  icpFiling: string | null;
+  /** 公安网安备案号（如 沪公网安备 XXXXXXXXXXXXX号）；可选。 */
+  psbFiling: string | null;
   homePath: string | null;
   allowedWorkspaceSlugs: ReadonlySet<string>;
   allowedWorkspaceSystemKeys: ReadonlySet<string>;
@@ -108,6 +114,17 @@ function normalizeCompanyName(value: string | undefined) {
   };
 }
 
+function normalizeFilingNumber(value: string | undefined) {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return { filing: null, valid: true };
+  }
+  if (normalized.length > 80 || /[\u0000-\u001f\u007f<>]/.test(normalized)) {
+    return { filing: null, valid: false };
+  }
+  return { filing: normalized, valid: true };
+}
+
 export function normalizeDeploymentHomePath(value: string | undefined) {
   const normalized = value?.trim();
   if (
@@ -146,6 +163,8 @@ export function resolveDeploymentEntryConfig(
   const companyResult = normalizeCompanyName(
     environment.HELM_DEPLOYMENT_ENTRY_COMPANY_NAME,
   );
+  const icpResult = normalizeFilingNumber(environment.HELM_DEPLOYMENT_ENTRY_ICP_FILING);
+  const psbResult = normalizeFilingNumber(environment.HELM_DEPLOYMENT_ENTRY_PSB_FILING);
   const hasWorkspaceAllowlist =
     allowedWorkspaceSlugs.size > 0 || allowedWorkspaceSystemKeys.size > 0;
   const homePath = normalizeDeploymentHomePath(
@@ -168,6 +187,8 @@ export function resolveDeploymentEntryConfig(
     configurationValid:
       profileResult.valid &&
       companyResult.valid &&
+      icpResult.valid &&
+      psbResult.valid &&
       (!requiresWorkspaceAllowlist || hasWorkspaceAllowlist) &&
       (!requiresHomePath || homePath !== null),
     displayName: normalizeDisplayName(
@@ -175,6 +196,8 @@ export function resolveDeploymentEntryConfig(
       profileResult.profile,
     ),
     companyName: companyResult.companyName,
+    icpFiling: icpResult.filing,
+    psbFiling: psbResult.filing,
     homePath,
     allowedWorkspaceSlugs,
     allowedWorkspaceSystemKeys,
