@@ -37,7 +37,7 @@ export type CaioWorkerLocalModelPort = {
 };
 
 export type CaioWorkerLogPort = (event: {
-  event: "offline" | "idle" | "claimed" | "submitted" | "local_validation_failed" | "model_failed";
+  event: "offline" | "idle" | "claimed" | "submitted" | "local_validation_failed" | "output_language_mismatch" | "model_failed";
   jobId?: string;
   detail?: string;
 }) => void;

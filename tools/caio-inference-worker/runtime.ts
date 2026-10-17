@@ -32,6 +32,11 @@ import {
   type CaioWorkerLocalModelConfig,
 } from "./local-model-port";
 import {
+  CAIO_WORKER_DEFAULT_OUTPUT_LANGUAGE,
+  CAIO_WORKER_OUTPUT_LANGUAGES,
+  type CaioWorkerOutputLanguage,
+} from "./prompt";
+import {
   createCaioInferenceTransportReadinessReceipt,
   parseCaioInferenceReadinessChallenge,
   writeCaioInferenceTransportReadinessReceipt,
@@ -81,6 +86,7 @@ const runtimeSchema = z
       })
       .strict(),
     loopPasses: z.number().int().min(1).max(128),
+    outputLanguage: z.enum(CAIO_WORKER_OUTPUT_LANGUAGES).optional(),
   })
   .strict();
 
@@ -88,6 +94,7 @@ export type CaioInferenceWorkerRuntimeConfig = Readonly<{
   gateway: CaioWorkerGatewayClientConfig;
   model: CaioWorkerLocalModelConfig;
   loopPasses: number;
+  outputLanguage: CaioWorkerOutputLanguage;
 }>;
 
 type RuntimeDependencies = Readonly<{
@@ -188,6 +195,7 @@ export function loadCaioInferenceWorkerRuntimeConfig(
     gateway,
     model,
     loopPasses: parsed.data.loopPasses,
+    outputLanguage: parsed.data.outputLanguage ?? CAIO_WORKER_DEFAULT_OUTPUT_LANGUAGE,
   });
 }
 
@@ -254,6 +262,7 @@ export async function runCaioInferenceWorkerRuntime(
     model: modelFactory(runtime.model),
     stdout,
     loopPasses: runtime.loopPasses,
+    outputLanguage: runtime.outputLanguage,
     ...(dependencies.signal ? { signal: dependencies.signal } : {}),
   });
   return result === null ? 2 : caioInferenceWorkerExitCode(result);

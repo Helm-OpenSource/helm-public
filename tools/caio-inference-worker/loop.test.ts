@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { CaioInferenceInput } from "@/lib/caio-inference/contracts";
 
 import type { CaioWorkerGatewayPort, CaioWorkerLocalModelPort, CaioWorkerLogPort } from "./contracts";
-import { runCaioInferenceWorkerPass } from "./loop";
+import { isMostlyNonChinese, runCaioInferenceWorkerPass } from "./loop";
 import { buildCaioWorkerPrompt } from "./prompt";
 
 const INPUT: CaioInferenceInput = {
@@ -60,7 +60,7 @@ function harness(input?: {
 describe("pull inference worker pass", () => {
   it("probes before claiming and submits the model answer unchanged", async () => {
     const test = harness();
-    const result = await runCaioInferenceWorkerPass({ gateway: test.gateway, model: test.model, log: test.log });
+    const result = await runCaioInferenceWorkerPass({ gateway: test.gateway, model: test.model, log: test.log , outputLanguage: "en" });
 
     expect(result).toEqual({
       status: "submitted",
@@ -140,5 +140,37 @@ describe("pull inference worker prompt", () => {
     // The judgement contract requires at least one cited ref per fact/inference/risk/suggestion; a model left
     // to guess emitted empty evidenceRefs arrays and every judgement was refused as malformed_output.
     expect(buildCaioWorkerPrompt(INPUT)).toContain("must cite at least one evidence ref");
+    // Default output language is Simplified Chinese; enums and refs stay untranslated.
+    expect(buildCaioWorkerPrompt(INPUT)).toContain("Simplified Chinese (简体中文)");
+    expect(buildCaioWorkerPrompt(INPUT)).toContain("do not translate them");
+    expect(buildCaioWorkerPrompt(INPUT, "en")).toContain("Write every statement and summary in English");
+    expect(buildCaioWorkerPrompt(INPUT, "en")).not.toContain("简体中文");
+  });
+});
+
+describe("output language (report, never retry)", () => {
+  it("logs a mostly English judgement under the Chinese default and submits it unchanged", async () => {
+    const test = harness();
+    const result = await runCaioInferenceWorkerPass({ gateway: test.gateway, model: test.model, log: test.log });
+    expect(test.events.map((e) => e.event)).toContain("output_language_mismatch");
+    expect(test.model.complete).toHaveBeenCalledTimes(1);
+    expect(test.gateway.submit).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ status: "submitted", locallyValid: true });
+  });
+
+  it("does not log a Chinese judgement, nor an English one when English is configured", async () => {
+    const zh = { ...JUDGEMENT, facts: [{ statement: "死信数在本小时上升。", evidenceRefs: ["evidence:metric-a"] }] };
+    const chinese = harness({ answer: JSON.stringify(zh) });
+    await runCaioInferenceWorkerPass({ gateway: chinese.gateway, model: chinese.model, log: chinese.log });
+    expect(chinese.events.map((e) => e.event)).not.toContain("output_language_mismatch");
+    const english = harness();
+    await runCaioInferenceWorkerPass({ gateway: english.gateway, model: english.model, log: english.log, outputLanguage: "en" });
+    expect(english.events.map((e) => e.event)).not.toContain("output_language_mismatch");
+  });
+
+  it("counts letters, not ids or numbers", () => {
+    expect(isMostlyNonChinese(["anson.reach.dial-attempts 在本窗口为 0。"])).toBe(false);
+    expect(isMostlyNonChinese(["Dead letters rose."])).toBe(true);
+    expect(isMostlyNonChinese([])).toBe(false);
   });
 });

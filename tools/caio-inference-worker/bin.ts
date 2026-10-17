@@ -7,6 +7,7 @@
  */
 
 import { runCaioInferenceWorkerPass } from "./loop";
+import type { CaioWorkerOutputLanguage } from "./prompt";
 import type {
   CaioWorkerGatewayPort,
   CaioWorkerLocalModelPort,
@@ -36,6 +37,8 @@ export type CaioInferenceWorkerCliDeps = {
   /** How many passes `run-loop` performs before returning; the packaging layer owns any sleeping. */
   loopPasses?: number;
   signal?: AbortSignal;
+  /** Language of the judgement's human-readable strings; the prompt default (zh-CN) applies when absent. */
+  outputLanguage?: CaioWorkerOutputLanguage;
 };
 
 export function caioInferenceWorkerUsage(): string {
@@ -81,6 +84,7 @@ export async function runCaioInferenceWorkerCli(
       gateway: deps.gateway,
       model: deps.model,
       ...(deps.log ? { log: deps.log } : {}),
+      ...(deps.outputLanguage ? { outputLanguage: deps.outputLanguage } : {}),
       ...signal,
     });
     passes.push(pass);
