@@ -116,7 +116,7 @@ vi.mock("@/lib/auth/public-oauth", () => ({
   PUBLIC_OAUTH_SIGNUP_PREFILL_COOKIE: "helm-public-oauth-prefill",
 }));
 
-import LoginPage from "@/app/(auth)/login/page";
+import LoginPage, { generateMetadata } from "@/app/(auth)/login/page";
 
 function createCookieStore(initial: Record<string, string> = {}) {
   const values = new Map(Object.entries(initial));
@@ -139,6 +139,24 @@ describe("login page salvage contract", () => {
     mocks.cookiesMock.mockResolvedValue(createCookieStore());
     mocks.getCurrentUserMock.mockResolvedValue(null);
     mocks.readPublicOauthSignupPrefillCookieMock.mockReturnValue(null);
+  });
+
+  it("exposes stable style scopes without a runtime stylesheet link", async () => {
+    const html = renderToStaticMarkup(await LoginPage({}));
+    expect(html).not.toContain('rel="stylesheet"');
+    expect(html).toContain('data-helm-auth="login"');
+    for (const part of ["header", "brand", "controls", "main", "intro", "eyebrow", "title", "description", "panel"]) {
+      expect(html).toContain(`data-helm-auth-part="${part}"`);
+    }
+  });
+
+  it("uses the existing deployment display name in the localized page title", async () => {
+    vi.stubEnv("HELM_DEPLOYMENT_ENTRY_DISPLAY_NAME", "Example workspace");
+    try {
+      expect(await generateMetadata()).toEqual({ title: "登录 | Example workspace" });
+      mocks.cookiesMock.mockResolvedValue(createCookieStore({ "helm-ui-locale": "en-US" }));
+      expect(await generateMetadata()).toEqual({ title: "Sign in | Example workspace" });
+    } finally { vi.unstubAllEnvs(); }
   });
 
   it("disables compatibility UI even for a legacy auto-entry URL", async () => {

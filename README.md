@@ -242,6 +242,10 @@ open http://localhost:3000    # 5. 访问
 | **PUBLIC_IDENTITY** | `HELM_PUBLIC_OPERATOR_DISPLAY_NAME`、`HELM_PUBLIC_OPERATOR_LEGAL_NAME`、`HELM_PUBLIC_OPERATOR_REGISTRATION_VERIFIED` | `/terms` 与 `/privacy` 的部署运营主体；法定名称只在私有发布流程已核验证据且 verification 精确为 `true` 时显示 |
 | **OPTIONAL_CONNECTORS** | DingTalk · WeCom · HubSpot · Salesforce · Stripe · 支付宝 · 微信支付 | 按需开启 |
 
+登录页的构建时样式入口是 `app/(auth)/login/appearance.css`，Core 默认为空。
+部署可在已审核的构建阶段向该固定目标组合样式；无需新增运行时环境变量。
+页面使用稳定 scope，详情见[部署入口配置](docs/getting-started.md#deployment_entry可选部署入口)。
+
 ASR 支持两个 provider：默认 `openai`（transcription path），以及 `ASR_PROVIDER=dashscope`
 （Qwen `qwen3-asr-flash`，OpenAI 兼容 chat 端点 + base64 内联音频，音频不出境、不产生
 公网 URL；需 `DASHSCOPE_API_KEY`）。`delivery:doctor --region cn` 会按 provider 判定
