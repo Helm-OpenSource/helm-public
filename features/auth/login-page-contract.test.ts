@@ -1,5 +1,6 @@
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { resolveTitle } from "next/dist/lib/metadata/resolvers/resolve-title";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -116,7 +117,7 @@ vi.mock("@/lib/auth/public-oauth", () => ({
   PUBLIC_OAUTH_SIGNUP_PREFILL_COOKIE: "helm-public-oauth-prefill",
 }));
 
-import LoginPage from "@/app/(auth)/login/page";
+import LoginPage, { generateMetadata } from "@/app/(auth)/login/page";
 
 function createCookieStore(initial: Record<string, string> = {}) {
   const values = new Map(Object.entries(initial));
@@ -139,6 +140,39 @@ describe("login page salvage contract", () => {
     mocks.cookiesMock.mockResolvedValue(createCookieStore());
     mocks.getCurrentUserMock.mockResolvedValue(null);
     mocks.readPublicOauthSignupPrefillCookieMock.mockReturnValue(null);
+  });
+
+  it("exposes stable style scopes without a runtime stylesheet link", async () => {
+    const html = renderToStaticMarkup(await LoginPage({}));
+    expect(html).not.toContain('rel="stylesheet"');
+    expect(html).toContain('data-helm-auth="login"');
+    for (const part of ["header", "brand", "controls", "main", "intro", "eyebrow", "title", "description", "panel"]) {
+      expect(html).toContain(`data-helm-auth-part="${part}"`);
+    }
+  });
+
+  it("uses an absolute localized deployment title even with a parent title template", async () => {
+    vi.stubEnv("HELM_DEPLOYMENT_ENTRY_DISPLAY_NAME", "Example workspace");
+    try {
+      const localized = await generateMetadata();
+      expect(localized).toEqual({ title: { absolute: "登录 | Example workspace" } });
+      expect(resolveTitle(localized.title, "%s | Helm").absolute).toBe("登录 | Example workspace");
+      mocks.cookiesMock.mockResolvedValue(createCookieStore({ "helm-ui-locale": "en-US" }));
+      const english = await generateMetadata();
+      expect(english).toEqual({ title: { absolute: "Sign in | Example workspace" } });
+      expect(resolveTitle(english.title, "%s | Helm").absolute).toBe("Sign in | Example workspace");
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("preserves the default public and cloud display names in page metadata", async () => {
+    vi.stubEnv("HELM_DEPLOYMENT_ENTRY_DISPLAY_NAME", "");
+    vi.stubEnv("HELM_DEPLOYMENT_ENTRY_PROFILE", "public");
+    try {
+      expect(await generateMetadata()).toEqual({ title: { absolute: "登录 | Helm" } });
+      vi.stubEnv("HELM_DEPLOYMENT_ENTRY_PROFILE", "cloud");
+      mocks.cookiesMock.mockResolvedValue(createCookieStore({ "helm-ui-locale": "en-US" }));
+      expect(await generateMetadata()).toEqual({ title: { absolute: "Sign in | Helm Cloud" } });
+    } finally { vi.unstubAllEnvs(); }
   });
 
   it("disables compatibility UI even for a legacy auto-entry URL", async () => {
