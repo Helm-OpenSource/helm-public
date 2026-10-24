@@ -18,6 +18,36 @@ const extensionPaths = ["tenant-alpha", "tenant-beta"].flatMap((tenant) => [
 ]);
 
 describe("Core proxy boundary", () => {
+  it("serves the fixed login logo without a session or completed identity setup", () => {
+    for (const pending of [false, true]) {
+      const request = new NextRequest("https://example.test/assets/logo.svg?v=1");
+      if (pending) {
+        request.cookies.set(SESSION_ID_COOKIE, "synthetic-session");
+        request.cookies.set(FIRST_LOGIN_IDENTITY_SETUP_COOKIE, "1");
+      }
+      expect(unstable_doesMiddlewareMatch({ config, url: request.url })).toBe(true);
+      expect(proxy(request).headers.get("x-middleware-next")).toBe("1");
+      expect(proxy(request).headers.has("location")).toBe(false);
+    }
+  });
+
+  it.each([
+    "/assets/private.svg",
+    "/assets/logo.svg/private",
+    "/assets/logo.svg.png",
+    "/assets/Logo.svg",
+    "/assets/logo.svg%2Fprivate",
+    "/tenant-alpha/logo.svg",
+  ])("does not exempt a neighboring or disguised resource: %s", (pathname) => {
+    const request = new NextRequest(new URL(pathname, "https://example.test"));
+    expect(proxy(request).headers.get("location")).toBe("https://example.test/login");
+    request.cookies.set(SESSION_ID_COOKIE, "synthetic-session");
+    request.cookies.set(FIRST_LOGIN_IDENTITY_SETUP_COOKIE, "1");
+    expect(proxy(request).headers.get("location")).toBe(
+      "https://example.test/getting-started?mode=identity-completion",
+    );
+  });
+
   it("keeps the original non-API authentication matcher", () => {
     expect(config.matcher).toEqual([
       "/((?!api|_next/static|_next/image|favicon.ico).*)",

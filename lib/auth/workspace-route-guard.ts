@@ -67,7 +67,9 @@ function matchesPrefix(pathname: string, prefix: string) {
 }
 
 function isPublicPagePathname(pathname: string) {
-  return PUBLIC_PAGE_PREFIXES.some((prefix) => matchesPrefix(pathname, prefix));
+  // The build-owned login logo is public, not the surrounding asset directory.
+  return pathname === "/assets/logo.svg" ||
+    PUBLIC_PAGE_PREFIXES.some((prefix) => matchesPrefix(pathname, prefix));
 }
 
 function isCustomerExtensionWorkspacePathname(pathname: string) {
