@@ -197,6 +197,8 @@ DingTalk · WeCom · HubSpot · Salesforce · Stripe · 支付宝 · 微信支�
 `eyebrow`、`title`、`description`、`notice` 或 `panel`。登录页标题使用已有
 部署展示名称及当前界面语言，并使用绝对标题，避免继承父布局的品牌模板。
 样式组合不改变注册、SSO、cookie、tab 或登录跳转。
+构建可提供公开 Logo `public/assets/logo.svg`；仅 `/assets/logo.svg` 精确路径免于
+登录及身份补全跳转，不开放整个 `/assets` 目录或该路径的子级。
 
 ### RUNTIME_ATTESTATION（可选，source-built 发布绑定）
 

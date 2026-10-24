@@ -204,6 +204,9 @@ content and adds no runtime configuration key. Scope CSS to
 `notice` or `panel`. The title uses the existing deployment display name and UI
 language as an absolute title, preventing an inherited parent-layout brand template.
 Style composition does not change signup, SSO, cookies, tabs or redirects.
+The build may supply a public logo at `public/assets/logo.svg`. Only the exact
+`/assets/logo.svg` path bypasses login and identity-setup redirects; the asset
+directory and child paths are not exempted.
 
 ### RUNTIME_ATTESTATION (optional source-built release binding)
 
