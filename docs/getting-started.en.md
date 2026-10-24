@@ -194,6 +194,17 @@ company name containing control characters or more than 120 characters fails
 closed. This display setting does not replace registration evidence or activate
 the legal identity on public legal pages.
 
+`/login` imports the fixed `app/(auth)/login/appearance.css` build target. In
+Public Core it contains generic comments only, preserving the default appearance.
+An approved deployment build may compose static CSS into this single target.
+Deployment styles and assets remain deployment-owned; Core imports no customer
+content and adds no runtime configuration key. Scope CSS to
+`[data-helm-auth="login"]` and select parts through `data-helm-auth-part`:
+`header`, `brand`, `controls`, `main`, `intro`, `eyebrow`, `title`, `description`,
+`notice` or `panel`. The title uses the existing deployment display name and UI
+language as an absolute title, preventing an inherited parent-layout brand template.
+Style composition does not change signup, SSO, cookies, tabs or redirects.
+
 ### RUNTIME_ATTESTATION (optional source-built release binding)
 
 | Variable | Purpose |

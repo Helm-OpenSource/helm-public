@@ -189,6 +189,15 @@ DingTalk · WeCom · HubSpot · Salesforce · Stripe · 支付宝 · 微信支�
 120 个字符，部署入口会 fail closed。该展示配置不替代下方工商登记证据与法律页面
 激活流程。
 
+`/login` 固定导入 `app/(auth)/login/appearance.css`。Public Core 的该文件只有
+通用说明注释，因此缺省保持原有外观。部署的已审核构建流程可向此唯一目标组合
+静态 CSS；客户样式与资产由部署自行提供，Core 不反向导入客户内容，且不新增
+运行时配置键。CSS 应以 `[data-helm-auth="login"]` 限定范围，通过
+`data-helm-auth-part` 选择 `header`、`brand`、`controls`、`main`、`intro`、
+`eyebrow`、`title`、`description`、`notice` 或 `panel`。登录页标题使用已有
+部署展示名称及当前界面语言，并使用绝对标题，避免继承父布局的品牌模板。
+样式组合不改变注册、SSO、cookie、tab 或登录跳转。
+
 ### RUNTIME_ATTESTATION（可选，source-built 发布绑定）
 
 | 变量 | 用途 |

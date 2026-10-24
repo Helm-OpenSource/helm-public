@@ -1,0 +1,7 @@
+/*
+ * Public Core keeps this build-time sign-in appearance target empty by default.
+ * A deployment build may compose its approved CSS into this exact file before
+ * compilation. Deployment styles should scope rules to [data-helm-auth="login"]
+ * and use data-helm-auth-part for page sections. No runtime configuration or
+ * customer assets are imported by Core.
+ */

@@ -1,4 +1,5 @@
 import { isEmailEntryEnabled } from "@/lib/auth/email-entry-policy";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -16,7 +17,15 @@ import {
   resolveDeploymentEntryConfig,
   resolveDeploymentPostLoginPath,
 } from "@/lib/auth/deployment-entry";
-import { resolveUiLocale } from "@/lib/i18n/config";
+import { resolveUiLocale, UI_LOCALE_COOKIE } from "@/lib/i18n/config";
+import "./appearance.css";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const cookieStore = await cookies();
+  const english = resolveUiLocale(cookieStore.get(UI_LOCALE_COOKIE)?.value) === "en-US";
+  const deploymentEntry = resolveDeploymentEntryConfig();
+  return { title: { absolute: `${english ? "Sign in" : "登录"} | ${deploymentEntry.displayName}` } };
+}
 
 type LoginPageSearchParams = Record<string, string | string[] | undefined>;
 type LoginPageEntryMode =
@@ -317,9 +326,9 @@ export default async function LoginPage({
   }
 
   return (
-    <div className="surface-grid min-h-screen bg-[color:var(--background)] text-[color:var(--foreground)]">
-      <header className="mx-auto flex w-full max-w-[1080px] flex-col gap-4 px-6 py-6 sm:flex-row sm:items-center sm:justify-between lg:px-10">
-        <div className="min-w-0">
+    <div data-helm-auth="login" className="surface-grid min-h-screen bg-[color:var(--background)] text-[color:var(--foreground)]">
+      <header data-helm-auth-part="header" className="mx-auto flex w-full max-w-[1080px] flex-col gap-4 px-6 py-6 sm:flex-row sm:items-center sm:justify-between lg:px-10">
+        <div data-helm-auth-part="brand" className="min-w-0">
           <p className="text-sm font-semibold">{deploymentEntry.displayName}</p>
           <p className="max-w-[18rem] text-xs text-[color:var(--muted-foreground)]">
             {deploymentEntry.companyName ??
@@ -328,7 +337,7 @@ export default async function LoginPage({
                 : "安全进入你的经营工作区。")}
           </p>
         </div>
-        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+        <div data-helm-auth-part="controls" className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           <PublicLocaleSwitcher locale={locale} variant="compact" />
           <ThemeToggle locale={locale} />
           <Button asChild variant="ghost">
@@ -340,15 +349,15 @@ export default async function LoginPage({
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-[760px] flex-1 flex-col justify-center gap-8 px-6 pb-16 pt-4 lg:px-10">
-        <section className="space-y-3 text-center sm:text-left">
-          <p className="inline-flex rounded-full border border-[color:var(--border)] bg-[color:var(--accent-soft)] px-3 py-1 text-xs font-medium text-[color:var(--accent)]">
+      <main data-helm-auth-part="main" className="mx-auto flex w-full max-w-[760px] flex-1 flex-col justify-center gap-8 px-6 pb-16 pt-4 lg:px-10">
+        <section data-helm-auth-part="intro" className="space-y-3 text-center sm:text-left">
+          <p data-helm-auth-part="eyebrow" className="inline-flex rounded-full border border-[color:var(--border)] bg-[color:var(--accent-soft)] px-3 py-1 text-xs font-medium text-[color:var(--accent)]">
             {loginCopy.eyebrow}
           </p>
-          <h1 className="text-balance text-3xl font-semibold leading-tight tracking-tight md:text-4xl">
+          <h1 data-helm-auth-part="title" className="text-balance text-3xl font-semibold leading-tight tracking-tight md:text-4xl">
             {loginCopy.title}
           </h1>
-          <p className="text-sm leading-6 text-[color:var(--muted)]">
+          <p data-helm-auth-part="description" className="text-sm leading-6 text-[color:var(--muted)]">
             {entryMode === "returning" && deploymentEntry.selfServeSignupEnabled ? (
               <>
                 {loginCopy.description} {english ? "First time here? " : "第一次来？"}
@@ -370,6 +379,7 @@ export default async function LoginPage({
 
         {oauthFallbackMessage && (
           <div
+            data-helm-auth-part="notice"
             className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--status-warning-bg)] p-4 text-sm text-[color:var(--status-warning-text)]"
             data-testid="public-oauth-fallback-notice"
           >
@@ -377,7 +387,7 @@ export default async function LoginPage({
           </div>
         )}
 
-        <section className="space-y-4">
+        <section data-helm-auth-part="panel" className="space-y-4">
           {entryMode === "dingtalk-invite" ? (
             <LoginInvitationOrientationCard
               english={english}
