@@ -35,7 +35,7 @@ export function captureServerBootstrapSources(root,bootstrapSource) {
    if((ts.isImportDeclaration(n)||ts.isExportDeclaration(n))&&n.moduleSpecifier){assert.ok(ts.isStringLiteral(n.moduleSpecifier));follow(n.moduleSpecifier.text);}
    if(ts.isCallExpression(n)&&(n.expression.kind===ts.SyntaxKind.ImportKeyword||ts.isIdentifier(n.expression)&&n.expression.text==='require')){
     if(n.arguments.length===1&&ts.isStringLiteral(n.arguments[0]))follow(n.arguments[0].text);
-    else assert.ok(relative==='lib/runtime/node-instrumentation.ts'&&n.getText(sf)==='import(packBootstrapPath)'&&bytes.toString().includes('const packBootstrapPath = ["@/extensions", "pack-bootstrap"].join("/");'),'bootstrap_fixture_dynamic_dependency_unknown');
+    else assert.fail('bootstrap_fixture_nonliteral_dependency_unknown:'+relative+':'+n.getText(sf));
    }
    ts.forEachChild(n,visit);
   }visit(sf);
@@ -81,7 +81,7 @@ async function start(root,fixture,outcome,refused,observe) {
    await new Promise(r=>setTimeout(r,25));
   }
   if(refused){assert.notEqual(result?.status,200,'required_refusal_must_not_serve');assert.match(text,/server_bootstrap_refused/);if(childHasExited(child))assert.equal(child.exitCode,1);else assert.equal(result?.status,500,'required_refusal_must_fail_http');}
-  else {assert.equal(result?.status,200,'actual_next_readiness_missing');await observe(result,()=>get(port,'POST'));}
+  else {assert.equal(result?.status,200,`actual_next_readiness_missing\n${text.slice(-6000)}`);await observe(result,()=>get(port,'POST'));}
   const routeStatuses={readiness:result?.status??null};
   if(!childHasExited(child)){for(const name of ['/api/health','/']){const observed=await get(port,'GET',name);routeStatuses[name]=observed.status;assert.equal(observed.status,refused?500:200,'actual_public_route_startup_boundary');}if(refused)assert.equal((await get(port,'POST')).status,500,'required_reentry_must_stay_refused');}
   const counts=JSON.parse(readFileSync(path.join(fixture,'counts.json')));assert.equal(counts.connects,0);assert.equal(counts.queries,0);if(refused)assert.equal(counts.constructors,0);
@@ -93,7 +93,7 @@ export async function runServerBootstrapHttpProof({root=ROOT,modes=['legacy-opti
  try {
   for(const mode of modes){assert.ok(['legacy-optional','disabled','required'].includes(mode));const fixture=path.join(parent,mode);mkdirSync(fixture,{mode:0o700});
    for(const [p,b]of sources){mkdirSync(path.dirname(path.join(fixture,p)),{recursive:true});writeFileSync(path.join(fixture,p),b);}
-   const nodeEntryPath=path.join(fixture,'lib/runtime/node-instrumentation.ts');const nodeEntry=readFileSync(nodeEntryPath,'utf8');assert.ok(nodeEntry.includes('const packBootstrapPath = ["@/extensions", "pack-bootstrap"].join("/");')&&nodeEntry.includes('import(packBootstrapPath)'),'bootstrap_fixture_fixed_slot_required');writeFileSync(nodeEntryPath,nodeEntry.replace('import(packBootstrapPath)','import("@/extensions/pack-bootstrap")'));
+   const nodeEntry=readFileSync(path.join(fixture,'lib/runtime/node-instrumentation.ts'),'utf8');assert.ok(nodeEntry.includes('import("@/extensions/pack-bootstrap")')&&!nodeEntry.includes('packBootstrapPath'),'bootstrap_fixture_static_slot_required');
    if(slotSource)writeFileSync(path.join(fixture,SLOT),slotSource);
    else {const slot=readFileSync(path.join(fixture,SLOT),'utf8');assert.equal(slot.split('mode: "legacy-optional"').length,2);writeFileSync(path.join(fixture,SLOT),slot.replace('mode: "legacy-optional"',`mode: "${mode}"`));}
    mkdirSync(path.join(fixture,'extensions'),{recursive:true});writeFileSync(path.join(fixture,BOOTSTRAP),bootstrapSource??REGISTRATION+(mode==='legacy-optional'?'':INITIALIZER.replace('__MODE__',mode)));

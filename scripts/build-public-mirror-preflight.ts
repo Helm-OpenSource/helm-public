@@ -13,8 +13,9 @@
  * Since 5A inverted the registry to a read-only seam, the real
  * lib/extensions/registry.tsx imports no tenant code and degrades to the
  * "no extension available" shape when no Pack registers (the mirror omits the
- * private extensions/pack-bootstrap.ts, so instrumentation finds no bootstrap
- * and the store stays empty). The mirror therefore ships the real registry
+ * private extensions/pack-bootstrap.ts. Its projected loader refuses the missing
+ * bootstrap without adding a runtime dependency; legacy-optional stays empty.
+ * The mirror therefore ships the real registry
  * unchanged; the former build-public-mirror-extensions-stub.ts has been removed.
  * Evidence: lib/extensions/registry-core-only-mirror-parity.test.ts.
  *
@@ -69,7 +70,7 @@ function resolveMirrorRoot(mirrorRoot: string): string {
 
 const NODE_ENTRY = "lib/runtime/node-instrumentation.ts";
 const PRIVATE_IMPORT = '  const loadPackBootstrap: BootstrapLoader = () => import("@/extensions/pack-bootstrap");';
-const PUBLIC_IMPORT = '  const packBootstrapPath = ["@/extensions", "pack-bootstrap"].join("/");\n  const loadPackBootstrap: BootstrapLoader = () => import(packBootstrapPath);';
+const PUBLIC_IMPORT = '  const loadPackBootstrap: BootstrapLoader = async () => { throw new Error("server_bootstrap_unavailable"); };';
 
 function projectInstrumentation(mirrorRoot: string, checkMode = false) {
   const file = path.join(mirrorRoot, NODE_ENTRY);

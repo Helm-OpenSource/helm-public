@@ -79,7 +79,8 @@ describe("public mirror preflight", () => {
     expect(result.envExample.status).toBe("wrote-projection");
     expect(result.dockerignore.status).toBe("wrote-projection");
     expect(result.instrumentation.status).toBe("projected");
-    expect(readText("lib/runtime/node-instrumentation.ts")).toContain('const packBootstrapPath = ["@/extensions", "pack-bootstrap"].join("/");\n  const loadPackBootstrap: BootstrapLoader = () => import(packBootstrapPath);');
+    expect(readText("lib/runtime/node-instrumentation.ts")).toContain('const loadPackBootstrap: BootstrapLoader = async () => { throw new Error("server_bootstrap_unavailable"); };');
+    expect(readText("lib/runtime/node-instrumentation.ts")).not.toContain("extensions/pack-bootstrap");
     expect(JSON.parse(readText("package.json"))).toMatchObject({
       name: "helm-console",
       private: false,
