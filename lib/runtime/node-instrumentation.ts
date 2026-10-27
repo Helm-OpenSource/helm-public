@@ -13,7 +13,6 @@ export async function registerNodeInstrumentation() {
   const policy = JSON.stringify(serverBootstrapBinding);
   if (globalThis.__helmServerBootstrapAdmission?.policy !== undefined && globalThis.__helmServerBootstrapAdmission.policy !== policy) throw new Error("server_bootstrap_binding_refused");
   // Preserve the fixed assembly slot in the same public-safe form used by base instrumentation.ts.
-  // @ts-ignore This source-only slot is provided by the assembled application.
   const packBootstrapPath = ["@/extensions", "pack-bootstrap"].join("/");
   const loadPackBootstrap: BootstrapLoader = () => import(packBootstrapPath);
   const admission = globalThis.__helmServerBootstrapAdmission ??= Object.freeze({ policy, initialize: createServerBootstrapInitializer(serverBootstrapBinding, loadPackBootstrap) });
