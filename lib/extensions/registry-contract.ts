@@ -53,6 +53,7 @@ import type {
   WorkspaceNavExtensionDescriptor,
   WorkstationSourceContribution,
   ExtensionAccessProbe,
+  ImportsTopSectionContribution,
 } from "./registry-types";
 
 // Re-export shared types so Pack modules can import everything they need from
@@ -125,6 +126,8 @@ export type PackContributions = {
     getAccess: ExtensionAccessProbe;
     build: () => AccountBindingContribution;
   };
+  /** Workspace-gated extension sections rendered above the shared CRM imports UI. */
+  importsTopSections?: ReadonlyArray<ImportsTopSectionContribution>;
   /** Approvals BI-board contribution gated by its own access probe. */
   biBoard?: {
     getAccess: ExtensionAccessProbe;
@@ -198,6 +201,7 @@ type MutableStore = {
   reportsExtensions: ReportsExtensionDescriptor[];
   workspaceNavExtensions: WorkspaceNavExtensionDescriptor[];
   accountBindings: NonNullable<PackContributions["accountBinding"]>[];
+  importsTopSections: ImportsTopSectionContribution[];
   biBoards: NonNullable<PackContributions["biBoard"]>[];
   industryDemoReadouts: IndustryDemoReadoutContribution[];
   mainlineProviders: MainlineProviderContribution[];
@@ -225,6 +229,7 @@ function emptyStore(): MutableStore {
     reportsExtensions: [],
     workspaceNavExtensions: [],
     accountBindings: [],
+    importsTopSections: [],
     biBoards: [],
     industryDemoReadouts: [],
     mainlineProviders: [],
@@ -274,6 +279,8 @@ export function registerPackContributions(
     s.workspaceNavExtensions.push(...contributions.workspaceNavExtensions);
   if (contributions.accountBinding)
     s.accountBindings.push(contributions.accountBinding);
+  if (contributions.importsTopSections)
+    s.importsTopSections.push(...contributions.importsTopSections);
   if (contributions.biBoard) s.biBoards.push(contributions.biBoard);
   if (contributions.industryDemoReadouts)
     s.industryDemoReadouts.push(...contributions.industryDemoReadouts);
@@ -361,6 +368,9 @@ export function getRegisteredAccountBindings(): ReadonlyArray<
   NonNullable<PackContributions["accountBinding"]>
 > {
   return store().accountBindings;
+}
+export function getRegisteredImportsTopSections(): ReadonlyArray<ImportsTopSectionContribution> {
+  return store().importsTopSections;
 }
 export function getRegisteredBiBoards(): ReadonlyArray<
   NonNullable<PackContributions["biBoard"]>

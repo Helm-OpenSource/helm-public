@@ -17,7 +17,7 @@ import "server-only";
  * functions exported here; they must not import `@/extensions/<tenant>/*`.
  */
 
-import type { ReactNode } from "react";
+import { Fragment, createElement, type ReactNode } from "react";
 
 import { logPageViewEvent } from "@/lib/analytics/session-events";
 import type { IndustryDemoPack } from "@/lib/demo/industry-fixtures/types";
@@ -34,6 +34,7 @@ import { recordSignalCollectionJobRun } from "@/lib/signal-collection/run-ledger
 
 import {
   getRegisteredAccountBindings,
+  getRegisteredImportsTopSections,
   getRegisteredAuditDisplayLabels,
   getRegisteredBiBoards,
   getRegisteredBiReportP0ProcessService,
@@ -59,6 +60,7 @@ import type {
   WorkspaceLike,
   ExtensionAccessContext,
   ExtensionAccessResult,
+  ImportsTopSectionContribution,
   RegisteredAuditDisplayLabels,
   WorkspaceNavExtensionCluster,
 } from "./registry-types";
@@ -326,6 +328,72 @@ export async function resolveImportsExtensions(input: {
     }
   }
   return { accountBinding: null };
+}
+
+const IMPORTS_EXTENSION_ACCESS_TIMEOUT_MS = 2_500;
+
+async function resolveImportsTopSectionAccessSafely(
+  section: ImportsTopSectionContribution,
+  workspace: WorkspaceLike,
+  accessContext?: ExtensionAccessContext,
+): Promise<ExtensionAccessResult> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<ExtensionAccessResult>((resolve) => {
+    timer = setTimeout(() => {
+      console.error(`[imports-extensions] ${section.id} getAccess timed out; treating as ok=false`);
+      resolve({ ok: false });
+    }, IMPORTS_EXTENSION_ACCESS_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([
+      section.getAccess(workspace, accessContext).catch((error) => {
+        console.error(`[imports-extensions] ${section.id} getAccess threw; treating as ok=false`, error);
+        return { ok: false } as const;
+      }),
+      timeout,
+    ]);
+  } catch (error) {
+    console.error(`[imports-extensions] ${section.id} getAccess threw; treating as ok=false`, error);
+    return { ok: false };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/** Resolve authorized extension sections for the active workspace. Failed or timed-out access
+ * probes omit their section; no contribution leaves the shared imports surface unchanged. */
+export async function resolveImportsTopSections(input: {
+  workspace: WorkspaceLike;
+  english: boolean;
+  accessContext?: ExtensionAccessContext;
+  membership?: {
+    id?: string;
+    workspaceId: string;
+    role?: string;
+    rolePresetKey?: string | null;
+    persona?: string | null;
+    title?: string | null;
+  } | null;
+}): Promise<ReactNode[]> {
+  const accessContext = input.accessContext ?? membershipAccessContext(input.workspace, input.membership);
+  const accessResults = await Promise.all(getRegisteredImportsTopSections().map(async (section) => ({
+    section,
+    access: await resolveImportsTopSectionAccessSafely(section, input.workspace, accessContext),
+  })));
+  const rendered: ReactNode[] = [];
+  for (const { section, access } of accessResults) {
+    if (!access.ok) continue;
+    try {
+      rendered.push(createElement(
+        Fragment,
+        { key: section.id },
+        section.render({ workspace: input.workspace, english: input.english }),
+      ));
+    } catch (error) {
+      console.error(`[imports-extensions] ${section.id} render threw; skipping section`, error);
+    }
+  }
+  return rendered;
 }
 
 export async function resolveApprovalsExtensions(input: {
