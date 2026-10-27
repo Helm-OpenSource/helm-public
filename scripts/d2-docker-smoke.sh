@@ -87,8 +87,8 @@ if ! command -v npm >/dev/null 2>&1; then
   exit 1
 fi
 
-npm --prefix "$workdir" ci --no-audit --no-fund
-npm --prefix "$workdir" run public-mirror:build -- --source-root "$workdir" --mirror-root "$mirror_dir"
+(cd "$workdir" && npm --prefix . ci --no-audit --no-fund)
+(cd "$workdir" && npm --prefix . run public-mirror:build -- --source-root "$workdir" --mirror-root "$mirror_dir")
 
 compose_dir="$mirror_dir"
 cd "$compose_dir"
