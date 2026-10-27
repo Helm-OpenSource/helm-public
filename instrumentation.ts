@@ -1,111 +1,13 @@
-import { isDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
-import { serverBootstrapBinding } from "@/lib/runtime/server-bootstrap-binding";
-import { createServerBootstrapInitializer } from "@/lib/runtime/server-bootstrap";
-
-const packBootstrapPath = ["@/extensions", "pack-bootstrap"].join("/");
-// Next may evaluate instrumentation in more than one server bundle. Share the
-// initializer within this process, as the contribution registry already does.
-// Deployment must independently verify the installed source root; this
-// fingerprint identifies the source admission policy, not file authenticity.
-declare global {
-  var __helmServerBootstrapAdmission: Readonly<{
-    policy: string;
-    initialize: ReturnType<typeof createServerBootstrapInitializer>;
-  }> | undefined;
-}
-const policy = JSON.stringify(serverBootstrapBinding);
-if (globalThis.__helmServerBootstrapAdmission?.policy !== undefined &&
-    globalThis.__helmServerBootstrapAdmission.policy !== policy) {
-  throw new Error("server_bootstrap_binding_refused");
-}
-const admission = globalThis.__helmServerBootstrapAdmission ??= Object.freeze({
-  policy,
-  initialize: createServerBootstrapInitializer(serverBootstrapBinding,
-    () => import(packBootstrapPath)),
-});
-const initializeServerBootstrap = admission.initialize;
-
+// Next evaluates the instrumentation entry in both runtimes. Keep the Node
+// composition root out of the Edge dependency graph.
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") {
-    logInstrumentationInfo("skip server cron registration", {
+    console.info(`[instrumentation] skip server cron registration ${JSON.stringify({
       nextRuntime: process.env.NEXT_RUNTIME ?? null,
-    });
+    })}`);
     return;
   }
 
-  // Composition root (repo-split Step 5A): wire Packs/Overlays into the Core
-  // registry via the generic bootstrap aggregator. Core names NO tenant here.
-  // `extensions/pack-bootstrap` is a PRIVATE_FILE, so the public Core mirror
-  // omits it. Keep the import path non-literal so public typecheck/build does
-  // not require the private bootstrap file; runtime absence still degrades to
-  // Core-only behavior. That degradation is intentional.
-  // Versioned initialization is awaited before downstream startup. Required
-  // failure propagates; it must never become a Core-only success. The fixed
-  // source slot cannot be selected by request data or environment variables.
-  const bootstrap = await initializeServerBootstrap();
-  logInstrumentationInfo("server bootstrap admission", bootstrap);
-
-  const { startEngineeringDeliveryReviewCron } = await import(
-    "@/lib/reports/engineering-delivery-review-cron"
-  );
-
-  startEngineeringDeliveryReviewCron();
-
-  // Advice-only follow-through sweep for the light task chain (ActionItem /
-  // Commitment). Opt-in via LIGHT_CHAIN_FOLLOW_THROUGH_CRON_ENABLED; internal
-  // notifications and audit only, no external send.
-  const { startLightChainFollowThroughCron } = await import(
-    "@/lib/task-follow-through/light-chain-follow-through-cron"
-  );
-
-  startLightChainFollowThroughCron();
-
-  // T019.code P0 #2b — wire DB-derived spend provider so the LLM
-  // spend-tracker can use max(in-memory, DB) on multi-instance
-  // deployments. The provider is cached with 60s TTL inside spend-tracker;
-  // a DB-unavailable error falls back to in-memory only.
-  // See HELM_LLM_SPEND_AND_ABUSE_GUARDS_SPEC_V1 (internal) §二 Gap 3.
-  try {
-    const [{ setDBDerivedSpendProvider }, { deriveMonthToDateSpendUSDFromCallLog }, { db }] = await Promise.all([
-      import("@/lib/llm/spend-tracker"),
-      import("@/lib/llm/spend-budget-db-derivation"),
-      import("@/lib/db"),
-    ]);
-    setDBDerivedSpendProvider(async ({ workspaceId, monthKey }) =>
-      deriveMonthToDateSpendUSDFromCallLog({
-        client: db.lLMCallLog,
-        workspaceId,
-        monthKey,
-      }),
-    );
-    logInstrumentationInfo("registered DB-derived LLM spend provider");
-  } catch (err) {
-    logInstrumentationInfo("failed to register DB-derived LLM spend provider; falling back to in-memory only", {
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
-
-  if (
-    process.env.SIGNAL_COLLECTION_SCHEDULER_ENABLED?.trim().toLowerCase() === "true" &&
-    isDeploymentCapabilityEnabled("signal_runtime_write")
-  ) {
-    logInstrumentationInfo("starting signal collection scheduler");
-    const { startRegisteredSignalCollectionScheduler } = await import(
-      "@/lib/extensions/registry"
-    );
-    startRegisteredSignalCollectionScheduler();
-  } else {
-    logInstrumentationInfo("signal collection scheduler disabled", {
-      signalCollectionSchedulerEnabled:
-        process.env.SIGNAL_COLLECTION_SCHEDULER_ENABLED ?? null,
-    });
-  }
-}
-
-function logInstrumentationInfo(message: string, details?: Record<string, unknown>) {
-  if (!details) {
-    console.info(`[instrumentation] ${message}`);
-    return;
-  }
-  console.info(`[instrumentation] ${message} ${JSON.stringify(details)}`);
+  const { registerNodeInstrumentation } = await import("@/lib/runtime/node-instrumentation");
+  await registerNodeInstrumentation();
 }

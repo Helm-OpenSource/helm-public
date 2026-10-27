@@ -28,6 +28,7 @@
  *   npx tsx scripts/build-public-mirror-preflight.ts --mirror-root /path/to/mirror --check
  */
 
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import {
@@ -53,6 +54,7 @@ export type PublicMirrorPreflightOptions = {
 };
 
 export type PublicMirrorPreflightResult = {
+  readonly instrumentation: { readonly status: "no-entry" | "projected" | "already-projected" | "needs-projection" | "unexpected-shape"; readonly exitCode: 0 | 1 };
   readonly mirrorRoot: string;
   readonly packageManifest: PublicPackageManifestBuildResult;
   readonly envExample: PublicEnvExampleBuildResult;
@@ -63,6 +65,23 @@ export type PublicMirrorPreflightResult = {
 
 function resolveMirrorRoot(mirrorRoot: string): string {
   return path.resolve(mirrorRoot);
+}
+
+const NODE_ENTRY = "lib/runtime/node-instrumentation.ts";
+const PRIVATE_IMPORT = '  const loadPackBootstrap: BootstrapLoader = () => import("@/extensions/pack-bootstrap");';
+const PUBLIC_IMPORT = '  const packBootstrapPath = ["@/extensions", "pack-bootstrap"].join("/");\n  const loadPackBootstrap: BootstrapLoader = () => import(packBootstrapPath);';
+
+function projectInstrumentation(mirrorRoot: string, checkMode = false) {
+  const file = path.join(mirrorRoot, NODE_ENTRY);
+  if (!existsSync(file)) return { status: "no-entry" as const, exitCode: 0 as const };
+  const source = readFileSync(file, "utf8");
+  const projectedCount = source.split(PUBLIC_IMPORT).length - 1;
+  const privateCount = source.split(PRIVATE_IMPORT).length - 1;
+  if (projectedCount === 1 && privateCount === 0) return { status: "already-projected" as const, exitCode: 0 as const };
+  if (projectedCount !== 0 || privateCount !== 1) return { status: "unexpected-shape" as const, exitCode: 1 as const };
+  if (checkMode) return { status: "needs-projection" as const, exitCode: 1 as const };
+  writeFileSync(file, source.replace(PRIVATE_IMPORT, PUBLIC_IMPORT), "utf8");
+  return { status: "projected" as const, exitCode: 0 as const };
 }
 
 export function buildPublicMirrorPreflight(
@@ -86,11 +105,13 @@ export function buildPublicMirrorPreflight(
     repoRoot: mirrorRoot,
     checkMode: options.checkMode,
   });
+  const instrumentation = projectInstrumentation(mirrorRoot, options.checkMode);
   const exitCode =
     packageManifest.exitCode === 0 &&
     envExample.exitCode === 0 &&
     dockerignore.exitCode === 0 &&
-    readme.exitCode === 0
+    readme.exitCode === 0 &&
+    instrumentation.exitCode === 0
       ? 0
       : 1;
 
@@ -100,6 +121,7 @@ export function buildPublicMirrorPreflight(
     envExample,
     dockerignore,
     readme,
+    instrumentation,
     exitCode,
   };
 }
@@ -149,6 +171,7 @@ function main(): number {
     `env-example: ${result.envExample.status}`,
     `dockerignore: ${result.dockerignore.status}`,
     `readme: ${result.readme.status}`,
+    `instrumentation: ${result.instrumentation.status}`,
   ];
 
   if (result.exitCode === 0) {

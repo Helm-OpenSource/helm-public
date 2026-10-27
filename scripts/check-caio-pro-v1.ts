@@ -163,7 +163,7 @@ const ALLOWED_COMPUTED_DYNAMIC_IMPORTS = new Map<
   readonly ComputedDynamicImportAllowance[]
 >([
   [
-    "instrumentation.ts",
+    "lib/runtime/node-instrumentation.ts",
     [
       {
         expression: "packBootstrapPath",
