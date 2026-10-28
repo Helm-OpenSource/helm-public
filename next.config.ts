@@ -17,6 +17,8 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: projectRoot,
   serverExternalPackages: ["ali-oss"],
   allowedDevOrigins: configuredAllowedDevOrigins,
+  // Next dev logs Server Function arguments by default; keep credentials and payloads out of stdout.
+  logging: { serverFunctions: false },
   async headers() {
     return ["/activate-member", "/settings/member-activation"].map(source => ({ source, headers: [
       { key: "Cache-Control", value: "no-store, private" },
