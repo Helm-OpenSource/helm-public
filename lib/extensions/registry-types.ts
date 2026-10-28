@@ -133,6 +133,13 @@ export type AccountBindingContribution = {
   entryButton: (props: { english: boolean }) => ReactNode;
 };
 
+/** A workspace-gated section rendered before the shared CRM imports surface. */
+export type ImportsTopSectionContribution = {
+  id: string;
+  getAccess: ExtensionAccessProbe;
+  render: (input: { workspace: WorkspaceLike; english: boolean }) => ReactNode;
+};
+
 export type ResolvedImportsExtensionsType = {
   accountBinding: AccountBindingContribution | null;
 };

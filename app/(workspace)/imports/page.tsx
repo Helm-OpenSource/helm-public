@@ -7,15 +7,16 @@ import {
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
 import { getWorkspaceBusinessLoopGapReadout } from "@/lib/helm-v2/runtime-upgrade";
 import { getImportConfig } from "@/lib/imports";
-import { resolveImportsExtensions } from "@/lib/extensions/registry";
+import { resolveImportsExtensions, resolveImportsTopSections } from "@/lib/extensions/registry";
 
 export default async function ImportsPage() {
   const session = await getCurrentWorkspaceSession();
   const workspace = session.workspace;
   const english = workspace.defaultLocale === "en-US";
   const canManageImports = canManageWorkspaceImports(session.membership.role);
-  const importsExtensions = await resolveImportsExtensions({ workspace });
-  const [crmData, businessLoopGapReadout] = await Promise.all([
+  const [importsExtensions, topSections, crmData, businessLoopGapReadout] = await Promise.all([
+    resolveImportsExtensions({ workspace }),
+    resolveImportsTopSections({ workspace, english, membership: session.membership }),
     getCrmImportData(workspace.id),
     getWorkspaceBusinessLoopGapReadout(workspace.id),
   ]);
@@ -37,6 +38,7 @@ export default async function ImportsPage() {
         importManagementDeniedMessage: getImportManagementDeniedMessage(english),
       }}
       accountBindingSlot={accountBindingSlot}
+      topSections={topSections}
       businessLoopGapSummary={businessLoopGapReadout.businessLoopGapSummary}
       configs={{
         contacts: getImportConfig("contacts"),

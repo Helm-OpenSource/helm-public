@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useSyncExternalStore, useTransition, type ReactNode } from "react";
+import { Fragment, useMemo, useState, useSyncExternalStore, useTransition, type ReactNode } from "react";
 import { Download, FileUp, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspaceUi } from "@/components/providers/workspace-ui-provider";
@@ -52,6 +52,8 @@ type ImportsClientProps = {
    * extension contributes one for the current workspace.
    */
   accountBindingSlot: ReactNode;
+  /** Authorized, server-rendered extension sections placed before the shared CRM area. */
+  topSections: ReactNode[];
   businessLoopGapSummary: BusinessLoopGapSummary;
 };
 
@@ -82,6 +84,7 @@ export function ImportsClient({
   crmSummary,
   capability,
   accountBindingSlot: _accountBindingSlot,
+  topSections,
   businessLoopGapSummary,
 }: ImportsClientProps) {
   const { locale } = useWorkspaceUi();
@@ -439,6 +442,7 @@ export function ImportsClient({
 
   return (
     <div className="workspace-surface-stack">
+      {topSections.map((section, index) => <Fragment key={index}>{section}</Fragment>)}
       <PageHeader
         eyebrow={english ? "Customer records" : "客户台账"}
         title={english ? "Bring in accounts, contacts, deals and meetings first" : "先接入客户、联系人、机会和会议"}
