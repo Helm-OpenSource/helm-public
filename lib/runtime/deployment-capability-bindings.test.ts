@@ -11,7 +11,7 @@ const EXPECTED_BINDINGS = {
     "lib/reports/engineering-delivery-review-refresh.ts",
   ],
   signal_runtime_write: [
-    "instrumentation.ts",
+    "lib/runtime/node-instrumentation.ts",
     "app/api/runtime/signals/collect/route.ts",
     "lib/extensions/registry.tsx",
     "lib/signal-collection/scheduler.ts",

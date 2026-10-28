@@ -24,6 +24,7 @@ export function captureServerBootstrapSources(root,bootstrapSource) {
   assert.ok(bytes.length<=2*1024*1024&&sources.size<512,'bootstrap_fixture_source_bound');sources.set(relative,Buffer.from(bytes));
   const sf=ts.createSourceFile(relative,bytes.toString('utf8'),ts.ScriptTarget.Latest,true);
   const follow=specifier=>{
+   if(specifier==='@/extensions/pack-bootstrap'){if(bootstrapSource)queue.push(BOOTSTRAP);return;}
    if(!(specifier.startsWith('@/')||specifier.startsWith('.'))||specifier.startsWith('.prisma/'))return;
    const base=specifier.startsWith('@/')?path.join(root,specifier.slice(2)):path.resolve(root,path.dirname(relative),specifier);
    const absolute=[base,...['.ts','.tsx','.mjs','.js','.json'].map(e=>base+e),path.join(base,'index.ts')].find(f=>existsSync(f)&&lstatSync(f).isFile());
@@ -34,7 +35,7 @@ export function captureServerBootstrapSources(root,bootstrapSource) {
    if((ts.isImportDeclaration(n)||ts.isExportDeclaration(n))&&n.moduleSpecifier){assert.ok(ts.isStringLiteral(n.moduleSpecifier));follow(n.moduleSpecifier.text);}
    if(ts.isCallExpression(n)&&(n.expression.kind===ts.SyntaxKind.ImportKeyword||ts.isIdentifier(n.expression)&&n.expression.text==='require')){
     if(n.arguments.length===1&&ts.isStringLiteral(n.arguments[0]))follow(n.arguments[0].text);
-    else assert.ok(relative==='instrumentation.ts'&&n.getText(sf)==='import(packBootstrapPath)'&&bytes.toString().includes('const packBootstrapPath = ["@/extensions", "pack-bootstrap"].join("/");'),'bootstrap_fixture_dynamic_dependency_unknown');
+    else assert.fail('bootstrap_fixture_nonliteral_dependency_unknown:'+relative+':'+n.getText(sf));
    }
    ts.forEachChild(n,visit);
   }visit(sf);
@@ -80,7 +81,7 @@ async function start(root,fixture,outcome,refused,observe) {
    await new Promise(r=>setTimeout(r,25));
   }
   if(refused){assert.notEqual(result?.status,200,'required_refusal_must_not_serve');assert.match(text,/server_bootstrap_refused/);if(childHasExited(child))assert.equal(child.exitCode,1);else assert.equal(result?.status,500,'required_refusal_must_fail_http');}
-  else {assert.equal(result?.status,200,'actual_next_readiness_missing');await observe(result,()=>get(port,'POST'));}
+  else {assert.equal(result?.status,200,`actual_next_readiness_missing\n${text.slice(-6000)}`);await observe(result,()=>get(port,'POST'));}
   const routeStatuses={readiness:result?.status??null};
   if(!childHasExited(child)){for(const name of ['/api/health','/']){const observed=await get(port,'GET',name);routeStatuses[name]=observed.status;assert.equal(observed.status,refused?500:200,'actual_public_route_startup_boundary');}if(refused)assert.equal((await get(port,'POST')).status,500,'required_reentry_must_stay_refused');}
   const counts=JSON.parse(readFileSync(path.join(fixture,'counts.json')));assert.equal(counts.connects,0);assert.equal(counts.queries,0);if(refused)assert.equal(counts.constructors,0);
@@ -92,7 +93,7 @@ export async function runServerBootstrapHttpProof({root=ROOT,modes=['legacy-opti
  try {
   for(const mode of modes){assert.ok(['legacy-optional','disabled','required'].includes(mode));const fixture=path.join(parent,mode);mkdirSync(fixture,{mode:0o700});
    for(const [p,b]of sources){mkdirSync(path.dirname(path.join(fixture,p)),{recursive:true});writeFileSync(path.join(fixture,p),b);}
-   const original=readFileSync(path.join(fixture,'instrumentation.ts'),'utf8');assert.equal(original.split('import(packBootstrapPath)').length,2,'bootstrap_fixture_single_relocation_required');writeFileSync(path.join(fixture,'instrumentation.ts'),original.replace('import(packBootstrapPath)','import("@/extensions/pack-bootstrap")'));
+   const nodeEntry=readFileSync(path.join(fixture,'lib/runtime/node-instrumentation.ts'),'utf8');assert.ok(nodeEntry.includes('import("@/extensions/pack-bootstrap")')&&!nodeEntry.includes('packBootstrapPath'),'bootstrap_fixture_static_slot_required');
    if(slotSource)writeFileSync(path.join(fixture,SLOT),slotSource);
    else {const slot=readFileSync(path.join(fixture,SLOT),'utf8');assert.equal(slot.split('mode: "legacy-optional"').length,2);writeFileSync(path.join(fixture,SLOT),slot.replace('mode: "legacy-optional"',`mode: "${mode}"`));}
    mkdirSync(path.join(fixture,'extensions'),{recursive:true});writeFileSync(path.join(fixture,BOOTSTRAP),bootstrapSource??REGISTRATION+(mode==='legacy-optional'?'':INITIALIZER.replace('__MODE__',mode)));
@@ -103,7 +104,7 @@ export const dynamic="force-dynamic";function read(){const g=globalThis as typeo
    writeFileSync(path.join(fixture,'tsconfig.json'),JSON.stringify({compilerOptions:{target:'ES2020',lib:['dom','esnext'],strict:true,skipLibCheck:true,noEmit:true,esModuleInterop:true,module:'esnext',moduleResolution:'bundler',resolveJsonModule:true,isolatedModules:true,jsx:'preserve',baseUrl:'.',paths:{'@/*':['./*']}},include:['**/*.ts','**/*.tsx','.next/types/**/*.ts'],exclude:['node_modules']}));writeFileSync(path.join(fixture,'next.config.mjs'),'export default {experimental:{cpus:1}};\n');
    const helper=readFileSync(path.join(root,'scripts/test-caio-route-admission-http.mjs'),'utf8');const preload=/const PRELOAD = String\.raw`([\s\S]*?)`;/u.exec(helper);assert.ok(preload);writeFileSync(path.join(fixture,'preload.cjs'),preload[1]+"\nrequire('node:net').Socket.prototype.connect=function(){throw new Error('reserved_network_forbidden')};\n");
    const build=spawnSync(process.execPath,[path.join(root,'node_modules/next/dist/bin/next'),'build','--webpack'],{cwd:fixture,env:env(fixture),encoding:'utf8',timeout:180000,maxBuffer:16*1024*1024});
-   assert.equal(build.error,undefined);assert.equal(build.status,0,'actual_next_bootstrap_build_failed');
+   assert.equal(build.error,undefined);assert.equal(build.status,0,`actual_next_bootstrap_build_failed\n${(build.stdout??'').slice(-6000)}\n${(build.stderr??'').slice(-6000)}`);
    for(const outcome of mode==='required'?['complete','registration-refusal','reject','pending']:mode==='legacy-optional'?['complete','registration-refusal','import-refusal']:['complete']){
     observations.push({mode,...await start(root,fixture,outcome,mode==='required'&&outcome!=='complete',async(r,repeat)=>{
      if(observe)await observe(r);

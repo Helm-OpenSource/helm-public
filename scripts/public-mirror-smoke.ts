@@ -2,16 +2,20 @@
 /**
  * Public mirror smoke gate.
  *
- * This is stricter than the source-tree public-release guard. It runs against a
- * prepared public mirror and rejects tenant-private semantic anchors from
- * runtime source/config surfaces. Policy docs can still describe boundaries,
- * but runnable public code must be generic.
+ * This is stricter than the source-tree public-release guard. It rejects
+ * tenant-private semantic anchors from runtime source/config surfaces. A Core
+ * source tree with the fixed private bootstrap slot is projected to a temporary
+ * public mirror before verification; an already-prepared mirror is checked in
+ * place. Policy docs can describe boundaries, but runnable public code stays
+ * generic.
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { buildPublicMirrorTree } from "./build-public-mirror-tree";
 import { verifyPublicMirrorTree } from "./check-public-mirror-tree";
 export { runPublicMirrorSemanticSmoke } from "./public-mirror-semantic";
 import {
@@ -54,46 +58,73 @@ export function runPublicMirrorSmoke(options: {
   readonly includeBuild?: boolean;
 }): PublicMirrorSmokeResult {
   const repoRoot = path.resolve(options.repoRoot);
-  const verification = verifyPublicMirrorTree({ mirrorRoot: repoRoot });
-  const semantic = runPublicMirrorSemanticSmoke(repoRoot);
-  const commandFailures: string[] = [];
-
-  if (options.runCommands) {
-    for (const scriptName of ["validate:env", "typecheck"]) {
-      const failure = runNpmCommand(repoRoot, scriptName);
-      if (failure) commandFailures.push(failure);
-    }
-    if (options.includeBuild !== false) {
-      const failure = runNpmCommand(repoRoot, "build");
-      if (failure) commandFailures.push(failure);
-    }
-    const publicReleaseArgs =
-      options.includeBuild !== false
-        ? ["--", "--include-local-build-artifacts"]
-        : [];
-    const failure = runNpmCommand(
-      repoRoot,
-      "check:public-release",
-      publicReleaseArgs,
-    );
-    if (failure) commandFailures.push(failure);
-  }
-
-  const exitCode =
-    verification.exitCode === 0 &&
-    semantic.violations.length === 0 &&
-    commandFailures.length === 0
-      ? 0
-      : 1;
-
-  return {
+  let mirrorRoot = repoRoot;
+  let temporaryMirrorRoot: string | undefined;
+  const instrumentationPath = path.join(
     repoRoot,
-    scannedFiles: semantic.scannedFiles,
-    violations: semantic.violations,
-    verificationExitCode: verification.exitCode,
-    commandFailures,
-    exitCode,
-  };
+    "lib/runtime/node-instrumentation.ts",
+  );
+  const sourceHasPrivateBootstrapSlot =
+    !options.runCommands &&
+    existsSync(instrumentationPath) &&
+    readFileSync(instrumentationPath, "utf8").includes(
+      'import("@/extensions/pack-bootstrap")',
+    );
+
+  try {
+    if (sourceHasPrivateBootstrapSlot) {
+      temporaryMirrorRoot = mkdtempSync(
+        path.join(tmpdir(), "helm-public-smoke-mirror-"),
+      );
+      mirrorRoot = temporaryMirrorRoot;
+      buildPublicMirrorTree({ sourceRoot: repoRoot, mirrorRoot });
+    }
+
+    const verification = verifyPublicMirrorTree({ mirrorRoot });
+    const semantic = runPublicMirrorSemanticSmoke(mirrorRoot);
+    const commandFailures: string[] = [];
+
+    if (options.runCommands) {
+      for (const scriptName of ["validate:env", "typecheck"]) {
+        const failure = runNpmCommand(repoRoot, scriptName);
+        if (failure) commandFailures.push(failure);
+      }
+      if (options.includeBuild !== false) {
+        const failure = runNpmCommand(repoRoot, "build");
+        if (failure) commandFailures.push(failure);
+      }
+      const publicReleaseArgs =
+        options.includeBuild !== false
+          ? ["--", "--include-local-build-artifacts"]
+          : [];
+      const failure = runNpmCommand(
+        repoRoot,
+        "check:public-release",
+        publicReleaseArgs,
+      );
+      if (failure) commandFailures.push(failure);
+    }
+
+    const exitCode =
+      verification.exitCode === 0 &&
+      semantic.violations.length === 0 &&
+      commandFailures.length === 0
+        ? 0
+        : 1;
+
+    return {
+      repoRoot,
+      scannedFiles: semantic.scannedFiles,
+      violations: semantic.violations,
+      verificationExitCode: verification.exitCode,
+      commandFailures,
+      exitCode,
+    };
+  } finally {
+    if (temporaryMirrorRoot) {
+      rmSync(temporaryMirrorRoot, { force: true, recursive: true });
+    }
+  }
 }
 
 function parseArgs(args: string[]): {

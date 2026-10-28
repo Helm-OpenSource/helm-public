@@ -55,6 +55,7 @@ function seedPrivateMirrorInputs(): { privatePackage: unknown; privateRegistry: 
   writeText(".env.example", "HELM_DEFAULT_LOCALE=zh-CN\n");
   writeText(".dockerignore", `node_modules\nextensions/${tenantSlug}/\n`);
   writeText("lib/extensions/registry.tsx", privateRegistry);
+  writeText("lib/runtime/node-instrumentation.ts", ['type BootstrapLoader = () => Promise<unknown>;', '  const loadPackBootstrap: BootstrapLoader = () => import("@/extensions/pack-bootstrap");'].join("\n"));
 
   return { privatePackage, privateRegistry };
 }
@@ -77,6 +78,9 @@ describe("public mirror preflight", () => {
     expect(result.packageManifest.status).toBe("wrote-projection");
     expect(result.envExample.status).toBe("wrote-projection");
     expect(result.dockerignore.status).toBe("wrote-projection");
+    expect(result.instrumentation.status).toBe("projected");
+    expect(readText("lib/runtime/node-instrumentation.ts")).toContain('const loadPackBootstrap: BootstrapLoader = async () => { throw new Error("server_bootstrap_unavailable"); };');
+    expect(readText("lib/runtime/node-instrumentation.ts")).not.toContain("extensions/pack-bootstrap");
     expect(JSON.parse(readText("package.json"))).toMatchObject({
       name: "helm-console",
       private: false,
@@ -108,6 +112,7 @@ describe("public mirror preflight", () => {
     expect(checkResult.packageManifest.status).toBe("already-projected");
     expect(checkResult.envExample.status).toBe("already-projected");
     expect(checkResult.dockerignore.status).toBe("already-projected");
+    expect(checkResult.instrumentation.status).toBe("already-projected");
   });
 
   it("fails in check mode without mutating unprojected mirror inputs", () => {
@@ -122,6 +127,7 @@ describe("public mirror preflight", () => {
     expect(result.packageManifest.status).toBe("not-projected");
     expect(result.envExample.status).toBe("not-projected");
     expect(result.dockerignore.status).toBe("not-projected");
+    expect(result.instrumentation.status).toBe("needs-projection");
     expect(JSON.parse(readText("package.json"))).toEqual(privatePackage);
   });
 });

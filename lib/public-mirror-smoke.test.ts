@@ -1,10 +1,11 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { PUBLIC_DOCKERIGNORE_CONTENT } from "../scripts/build-public-dockerignore";
 import { PUBLIC_ENV_EXAMPLE_CONTENT } from "../scripts/build-public-env-example";
+import { projectPublicPackageManifest } from "../scripts/public-release-guard";
 import {
   runPublicMirrorSemanticSmoke,
   runPublicMirrorSmoke,
@@ -36,7 +37,7 @@ function writeJson(relativePath: string, value: unknown): void {
 }
 
 function seedProjectedMirror(): void {
-  writeJson("package.json", {
+  const packageProjection = projectPublicPackageManifest({
     name: "helm-console",
     private: false,
     license: "Apache-2.0",
@@ -69,6 +70,7 @@ function seedProjectedMirror(): void {
       typecheck: "tsc --noEmit --project tsconfig.public.json",
     },
   });
+  writeJson("package.json", packageProjection.manifest);
   writeText("LICENSE", "Apache License\nVersion 2.0, January 2004\n");
   writeText(
     "NOTICE",
@@ -124,9 +126,26 @@ describe("public mirror smoke", () => {
     seedProjectedMirror();
 
     const result = runPublicMirrorSmoke({ repoRoot: fixtureRoot });
+    expect(result.exitCode).toBe(0);
+    expect(result.verificationExitCode).toBe(0);
+    expect(result.violations).toEqual([]);
+  });
+
+  it("projects a Core source tree before checking its public mirror", () => {
+    seedProjectedMirror();
+    const source = [
+      "type BootstrapLoader = () => Promise<unknown>;",
+      '  const loadPackBootstrap: BootstrapLoader = () => import("@/extensions/pack-bootstrap");',
+    ].join("\n");
+    writeText("lib/runtime/node-instrumentation.ts", source);
+
+    const result = runPublicMirrorSmoke({ repoRoot: fixtureRoot });
 
     expect(result.exitCode).toBe(0);
     expect(result.verificationExitCode).toBe(0);
     expect(result.violations).toEqual([]);
+    expect(
+      readFileSync(path.join(fixtureRoot, "lib/runtime/node-instrumentation.ts"), "utf8"),
+    ).toBe(source);
   });
 });

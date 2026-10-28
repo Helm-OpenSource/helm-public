@@ -6,6 +6,8 @@ ref="${HELM_D2_SMOKE_REF:-HEAD}"
 keep_workdir="${HELM_D2_SMOKE_KEEP_WORKDIR:-0}"
 timeout_seconds="${HELM_D2_SMOKE_TIMEOUT_SECONDS:-240}"
 workdir="${HELM_D2_SMOKE_WORKDIR:-$(mktemp -d "${TMPDIR:-/tmp}/helm-public-d2-smoke.XXXXXX")}"
+mirror_dir="${HELM_D2_SMOKE_MIRROR_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/helm-public-d2-mirror.XXXXXX")}"
+compose_dir=""
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "[d2-smoke] docker is required but was not found on PATH" >&2
@@ -25,21 +27,22 @@ fi
 cleanup() {
   local status=$?
 
-  if [ -d "${workdir}/.git" ]; then
+  if [ -n "$compose_dir" ] && [ -f "${compose_dir}/docker-compose.yml" ]; then
     if [ "$status" -ne 0 ]; then
       echo "[d2-smoke] docker compose ps" >&2
-      (cd "$workdir" && docker compose ps) >&2 || true
+      (cd "$compose_dir" && docker compose ps) >&2 || true
       echo "[d2-smoke] docker compose logs" >&2
-      (cd "$workdir" && docker compose logs --no-color --tail=300) >&2 || true
+      (cd "$compose_dir" && docker compose logs --no-color --tail=300) >&2 || true
     fi
 
-    (cd "$workdir" && docker compose down -v --remove-orphans) >/dev/null 2>&1 || true
+    (cd "$compose_dir" && docker compose down -v --remove-orphans) >/dev/null 2>&1 || true
   fi
 
   if [ "$keep_workdir" != "1" ]; then
-    rm -rf "$workdir"
+    rm -rf "$workdir" "$mirror_dir"
   else
-    echo "[d2-smoke] kept workdir: $workdir" >&2
+    echo "[d2-smoke] kept source workdir: $workdir" >&2
+    echo "[d2-smoke] kept public mirror: $mirror_dir" >&2
   fi
 
   exit "$status"
@@ -79,7 +82,16 @@ git -C "$workdir" checkout --detach FETCH_HEAD
 
 echo "[d2-smoke] checkout=$(git -C "$workdir" rev-parse HEAD)"
 
-cd "$workdir"
+if ! command -v npm >/dev/null 2>&1; then
+  echo "[d2-smoke] npm is required to prepare the public mirror" >&2
+  exit 1
+fi
+
+(cd "$workdir" && npm --prefix . ci --no-audit --no-fund)
+(cd "$workdir" && npm --prefix . run public-mirror:build -- --source-root "$workdir" --mirror-root "$mirror_dir")
+
+compose_dir="$mirror_dir"
+cd "$compose_dir"
 docker compose up --build -d
 
 wait_for_url "http://localhost:3000/health" "/health"
