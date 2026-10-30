@@ -4485,6 +4485,10 @@ model AuditLog {
 
   @@index([workspaceId, traceId])
   @@index([workspaceId, requestId])
+  // Workspace timelines (dashboard, operating workspace, memory) and per-action reads/counts (stage-1 owner loop,
+  // settings, org-admin governance) filter by workspace and order or bound by createdAt (2026-10-30).
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, actionType, createdAt])
 }
 
 model InternalCommercializationRun {
