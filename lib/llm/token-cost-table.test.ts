@@ -48,14 +48,20 @@ describe("token-cost-table · resolveTokenCost", () => {
     }
   });
 
-  it("leaves the unpriced qwen3.8-max on the worst-case fallback", () => {
-    // Intentional, not an omission: the vendor had not published a price as of
-    // 2026-08-18. Pinned so that nobody closes the gap with a guessed number —
-    // if this test starts failing because a real entry was added, update it
-    // together with the source citation in the table.
-    const cost = resolveTokenCost("qwen", "qwen3.8-max");
-    expect(cost.source).toContain("unknown");
-    expect(cost.inputPerMillion).toBeGreaterThan(resolveTokenCost("qwen", "qwen3.7-max").inputPerMillion);
+  it("prices qwen3.8-max at parity with qwen3.7-max from the 2026-10-31 list", () => {
+    // Until 2026-10-31 this test pinned qwen3.8-max to the unknown fallback
+    // because the vendor had published no price. The cn-beijing pricing page
+    // now lists it (and snapshot qwen3.8-max-0902) at 12/36 CNY per 1M tokens,
+    // the same as qwen3.7-max — so the entry must exist, must not be the
+    // fallback, and must not drift from 3.7-max without a new citation.
+    const max38 = resolveTokenCost("qwen", "qwen3.8-max");
+    const max37 = resolveTokenCost("qwen", "qwen3.7-max");
+    expect(max38.inputPerMillion).toBe(1.65);
+    expect(max38.outputPerMillion).toBe(4.951);
+    expect(max38.inputPerMillion).toBe(max37.inputPerMillion);
+    expect(max38.outputPerMillion).toBe(max37.outputPerMillion);
+    expect(max38.source).toContain("2026-10-31");
+    expect(max38.source).not.toContain("unknown");
   });
 
   it("returns expensive worst-case fallback for unknown model", () => {

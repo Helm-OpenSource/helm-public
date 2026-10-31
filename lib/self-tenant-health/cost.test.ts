@@ -37,18 +37,20 @@ describe("self-tenant LLM cost estimates", () => {
     ).toBe(4753);
   });
 
-  it("keeps the unpriced qwen3.8-max on the honest unknown bucket", () => {
-    // The vendor had published no price as of 2026-08-18. Null here surfaces as
-    // an "unknown" bucket, which is the truth; a guessed profile would render
-    // as a confident number instead.
-    expect(
+  it("prices qwen3.8-max at parity with qwen3.7-max instead of the unknown bucket", () => {
+    // Until 2026-10-31 this pinned null (unpublished price → "unknown" bucket).
+    // The cn-beijing list now prices qwen3.8-max identically to qwen3.7-max, so
+    // the two must estimate the same: 1188 + 3565 = 4753 minor units for
+    // 1M prompt + 1M completion.
+    const estimate = (model: string) =>
       estimateLLMCallCostMinorUnit({
         provider: "qwen",
-        model: "qwen3.8-max",
+        model,
         promptTokens: 1_000_000,
         completionTokens: 1_000_000,
-      }),
-    ).toBeNull();
+      });
+    expect(estimate("qwen3.8-max")).toBe(4753);
+    expect(estimate("qwen3.8-max")).toBe(estimate("qwen3.7-max"));
   });
 
   it("fails closed for unknown models instead of treating them as free", () => {

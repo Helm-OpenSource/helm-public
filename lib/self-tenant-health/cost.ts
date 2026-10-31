@@ -19,9 +19,13 @@ const COST_PROFILES: CostProfile[] = [
   // to whole minor units. The double conversion carries a few percent of
   // error; the buckets this feeds are decade-wide (0–100 / 100–1000 / 1000–
   // 10000 CNY), so it cannot move a tenant across a bucket boundary.
-  // qwen3.8-max is absent on purpose — its price is unpublished, and here an
-  // unknown model yields a null cost and an honest "unknown" bucket rather
-  // than a made-up number.
+  // qwen3.8-max was absent until 2026-10-31 (unpublished price → null cost →
+  // honest "unknown" bucket). The cn-beijing pricing page now lists it at the
+  // same price as qwen3.7-max (12/36 CNY per 1M), so it takes the same USD
+  // entry (1.65 / 4.951, see token-cost-table.ts) through the same conversion:
+  //   prompt     1.65  USD × 7.2 × 100 = 1188.00 → 1188
+  //   completion 4.951 USD × 7.2 × 100 = 3564.72 → 3565
+  { provider: "qwen", model: "qwen3.8-max", promptMinorUnitPerMillionTokens: 1188, completionMinorUnitPerMillionTokens: 3565 },
   { provider: "qwen", model: "qwen3.7-max", promptMinorUnitPerMillionTokens: 1188, completionMinorUnitPerMillionTokens: 3565 },
   { provider: "qwen", model: "qwen3.7-plus", promptMinorUnitPerMillionTokens: 199, completionMinorUnitPerMillionTokens: 793 },
   { provider: "qwen", model: "qwen3.7-flash", promptMinorUnitPerMillionTokens: 119, completionMinorUnitPerMillionTokens: 713 },
