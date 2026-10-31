@@ -21,6 +21,13 @@ export const CAIO_INFERENCE_REJECTION_CODES = [
   "suggestion_kind_not_allowed",
   "action_disposition_present",
   "payload_too_large",
+  // In-process governed execution (S1b). `in_doubt` marks a row whose dispatch may have been charged but
+  // reached no verifiable judgement: the row stays `claimed` and reconciliation never requeues it.
+  // `output_lost` is terminal: the gateway holds a terminal receipt for the request but the body is gone.
+  // `provider_failure` is terminal: the governed gateway recorded a FAILURE terminal for the request.
+  "in_doubt",
+  "output_lost",
+  "provider_failure",
 ] as const;
 export type CaioInferenceRejectionCode = (typeof CAIO_INFERENCE_REJECTION_CODES)[number];
 
