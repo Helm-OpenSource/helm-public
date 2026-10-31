@@ -15,7 +15,7 @@
 
 import type { LLMProvider } from "@/lib/llm/types";
 
-export const PRICING_TABLE_VERSION = "2026-08-18";
+export const PRICING_TABLE_VERSION = "2026-10-31";
 
 export type TokenCost = {
   /** USD per 1M input tokens */
@@ -52,14 +52,15 @@ const COST_TABLE: Record<string, TokenCost> = {
   "qwen:qwen3.7-flash": { inputPerMillion: 0.165, outputPerMillion: 0.99, source: "aliyun model studio cn-beijing list price 2026-08-18, 0-256K tier" },
   "qwen:qwen3.7-max": { inputPerMillion: 1.65, outputPerMillion: 4.951, source: "aliyun model studio cn-beijing list price 2026-08-18" },
 
-  // qwen3.8-max is DELIBERATELY ABSENT. It is offered on the model list but
-  // its price was not published on the pricing page as of 2026-08-18, so it
-  // resolves to UNKNOWN_MODEL_FALLBACK below — deliberately ~9x the priciest
-  // Qwen entry here. That is the correct behaviour for an unpriced model, and
-  // a guarding test pins it. Do NOT "fix" it by interpolating a plausible
-  // number: a guessed price in a table whose whole job is budget enforcement
-  // is worse than an honest worst case. Add a real entry only once the vendor
-  // publishes one.
+  // qwen3.8-max was deliberately absent until 2026-10-31: it sat on the model
+  // list without a published price as of 2026-08-18, so it resolved to
+  // UNKNOWN_MODEL_FALLBACK below and a guarding test pinned that. On
+  // 2026-10-31 the Model Studio pricing page (cn-beijing) lists it — and its
+  // snapshot qwen3.8-max-0902 — at 12 CNY in / 36 CNY out per 1M tokens, a
+  // single 0–1M tier, identical to qwen3.7-max; the USD figure below is the
+  // same conversion already used for qwen3.7-max. The guarding test now pins
+  // price parity with qwen3.7-max instead of the fallback.
+  "qwen:qwen3.8-max": { inputPerMillion: 1.65, outputPerMillion: 4.951, source: "aliyun model studio cn-beijing list price 2026-10-31 (12/36 CNY per 1M tokens, identical to qwen3.7-max; snapshot qwen3.8-max-0902 same price)" },
 };
 
 /**
