@@ -92,6 +92,29 @@ CI 中的 `Model Egress MySQL` job 使用 MySQL 8.4 空库重放迁移并执行�
 且 Build / Test 都依赖该 job。CI 配置存在不等于远端 CI 已通过；必须保留对应运行
 链接或 commit check receipt 后，才能声称获得 CI 证据。
 
+### 2.4 DashScope 参考 adapter 的回环验证
+
+`lib/llm/governed-dashscope-adapter.service.ts` 是面向 CAIO 推理的受治理 DashScope（阿里云百炼，Qwen）
+provider adapter 参考实现：只经 `GovernedModelProviderAdapter` 契约由受治理 gateway 派发，调用 DashScope
+OpenAI 兼容 `chat/completions`，强制 `enable_thinking=false` 与 strict `json_schema`，输出必须通过
+`validateCaioLayeredJudgement`；费用由响应 `usage` 乘以 `token-cost-table` 得出，`route.pricingVersion`
+必须等于价格表版本，否则 preflight 拒绝。凭据只经注入的 `resolveCredential(credentialRef)` 端口取用，
+不读环境变量，不进日志或错误码；endpoint fingerprint 在构造时与 route 绑定校验。守卫
+`check:model-egress-governance` 禁止 public Core 其他文件 import 该模块或其工厂，组合方必须经评审加入
+allowlist 后才能把 adapter 交给 registry / gateway。
+
+```bash
+npx vitest run lib/llm/governed-dashscope-adapter.service.test.ts --config vitest.public.config.ts
+```
+
+测试只使用本机回环 HTTP 服务器伪装 provider，不访问真实网络。回执语义：provider 以不含补全的 4xx 拒绝或
+请求未发出时记 `failure/not_accepted` 且用量为零；2xx 但输出不通过校验时记 `failure/accepted` 并照实计费；
+5xx、超时、取消、响应超限、缺少 `usage` 一律保持 `unknown`，费用留空不补零。Public Core 仍未组合该 adapter，
+没有 provider 凭据、客户 route policy 或任何真实调用；请求 `model` 取 route 的精确快照 id（`modelVersion`
+形如 `<modelId>-<suffix>` 时），响应 model 不等于所请求值即记 `dashscope_model_mismatch`；`probeReadiness`
+只在 `GET /models` 列出该 id（或其族 id）时报告 ready，capabilityRefs 只写实际列出的 id，不声称 schema
+支持、思考控制或配额。
+
 ## 3. 准入准备清单
 
 真实客户启用前必须由对应私有层和 owner 回执证明：
@@ -252,3 +275,5 @@ After the lease expires, the exact adapter may reconcile the original provider
 idempotency key, but must never blindly resend it. Rollback creates a newly
 reviewed policy revision; it never deletes or mutates the historical decision
 and receipt ledger.
+The governed DashScope adapter is a loopback-tested reference implementation
+that is not composed, credentialed or activated anywhere in Public Core.
