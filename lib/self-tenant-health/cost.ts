@@ -14,19 +14,17 @@ type CostProfile = {
 // Internal pilot estimates only. These values drive budget buckets and are not
 // a provider billing statement.
 const COST_PROFILES: CostProfile[] = [
-  // Qwen 3.7 series, derived from the cn-beijing USD list price read on
-  // 2026-08-18 (see lib/llm/token-cost-table.ts) at ~1 USD = 7.2 CNY, rounded
-  // to whole minor units. The double conversion carries a few percent of
-  // error; the buckets this feeds are decade-wide (0–100 / 100–1000 / 1000–
-  // 10000 CNY), so it cannot move a tenant across a bucket boundary.
-  // qwen3.8-max was absent until 2026-10-31 (unpublished price → null cost →
-  // honest "unknown" bucket). The cn-beijing pricing page now lists it at the
-  // same price as qwen3.7-max (12/36 CNY per 1M), so it takes the same USD
-  // entry (1.65 / 4.951, see token-cost-table.ts) through the same conversion:
-  //   prompt     1.65  USD × 7.2 × 100 = 1188.00 → 1188
-  //   completion 4.951 USD × 7.2 × 100 = 3564.72 → 3565
-  { provider: "qwen", model: "qwen3.8-max", promptMinorUnitPerMillionTokens: 1188, completionMinorUnitPerMillionTokens: 3565 },
-  { provider: "qwen", model: "qwen3.7-max", promptMinorUnitPerMillionTokens: 1188, completionMinorUnitPerMillionTokens: 3565 },
+  // Conservative pilot estimates for budget and health buckets, not billing
+  // evidence: a value below the real price can flip a bucket or budget state
+  // right at a threshold (see the boundary tests).
+  // qwen3.8-max and qwen3.7-max use the CNY list price directly (cn-beijing
+  // 2026-10-31: 12/36 CNY per 1M tokens), not a round trip through USD, which
+  // came out about 1% low (1188/3565).
+  { provider: "qwen", model: "qwen3.8-max", promptMinorUnitPerMillionTokens: 1200, completionMinorUnitPerMillionTokens: 3600 },
+  { provider: "qwen", model: "qwen3.7-max", promptMinorUnitPerMillionTokens: 1200, completionMinorUnitPerMillionTokens: 3600 },
+  // TODO: qwen3.7-plus / qwen3.7-flash below are still USD list prices (read
+  // 2026-08-18) converted at ~1 USD = 7.2 CNY, so they carry the same kind of
+  // error; move them to CNY list prices once those are re-read from the page.
   { provider: "qwen", model: "qwen3.7-plus", promptMinorUnitPerMillionTokens: 199, completionMinorUnitPerMillionTokens: 793 },
   { provider: "qwen", model: "qwen3.7-flash", promptMinorUnitPerMillionTokens: 119, completionMinorUnitPerMillionTokens: 713 },
   { provider: "qwen", model: "qwen3.6-plus", promptMinorUnitPerMillionTokens: 800, completionMinorUnitPerMillionTokens: 2400 },

@@ -34,14 +34,10 @@ describe("self-tenant LLM cost estimates", () => {
         promptTokens: 1_000_000,
         completionTokens: 1_000_000,
       }),
-    ).toBe(4753);
+    ).toBe(4800);
   });
 
-  it("prices qwen3.8-max at parity with qwen3.7-max instead of the unknown bucket", () => {
-    // Until 2026-10-31 this pinned null (unpublished price → "unknown" bucket).
-    // The cn-beijing list now prices qwen3.8-max identically to qwen3.7-max, so
-    // the two must estimate the same: 1188 + 3565 = 4753 minor units for
-    // 1M prompt + 1M completion.
+  it("prices qwen3.8-max at the CNY list price, identical to qwen3.7-max", () => {
     const estimate = (model: string) =>
       estimateLLMCallCostMinorUnit({
         provider: "qwen",
@@ -49,8 +45,26 @@ describe("self-tenant LLM cost estimates", () => {
         promptTokens: 1_000_000,
         completionTokens: 1_000_000,
       });
-    expect(estimate("qwen3.8-max")).toBe(4753);
+    expect(estimate("qwen3.8-max")).toBe(4800);
     expect(estimate("qwen3.8-max")).toBe(estimate("qwen3.7-max"));
+  });
+
+  it("does not understate list price at bucket and budget thresholds", () => {
+    const perCall = estimateLLMCallCostMinorUnit({
+      provider: "qwen",
+      model: "qwen3.8-max",
+      promptTokens: 100_000,
+      completionTokens: 0,
+    });
+    expect(perCall).toBe(120);
+    const total = (calls: number) => calls * (perCall ?? 0);
+    expect(bucketEstimatedCostMinorUnit(total(83))).toBe("cny_0_100");
+    expect(bucketEstimatedCostMinorUnit(total(84))).toBe("cny_100_1000");
+    expect(resolveBudgetState({ estimatedCostMinorUnit: total(84), monthlyLimitMinorUnit: 10_000 })).toBe("blocked");
+    expect(bucketEstimatedCostMinorUnit(total(833))).toBe("cny_100_1000");
+    expect(bucketEstimatedCostMinorUnit(total(834))).toBe("cny_1000_10000");
+    expect(bucketEstimatedCostMinorUnit(total(8_333))).toBe("cny_1000_10000");
+    expect(bucketEstimatedCostMinorUnit(total(8_334))).toBe("cny_10000_plus");
   });
 
   it("fails closed for unknown models instead of treating them as free", () => {
