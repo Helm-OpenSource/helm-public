@@ -1,5 +1,6 @@
 /** Metadata-only attestation, not a provider signature or production grant. */
 import { createHash, createPublicKey, verify } from "node:crypto";
+import type { TenantModelRoute } from "./model-route-contracts";
 import { authorityDate, authorityHash, authorityRef, canonicalAuthorityJson, exactObject, refuse } from "./trusted-spend-authority";
 export const USAGE_SCHEMA = "helm.trusted-usage/v1" as const;
 export const USAGE_SOURCE = "helm.controlled-http-usage/v1" as const;
@@ -115,3 +116,18 @@ export function decodeDashScopeChatCompletion(bytes: Uint8Array, requestedModel:
       Buffer.byteLength(message.content) > DASHSCOPE_CONTENT_MAX_BYTES) refuse("usage_response_binding_invalid");
   return { requestRef: body.id, promptTokens, completionTokens, rawOutput: message.content, responseDigest: bytesHash(bytes) };
 }
+
+/** The claim as the adapter holds it; the collector re-reads and compares it, it never trusts these fields. */
+export type DashScopeUsageCall = {
+  workspaceId: string; providerIdempotencyKey: string; dispatchClaimHash: string;
+  dispatchRuntimeHash: string; projectedPayloadHash: string; route: TenantModelRoute;
+};
+/** The exact bytes of one exchange plus the validated output the adapter is about to return. */
+export type DashScopeUsageExchange = { requestBytes: Uint8Array; responseBytes: Uint8Array; output: unknown };
+export type DashScopeUsageRecord = { providerRequestRef: string; promptTokens: number; completionTokens: number; actualCostUsdMicros: number };
+export type DashScopeUsageCapture = { leaseRemainingMs: number; record: (exchange: DashScopeUsageExchange) => Promise<DashScopeUsageRecord> };
+/** Port between the provider adapter and its collector. It lives here so neither module has to import the other. */
+export type DashScopeUsageCollector = {
+  binding: { adapterKey: string; registrationHash: string; endpointFingerprint: string };
+  prepare: (call: DashScopeUsageCall) => Promise<DashScopeUsageCapture>;
+};

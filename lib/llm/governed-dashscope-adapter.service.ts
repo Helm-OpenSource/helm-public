@@ -14,6 +14,7 @@ import {
   type GovernedModelAdapterRegistration, type ModelDeploymentForm, type TenantModelRoute,
 } from "./model-route-contracts";
 import { PRICING_TABLE_VERSION, resolveTokenCost } from "./token-cost-table";
+import type { DashScopeUsageCapture, DashScopeUsageCall, DashScopeUsageCollector, DashScopeUsageRecord } from "./trusted-usage-evidence";
 
 /**
  * Governed DashScope (Alibaba Cloud Model Studio, Qwen) provider adapter for CAIO inference: the OpenAI-compatible
@@ -26,6 +27,11 @@ import { PRICING_TABLE_VERSION, resolveTokenCost } from "./token-cost-table";
  * completion, is `failure/not_accepted` with zero usage; a 2xx answer with usage whose content the validator refuses
  * is `failure/accepted` and still costed; every transport doubt (timeout, abort, oversize, 5xx, missing usage,
  * undecodable body) stays `unknown` with the cost unset rather than zero-filled.
+ *
+ * Settlement needs the optional `usageCollector` port: it pins the ledger's signed price before the send and, on a
+ * complete success, writes the usage evidence and returns the cost computed from that price. Without it the adapter
+ * still answers from its own table, but under the registered spend authority no terminal can settle: every call
+ * ends with its reservation held as unknown. An accepted failure writes no evidence and ends the same way, by design.
  *
  * Importing this module or its factory anywhere else in public Core is refused by
  * `scripts/check-model-egress-governance.ts`; a composer that hands the adapter to the registry/gateway must be
@@ -187,7 +193,8 @@ function readUsage(body: Record<string, unknown> | null): { prompt: number; comp
 
 function costUsdMicros(modelId: string, promptTokens: number, completionTokens: number): number {
   // Worst-case reading from the adapter's own table (version pinned in the implementation hash); the governed
-  // spend chain re-prices from the route's signed record and refuses the terminal if the two disagree.
+  // spend chain re-prices from the route's signed record and refuses the terminal if the two disagree, so with a
+  // usage collector a success carries the collector's amount and this reading only bounds preflight and failures.
   const price = resolveTokenCost(GOVERNED_DASHSCOPE_PROVIDER, modelId);
   // USD per million tokens times tokens is exactly USD micro-units.
   return Math.ceil(promptTokens * price.inputPerMillion + completionTokens * price.outputPerMillion);
@@ -216,6 +223,8 @@ function routeBinding(registration: GovernedModelAdapterRegistration, route: Ten
 export function createGovernedDashScopeAdapter(provided: {
   registration: GovernedModelAdapterRegistration; endpoint: string; endpointFingerprint: string;
   resolveCredential: GovernedDashScopeCredentialResolver; timeoutMs: number; maximumResponseBytes: number; now?: () => Date;
+  /** Optional only for composition without settlement; see the module comment for what omitting it means. */
+  usageCollector?: DashScopeUsageCollector;
 }): GovernedDashScopeAdapter {
   const candidate = JSON.parse(canonicalJson(provided.registration)) as GovernedModelAdapterRegistration;
   if (!validateGovernedModelAdapterRegistration(candidate).valid) refuse("dashscope_registration_invalid");
@@ -234,6 +243,9 @@ export function createGovernedDashScopeAdapter(provided: {
   const { origin, path } = parseEndpoint(provided.endpoint);
   const fingerprint = computeGovernedDashScopeEndpointFingerprint(provided.endpoint);
   if (fingerprint !== provided.endpointFingerprint) refuse("dashscope_endpoint_binding_invalid");
+  const usageCollector = provided.usageCollector;
+  if (usageCollector && (usageCollector.binding.adapterKey !== registration.adapterKey || usageCollector.binding.registrationHash !== registration.contentHash ||
+      usageCollector.binding.endpointFingerprint !== fingerprint)) refuse("dashscope_usage_collector_binding_invalid");
   const modelsUrl = new URL(`${origin}${path}/models`);
   const completionsUrl = new URL(`${origin}${path}/chat/completions`);
   const timeoutMs = provided.timeoutMs, maximumBytes = provided.maximumResponseBytes;
@@ -262,6 +274,11 @@ export function createGovernedDashScopeAdapter(provided: {
   function unknown(errorCode: string, providerRequestRef: string | null = null, usage: { prompt: number; completion: number } | null = null): GovernedModelAdapterResult<CaioLayeredJudgement> {
     return { outcome: "unknown", requestDisposition: "unknown", providerRequestRef, promptTokens: usage?.prompt ?? null,
       completionTokens: usage?.completion ?? null, actualCostUsdMicros: null, costCurrency: null, pricingVersion: null, costBand: "unknown", errorCode };
+  }
+  /** The closed refusal code when there is one; a raw driver message never reaches a result. */
+  function usageErrorCode(error: unknown, fallback: string): string {
+    const code = error instanceof Error ? /^spend_authority_(usage_[a-z_]+)$/u.exec(error.message)?.[1] : undefined;
+    return code && code.length <= 54 ? `dashscope_${code}` : fallback;
   }
 
   return {
@@ -309,7 +326,8 @@ export function createGovernedDashScopeAdapter(provided: {
       return { endpointFingerprint: fingerprint, credentialConfigured, observedAt: now().toISOString(), estimatedInputTokens, estimatedMaxCostUsdMicros };
     },
     async invoke(call) {
-      const route = call.route;
+      // Snapshot before the first await: the collector compares this route with the claim.
+      const route = structuredClone(call.route);
       const binding = routeBinding(registration, route);
       if (binding) return notAccepted(route, binding);
       const payloadText = canonicalJson(call.projectedPayload);
@@ -328,6 +346,8 @@ export function createGovernedDashScopeAdapter(provided: {
       // Reserve synchronously, before the first await, so two concurrent calls cannot both pass the check. A call
       // that never reaches the wire releases the key; once a request was sent the key stays taken whatever the outcome.
       attempted.add(tag);
+      const usageCall: DashScopeUsageCall = { workspaceId: call.workspaceId, providerIdempotencyKey: call.providerIdempotencyKey, dispatchClaimHash: call.dispatchClaimHash,
+        dispatchRuntimeHash: call.dispatchRuntimeHash, projectedPayloadHash: call.projectedPayloadHash, route };
       let secret: string;
       try {
         secret = await credential(route.credentialRef);
@@ -354,7 +374,22 @@ export function createGovernedDashScopeAdapter(provided: {
         attempted.delete(tag);
         return notAccepted(route, "dashscope_request_too_large");
       }
-      const result = await send({ url: completionsUrl, credential: secret, body: requestBytes, timeoutMs, maximumBytes, signal: call.signal });
+      let capture: DashScopeUsageCapture | null = null;
+      if (usageCollector) {
+        try {
+          capture = await usageCollector.prepare(usageCall);
+        } catch (error) {
+          attempted.delete(tag);
+          return notAccepted(route, usageErrorCode(error, "dashscope_usage_prepare_refused"));
+        }
+        if (call.signal.aborted) {
+          attempted.delete(tag);
+          return notAccepted(route, "dashscope_aborted_before_send");
+        }
+      }
+      // Evidence captured after the lease cannot settle, so waiting past it only turns a success into an unknown.
+      const sendTimeoutMs = capture ? Math.min(timeoutMs, capture.leaseRemainingMs) : timeoutMs;
+      const result = await send({ url: completionsUrl, credential: secret, body: requestBytes, timeoutMs: sendTimeoutMs, maximumBytes, signal: call.signal });
       secret = "";
       if (result.kind !== "response") {
         return unknown(result.kind === "too_large" ? "dashscope_response_too_large" : `dashscope_transport_${result.kind}`);
@@ -391,7 +426,18 @@ export function createGovernedDashScopeAdapter(provided: {
       }
       const validation = validateCaioLayeredJudgement(parsedOutput, new Set(payload.evidenceRefs));
       if (!validation.ok) return accepted(`dashscope_output_${validation.code}`);
-      return accepted(null, validation.value);
+      if (!capture) return accepted(null, validation.value);
+      let recorded: DashScopeUsageRecord;
+      try {
+        recorded = await capture.record({ requestBytes, responseBytes: result.bytes, output: validation.value });
+      } catch (error) {
+        // Sent and possibly billed, but unproven. The key stays taken: the same request is never resent.
+        return unknown(usageErrorCode(error, "dashscope_usage_evidence_unrecorded"), providerRequestRef, usage);
+      }
+      // Everything the terminal is checked against comes from the evidence, never from this adapter's own reading.
+      return { outcome: "success", output: validation.value, requestDisposition: "accepted", providerRequestRef: recorded.providerRequestRef,
+        promptTokens: recorded.promptTokens, completionTokens: recorded.completionTokens, actualCostUsdMicros: recorded.actualCostUsdMicros, costCurrency: "USD",
+        pricingVersion: route.pricingVersion, costBand: costBand(recorded.actualCostUsdMicros, route.maxCostUsdMicros), errorCode: null };
     },
   };
 }

@@ -5,8 +5,12 @@ import { dirname, isAbsolute } from "node:path";
 import { generateKeyPairSync, sign } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { createGovernedOrdinaryHttpAdapter } from "./governed-ordinary-http-adapter.service";
-import { USAGE_SOURCE } from "./trusted-usage-evidence";
-import { authorityHash, canonicalAuthorityJson } from "./trusted-spend-authority";
+import { createGovernedDashScopeUsageCollector } from "./dashscope-usage-collector.service";
+import { buildGovernedDashScopeAdapterRegistration, computeGovernedDashScopeEndpointFingerprint, createGovernedDashScopeAdapter, GOVERNED_DASHSCOPE_ADAPTER_KEY } from "./governed-dashscope-adapter.service";
+import type { CaioInferenceInput } from "@/lib/caio-inference/contracts";
+import type { CaioLayeredJudgement } from "@/lib/caio-inference/layered-judgement";
+import { bytesHash, DASHSCOPE_USAGE_SOURCE, USAGE_SOURCE, type UsageEvidence } from "./trusted-usage-evidence";
+import { authorityHash, canonicalAuthorityJson, computeMaximumCharge } from "./trusted-spend-authority";
 import { createRegisteredGovernedSpendAuthority, issuerGrantHash } from "./trusted-spend-authority-prisma";
 import {
   MembershipStatus,
@@ -52,6 +56,7 @@ import {
   computeGovernedModelAdapterRegistrationHash,
   computeProviderAdapterReadinessHash,
   computeTenantModelRoutePolicyHash,
+  type GovernedModelAdapterRegistration,
   type ProviderAdapterReadinessReceipt,
   type TenantModelRoute,
   type TenantModelRoutePolicy,
@@ -277,6 +282,7 @@ function readiness(input: {
   checkedAt: Date;
   expiresAt: Date;
   endpointFingerprint?: string;
+  registration?: GovernedModelAdapterRegistration;
 }): ProviderAdapterReadinessReceipt {
   const candidate: ProviderAdapterReadinessReceipt = {
     schemaVersion: "helm.provider-adapter-readiness-receipt/v1",
@@ -286,10 +292,9 @@ function readiness(input: {
     modelId: input.target.modelId,
     modelVersion: input.target.modelVersion,
     adapterKey: input.target.adapterKey,
-    adapterVersion: "synthetic-adapter-v1",
-    adapterRegistrationRef:
-      "adapter-registration:synthetic-adapter",
-    adapterRegistrationHash: SYNTHETIC_REGISTRATION.contentHash,
+    adapterVersion: (input.registration ?? SYNTHETIC_REGISTRATION).adapterVersion,
+    adapterRegistrationRef: (input.registration ?? SYNTHETIC_REGISTRATION).registrationRef,
+    adapterRegistrationHash: (input.registration ?? SYNTHETIC_REGISTRATION).contentHash,
     deploymentForm: input.target.deploymentForm,
     jurisdiction: input.target.jurisdiction,
     region: input.target.region,
@@ -378,6 +383,8 @@ describeMysql("model egress store with an isolated MySQL database", () => {
     primaryMaxOutputTokens?: number;
     primaryMaxConcurrency?: number;
     endpointFingerprint?: string;
+    primaryRegistration?: GovernedModelAdapterRegistration;
+    primaryRoute?: Partial<TenantModelRoute>;
   } = {}) {
     assertIsolatedDatabaseTarget();
     const now = new Date();
@@ -492,6 +499,7 @@ describeMysql("model egress store with an isolated MySQL database", () => {
       ...(options.primaryMaxOutputTokens
         ? { maxOutputTokens: options.primaryMaxOutputTokens } : {}),
       ...(options.primaryMaxConcurrency ? { maxConcurrency: options.primaryMaxConcurrency } : {}),
+      ...options.primaryRoute,
     });
     const primaryReadiness = readiness({
       workspaceId,
@@ -499,6 +507,7 @@ describeMysql("model egress store with an isolated MySQL database", () => {
       checkedAt: new Date(now.getTime() - 60_000),
       expiresAt: new Date(now.getTime() + 86_400_000),
       endpointFingerprint: options.endpointFingerprint,
+      registration: options.primaryRegistration,
     });
     primaryRoute = {
       ...primaryReadinessBase,
@@ -2551,11 +2560,11 @@ describeMysql("model egress store with an isolated MySQL database", () => {
     return target;
   }
 
-  async function provisionC4(label: string, finiteLimit: bigint | null = null) {
+  async function provisionC4(label: string, finiteLimit: bigint | null = null, signed: { price: Record<string, unknown>; fx: Record<string, unknown> } | null = null) {
     const now=new Date(), before=new Date(now.getTime()-60_000), until=new Date(now.getTime()+3_600_000);
     const scopedLabel = `${label}:${suffix}`;
     const keys=generateKeyPairSync("ed25519"), grantId=`issuer:${scopedLabel}`;
-    const grant={id:grantId,workspaceId,issuerUserId:ownerUserId,publicKeyPem:keys.publicKey.export({type:"spki",format:"pem"}).toString(),allowedKindsJson:canonicalAuthorityJson(["budget","period","price"]),sourceReceiptHash:HASH_A,validFrom:before,validUntil:until,revokedAt:null,contentHash:""};
+    const grant={id:grantId,workspaceId,issuerUserId:ownerUserId,publicKeyPem:keys.publicKey.export({type:"spki",format:"pem"}).toString(),allowedKindsJson:canonicalAuthorityJson(signed ? ["budget","fx","period","price"] : ["budget","period","price"]),sourceReceiptHash:HASH_A,validFrom:before,validUntil:until,revokedAt:null,contentHash:""};
     grant.contentHash=issuerGrantHash(grant);
     await db.$executeRaw`INSERT INTO LLMSpendIssuerGrant(id,workspaceId,issuerUserId,publicKeyPem,allowedKindsJson,sourceReceiptHash,contentHash,validFrom,validUntil)
       VALUES (${grant.id},${workspaceId},${ownerUserId},${grant.publicKeyPem},${grant.allowedKindsJson},${grant.sourceReceiptHash},${grant.contentHash},${before},${until})`;
@@ -2567,9 +2576,10 @@ describeMysql("model egress store with an isolated MySQL database", () => {
       return {ref,hash};
     };
     const period=await issue("period",`period:${scopedLabel}`,SPEND_PERIOD_VERSION,{algorithm:"calendar-month-v1",timezone:"Asia/Shanghai"});
-    const price=await issue("price",`price:${scopedLabel}`,PRICING_VERSION,{billing:"input-output-only-v1",provider:primaryRoute.provider,model:primaryRoute.modelId,sku:"text-only",currency:"USD",input:{numerator:"0",denominator:"1",ceiling:String(primaryRoute.maxInputTokens)},output:{numerator:"1",denominator:"1",ceiling:String(primaryRoute.maxOutputTokens)}});
-    await issue("budget",`approval:${scopedLabel}`,"v1",{configVersion:1,mode:finiteLimit === null ? "unlimited" : "limited",limitMicros:finiteLimit === null ? null : String(finiteLimit),currency:"USD",updatedBy:ownerUserId,updatedAt:now.toISOString(),periodRef:period.ref,periodHash:period.hash,priceRef:price.ref,priceHash:price.hash,fxRef:null,fxHash:null});
-    await db.workspace.update({where:{id:workspaceId},data:{llmBudgetMode:finiteLimit === null ? "unlimited" : "limited",llmMonthlyBudgetMicros:finiteLimit,llmBudgetApprovalRef:`approval:${scopedLabel}`,llmBudgetCurrency:"USD",llmBudgetUpdatedBy:ownerUserId,llmBudgetUpdatedAt:now,llmBudgetPriceBookRef:price.ref,llmBudgetFxPolicyRef:null}});
+    const price=await issue("price",`price:${scopedLabel}`,PRICING_VERSION,signed?.price ?? {billing:"input-output-only-v1",provider:primaryRoute.provider,model:primaryRoute.modelId,sku:"text-only",currency:"USD",input:{numerator:"0",denominator:"1",ceiling:String(primaryRoute.maxInputTokens)},output:{numerator:"1",denominator:"1",ceiling:String(primaryRoute.maxOutputTokens)}});
+    const fx=signed ? await issue("fx",`fx:${scopedLabel}`,"v1",signed.fx) : null;
+    await issue("budget",`approval:${scopedLabel}`,"v1",{configVersion:1,mode:finiteLimit === null ? "unlimited" : "limited",limitMicros:finiteLimit === null ? null : String(finiteLimit),currency:"USD",updatedBy:ownerUserId,updatedAt:now.toISOString(),periodRef:period.ref,periodHash:period.hash,priceRef:price.ref,priceHash:price.hash,fxRef:fx?.ref ?? null,fxHash:fx?.hash ?? null});
+    await db.workspace.update({where:{id:workspaceId},data:{llmBudgetMode:finiteLimit === null ? "unlimited" : "limited",llmMonthlyBudgetMicros:finiteLimit,llmBudgetApprovalRef:`approval:${scopedLabel}`,llmBudgetCurrency:"USD",llmBudgetUpdatedBy:ownerUserId,llmBudgetUpdatedAt:now,llmBudgetPriceBookRef:price.ref,llmBudgetFxPolicyRef:fx?.ref ?? null}});
     const registered=createRegisteredGovernedSpendAuthority({expectedPeriodPolicyVersion:SPEND_PERIOD_VERSION,trustedIssuerGrants:{[grantId]:grant.contentHash}});
     const authority: GovernedSpendAuthority={...registered,resolveDispatch:async(input)=>{
       // Assert the actual C3 transaction identity, not an unrelated negative
@@ -3607,4 +3617,113 @@ describeMysql("model egress store with an isolated MySQL database", () => {
   });
 
 
+  it.each(["valid", "schema-invalid", "model-mismatch", "collector-insert-failure", "wrong-source", "same-principal"])(
+    "settles a DashScope exchange only from signed evidence and the signed price: %s", async (mode) => {
+    assertTrustedUsageTestTargets();
+    const writer = new PrismaClient({ datasources: { db: { url: process.env.ORDINARY_PAID_WRITER_DATABASE_URL! } } });
+    const charge = new PrismaClient({ datasources: { db: { url: process.env.MODEL_EGRESS_RUNTIME_DATABASE_URL! } } });
+    const collector = new PrismaClient({ datasources: { db: { url: process.env.LLM_USAGE_COLLECTOR_DATABASE_URL! } } });
+    const modelId = "qwen3.7-plus", modelVersion = "qwen3.7-plus-2026-08-15", scoped = `dashscope-${mode}-${suffix}`;
+    const judgement = { schemaVersion: "helm.caio.layered-judgement.v1", facts: [{ statement: "Dead letters rose.", evidenceRefs: ["evidence:metric-a"] }],
+      inferences: [], risks: [], unknowns: [], suggestions: [], confidence: { band: "medium", score: 0.72 } };
+    let calls = 0, sentBody = "", answered = "", insertDenied = false;
+    const server = createServer((request, response) => {
+      calls++; request.setEncoding("utf8"); request.on("data", (chunk) => { sentBody += chunk; });
+      request.on("end", () => {
+        answered = JSON.stringify({ id: `chatcmpl-${suffix}`, model: mode === "model-mismatch" ? "qwen3.7-flash" : modelVersion,
+          choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: JSON.stringify(mode === "schema-invalid" ? { ...judgement, facts: "not-a-list" } : judgement) } }],
+          usage: { prompt_tokens: 1_000, completion_tokens: 200, total_tokens: 1_200 } });
+        response.setHeader("Content-Type", "application/json"); response.end(answered);
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("synthetic_loopback_unbound");
+    try {
+      const endpoint = `http://127.0.0.1:${address.port}/compatible-mode/v1`;
+      const endpointFingerprint = computeGovernedDashScopeEndpointFingerprint(endpoint);
+      const registration = buildGovernedDashScopeAdapterRegistration({ registrationRef: "adapter-registration:dashscope-mysql" });
+      await initializeFixture(scoped, { endpointFingerprint, primaryRegistration: registration,
+        primaryRoute: { provider: "qwen", modelId, modelVersion, adapterKey: GOVERNED_DASHSCOPE_ADAPTER_KEY } });
+      // Signed CNY rate and FX, never the adapter's USD table: 12 and 36 CNY per million tokens at 11/80 USD.
+      const signedPrice = { billing: "input-output-only-v1", provider: "qwen", model: modelId, sku: "text-only", currency: "CNY",
+        input: { numerator: "12", denominator: "1", ceiling: String(primaryRoute.maxInputTokens) }, output: { numerator: "36", denominator: "1", ceiling: String(primaryRoute.maxOutputTokens) } };
+      const signedFx = { from: "CNY", to: "USD", numerator: "11", denominator: "80" };
+      const { registryConfig } = await provisionC4(scoped, null, { price: signedPrice, fx: signedFx });
+      const usageKeys = generateKeyPairSync("ed25519");
+      const grant = { schema: "helm.usage-attestor-grant/v1" as const, id: `usage-grant:${scoped}`, workspaceId,
+        source: mode === "wrong-source" ? USAGE_SOURCE : DASHSCOPE_USAGE_SOURCE, sourceHash: HASH_A, adapterKey: registration.adapterKey,
+        registrationHash: registration.contentHash, provider: "qwen", model: modelId, modelVersion, sku: "text-only", endpointFingerprint,
+        publicKeyPem: usageKeys.publicKey.export({ type: "spki", format: "pem" }).toString(),
+        validFrom: new Date(Date.now() - 60_000).toISOString(), validUntil: new Date(Date.now() + 3_600_000).toISOString() };
+      const usage = { trustedAttestorGrants: { [grant.id]: authorityHash(grant) } };
+      await db.$executeRaw`INSERT INTO LLMUsageAttestorGrant(id,workspaceId,envelopeJson,contentHash) VALUES (${grant.id},${workspaceId},${canonicalAuthorityJson(grant)},${authorityHash(grant)})`;
+      const installedCollector = mode !== "collector-insert-failure" ? collector : new Proxy(collector, { get(target, property) {
+        if (property === "$transaction") return async (callback: (tx: Prisma.TransactionClient) => Promise<unknown>) =>
+          target.$transaction((tx) => callback(new Proxy(tx, { get(actual, key) {
+            // A real permission failure: the charge principal is SELECT-only on evidence.
+            if (key === "$executeRaw") return (...args: Parameters<typeof charge.$executeRaw>) => charge.$executeRaw(...args).catch((error: Error) => {
+              insertDenied = error.message.includes("INSERT command denied"); throw error; });
+            const value = Reflect.get(actual, key); return typeof value === "function" ? value.bind(actual) : value;
+          } })));
+        const value = Reflect.get(target, property); return typeof value === "function" ? value.bind(target) : value;
+      } });
+      const factoryInput = { collectorClient: installedCollector, chargeClient: charge, operationWriterClient: writer, registration,
+        grantId: grant.id, usage, spend: registryConfig, privateKey: usageKeys.privateKey, endpointFingerprint };
+      if (mode === "wrong-source" || mode === "same-principal") {
+        await expect(createGovernedDashScopeUsageCollector(mode === "wrong-source" ? factoryInput : { ...factoryInput, collectorClient: writer }))
+          .rejects.toThrow(mode === "wrong-source" ? "usage_factory_binding_invalid" : "usage_realm_invalid");
+        expect(calls).toBe(0);
+        return;
+      }
+      const adapter = createGovernedDashScopeAdapter({ registration, endpoint, endpointFingerprint, resolveCredential: async () => "HELM_SYNTHETIC_PROVIDER_CREDENTIAL",
+        timeoutMs: 5_000, maximumResponseBytes: 1_048_576, usageCollector: await createGovernedDashScopeUsageCollector(factoryInput) });
+      const gateway = createGovernedModelGatewayForChargeClient<CaioInferenceInput, CaioLayeredJudgement>({ client: charge,
+        spendAuthority: createRegisteredGovernedSpendAuthority({ ...registryConfig, usage }), adapters: [adapter] });
+      const payload: CaioInferenceInput = { schemaVersion: "helm.caio.inference-input.v1", workspaceId, taskClass: "hourly_diagnosis",
+        windowStart: "2026-07-23T10:00:00.000Z", windowEnd: "2026-07-23T11:00:00.000Z", snapshotRefs: [{ snapshotId: "snapshot-1", snapshotHash: HASH_A }],
+        evidenceRefs: ["evidence:metric-a"], supplements: [] };
+      const canonicalPayload = canonicalJson(payload);
+      const projectionReceiptRef = await projection(`evidence:${scoped}`, `projection:${scoped}`, { maxInputTokens: 8_000, maxOutputTokens: 200 },
+        assetId, new Date(), sha256(canonicalPayload), Buffer.byteLength(canonicalPayload, "utf8"));
+      const invoke = () => gateway({ workspaceId, gatewayRef: "gateway:dashscope-mysql", policyKey: "caio-pro-default", requestKey: scoped,
+        taskClass: "reasoning_counterfactual", taskRef: `task:${scoped}`, projectionReceiptRef, projectedPayload: payload, requestedMaxOutputTokens: 200 });
+      const outcome = await invoke().catch((error: Error) => error);
+      const decision = await charge.modelRouteDecision.findFirstOrThrow({ where: { workspaceId, dispatchProviderIdempotencyKey: { not: null } } });
+      const ledger = await charge.lLMSpendLedgerEntry.findUniqueOrThrow({ where: { workspaceId_attemptRef: { workspaceId, attemptRef: decision.dispatchProviderIdempotencyKey! } } });
+      const counter = await charge.lLMSpendPeriodCounter.findFirstOrThrow({ where: { workspaceId } });
+      const evidence = await db.lLMTrustedUsageEvidence.findMany({ where: { workspaceId } });
+      const terminals = await charge.modelEgressReceipt.findMany({ where: { workspaceId, sequence: 2 } });
+      expect(calls).toBe(1);
+      if (mode === "valid") {
+        const expected = computeMaximumCharge(signedPrice, signedFx, BigInt(1_000), BigInt(200));
+        expect(expected).toBe(BigInt(2_640));
+        expect(outcome).toMatchObject({ status: "success", output: judgement });
+        expect(ledger.state).toBe("settled"); expect(ledger.observedActualMicros).toBe(expected);
+        expect(counter.settledMicros).toBe(expected); expect(counter.unknownBoundMicros).toBe(BigInt(0));
+        expect(evidence).toHaveLength(1); expect(terminals).toHaveLength(1);
+        const receipt = JSON.parse(terminals[0].receiptJson) as { outputContentHash: string; providerRequestRefHash: string; actualCostUsdMicros: number; promptTokens: number; completionTokens: number };
+        const envelope = JSON.parse(evidence[0].envelopeJson) as UsageEvidence;
+        expect(receipt.actualCostUsdMicros).toBe(2_640);
+        expect(envelope).toMatchObject({ providerIdempotencyKey: ledger.attemptRef, decisionId: decision.id, claimHash: decision.dispatchClaimHash, runtimeHash: decision.dispatchRuntimeHash,
+          routeRef: primaryRoute.routeId, pricingVersion: PRICING_VERSION, priceRef: ledger.priceBookRef, priceHash: ledger.priceBookHash, fxRef: ledger.fxSnapshotRef, fxHash: ledger.fxSnapshotHash,
+          quoteHash: ledger.quoteHash, requestDigest: bytesHash(Buffer.from(sentBody)), responseDigest: bytesHash(Buffer.from(answered)), providerRequestRefHash: receipt.providerRequestRefHash,
+          outputContentHash: receipt.outputContentHash, promptTokens: receipt.promptTokens, completionTokens: receipt.completionTokens });
+        expect(ledger.fxSnapshotRef).not.toBeNull();
+      } else {
+        if (mode === "collector-insert-failure") { expect(outcome).toMatchObject({ status: "in_doubt", output: null, attempts: [{ terminalReceipt: null }] }); expect(insertDenied).toBe(true); }
+        else expect(outcome).toMatchObject({ message: "terminal_receipt_persistence_failed_output_withheld" });
+        expect(ledger.state).toBe("unknown"); expect(ledger.observedActualMicros).toBeNull();
+        expect(evidence).toHaveLength(0); expect(terminals).toHaveLength(0);
+        expect(counter.settledMicros).toBe(BigInt(0)); expect(counter.reservedMicros).toBe(BigInt(0));
+        expect(counter.unknownBoundMicros).toBe(ledger.reservedMicros); expect(ledger.reservedMicros).toBeGreaterThan(BigInt(0));
+        await invoke().catch(() => null);
+        expect(calls).toBe(1);
+        expect(await charge.modelEgressReceipt.count({ where: { workspaceId, sequence: 2 } })).toBe(0);
+      }
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      await Promise.all([writer.$disconnect(), charge.$disconnect(), collector.$disconnect()]);
+    }
+  });
 });
