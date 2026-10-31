@@ -289,3 +289,104 @@ describe("governed DashScope adapter invoke", () => {
     expect(result.actualCostUsdMicros).toBeGreaterThan(0);
   });
 });
+
+describe("governed DashScope adapter with a usage collector port", () => {
+  type Exchange = { requestBytes: Uint8Array; responseBytes: Uint8Array; output: unknown };
+  const FLOAT_SCORE = { ...JUDGEMENT, confidence: { band: "medium", score: 0.72 } };
+  function usageCollector(endpoint: string, overrides: {
+    prepare?: () => Promise<never>; record?: (exchange: Exchange) => Promise<never>; leaseRemainingMs?: number;
+  } = {}) {
+    const prepared: Array<{ route: unknown }> = [], recorded: Exchange[] = [];
+    return { prepared, recorded, port: {
+      binding: { adapterKey: REGISTRATION.adapterKey, registrationHash: REGISTRATION.contentHash, endpointFingerprint: computeGovernedDashScopeEndpointFingerprint(endpoint) },
+      prepare: overrides.prepare ?? (async (call: { route: unknown }) => {
+        prepared.push(call);
+        return { leaseRemainingMs: overrides.leaseRemainingMs ?? 60_000, record: async (exchange: Exchange) => {
+          recorded.push(exchange);
+          if (overrides.record) return overrides.record(exchange);
+          return { providerRequestRef: "chatcmpl-from-evidence", promptTokens: 1_000, completionTokens: 200, actualCostUsdMicros: 2_640 };
+        } };
+      }),
+    } };
+  }
+
+  it("returns the cost, reference and tokens from the evidence and hands over the exact bytes sent and received", async () => {
+    const received: string[] = [];
+    const { endpoint, seen } = await loopback((_req, res, body) => { received.push(body); json(res, 200, completion(FLOAT_SCORE)); });
+    const collector = usageCollector(endpoint);
+    const result = await adapter(endpoint, { usageCollector: collector.port }).invoke(invokeInput());
+    expect(result).toEqual({ outcome: "success", output: FLOAT_SCORE, requestDisposition: "accepted", providerRequestRef: "chatcmpl-from-evidence",
+      promptTokens: 1_000, completionTokens: 200, actualCostUsdMicros: 2_640, costCurrency: "USD", pricingVersion: ROUTE_PRICING_VERSION, costBand: "low", errorCode: null });
+    expect(seen).toHaveLength(1);
+    expect(collector.prepared).toHaveLength(1);
+    expect(collector.prepared[0]).toMatchObject({ workspaceId: "workspace-1", providerIdempotencyKey: "idem-1", dispatchClaimHash: HASH_A, dispatchRuntimeHash: HASH_A, projectedPayloadHash: PAYLOAD_HASH });
+    expect(Buffer.from(collector.recorded[0].requestBytes).toString("utf8")).toBe(received[0]);
+    expect(JSON.parse(Buffer.from(collector.recorded[0].responseBytes).toString("utf8"))).toEqual(completion(FLOAT_SCORE));
+    expect(collector.recorded[0].output).toEqual(FLOAT_SCORE);
+  });
+
+  it("the gateway's output hash accepts a fractional confidence that the authority hash refuses", () => {
+    expect(() => authorityHash(FLOAT_SCORE)).toThrow("spend_authority_json_number_invalid");
+    expect(sha256(canonicalJson(FLOAT_SCORE))).toMatch(/^sha256:[a-f0-9]{64}$/u);
+  });
+
+  it("refuses a collector bound to another registration or endpoint at construction", async () => {
+    const { endpoint } = await loopback((_req, res) => json(res, 200, completion(JUDGEMENT)));
+    const { port } = usageCollector(endpoint);
+    for (const binding of [{ ...port.binding, registrationHash: HASH_A }, { ...port.binding, endpointFingerprint: HASH_A }, { ...port.binding, adapterKey: "other-adapter" }]) {
+      expect(() => adapter(endpoint, { usageCollector: { ...port, binding } })).toThrow("dashscope_usage_collector_binding_invalid");
+    }
+  });
+
+  it("sends nothing and releases the key when prepare refuses", async () => {
+    const { endpoint, seen } = await loopback((_req, res) => json(res, 200, completion(JUDGEMENT)));
+    const refused = usageCollector(endpoint, { prepare: async () => { throw new Error("spend_authority_usage_dispatch_binding_invalid"); } });
+    const instance = adapter(endpoint, { usageCollector: refused.port });
+    expect(await instance.invoke(invokeInput())).toMatchObject({ outcome: "failure", requestDisposition: "not_accepted", actualCostUsdMicros: 0, errorCode: "dashscope_usage_dispatch_binding_invalid" });
+    const hidden = usageCollector(endpoint, { prepare: async () => { throw new Error("connect failed at a private host"); } });
+    expect(await adapter(endpoint, { usageCollector: hidden.port }).invoke(invokeInput())).toMatchObject({ requestDisposition: "not_accepted", errorCode: "dashscope_usage_prepare_refused" });
+    expect(seen).toHaveLength(0);
+    await expect(instance.invoke(invokeInput())).resolves.toMatchObject({ requestDisposition: "not_accepted" });
+  });
+
+  it("stays unknown without zero-filling when the evidence write fails, and never resends", async () => {
+    const { endpoint, seen } = await loopback((_req, res) => json(res, 200, completion(JUDGEMENT)));
+    const collector = usageCollector(endpoint, { record: async () => { throw new Error("spend_authority_usage_capture_changed_or_expired"); } });
+    const instance = adapter(endpoint, { usageCollector: collector.port });
+    expect(await instance.invoke(invokeInput())).toEqual({ outcome: "unknown", requestDisposition: "unknown", providerRequestRef: "chatcmpl-synthetic-1", promptTokens: 1_000, completionTokens: 200,
+      actualCostUsdMicros: null, costCurrency: null, pricingVersion: null, costBand: "unknown", errorCode: "dashscope_usage_capture_changed_or_expired" });
+    await expect(instance.invoke(invokeInput())).rejects.toThrow("dashscope_dispatch_already_attempted");
+    expect(seen).toHaveLength(1);
+  });
+
+  it.each([
+    ["a schema refusal", completion({ ...JUDGEMENT, facts: "not-a-list" }), "dashscope_output_malformed_output"],
+    ["another model", completion(JUDGEMENT, { model: "qwen3.7-flash" }), "dashscope_model_mismatch"],
+    ["truncated output", { ...completion(JUDGEMENT), choices: [{ finish_reason: "length", message: { content: "{" } }] }, "dashscope_output_truncated"],
+  ])("writes no evidence on %s and keeps the existing accepted failure", async (_label, body, errorCode) => {
+    const { endpoint } = await loopback((_req, res) => json(res, 200, body));
+    const collector = usageCollector(endpoint);
+    const result = await adapter(endpoint, { usageCollector: collector.port }).invoke(invokeInput());
+    expect(result).toMatchObject({ outcome: "failure", requestDisposition: "accepted", promptTokens: 1_000, completionTokens: 200, errorCode });
+    expect(collector.prepared).toHaveLength(1);
+    expect(collector.recorded).toHaveLength(0);
+  });
+
+  it("does not wait past the dispatch lease", async () => {
+    const { endpoint } = await loopback(() => { /* never answers */ });
+    const collector = usageCollector(endpoint, { leaseRemainingMs: 30 });
+    const startedAt = Date.now();
+    expect(await adapter(endpoint, { usageCollector: collector.port }).invoke(invokeInput())).toMatchObject({ outcome: "unknown", errorCode: "dashscope_transport_timeout" });
+    expect(Date.now() - startedAt).toBeLessThan(1_500);
+  });
+
+  it("takes the claim's route as it was before the first await", async () => {
+    const { endpoint } = await loopback((_req, res) => json(res, 200, completion(JUDGEMENT)));
+    const collector = usageCollector(endpoint);
+    const input = invokeInput();
+    const pending = adapter(endpoint, { usageCollector: collector.port }).invoke(input);
+    input.route.maxCostUsdMicros = 1;
+    await pending;
+    expect(collector.prepared[0].route).toEqual(route());
+  });
+});
