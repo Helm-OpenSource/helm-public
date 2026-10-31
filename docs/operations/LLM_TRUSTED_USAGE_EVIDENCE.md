@@ -20,6 +20,14 @@ collector 先读真实 claim/runtime、预约原价格与汇率，独立持久�
 
 已提交而 ACK 丢失，只允许同原键 committed readback，不再 HTTP；没有提交或已为 unknown 的迟到证据仍不自动核销。旧 bridge 是否交付正文服从其原语义，不从“状态成功”生成正文。此接口不是 unknown→settled 恢复工具。
 
+## DashScope 来源 / DashScope source
+
+`helm.dashscope-chat-completions-usage/v1` 是第二个闭集来源。百炼响应是第三方原文，不要求 canonical：`decodeDashScopeChatCompletion` 只接受有界严格 UTF-8 JSON，证据保存这段原始字节的摘要和 token 计数，不存正文。这同样只证明本方受控采集，不是 provider 签名，也不是账单。`prompt_tokens_details` 等细分项不参与计价，缓存折扣不抵扣，结果偏保守。
+
+只有完整回答才产生证据：id、与请求完全相同的 model、一致的 usage、唯一 choice、`finish_reason` 为 `stop`。其余情况（包括 2xx 但判断校验失败）不产生 success 证据，终态无法核销，预约额度保持 unknown 占用，不补零也不自动释放。本节只增加契约，默认未装配；grant 仍绑定 adapter、registration 和 endpoint，不能跨来源复用。
+
+The DashScope source keeps a digest of the exact third-party bytes plus token counts. It attests our own capture, not a provider signature. Anything short of a complete answer leaves no success evidence, so the reservation stays held as unknown.
+
 ## 合成验证 / Synthetic verification
 
 ```sh
