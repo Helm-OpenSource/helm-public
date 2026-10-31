@@ -251,4 +251,41 @@ describe("governed DashScope adapter invoke", () => {
     const huge = await loopback((_req, res) => json(res, 200, completion(JUDGEMENT, { padding: "x".repeat(4_096) })));
     expect(await adapter(huge.endpoint, { maximumResponseBytes: 1_024 }).invoke(invokeInput())).toMatchObject({ outcome: "unknown", errorCode: "dashscope_response_too_large" });
   });
+  it("reserves the key before the credential await: concurrent calls send at most once, other keys still work", async () => {
+    const { endpoint, seen } = await loopback((_req, res) => json(res, 200, completion(JUDGEMENT)));
+    let release: (value: string) => void = () => undefined;
+    const barrier = new Promise<string>((resolve) => { release = resolve; });
+    const instance = adapter(endpoint, { resolveCredential: () => barrier });
+    const first = instance.invoke(invokeInput());
+    await expect(instance.invoke(invokeInput())).rejects.toThrow("dashscope_dispatch_already_attempted");
+    release(SECRET);
+    expect(await first).toMatchObject({ outcome: "success" });
+    expect(seen.filter((entry) => entry.method === "POST")).toHaveLength(1);
+    await expect(instance.invoke(invokeInput())).rejects.toThrow("dashscope_dispatch_already_attempted");
+    expect(await instance.invoke(invokeInput(undefined, "idem-2"))).toMatchObject({ outcome: "success" });
+    expect(seen.filter((entry) => entry.method === "POST")).toHaveLength(2);
+  });
+
+  it("releases the key only when nothing reached the wire", async () => {
+    const { endpoint, seen } = await loopback((_req, res) => json(res, 200, completion(JUDGEMENT)));
+    let failures = 1;
+    const instance = adapter(endpoint, { resolveCredential: async () => { if (failures-- > 0) throw new Error("port down"); return SECRET; } });
+    expect(await instance.invoke(invokeInput())).toMatchObject({ outcome: "failure", requestDisposition: "not_accepted", errorCode: "dashscope_credential_unavailable" });
+    expect(seen).toHaveLength(0);
+    expect(await instance.invoke(invokeInput())).toMatchObject({ outcome: "success" });
+  });
+
+  it.each([
+    ["missing", undefined, "dashscope_model_missing"],
+    ["null", null, "dashscope_model_missing"],
+    ["a number", 42, "dashscope_model_missing"],
+    ["empty", "", "dashscope_model_missing"],
+    ["another model", "qwen3.7-flash", "dashscope_model_mismatch"],
+  ])("does not succeed when the response model is %s, and keeps the observed usage", async (_label, model, errorCode) => {
+    const { endpoint } = await loopback((_req, res) => json(res, 200, completion(JUDGEMENT, { model })));
+    const result = await adapter(endpoint).invoke(invokeInput());
+    expect(result).toMatchObject({ outcome: "failure", requestDisposition: "accepted", promptTokens: 1_000, completionTokens: 200, errorCode });
+    expect(result.output).toBeUndefined();
+    expect(result.actualCostUsdMicros).toBeGreaterThan(0);
+  });
 });

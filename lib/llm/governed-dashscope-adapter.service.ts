@@ -325,11 +325,19 @@ export function createGovernedDashScopeAdapter(provided: {
       const tag = sha256(canonicalJson({ workspaceId: call.workspaceId, key: call.providerIdempotencyKey }));
       if (attempted.size >= MAX_ATTEMPTED_KEYS || attempted.has(tag)) refuse("dashscope_dispatch_already_attempted");
       if (call.signal.aborted) return notAccepted(route, "dashscope_aborted_before_send");
+      // Reserve synchronously, before the first await, so two concurrent calls cannot both pass the check. A call
+      // that never reaches the wire releases the key; once a request was sent the key stays taken whatever the outcome.
+      attempted.add(tag);
       let secret: string;
       try {
         secret = await credential(route.credentialRef);
       } catch {
+        attempted.delete(tag);
         return notAccepted(route, "dashscope_credential_unavailable");
+      }
+      if (call.signal.aborted) {
+        attempted.delete(tag);
+        return notAccepted(route, "dashscope_aborted_before_send");
       }
       const requestModel = governedDashScopeRequestModel(route);
       const requestBytes = Buffer.from(JSON.stringify({
@@ -342,8 +350,10 @@ export function createGovernedDashScopeAdapter(provided: {
         enable_thinking: false,
         response_format: { type: "json_schema", json_schema: { name: GOVERNED_DASHSCOPE_RESPONSE_FORMAT_NAME, schema: CAIO_LAYERED_JUDGEMENT_JSON_SCHEMA, strict: true } },
       }), "utf8");
-      if (requestBytes.length > MAX_REQUEST_BYTES) return notAccepted(route, "dashscope_request_too_large");
-      attempted.add(tag);
+      if (requestBytes.length > MAX_REQUEST_BYTES) {
+        attempted.delete(tag);
+        return notAccepted(route, "dashscope_request_too_large");
+      }
       const result = await send({ url: completionsUrl, credential: secret, body: requestBytes, timeoutMs, maximumBytes, signal: call.signal });
       secret = "";
       if (result.kind !== "response") {
@@ -366,7 +376,9 @@ export function createGovernedDashScopeAdapter(provided: {
         promptTokens: usage.prompt, completionTokens: usage.completion, actualCostUsdMicros, costCurrency: "USD",
         pricingVersion: route.pricingVersion, costBand: costBand(actualCostUsdMicros, route.maxCostUsdMicros), errorCode,
       });
-      if (typeof body.model === "string" && body.model !== requestModel) return accepted("dashscope_model_mismatch");
+      // Success requires proof of which model answered: an absent or malformed field is not a match. Usage stays recorded.
+      if (typeof body.model !== "string" || body.model.length === 0) return accepted("dashscope_model_missing");
+      if (body.model !== requestModel) return accepted("dashscope_model_mismatch");
       const choice = Array.isArray(body.choices) ? (body.choices[0] as Record<string, unknown> | undefined) : undefined;
       if (choice?.finish_reason === "length") return accepted("dashscope_output_truncated");
       const content = choice?.message && typeof choice.message === "object" ? (choice.message as { content?: unknown }).content : undefined;
