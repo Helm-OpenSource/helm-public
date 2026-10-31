@@ -202,6 +202,48 @@ OWNER-only 读模型应显示 terminal outcome，并保持：
 只有 provider 明确不接受请求，且失败 terminal receipt 已成功落库时，才可请求一个
 policy 已声明的 fallback。异常、超时、断连和未知结果不 fallback。
 
+### 5.7 进程内执行器的状态机与 `in_doubt` 处置
+
+适用：CAIO 推理队列由服务端进程内执行器（`lib/caio-inference/inline-execute-job.ts`）
+经同步受治理 gateway 直接派发，而不是设备 worker claim / submit 的部署。
+
+状态机（队列行，`CaioInferenceJob`）：
+
+| 步骤 | 队列行 | 网关侧 | 说明 |
+| --- | --- | --- | --- |
+| 预留 | `queued → claimed`，写 preparation lease（默认 2 分钟）、新 `claimToken`、`attempt+1`、`gatewayRef`；`decisionRef` 为空 | 无 | 短事务；`gatewayRef` 有值而 `decisionRef` 为空即「进程内预留」标记 |
+| 执行 | 不变 | 投影回执 → **一次** gateway 调用：claim、invoke、terminal receipt 与花费核销在同一次调用内完成 | 网络不在任何数据库事务内；不重试、不 fallback |
+| 终态写入 | 以 `(id, workspaceId, claimToken, attempt, status=claimed)` 做 CAS，计数为 1 才算写入 | 已完成 | 旧线程不能覆盖新预留；CAS 失败只记 `stale`，不再写 |
+
+终态写入按 gateway 结果分流：
+
+- `success` / `partial` 且有正文 → 校验正文（证据只能引用冻结输入、禁止动作口径）→ `completed`，
+  绑定 `decisionRef` / `dispatchClaimHash`；正文与 terminal receipt 的 `outputContentHash` 不一致 → `rejected:output_hash_mismatch`。
+  校验失败 → `rejected:<闭集码>`，**不改 gateway 终态**，也不再调用 deferred dispatch 的 complete / fail / expire（终态与花费已由 gateway 结算，重复结算即重复计费）。
+- `success` / `partial` 但正文为空（terminal 已存在、只回放不给正文）→ `rejected:output_lost`：已收费、无判断，**不重发**。
+- `failure` → `rejected:provider_failure`；`blocked` / `not_dispatched` → `rejected:dispatch_claim_denied`。
+- `in_doubt` / `unknown`，以及 claim 之后抛出的
+  `terminal_receipt_persistence_failed_output_withheld`、`spend_invariant_breach_output_withheld` 或任何未分类异常
+  → 行保持 `claimed`，`rejectionCode=in_doubt`。
+
+`in_doubt` 处置（进程内执行器补充 §5.1）：
+
+1. 回收作业（`reclaimCaioInferenceJobs`）对 `rejectionCode=in_doubt` 的行**只计数**（`inDoubt`），不清 claim、不重排队、不 dead letter；
+   对 lease 已过期且带进程内预留标记（`gatewayRef` 有值、`decisionRef` 为空）的行，同样以该行自己的 CAS 元组标为 `in_doubt`，
+   而不是重排队——这覆盖「网关已写终态、保存正文前进程崩溃」的情形。重排队意味着新 attempt、新 requestKey，即对已付费请求的盲目重发。
+2. 仍存活的原线程可以在被标 `in_doubt` 之后用同一元组完成 `finalize`（finalize 会清掉标记）；这是避免人为制造「已收费无判断」的依据。
+3. 处置路径只有两条：由受治理 gateway 用**完全相同**的请求（同 `caio-inference-inline:<jobId>:<attempt>`、同投影回执）走 §5.1 的对账得到可核验终态；
+   或由操作者按 §5.1 第 7 条认定为未成功。**不得**通过手工把行改回 `queued` 来「重试」——那会换 requestKey 并重发。
+4. 读出面上 `claimed` 行仍被计为 worker「working」；`in_doubt` 行长期停留时请以 `rejectionCode` 为准，而不是以状态推断有人在跑。
+
+派发前置条件（任一不满足即 `skipped`，不消费积压）：任务类开关精确等于 `"true"`、上海时区落在复盘 cron 的小时区间内（`5 8-20 * * *` → 08:00–20:59）、
+注入的停机端口 `guards.isStopped(workspaceId)` 为假。停机端口由装配方接 guardian stop / mandate 状态；Core 只定义端口。
+
+English summary: the in-process executor reserves a queue row under a short preparation lease, makes exactly one
+governed gateway call (claim, invoke and terminal settle inside the gateway), and writes the outcome with a
+compare-and-swap on the reservation tuple; a doubtful or in-flight inline row is counted by reconciliation and
+never requeued, because a new attempt is a new request key and therefore a blind resend of a possibly charged request.
+
 ## 6. 回滚
 
 模型策略回滚不是删除历史记录：
@@ -249,6 +291,8 @@ The dispatch claim is the authorization cutoff: revocation blocks unclaimed
 requests but cannot unsend a claimed request, which remains in flight and must
 be reconciled.
 After the lease expires, the exact adapter may reconcile the original provider
-idempotency key, but must never blindly resend it. Rollback creates a newly
+idempotency key, but must never blindly resend it. The in-process executor
+(section 5.7) follows the same rule: a doubtful or in-flight inline queue row is
+never requeued, since a new attempt would be a new request. Rollback creates a newly
 reviewed policy revision; it never deletes or mutates the historical decision
 and receipt ledger.
