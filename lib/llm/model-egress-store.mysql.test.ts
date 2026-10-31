@@ -3356,7 +3356,7 @@ describeMysql("model egress store with an isolated MySQL database", () => {
     }
   });
 
-  it.each(["valid", "missing-usage", "duplicate-key", "too-large", "http-error", "timeout", "revoked-during-call", "wrong-output", "wrong-cost", "lost-terminal-ack", "collector-insert-failure", "collector-ack-loss", "attestor-expired-lockwait", "untrusted-root", "wrong-key", "wrong-endpoint", "same-principal", "finite-concurrent", "finite-unknown"])(
+  it.each(["valid", "wrong-source", "missing-usage", "duplicate-key", "too-large", "http-error", "timeout", "revoked-during-call", "wrong-output", "wrong-cost", "lost-terminal-ack", "collector-insert-failure", "collector-ack-loss", "attestor-expired-lockwait", "untrusted-root", "wrong-key", "wrong-endpoint", "same-principal", "finite-concurrent", "finite-unknown"])(
     "runs trusted HTTP usage through actual bootstrap and committed readback: %s", async (mode) => {
     assertTrustedUsageTestTargets();
     vi.resetModules();
@@ -3398,7 +3398,7 @@ describeMysql("model egress store with an isolated MySQL database", () => {
       modelVersion: primaryRoute.modelVersion, promptTokens: 10, completionTokens: 10 };
     const usageKeys = generateKeyPairSync("ed25519");
     const grant = { schema: "helm.usage-attestor-grant/v1" as const, id: `usage-grant:${mode}:${suffix}`, workspaceId,
-      source: USAGE_SOURCE, sourceHash: HASH_A, adapterKey: SYNTHETIC_REGISTRATION.adapterKey,
+      source: mode === "wrong-source" ? DASHSCOPE_USAGE_SOURCE : USAGE_SOURCE, sourceHash: HASH_A, adapterKey: SYNTHETIC_REGISTRATION.adapterKey,
       registrationHash: SYNTHETIC_REGISTRATION.contentHash, provider: primaryRoute.provider, model: primaryRoute.modelId,
       modelVersion: primaryRoute.modelVersion, sku: "text-only", endpointFingerprint,
       publicKeyPem: usageKeys.publicKey.export({ type: "spki", format: "pem" }).toString(),
@@ -3428,6 +3428,13 @@ describeMysql("model egress store with an isolated MySQL database", () => {
       operationWriterClient: writer, registration: SYNTHETIC_REGISTRATION, grantId: grant.id, usage, spend: registryConfig,
       privateKey: usageKeys.privateKey, endpoint: `http://127.0.0.1:${address.port}/synthetic`, endpointFingerprint,
       timeoutMs: mode === "timeout" ? 40 : 5_000, maximumResponseBytes: 65_536 };
+    if (mode === "wrong-source") {
+      // Every other binding is valid: only the usage source differs, and the controlled factory must still refuse it.
+      await expect(createGovernedOrdinaryHttpAdapter(factoryInput)).rejects.toThrow("usage_factory_binding_invalid");
+      expect(calls).toBe(0);
+      expect(await db.lLMTrustedUsageEvidence.count({ where: { workspaceId } })).toBe(0);
+      return;
+    }
     if (["untrusted-root", "wrong-key", "wrong-endpoint", "same-principal"].includes(mode)) {
       const rejected = mode === "untrusted-root" ? { ...factoryInput, usage: { trustedAttestorGrants: {} } } :
         mode === "wrong-key" ? { ...factoryInput, privateKey: generateKeyPairSync("ed25519").privateKey } :

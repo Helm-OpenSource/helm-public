@@ -24,7 +24,7 @@ collector 先读真实 claim/runtime、预约原价格与汇率，独立持久�
 
 `helm.dashscope-chat-completions-usage/v1` 是第二个闭集来源。百炼响应是第三方原文，不要求 canonical：`decodeDashScopeChatCompletion` 只接受有界严格 UTF-8 JSON，证据保存这段原始字节的摘要和 token 计数，不存正文。这同样只证明本方受控采集，不是 provider 签名，也不是账单。`prompt_tokens_details` 等细分项不参与计价，缓存折扣不抵扣，结果偏保守。
 
-只有完整回答才产生证据：id、与请求完全相同的 model、一致的 usage、唯一 choice、`finish_reason` 为 `stop`。其余情况（包括 2xx 但判断校验失败）不产生 success 证据，终态无法核销，预约额度保持 unknown 占用，不补零也不自动释放。grant 仍绑定 source、adapter、registration 和 endpoint，不能跨来源复用。
+只有完整回答才产生证据：id、与请求完全相同的 model、一致的 usage、唯一 choice、`finish_reason` 为 `stop`。其余情况（包括 2xx 但判断校验失败）不产生 success 证据，终态无法核销，预约额度保持 unknown 占用，不补零也不自动释放。grant 绑定 adapter、registration 和 endpoint；受控 adapter 与 DashScope collector 的工厂各自要求对应的 `source`，不能跨来源复用。
 
 `createGovernedDashScopeUsageCollector` 是这一来源的 collector，默认未装配，核心仓没有组合方。它按 ordinary 路径执行：发送前在 collector 事务内快照 claim 与账本钉住的价格/FX，成功后在同一身份下写证据、验签、回读。终态费用由它按签审价以 `computeMaximumCharge` 算出并由 adapter 原样返回；adapter 的价目表只用于 preflight 估算和失败结果，二者通常不相等，存储层只接受前者。未注入 collector 的 adapter 不能核销：每次调用都以 unknown 占额结束。写证据失败时 adapter 返回 unknown，不补零，同一 key 不重发。`outputContentHash` 用网关的 `sha256(canonicalJson(output))`，不用 `authorityHash`：后者拒绝 `confidence.score` 这类小数。发送超时不超过 claim 租约的剩余时间，租约后捕获的证据无法核销，路由的 `maxLatencyMs` 与预期响应时间应落在租约内。
 

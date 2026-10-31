@@ -11,7 +11,7 @@ import { validateGovernedModelAdapterRegistration } from "./model-route-contract
 import { authorityDate, authorityHash, canonicalAuthorityJson, computeMaximumCharge, refuse } from "./trusted-spend-authority";
 import { readTrustedSpendRecordInTransaction, type TrustedSpendRegistryConfig } from "./trusted-spend-authority-prisma";
 import { assertUsageCollectorRealm, readUsageClaimInTransaction, readUsageGrantInTransaction, type UsageRegistryConfig } from "./trusted-usage-evidence-prisma";
-import { bytesHash, decodeControlledResponse, readUsageEvidence, USAGE_SCHEMA, type UsageEvidence } from "./trusted-usage-evidence";
+import { bytesHash, decodeControlledResponse, readUsageEvidence, USAGE_SCHEMA, USAGE_SOURCE, type UsageEvidence } from "./trusted-usage-evidence";
 
 /** Only explicitly reviewed server composition can construct this adapter. No
  * public record(JSON), URL task field, default key, retry or env authority. The
@@ -48,7 +48,8 @@ export async function createGovernedOrdinaryHttpAdapter(provided: {
     if (!row) refuse("usage_attestor_untrusted");
     return readUsageGrantInTransaction(tx, grantId, row.workspaceId, usage);
   });
-  if (factoryGrant.registrationHash !== registration.contentHash || factoryGrant.adapterKey !== registration.adapterKey ||
+  // This adapter speaks only the controlled protocol, so a grant for any other usage source must not sign its evidence.
+  if (factoryGrant.source !== USAGE_SOURCE || factoryGrant.registrationHash !== registration.contentHash || factoryGrant.adapterKey !== registration.adapterKey ||
       factoryGrant.endpointFingerprint !== fingerprint || createPublicKey(key).export({ type: "spki", format: "pem" }).toString() !== factoryGrant.publicKeyPem) refuse("usage_factory_binding_invalid");
   const timeoutMs = input.timeoutMs, maximum = input.maximumResponseBytes;
   const attempted = new Set<string>();
