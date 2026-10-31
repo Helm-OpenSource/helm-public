@@ -14,10 +14,11 @@ import {
   governedDashScopeRequestModel,
 } from "./governed-dashscope-adapter.service";
 import { isSafeModelGovernanceRef, type TenantModelRoute } from "./model-route-contracts";
-import { PRICING_TABLE_VERSION } from "./token-cost-table";
 import { authorityHash } from "./trusted-spend-authority";
 
 const HASH_A = sha256("a");
+/** Owner-signed price record version: letter-led authorityRef shape, independent of the adapter's internal table. */
+const ROUTE_PRICING_VERSION = "price-qwen3.8-max-0902-cn-beijing-20261031";
 const SECRET = "sk-synthetic-loopback-only";
 const REGISTRATION = buildGovernedDashScopeAdapterRegistration({ registrationRef: "adapter-registration:dashscope-test" });
 
@@ -53,7 +54,7 @@ function route(overrides: Partial<TenantModelRoute> = {}): TenantModelRoute {
     allowedTaskClasses: ["reasoning_counterfactual"], maximumSensitivity: "internal", allowedProcessingDispositions: ["remote_projected"],
     retentionDays: 0, trainingUse: "prohibited", termsAssurance: "contractual_no_retention",
     providerTermsRef: "terms:synthetic", providerTermsHash: HASH_A, deletionTermsRef: "terms:synthetic-delete", deletionTermsHash: HASH_A,
-    pricingTermsRef: "pricing:synthetic", pricingTermsHash: HASH_A, pricingVersion: PRICING_TABLE_VERSION,
+    pricingTermsRef: "pricing:synthetic", pricingTermsHash: HASH_A, pricingVersion: ROUTE_PRICING_VERSION,
     maxInputTokens: 20_000, maxOutputTokens: 1_000, maxCostUsdMicros: 100_000, maxLatencyMs: 10_000, maxConcurrency: 1, fallbackRouteIds: [],
     ...overrides,
   };
@@ -167,8 +168,9 @@ describe("governed DashScope adapter readiness and preflight", () => {
     const missing = await adapter(endpoint, { resolveCredential: async () => { throw new Error("no"); } })
       .preflight({ workspaceId: "workspace-1", route: route(), taskClass: "reasoning_counterfactual", projectedPayloadHash: PAYLOAD_HASH, projectedPayloadBytes: bytes, requestedMaxOutputTokens: 800 });
     expect(missing.credentialConfigured).toBe(false);
-    await expect(adapter(endpoint).preflight({ workspaceId: "workspace-1", route: route({ pricingVersion: "other" }), taskClass: "reasoning_counterfactual", projectedPayloadHash: PAYLOAD_HASH, projectedPayloadBytes: bytes, requestedMaxOutputTokens: 800 }))
-      .rejects.toThrow("dashscope_pricing_version_mismatch");
+    // The route's pricing version names the signed price record; the adapter neither matches nor rewrites it.
+    const other = await adapter(endpoint).preflight({ workspaceId: "workspace-1", route: route({ pricingVersion: "price:other-record" }), taskClass: "reasoning_counterfactual", projectedPayloadHash: PAYLOAD_HASH, projectedPayloadBytes: bytes, requestedMaxOutputTokens: 800 });
+    expect(other.estimatedMaxCostUsdMicros).toBe(observation.estimatedMaxCostUsdMicros);
   });
 });
 
@@ -179,7 +181,7 @@ describe("governed DashScope adapter invoke", () => {
     expect(result).toEqual({
       outcome: "success", output: JUDGEMENT, requestDisposition: "accepted", providerRequestRef: "chatcmpl-synthetic-1",
       promptTokens: 1_000, completionTokens: 200, actualCostUsdMicros: Math.ceil(1_000 * 0.276 + 200 * 1.101), costCurrency: "USD",
-      pricingVersion: PRICING_TABLE_VERSION, costBand: "low", errorCode: null,
+      pricingVersion: ROUTE_PRICING_VERSION, costBand: "low", errorCode: null,
     });
     expect(seen).toHaveLength(1);
     expect(seen[0]).toMatchObject({ method: "POST", url: "/compatible-mode/v1/chat/completions", authorization: `Bearer ${SECRET}` });
@@ -188,6 +190,8 @@ describe("governed DashScope adapter invoke", () => {
     expect(body.response_format).toMatchObject({ type: "json_schema", json_schema: { name: "helm_caio_layered_judgement_v1", strict: true, schema: { additionalProperties: false } } });
     expect(body.messages).toEqual([{ role: "user", content: buildCaioInferencePrompt(PAYLOAD) }]);
     expect(JSON.stringify(body)).not.toContain(SECRET);
+    const otherRecord = await adapter(endpoint).invoke({ ...invokeInput(), route: route({ pricingVersion: "price:other-record" }) });
+    expect(otherRecord).toMatchObject({ outcome: "success", pricingVersion: "price:other-record", actualCostUsdMicros: 497 });
   });
 
   it("sends the route's exact snapshot id when it has one and refuses an answer from another model", async () => {
@@ -206,7 +210,7 @@ describe("governed DashScope adapter invoke", () => {
     const outsideInput = { ...JUDGEMENT, facts: [{ statement: "x", evidenceRefs: ["evidence:not-in-input"] }] };
     const { endpoint } = await loopback((_req, res) => json(res, 200, completion(outsideInput)));
     const result = await adapter(endpoint).invoke(invokeInput());
-    expect(result).toMatchObject({ outcome: "failure", requestDisposition: "accepted", providerRequestRef: "chatcmpl-synthetic-1", promptTokens: 1_000, completionTokens: 200, actualCostUsdMicros: 497, costCurrency: "USD", pricingVersion: PRICING_TABLE_VERSION, errorCode: "dashscope_output_evidence_outside_input" });
+    expect(result).toMatchObject({ outcome: "failure", requestDisposition: "accepted", providerRequestRef: "chatcmpl-synthetic-1", promptTokens: 1_000, completionTokens: 200, actualCostUsdMicros: 497, costCurrency: "USD", pricingVersion: ROUTE_PRICING_VERSION, errorCode: "dashscope_output_evidence_outside_input" });
     expect(result).not.toHaveProperty("output");
     const notJson = await loopback((_req, res) => json(res, 200, completion("not json at all")));
     expect(await adapter(notJson.endpoint).invoke(invokeInput())).toMatchObject({ outcome: "failure", requestDisposition: "accepted", errorCode: "dashscope_output_not_json", actualCostUsdMicros: 497 });
@@ -225,7 +229,7 @@ describe("governed DashScope adapter invoke", () => {
 
   it("marks a refusing 4xx and every pre-send refusal as not accepted with zero usage", async () => {
     const unauthorized = await loopback((_req, res) => json(res, 401, { error: { message: "Incorrect API key", type: "invalid_request_error" } }));
-    const notAccepted = { outcome: "failure", requestDisposition: "not_accepted", providerRequestRef: null, promptTokens: 0, completionTokens: 0, actualCostUsdMicros: 0, costCurrency: "USD", pricingVersion: PRICING_TABLE_VERSION, costBand: "zero" };
+    const notAccepted = { outcome: "failure", requestDisposition: "not_accepted", providerRequestRef: null, promptTokens: 0, completionTokens: 0, actualCostUsdMicros: 0, costCurrency: "USD", pricingVersion: ROUTE_PRICING_VERSION, costBand: "zero" };
     expect(await adapter(unauthorized.endpoint).invoke(invokeInput())).toEqual({ ...notAccepted, errorCode: "dashscope_http_401" });
     const untouched = await loopback((_req, res) => json(res, 200, completion(JUDGEMENT)));
     const credentialDown = adapter(untouched.endpoint, { resolveCredential: async () => { throw new Error("vault offline"); } });

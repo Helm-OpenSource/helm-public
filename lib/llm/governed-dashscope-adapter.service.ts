@@ -98,6 +98,9 @@ export function computeGovernedDashScopeImplementationHash(): string {
     adapterKey: GOVERNED_DASHSCOPE_ADAPTER_KEY, adapterVersion: GOVERNED_DASHSCOPE_ADAPTER_VERSION, transport: TRANSPORT_CONTRACT,
     request: { temperature: 0, stream: false, enable_thinking: false, responseFormatName: GOVERNED_DASHSCOPE_RESPONSE_FORMAT_NAME, strict: true },
     responseSchema: CAIO_LAYERED_JUDGEMENT_JSON_SCHEMA, promptContractHash: sha256(buildCaioInferencePrompt(PROMPT_CONTRACT_FIXTURE)),
+    // The adapter's internal price table version is evidence about this code, not a route matching condition:
+    // `route.pricingVersion` names the owner-signed price record and is echoed back unchanged in every result.
+    priceTableVersion: PRICING_TABLE_VERSION,
   }));
 }
 
@@ -183,6 +186,8 @@ function readUsage(body: Record<string, unknown> | null): { prompt: number; comp
 }
 
 function costUsdMicros(modelId: string, promptTokens: number, completionTokens: number): number {
+  // Worst-case reading from the adapter's own table (version pinned in the implementation hash); the governed
+  // spend chain re-prices from the route's signed record and refuses the terminal if the two disagree.
   const price = resolveTokenCost(GOVERNED_DASHSCOPE_PROVIDER, modelId);
   // USD per million tokens times tokens is exactly USD micro-units.
   return Math.ceil(promptTokens * price.inputPerMillion + completionTokens * price.outputPerMillion);
@@ -291,7 +296,6 @@ export function createGovernedDashScopeAdapter(provided: {
     async preflight({ route, projectedPayloadBytes, requestedMaxOutputTokens }) {
       const binding = routeBinding(registration, route);
       if (binding) refuse(binding);
-      if (route.pricingVersion !== PRICING_TABLE_VERSION) refuse("dashscope_pricing_version_mismatch");
       if (!Number.isSafeInteger(projectedPayloadBytes) || projectedPayloadBytes < 0 || projectedPayloadBytes > MAX_PAYLOAD_BYTES) refuse("dashscope_payload_bytes_invalid");
       if (!Number.isSafeInteger(requestedMaxOutputTokens) || requestedMaxOutputTokens < 1) refuse("dashscope_output_budget_invalid");
       let credentialConfigured = false;
@@ -308,7 +312,6 @@ export function createGovernedDashScopeAdapter(provided: {
       const route = call.route;
       const binding = routeBinding(registration, route);
       if (binding) return notAccepted(route, binding);
-      if (route.pricingVersion !== PRICING_TABLE_VERSION) return notAccepted(route, "dashscope_pricing_version_mismatch");
       const payloadText = canonicalJson(call.projectedPayload);
       if (Buffer.byteLength(payloadText, "utf8") > MAX_PAYLOAD_BYTES || sha256(payloadText) !== call.projectedPayloadHash) {
         return notAccepted(route, "dashscope_payload_binding_invalid");
@@ -361,7 +364,7 @@ export function createGovernedDashScopeAdapter(provided: {
       const accepted = (errorCode: string | null, output?: CaioLayeredJudgement): GovernedModelAdapterResult<CaioLayeredJudgement> => ({
         outcome: output ? "success" : "failure", ...(output ? { output } : {}), requestDisposition: "accepted", providerRequestRef,
         promptTokens: usage.prompt, completionTokens: usage.completion, actualCostUsdMicros, costCurrency: "USD",
-        pricingVersion: PRICING_TABLE_VERSION, costBand: costBand(actualCostUsdMicros, route.maxCostUsdMicros), errorCode,
+        pricingVersion: route.pricingVersion, costBand: costBand(actualCostUsdMicros, route.maxCostUsdMicros), errorCode,
       });
       if (typeof body.model === "string" && body.model !== requestModel) return accepted("dashscope_model_mismatch");
       const choice = Array.isArray(body.choices) ? (body.choices[0] as Record<string, unknown> | undefined) : undefined;

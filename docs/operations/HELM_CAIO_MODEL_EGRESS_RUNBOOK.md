@@ -97,8 +97,9 @@ CI 中的 `Model Egress MySQL` job 使用 MySQL 8.4 空库重放迁移并执行�
 `lib/llm/governed-dashscope-adapter.service.ts` 是面向 CAIO 推理的受治理 DashScope（阿里云百炼，Qwen）
 provider adapter 参考实现：只经 `GovernedModelProviderAdapter` 契约由受治理 gateway 派发，调用 DashScope
 OpenAI 兼容 `chat/completions`，强制 `enable_thinking=false` 与 strict `json_schema`，输出必须通过
-`validateCaioLayeredJudgement`；费用由响应 `usage` 乘以 `token-cost-table` 得出，`route.pricingVersion`
-必须等于价格表版本，否则 preflight 拒绝。凭据只经注入的 `resolveCredential(credentialRef)` 端口取用，
+`validateCaioLayeredJudgement`；费用由响应 `usage` 乘以 adapter 内部 `token-cost-table` 得出，该价目表版本
+只进入 adapter 的 implementationHash 作为代码证据；`route.pricingVersion` 是 owner 签审价格记录的版本号，
+adapter 原样回填、不做匹配，终态计价仍由受治理花费链按签审记录复算并裁决。凭据只经注入的 `resolveCredential(credentialRef)` 端口取用，
 不读环境变量，不进日志或错误码；endpoint fingerprint 在构造时与 route 绑定校验。守卫
 `check:model-egress-governance` 禁止 public Core 其他文件 import 该模块或其工厂，组合方必须经评审加入
 allowlist 后才能把 adapter 交给 registry / gateway。
