@@ -164,6 +164,8 @@ export type CaioInferenceInlineDispatchHandle = {
     attempt: number;
     taskClass: CaioInferenceTaskClass;
     inferenceInput: CaioInferenceInput;
+    /** Last authorization read, after projection and right before the gateway. A reason refuses the dispatch. */
+    beforeDispatch?: () => Promise<string | null>;
   }) => Promise<CaioInferenceInlineExecution>;
 };
 
@@ -177,7 +179,7 @@ export function createCaioInferenceInlineDispatchHandle(input: {
 }): CaioInferenceInlineDispatchHandle {
   return Object.freeze({
     gatewayRef: input.gatewayRef,
-    execute: async ({ workspaceId, jobId, attempt, taskClass, inferenceInput }) => {
+    execute: async ({ workspaceId, jobId, attempt, taskClass, inferenceInput, beforeDispatch }) => {
       const sourceAssetRefs = await input.sourceAssetRefs(workspaceId);
       if (sourceAssetRefs.length === 0) {
         return { status: "blocked", reasonCode: "no_authorized_source_asset", decisionRef: null, claimHash: null };
@@ -196,6 +198,15 @@ export function createCaioInferenceInlineDispatchHandle(input: {
       } catch (error) {
         // Projection happens before any decision exists: nothing was authorised, nothing was charged.
         return { status: "blocked", reasonCode: describeError(error).code, decisionRef: null, claimHash: null };
+      }
+      if (beforeDispatch) {
+        let refusal: string | null;
+        try {
+          refusal = await beforeDispatch();
+        } catch {
+          refusal = "dispatch_guard_unavailable"; // An unreadable stop state is not permission to send.
+        }
+        if (refusal) return { status: "blocked", reasonCode: refusal, decisionRef: null, claimHash: null };
       }
       let result: GovernedModelGatewayResult<GovernedJsonValue>;
       try {

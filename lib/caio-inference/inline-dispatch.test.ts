@@ -183,4 +183,15 @@ describe("CAIO inline governed dispatch handle", () => {
     await expect(refused.execute()).resolves.toEqual({ status: "blocked", reasonCode: "projection_scan_failed", decisionRef: null, claimHash: null });
     expect(gateway).not.toHaveBeenCalled();
   });
+
+  it("never reaches the gateway when the last gate refuses or cannot be read, even after projection", async () => {
+    const gateway = vi.fn() as unknown as CaioInferenceInlineGatewayPort;
+    const { handle, project } = harness(gateway);
+    const run = (beforeDispatch: () => Promise<string | null>) =>
+      handle.execute({ workspaceId: "workspace-1", jobId: "job-1", attempt: 2, taskClass: "hourly_diagnosis", inferenceInput: INPUT, beforeDispatch });
+    await expect(run(async () => "guardian_stop")).resolves.toMatchObject({ status: "blocked", reasonCode: "guardian_stop", decisionRef: null });
+    await expect(run(async () => { throw new Error("db down"); })).resolves.toMatchObject({ status: "blocked", reasonCode: "dispatch_guard_unavailable" });
+    expect(project).toHaveBeenCalledTimes(2);
+    expect(gateway).not.toHaveBeenCalled();
+  });
 });
