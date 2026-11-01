@@ -225,6 +225,12 @@ export function createGovernedDashScopeAdapter(provided: {
   resolveCredential: GovernedDashScopeCredentialResolver; timeoutMs: number; maximumResponseBytes: number; now?: () => Date;
   /** Optional only for composition without settlement; see the module comment for what omitting it means. */
   usageCollector?: DashScopeUsageCollector;
+  /**
+   * Last authorization read before the request leaves the deployment: after the governed claim and every other
+   * await on this path, so a stop recorded during preflight, claim, credential or usage preparation still prevents
+   * egress. A returned reason, or a failed read, refuses the send.
+   */
+  dispatchGate?: (input: { workspaceId: string }) => Promise<string | null>;
 }): GovernedDashScopeAdapter {
   const candidate = JSON.parse(canonicalJson(provided.registration)) as GovernedModelAdapterRegistration;
   if (!validateGovernedModelAdapterRegistration(candidate).valid) refuse("dashscope_registration_invalid");
@@ -385,6 +391,18 @@ export function createGovernedDashScopeAdapter(provided: {
         if (call.signal.aborted) {
           attempted.delete(tag);
           return notAccepted(route, "dashscope_aborted_before_send");
+        }
+      }
+      if (provided.dispatchGate) {
+        let refusal: string | null;
+        try {
+          refusal = await provided.dispatchGate({ workspaceId: call.workspaceId });
+        } catch {
+          refusal = "unavailable"; // An unreadable stop state is not permission to send.
+        }
+        if (refusal || call.signal.aborted) {
+          attempted.delete(tag);
+          return notAccepted(route, "dashscope_dispatch_gate_refused");
         }
       }
       // Evidence captured after the lease cannot settle, so waiting past it only turns a success into an unknown.

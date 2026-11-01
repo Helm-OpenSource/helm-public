@@ -389,4 +389,22 @@ describe("governed DashScope adapter with a usage collector port", () => {
     await pending;
     expect(collector.prepared[0].route).toEqual(route());
   });
+
+  it("reads the dispatch gate last, after the credential, and sends nothing when it refuses or cannot be read", async () => {
+    const { endpoint, seen } = await loopback((_req, res) => json(res, 200, completion(JUDGEMENT)));
+    const order: string[] = [];
+    let gate: () => Promise<string | null> = async () => "guardian_stop";
+    const instance = adapter(endpoint, {
+      resolveCredential: async () => { order.push("credential"); return SECRET; },
+      dispatchGate: async () => { order.push("gate"); return gate(); },
+    });
+    expect(await instance.invoke(invokeInput())).toMatchObject({ outcome: "failure", requestDisposition: "not_accepted", errorCode: "dashscope_dispatch_gate_refused" });
+    expect(order).toEqual(["credential", "gate"]);
+    gate = async () => { throw new Error("db down"); };
+    expect(await instance.invoke(invokeInput())).toMatchObject({ requestDisposition: "not_accepted", errorCode: "dashscope_dispatch_gate_refused" });
+    expect(seen).toHaveLength(0);
+    gate = async () => null;
+    expect(await instance.invoke(invokeInput())).toMatchObject({ outcome: "success" });
+    expect(seen.filter((entry) => entry.method === "POST")).toHaveLength(1);
+  });
 });
