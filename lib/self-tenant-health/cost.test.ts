@@ -3,6 +3,7 @@ import {
   bucketEstimatedCostMinorUnit,
   estimateLLMCallCostMinorUnit,
   resolveBudgetState,
+  sumEstimatedLLMCostMinorUnit,
 } from "@/lib/self-tenant-health/cost";
 
 describe("self-tenant LLM cost estimates", () => {
@@ -34,21 +35,44 @@ describe("self-tenant LLM cost estimates", () => {
         promptTokens: 1_000_000,
         completionTokens: 1_000_000,
       }),
-    ).toBe(4753);
+    ).toBe(4800);
   });
 
-  it("keeps the unpriced qwen3.8-max on the honest unknown bucket", () => {
-    // The vendor had published no price as of 2026-08-18. Null here surfaces as
-    // an "unknown" bucket, which is the truth; a guessed profile would render
-    // as a confident number instead.
-    expect(
+  it("prices qwen3.8-max at the CNY list price, identical to qwen3.7-max", () => {
+    const estimate = (model: string) =>
       estimateLLMCallCostMinorUnit({
         provider: "qwen",
-        model: "qwen3.8-max",
+        model,
         promptTokens: 1_000_000,
         completionTokens: 1_000_000,
-      }),
-    ).toBeNull();
+      });
+    expect(estimate("qwen3.8-max")).toBe(4800);
+    expect(estimate("qwen3.8-max")).toBe(estimate("qwen3.7-max"));
+  });
+
+  it("does not understate list price at bucket and budget thresholds", () => {
+    const perCall = estimateLLMCallCostMinorUnit({
+      provider: "qwen",
+      model: "qwen3.8-max",
+      promptTokens: 100_000,
+      completionTokens: 0,
+    });
+    expect(perCall).toBe(120);
+    const total = (calls: number) => calls * (perCall ?? 0);
+    expect(bucketEstimatedCostMinorUnit(total(83))).toBe("cny_0_100");
+    expect(bucketEstimatedCostMinorUnit(total(84))).toBe("cny_100_1000");
+    expect(resolveBudgetState({ estimatedCostMinorUnit: total(84), monthlyLimitMinorUnit: 10_000 })).toBe("blocked");
+    expect(bucketEstimatedCostMinorUnit(total(833))).toBe("cny_100_1000");
+    expect(bucketEstimatedCostMinorUnit(total(834))).toBe("cny_1000_10000");
+    expect(bucketEstimatedCostMinorUnit(total(8_333))).toBe("cny_1000_10000");
+    expect(bucketEstimatedCostMinorUnit(total(8_334))).toBe("cny_10000_plus");
+  });
+
+  it("treats missing usage on a priced model as unknown, not zero", () => {
+    for (const usage of [{ promptTokens: null, completionTokens: null }, { promptTokens: 10, completionTokens: null }, { promptTokens: null, completionTokens: 10 }]) {
+      expect(estimateLLMCallCostMinorUnit({ provider: "qwen", model: "qwen3.8-max", ...usage })).toBeNull();
+    }
+    expect(sumEstimatedLLMCostMinorUnit([{ provider: "qwen", model: "qwen3.8-max", tokenUsagePrompt: null, tokenUsageCompletion: null }] as never)).toEqual({ estimatedCostMinorUnit: null, unknownCount: 1 });
   });
 
   it("fails closed for unknown models instead of treating them as free", () => {
