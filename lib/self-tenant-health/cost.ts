@@ -14,15 +14,17 @@ type CostProfile = {
 // Internal pilot estimates only. These values drive budget buckets and are not
 // a provider billing statement.
 const COST_PROFILES: CostProfile[] = [
-  // Qwen 3.7 series, derived from the cn-beijing USD list price read on
-  // 2026-08-18 (see lib/llm/token-cost-table.ts) at ~1 USD = 7.2 CNY, rounded
-  // to whole minor units. The double conversion carries a few percent of
-  // error; the buckets this feeds are decade-wide (0–100 / 100–1000 / 1000–
-  // 10000 CNY), so it cannot move a tenant across a bucket boundary.
-  // qwen3.8-max is absent on purpose — its price is unpublished, and here an
-  // unknown model yields a null cost and an honest "unknown" bucket rather
-  // than a made-up number.
-  { provider: "qwen", model: "qwen3.7-max", promptMinorUnitPerMillionTokens: 1188, completionMinorUnitPerMillionTokens: 3565 },
+  // Conservative pilot estimates for budget and health buckets, not billing
+  // evidence: a value below the real price can flip a bucket or budget state
+  // right at a threshold (see the boundary tests).
+  // qwen3.8-max and qwen3.7-max use the CNY list price directly (cn-beijing
+  // 2026-10-31: 12/36 CNY per 1M tokens), not a round trip through USD, which
+  // came out about 1% low (1188/3565).
+  { provider: "qwen", model: "qwen3.8-max", promptMinorUnitPerMillionTokens: 1200, completionMinorUnitPerMillionTokens: 3600 },
+  { provider: "qwen", model: "qwen3.7-max", promptMinorUnitPerMillionTokens: 1200, completionMinorUnitPerMillionTokens: 3600 },
+  // TODO: qwen3.7-plus / qwen3.7-flash below are still USD list prices (read
+  // 2026-08-18) converted at ~1 USD = 7.2 CNY, so they carry the same kind of
+  // error; move them to CNY list prices once those are re-read from the page.
   { provider: "qwen", model: "qwen3.7-plus", promptMinorUnitPerMillionTokens: 199, completionMinorUnitPerMillionTokens: 793 },
   { provider: "qwen", model: "qwen3.7-flash", promptMinorUnitPerMillionTokens: 119, completionMinorUnitPerMillionTokens: 713 },
   { provider: "qwen", model: "qwen3.6-plus", promptMinorUnitPerMillionTokens: 800, completionMinorUnitPerMillionTokens: 2400 },
@@ -59,9 +61,11 @@ export function estimateLLMCallCostMinorUnit(input: {
 }) {
   const profile = findLLMCostProfile(input.provider, input.model);
   if (!profile) return null;
+  // Missing usage is unknown, not zero: a priced model must not read as free.
+  if (input.promptTokens == null || input.completionTokens == null) return null;
 
-  const promptTokens = Math.max(input.promptTokens ?? 0, 0);
-  const completionTokens = Math.max(input.completionTokens ?? 0, 0);
+  const promptTokens = Math.max(input.promptTokens, 0);
+  const completionTokens = Math.max(input.completionTokens, 0);
   const cost =
     (promptTokens * profile.promptMinorUnitPerMillionTokens +
       completionTokens * profile.completionMinorUnitPerMillionTokens) /

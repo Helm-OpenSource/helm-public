@@ -70,6 +70,55 @@ describe("model egress governance boundary guard", () => {
     );
   });
 
+  it("admits the governed DashScope adapter as a provider adapter holder but no sibling copy of it", () => {
+    const holder = 'import type { GovernedModelProviderAdapter } from "./governed-model-adapter-registry.service";\nexport function createGovernedDashScopeAdapter(): GovernedModelProviderAdapter<never, never> | null { return null; }';
+    withFixture({ "lib/llm/governed-dashscope-adapter.service.ts": holder }, (root) => {
+      expect(scanModelEgressDirectWrites(root)).toEqual([]);
+    });
+    withFixture({ "lib/llm/governed-dashscope-adapter.copy.service.ts": holder }, (root) => {
+      expect(scanModelEgressDirectWrites(root)).toContainEqual(expect.objectContaining({ rule: "MEG-GATEWAY-BYPASS", file: "lib/llm/governed-dashscope-adapter.copy.service.ts" }));
+    });
+  });
+
+  it("rejects minting the DashScope adapter directly, through an alias re-export, or through a two-hop barrel", () => {
+    const bypass = (file: string, source: string) =>
+      withFixture({ [file]: source }, (root) => {
+        expect(scanModelEgressDirectWrites(root)).toContainEqual(expect.objectContaining({ rule: "MEG-GATEWAY-BYPASS", file }));
+      });
+    // direct: import the factory and call invoke() with fabricated claim hashes
+    bypass("features/rogue/direct.ts", 'import { createGovernedDashScopeAdapter } from "@/lib/llm/governed-dashscope-adapter.service";\nexport const run = () => createGovernedDashScopeAdapter({} as never).invoke({ dispatchClaimHash: "sha256:0" } as never);');
+    // alias: launder the factory name through a re-export
+    bypass("lib/llm/mint.ts", 'export { createGovernedDashScopeAdapter as mint } from "./governed-dashscope-adapter.service";');
+    // barrel: `export *` carries no factory name, so the module path itself is the token; the second hop is caught by name
+    bypass("lib/llm/index.ts", 'export * from "./governed-dashscope-adapter.service";');
+    bypass("features/rogue/two-hop.ts", 'import { createGovernedDashScopeAdapter } from "@/lib/llm/index";\nexport const a = createGovernedDashScopeAdapter;');
+  });
+
+  it("admits the usage evidence INSERT only in the exact collector file and keeps the collector unimportable", () => {
+    const writer = "await db.$executeRaw`INSERT INTO LLMTrustedUsageEvidence(id) VALUES ('x')`;";
+    withFixture({ "lib/llm/dashscope-usage-collector.service.ts": writer }, (root) => {
+      expect(scanModelEgressDirectWrites(root)).toEqual([]);
+    });
+    for (const file of ["lib/llm/dashscope-usage-collector.copy.service.ts", "lib/rogue/dashscope-usage-collector.service.ts"]) {
+      withFixture({ [file]: writer }, (root) => {
+        expect(scanModelEgressDirectWrites(root)).toContainEqual(expect.objectContaining({ rule: "MEG-USAGE-IMMUTABLE", file }));
+      });
+    }
+    // The collector may insert evidence, but it gains no mutation of a grant or of evidence already written.
+    withFixture({ "lib/llm/dashscope-usage-collector.service.ts": "await db.$executeRaw`UPDATE LLMTrustedUsageEvidence SET promptTokens=0`;" }, (root) => {
+      expect(scanModelEgressDirectWrites(root)).toContainEqual(expect.objectContaining({ rule: "MEG-USAGE-IMMUTABLE" }));
+    });
+    for (const [file, source] of [
+      ["features/rogue/direct.ts", 'import { createGovernedDashScopeUsageCollector } from "@/lib/llm/dashscope-usage-collector.service";\nexport const run = createGovernedDashScopeUsageCollector;'],
+      ["lib/llm/index.ts", 'export * from "./dashscope-usage-collector.service";'],
+      ["lib/llm/governed-dashscope-adapter.service.ts", 'import type {} from "./dashscope-usage-collector.service";'],
+    ] as const) {
+      withFixture({ [file]: source }, (root) => {
+        expect(scanModelEgressDirectWrites(root)).toContainEqual(expect.objectContaining({ rule: "MEG-GATEWAY-BYPASS", file }));
+      });
+    }
+  });
+
   it("rejects minting a raw legacy provider adapter outside its closed singleton", () => {
     withFixture({
       "lib/rogue/raw-paid.ts": 'import { createOpenAICompatibleAdapter } from "@/lib/llm/openai-adapter";\nexport const raw = createOpenAICompatibleAdapter({provider:"openai",label:"raw",audioTranscription:false});',
