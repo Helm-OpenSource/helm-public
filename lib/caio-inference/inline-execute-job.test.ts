@@ -60,6 +60,7 @@ function harness(input: {
   execution?: CaioInferenceInlineExecution | (() => Promise<CaioInferenceInlineExecution>);
   stopped?: boolean;
   now?: Date;
+  clock?: () => Date;
   env?: NodeJS.ProcessEnv;
   maxJobsPerTick?: number;
 }) {
@@ -74,7 +75,7 @@ function harness(input: {
     dispatchHandle: handle,
     guards: { isStopped },
     env: input.env ?? ENABLED,
-    now: () => input.now ?? IN_WINDOW,
+    now: input.clock ?? (() => input.now ?? IN_WINDOW),
     ...(input.maxJobsPerTick === undefined ? {} : { maxJobsPerTick: input.maxJobsPerTick }),
   });
   const run = () =>
@@ -189,6 +190,32 @@ describe("CAIO inline execute job", () => {
       }
       expect(store.finalizeCaioInferenceInlineJudgement).not.toHaveBeenCalled();
     }
+  });
+
+  it("re-reads the live clock before each job: a job crossing the window edge stops the next one", async () => {
+    store.reserveCaioInferenceJobForInline.mockReset().mockResolvedValue(RESERVATION);
+    let time = IN_WINDOW;
+    const h = harness({ maxJobsPerTick: 2, clock: () => time, execution: async () => { time = OUT_OF_WINDOW; return COMPLETED; } });
+    await expect(h.run()).resolves.toMatchObject({ status: "success", message: "outside_working_window" });
+    expect(h.execute).toHaveBeenCalledTimes(1);
+    expect(store.reserveCaioInferenceJobForInline).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-reads the switch before each job: turning it off mid-tick stops the next one", async () => {
+    store.reserveCaioInferenceJobForInline.mockReset().mockResolvedValue(RESERVATION);
+    const env: NodeJS.ProcessEnv = { ...ENABLED };
+    const h = harness({ maxJobsPerTick: 2, env, execution: async () => { env[CAIO_HOURLY_REVIEW_ENABLED_ENV] = "false"; return COMPLETED; } });
+    await expect(h.run()).resolves.toMatchObject({ message: "task_class_disabled" });
+    expect(h.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it("hands the handle a last gate that reports a stop recorded after the reservation", async () => {
+    const h = harness({});
+    await h.run();
+    const { beforeDispatch } = h.execute.mock.calls[0][0] as unknown as { beforeDispatch: () => Promise<string | null> };
+    await expect(beforeDispatch()).resolves.toBeNull();
+    h.isStopped.mockResolvedValue(true);
+    await expect(beforeDispatch()).resolves.toBe("guardian_stop");
   });
 
   it("takes at most maxJobsPerTick reservations and reports an empty queue as skipped", async () => {

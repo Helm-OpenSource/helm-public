@@ -95,27 +95,28 @@ export function createCaioInferenceInlineExecuteJob(input: {
     allowedEffects: ["external_read", "internal_signal_write"],
     resolveTargets: async () =>
       (await input.resolveWorkspaceIds()).map((workspaceId) => ({ key: `workspace:${workspaceId}`, workspaceId })),
-    runTarget: async (target, context): Promise<SignalCollectionTargetResult> => {
+    runTarget: async (target): Promise<SignalCollectionTargetResult> => {
       const workspaceId = target.workspaceId;
       if (!workspaceId) return { status: "skipped", message: "workspace_required" };
-      const now = input.now ? input.now() : context.requestedAt;
-      if (!isCaioReviewEnabled(taskClass, env)) return { status: "skipped", message: "task_class_disabled" };
-      if (!isWithinCaioReviewWorkingWindow(now, taskClass)) return { status: "skipped", message: "outside_working_window" };
-
+      // The live clock, never the tick's start: a job can cross the window edge while an earlier one runs.
+      const clock = () => (input.now ? input.now() : new Date());
+      const gate = async (): Promise<string | null> => {
+        if (!isCaioReviewEnabled(taskClass, env)) return "task_class_disabled";
+        if (!isWithinCaioReviewWorkingWindow(clock(), taskClass)) return "outside_working_window";
+        return (await input.guards.isStopped(workspaceId)) ? "guardian_stop" : null;
+      };
       const counts: InlineTickCounts = { completed: 0, replayed: 0, rejected: 0, inDoubt: 0, outputLost: 0, stale: 0 };
       let reservations = 0;
-      let stopped = false;
+      let gated: string | null = null;
       for (let index = 0; index < maxJobsPerTick; index += 1) {
-        // Re-read the stop guard before every dispatch: a stop recorded mid-tick halts the next job.
-        if (await input.guards.isStopped(workspaceId)) {
-          stopped = true;
-          break;
-        }
+        // Switch, window and stop are re-read before every reservation, and again just before the gateway call.
+        gated = await gate();
+        if (gated) break;
         const reserved = await reserveCaioInferenceJobForInline({
           workspaceId,
           gatewayRef: input.dispatchHandle.gatewayRef,
           taskClass,
-          now,
+          now: clock(),
           ...(input.preparationLeaseMs === undefined ? {} : { preparationLeaseMs: input.preparationLeaseMs }),
         });
         if (reserved.status === "none") break;
@@ -131,10 +132,11 @@ export function createCaioInferenceInlineExecuteJob(input: {
           attempt: reserved.attempt,
           taskClass: reserved.taskClass,
           inferenceInput: reserved.input,
+          beforeDispatch: gate,
         });
         const key = { workspaceId, jobId: reserved.jobId, claimToken: reserved.claimToken, attempt: reserved.attempt };
         const binding = { decisionRef: execution.decisionRef, claimHash: execution.claimHash, gatewayRef: input.dispatchHandle.gatewayRef };
-        const settledAt = input.now ? input.now() : new Date();
+        const settledAt = clock();
         const reject = async (code: CaioInferenceRejectionCode) => {
           const outcome = await rejectCaioInferenceInlineJob({ ...key, ...binding, code, now: settledAt });
           if (outcome === "stale") counts.stale += 1;
@@ -180,11 +182,12 @@ export function createCaioInferenceInlineExecuteJob(input: {
 
       const failureCount = counts.inDoubt + counts.outputLost + counts.rejected + counts.stale;
       if (reservations === 0) {
-        return { status: "skipped", message: stopped ? "guardian_stop" : "no_queued_job", details: counts };
+        if (gated && gated !== "guardian_stop") return { status: "skipped", message: gated };
+        return { status: "skipped", message: gated ?? "no_queued_job", details: counts };
       }
       return {
         status: counts.inDoubt > 0 ? "failed" : "success",
-        message: stopped ? "guardian_stop" : counts.inDoubt > 0 ? "in_doubt" : "executed",
+        message: gated ?? (counts.inDoubt > 0 ? "in_doubt" : "executed"),
         signalCount: counts.completed + counts.replayed,
         failureCount,
         details: { ...counts, reservations, maxJobsPerTick },
