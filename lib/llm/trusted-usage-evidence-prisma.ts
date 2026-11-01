@@ -1,8 +1,44 @@
-import type { Prisma } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { parseStoredModelRouteDecision, type GovernedSpendAuthority } from "./model-egress-store.service";
 import { authorityDate, authorityHash, refuse } from "./trusted-spend-authority";
-import { readUsageEvidence, readUsageGrant, type UsageGrant } from "./trusted-usage-evidence";
+import { readMysqlTableNameMode, readUsageEvidence, readUsageGrant, type UsageGrant } from "./trusted-usage-evidence";
 export type UsageRegistryConfig = { trustedAttestorGrants: Readonly<Record<string, string>> };
+type Identity = { databaseName: string; principal: string; serverUuid: string; lowerCaseNames: number };
+async function identity(client: PrismaClient): Promise<Identity> {
+  const [row] = await client.$queryRaw<Array<Omit<Identity, "lowerCaseNames"> & { lowerCaseNames: unknown }>>`SELECT DATABASE() AS databaseName, CURRENT_USER() AS principal, @@server_uuid AS serverUuid, @@lower_case_table_names AS lowerCaseNames`;
+  if (!row?.databaseName || !row.principal || !row.serverUuid) refuse("usage_realm_invalid");
+  return { ...row, lowerCaseNames: readMysqlTableNameMode(row.lowerCaseNames) };
+}
+/** Same database and server, three distinct principals, and a collector that is
+ * insert-only for evidence and read-only elsewhere. SHOW GRANTS includes
+ * schema/global/role privileges; no inherited wildcard grant or administrative
+ * identity is accepted as this limited collector. */
+export async function assertUsageCollectorRealm(clients: { collectorClient: PrismaClient; chargeClient: PrismaClient; operationWriterClient: PrismaClient }): Promise<void> {
+  const [collector, charge, writer] = await Promise.all([identity(clients.collectorClient), identity(clients.chargeClient), identity(clients.operationWriterClient)]);
+  if ([charge, writer].some((r) => r.databaseName !== collector.databaseName || r.serverUuid !== collector.serverUuid) ||
+      new Set([collector.principal, charge.principal, writer.principal]).size !== 3) refuse("usage_realm_invalid");
+  const grants = await clients.collectorClient.$queryRawUnsafe<Array<Record<string, string>>>("SHOW GRANTS");
+  const allowed = new Set(["ModelRouteDecision", "LLMSpendLedgerEntry", "LLMUsageAttestorGrant", "LLMTrustedUsageEvidence", "LLMSpendAuthorityRecord", "LLMSpendIssuerGrant", "Membership", "User"]);
+  const tableName = (name: string) => collector.lowerCaseNames === 0 ? name : name.toLowerCase();
+  const allowedNames = new Set([...allowed].map(tableName));
+  let evidenceInsert = false;
+  for (const row of grants) for (const value of Object.values(row)) {
+    if (/^GRANT USAGE ON \*\.\* TO /u.test(value)) continue;
+    const match = /^GRANT (.+?) ON `([^`]+)`\.`([^`]+)` TO /u.exec(value);
+    if (!match || match[2] !== collector.databaseName || !allowedNames.has(match[3])) refuse("usage_collector_acl_invalid");
+    const table = match[3], privilege = match[1];
+    const columns = /^SELECT \(([^)]+)\)$/u.exec(privilege)?.[1].replaceAll("`", "").split(", ").map((c) => c.toLowerCase()).sort().join(",");
+    if (table === tableName("User")) {
+      if (columns !== "id") refuse("usage_collector_acl_invalid");
+    } else if (table === tableName("Membership")) {
+      if (columns !== "role,status,userid,workspaceid") refuse("usage_collector_acl_invalid");
+    } else if (table === tableName("LLMTrustedUsageEvidence")) {
+      if (!["SELECT", "SELECT, INSERT", "INSERT, SELECT"].includes(privilege)) refuse("usage_collector_acl_invalid");
+      if (privilege !== "SELECT") evidenceInsert = true;
+    } else if (privilege !== "SELECT") refuse("usage_collector_acl_invalid");
+  }
+  if (!evidenceInsert) refuse("usage_collector_acl_invalid");
+}
 export type UsageGrantRow = { id: string; workspaceId: string; envelopeJson: string; contentHash: string; revokedAt: Date | null };
 export async function readUsageGrantInTransaction(tx: Prisma.TransactionClient, id: string,
   workspaceId: string, pins: UsageRegistryConfig): Promise<UsageGrant> {

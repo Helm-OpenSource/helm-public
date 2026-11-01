@@ -35,6 +35,9 @@ const ADAPTER_REGISTRY =
   "lib/llm/governed-model-adapter-registry.service.ts";
 const DASHSCOPE_ADAPTER =
   "lib/llm/governed-dashscope-adapter.service.ts";
+const DASHSCOPE_USAGE_COLLECTOR =
+  "lib/llm/dashscope-usage-collector.service.ts";
+const USAGE_EVIDENCE_WRITERS: readonly string[] = ["lib/llm/governed-ordinary-http-adapter.service.ts", DASHSCOPE_USAGE_COLLECTOR];
 const OWNER_READOUT =
   "features/dashboard/model-egress-readout.ts";
 const OWNER_QUERY =
@@ -185,6 +188,13 @@ const INTERNAL_AUTHORITY_BOUNDARIES = [
     // factory; a reviewed composer must be added here before it can import it.
     tokens: ["createGovernedDashScopeAdapter", "governed-dashscope-adapter.service"],
     allowedFiles: [DASHSCOPE_ADAPTER],
+  },
+  {
+    // The collector writes signed usage evidence, so naming it is a settlement
+    // authority. The adapter holds it through a port type and never imports it;
+    // only a reviewed composer added here may construct one.
+    tokens: ["createGovernedDashScopeUsageCollector", "dashscope-usage-collector.service"],
+    allowedFiles: [DASHSCOPE_USAGE_COLLECTOR],
   },
   {
     // The historical transport factory still exists for its transport
@@ -351,7 +361,7 @@ export function scanModelEgressDirectWrites(
 
     const usageMutation = /\b(?:UPDATE|DELETE\s+FROM|INSERT\s+INTO)\s+[`"']?(LLMTrustedUsageEvidence|LLMUsageAttestorGrant)\b/giu;
     for (const match of content.matchAll(usageMutation)) {
-      if (relative === "lib/llm/governed-ordinary-http-adapter.service.ts" && /^INSERT\s+INTO LLMTrustedUsageEvidence$/iu.test(match[0])) continue;
+      if (USAGE_EVIDENCE_WRITERS.includes(relative) && /^INSERT\s+INTO LLMTrustedUsageEvidence$/iu.test(match[0])) continue;
       violations.push({ rule: "MEG-USAGE-IMMUTABLE", file: relative, line: lineNumberAt(content, match.index ?? 0), detail: "usage evidence writes require the controlled collector; grant issuance is external" });
     }
     for (const delegate of ["lLMUsageAttestorGrant", "lLMTrustedUsageEvidence"]) for (const operation of ["create", "createMany", "update", "updateMany", "upsert", "delete", "deleteMany"]) {

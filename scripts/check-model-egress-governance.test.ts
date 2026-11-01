@@ -94,6 +94,31 @@ describe("model egress governance boundary guard", () => {
     bypass("features/rogue/two-hop.ts", 'import { createGovernedDashScopeAdapter } from "@/lib/llm/index";\nexport const a = createGovernedDashScopeAdapter;');
   });
 
+  it("admits the usage evidence INSERT only in the exact collector file and keeps the collector unimportable", () => {
+    const writer = "await db.$executeRaw`INSERT INTO LLMTrustedUsageEvidence(id) VALUES ('x')`;";
+    withFixture({ "lib/llm/dashscope-usage-collector.service.ts": writer }, (root) => {
+      expect(scanModelEgressDirectWrites(root)).toEqual([]);
+    });
+    for (const file of ["lib/llm/dashscope-usage-collector.copy.service.ts", "lib/rogue/dashscope-usage-collector.service.ts"]) {
+      withFixture({ [file]: writer }, (root) => {
+        expect(scanModelEgressDirectWrites(root)).toContainEqual(expect.objectContaining({ rule: "MEG-USAGE-IMMUTABLE", file }));
+      });
+    }
+    // The collector may insert evidence, but it gains no mutation of a grant or of evidence already written.
+    withFixture({ "lib/llm/dashscope-usage-collector.service.ts": "await db.$executeRaw`UPDATE LLMTrustedUsageEvidence SET promptTokens=0`;" }, (root) => {
+      expect(scanModelEgressDirectWrites(root)).toContainEqual(expect.objectContaining({ rule: "MEG-USAGE-IMMUTABLE" }));
+    });
+    for (const [file, source] of [
+      ["features/rogue/direct.ts", 'import { createGovernedDashScopeUsageCollector } from "@/lib/llm/dashscope-usage-collector.service";\nexport const run = createGovernedDashScopeUsageCollector;'],
+      ["lib/llm/index.ts", 'export * from "./dashscope-usage-collector.service";'],
+      ["lib/llm/governed-dashscope-adapter.service.ts", 'import type {} from "./dashscope-usage-collector.service";'],
+    ] as const) {
+      withFixture({ [file]: source }, (root) => {
+        expect(scanModelEgressDirectWrites(root)).toContainEqual(expect.objectContaining({ rule: "MEG-GATEWAY-BYPASS", file }));
+      });
+    }
+  });
+
   it("rejects minting a raw legacy provider adapter outside its closed singleton", () => {
     withFixture({
       "lib/rogue/raw-paid.ts": 'import { createOpenAICompatibleAdapter } from "@/lib/llm/openai-adapter";\nexport const raw = createOpenAICompatibleAdapter({provider:"openai",label:"raw",audioTranscription:false});',
