@@ -3,6 +3,7 @@ import {
   bucketEstimatedCostMinorUnit,
   estimateLLMCallCostMinorUnit,
   resolveBudgetState,
+  sumEstimatedLLMCostMinorUnit,
 } from "@/lib/self-tenant-health/cost";
 
 describe("self-tenant LLM cost estimates", () => {
@@ -65,6 +66,13 @@ describe("self-tenant LLM cost estimates", () => {
     expect(bucketEstimatedCostMinorUnit(total(834))).toBe("cny_1000_10000");
     expect(bucketEstimatedCostMinorUnit(total(8_333))).toBe("cny_1000_10000");
     expect(bucketEstimatedCostMinorUnit(total(8_334))).toBe("cny_10000_plus");
+  });
+
+  it("treats missing usage on a priced model as unknown, not zero", () => {
+    for (const usage of [{ promptTokens: null, completionTokens: null }, { promptTokens: 10, completionTokens: null }, { promptTokens: null, completionTokens: 10 }]) {
+      expect(estimateLLMCallCostMinorUnit({ provider: "qwen", model: "qwen3.8-max", ...usage })).toBeNull();
+    }
+    expect(sumEstimatedLLMCostMinorUnit([{ provider: "qwen", model: "qwen3.8-max", tokenUsagePrompt: null, tokenUsageCompletion: null }] as never)).toEqual({ estimatedCostMinorUnit: null, unknownCount: 1 });
   });
 
   it("fails closed for unknown models instead of treating them as free", () => {

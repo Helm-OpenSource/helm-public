@@ -61,9 +61,11 @@ export function estimateLLMCallCostMinorUnit(input: {
 }) {
   const profile = findLLMCostProfile(input.provider, input.model);
   if (!profile) return null;
+  // Missing usage is unknown, not zero: a priced model must not read as free.
+  if (input.promptTokens == null || input.completionTokens == null) return null;
 
-  const promptTokens = Math.max(input.promptTokens ?? 0, 0);
-  const completionTokens = Math.max(input.completionTokens ?? 0, 0);
+  const promptTokens = Math.max(input.promptTokens, 0);
+  const completionTokens = Math.max(input.completionTokens, 0);
   const cost =
     (promptTokens * profile.promptMinorUnitPerMillionTokens +
       completionTokens * profile.completionMinorUnitPerMillionTokens) /
