@@ -3,6 +3,10 @@ import { createHash, createPublicKey, verify } from "node:crypto";
 import { authorityDate, authorityHash, authorityRef, canonicalAuthorityJson, exactObject, refuse } from "./trusted-spend-authority";
 export const USAGE_SCHEMA = "helm.trusted-usage/v1" as const;
 export const USAGE_SOURCE = "helm.controlled-http-usage/v1" as const;
+/** Third-party response bytes: only their digest and counts are kept. Still our own capture, never a provider signature. */
+export const DASHSCOPE_USAGE_SOURCE = "helm.dashscope-chat-completions-usage/v1" as const;
+export const USAGE_SOURCES = [USAGE_SOURCE, DASHSCOPE_USAGE_SOURCE] as const;
+export type UsageSource = (typeof USAGE_SOURCES)[number];
 /** Prisma returns unsigned MySQL metadata as bigint. Preserve case-sensitive
  * mode zero without accepting string coercion or unsupported server modes. */
 export function readMysqlTableNameMode(value: unknown): 0 | 1 | 2 {
@@ -36,14 +40,14 @@ export function boundedCanonical(bytes: Uint8Array, maximum = 65_536): unknown {
   return value;
 }
 export type UsageGrant = {
-  schema: "helm.usage-attestor-grant/v1"; id: string; workspaceId: string; source: typeof USAGE_SOURCE;
+  schema: "helm.usage-attestor-grant/v1"; id: string; workspaceId: string; source: UsageSource;
   sourceHash: string; adapterKey: string; registrationHash: string; provider: string; model: string;
   modelVersion: string; sku: string; endpointFingerprint: string; publicKeyPem: string;
   validFrom: string; validUntil: string;
 };
 export function readUsageGrant(json: string): UsageGrant {
   const g = exactObject(boundedCanonical(Buffer.from(json), 16_384), ["schema", "id", "workspaceId", "source", "sourceHash", "adapterKey", "registrationHash", "provider", "model", "modelVersion", "sku", "endpointFingerprint", "publicKeyPem", "validFrom", "validUntil"]);
-  if (g.schema !== "helm.usage-attestor-grant/v1" || g.source !== USAGE_SOURCE) refuse("usage_purpose_invalid");
+  if (g.schema !== "helm.usage-attestor-grant/v1" || !(USAGE_SOURCES as readonly unknown[]).includes(g.source)) refuse("usage_purpose_invalid");
   for (const k of ["id", "workspaceId", "adapterKey", "provider", "model", "modelVersion", "sku"]) authorityRef(g[k]);
   for (const k of ["sourceHash", "registrationHash", "endpointFingerprint"]) hash(g[k]);
   if (typeof g.publicKeyPem !== "string" || g.publicKeyPem.length > 2_048 || createPublicKey(g.publicKeyPem).asymmetricKeyType !== "ed25519" || authorityDate(g.validFrom) >= authorityDate(g.validUntil)) refuse("usage_grant_invalid");
@@ -82,4 +86,32 @@ export function decodeControlledResponse(bytes: Uint8Array, requestId: string, m
   if (typeof content.rawOutput !== "string" || Buffer.byteLength(content.rawOutput) > 49_152 || content.modelVersion !== modelVersion || content.promptTokens !== input || content.completionTokens !== output) refuse("usage_output_invalid");
   return { requestRef: response.requestRef as string, promptTokens: input, completionTokens: output,
     output: content as { rawOutput: string; modelVersion: string; promptTokens: number; completionTokens: number } };
+}
+
+const DASHSCOPE_RESPONSE_MAX_BYTES = 1_048_576;
+const DASHSCOPE_CONTENT_MAX_BYTES = 65_536;
+/**
+ * Reads a DashScope chat completion as usage evidence. The bytes are third-party text, so canonical form is not
+ * required: bounded strict UTF-8 JSON is, and the digest over these exact bytes is what the evidence keeps. Anything
+ * short of a complete, stop-terminated answer from the requested model refuses, and a refusal leaves no success
+ * evidence: the terminal cannot settle and the reservation stays held as unknown.
+ */
+export function decodeDashScopeChatCompletion(bytes: Uint8Array, requestedModel: string) {
+  if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0 || bytes.byteLength > DASHSCOPE_RESPONSE_MAX_BYTES) refuse("usage_size_invalid");
+  let value: unknown;
+  try { value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(bytes))); }
+  catch { return refuse("usage_json_invalid"); }
+  if (!value || typeof value !== "object" || Array.isArray(value)) refuse("usage_json_invalid");
+  const body = value as Record<string, unknown>;
+  if (typeof body.id !== "string" || body.id.length === 0 || body.id.length > 190) refuse("usage_response_binding_invalid");
+  if (typeof requestedModel !== "string" || requestedModel.length === 0 || body.model !== requestedModel) refuse("usage_response_binding_invalid");
+  const usage = body.usage as Record<string, unknown> | null | undefined;
+  if (!usage || typeof usage !== "object") refuse("usage_units_invalid");
+  const promptTokens = units(usage.prompt_tokens), completionTokens = units(usage.completion_tokens);
+  if (units(usage.total_tokens) !== promptTokens + completionTokens) refuse("usage_total_invalid");
+  const choice = Array.isArray(body.choices) && body.choices.length === 1 ? body.choices[0] as Record<string, unknown> | null : null;
+  const message = choice?.message as Record<string, unknown> | null | undefined;
+  if (choice?.finish_reason !== "stop" || typeof message?.content !== "string" || message.content.length === 0 ||
+      Buffer.byteLength(message.content) > DASHSCOPE_CONTENT_MAX_BYTES) refuse("usage_response_binding_invalid");
+  return { requestRef: body.id, promptTokens, completionTokens, rawOutput: message.content, responseDigest: bytesHash(bytes) };
 }
