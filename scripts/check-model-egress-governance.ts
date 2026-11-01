@@ -33,6 +33,8 @@ const POLICY_STORE =
   "lib/llm/model-route-policy-store.service.ts";
 const ADAPTER_REGISTRY =
   "lib/llm/governed-model-adapter-registry.service.ts";
+const DASHSCOPE_ADAPTER =
+  "lib/llm/governed-dashscope-adapter.service.ts";
 const OWNER_READOUT =
   "features/dashboard/model-egress-readout.ts";
 const OWNER_QUERY =
@@ -174,7 +176,15 @@ const INTERNAL_AUTHORITY_BOUNDARIES = [
     // defense-in-depth against a caller wiring dispatch around the
     // decision/claim/receipt chain.
     tokens: ["GovernedModelProviderAdapter"],
-    allowedFiles: [ADAPTER_REGISTRY, GOVERNED_GATEWAY, "lib/llm/governed-ordinary-http-adapter.service.ts"],
+    allowedFiles: [ADAPTER_REGISTRY, GOVERNED_GATEWAY, "lib/llm/governed-ordinary-http-adapter.service.ts", DASHSCOPE_ADAPTER],
+  },
+  {
+    // The DashScope factory is a raw adapter minter: anything that imports the
+    // module (by name or by `export *` barrel) can call invoke() with
+    // fabricated claim hashes. Only the module itself may name itself or its
+    // factory; a reviewed composer must be added here before it can import it.
+    tokens: ["createGovernedDashScopeAdapter", "governed-dashscope-adapter.service"],
+    allowedFiles: [DASHSCOPE_ADAPTER],
   },
   {
     // The historical transport factory still exists for its transport
