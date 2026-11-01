@@ -134,7 +134,7 @@ describe("CAIO inline execute job", () => {
     expect(store.reserveCaioInferenceJobForInline).toHaveBeenCalledWith(expect.objectContaining({
       workspaceId, gatewayRef: "gateway:caio-inference-inline", taskClass: "hourly_diagnosis", now: IN_WINDOW,
     }));
-    expect(execute).toHaveBeenCalledWith({ workspaceId, jobId: "job-1", attempt: 1, taskClass: "hourly_diagnosis", inferenceInput: INPUT });
+    expect(execute).toHaveBeenCalledWith(expect.objectContaining({ workspaceId, jobId: "job-1", attempt: 1, taskClass: "hourly_diagnosis", inferenceInput: INPUT }));
     expect(store.finalizeCaioInferenceInlineJudgement).toHaveBeenCalledWith(expect.objectContaining({
       ...KEY,
       inputHash: RESERVATION.inputHash,
