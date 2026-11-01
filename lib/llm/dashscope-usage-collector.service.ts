@@ -52,7 +52,7 @@ export async function createGovernedDashScopeUsageCollector(provided: {
       if (claim.row.dispatchClaimHash !== call.dispatchClaimHash || claim.row.dispatchRuntimeHash !== call.dispatchRuntimeHash ||
           claim.decision.projectedPayloadHash !== call.projectedPayloadHash || claim.decision.routeRef !== call.route.routeId ||
           authorityHash(claim.decision.routeSnapshot) !== authorityHash(call.route) || claim.ledger.state !== "reserved" ||
-          claim.row.dispatchLeaseExpiresAt! <= clock.now || !grantBound(grant) || grant.provider !== call.route.provider ||
+          claim.row.dispatchLeaseExpiresAt! <= clock.now || authorityDate(grant.validUntil) < claim.row.dispatchLeaseExpiresAt! || !grantBound(grant) || grant.provider !== call.route.provider ||
           grant.model !== call.route.modelId || grant.modelVersion !== call.route.modelVersion ||
           grant.registrationHash !== claim.runtime.adapterRegistrationHash || endpointFingerprint !== claim.runtime.endpointFingerprint) refuse("usage_dispatch_binding_invalid");
       const price = await readTrustedSpendRecordInTransaction(tx, call.workspaceId, claim.ledger.priceBookRef, "price", spend, claim.ledger.priceBookHash);

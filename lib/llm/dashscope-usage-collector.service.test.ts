@@ -121,6 +121,7 @@ describe("governed DashScope usage collector", () => {
     ["a different claim", () => { (state.claim.row as Record<string, unknown>).dispatchClaimHash = HASH_C; }, "usage_dispatch_binding_invalid"],
     ["a different route snapshot", () => { (state.claim.decision as Record<string, unknown>).routeSnapshot = { ...ROUTE, modelId: "other" }; }, "usage_dispatch_binding_invalid"],
     ["a ledger no longer reserved", () => { (state.claim.ledger as Record<string, unknown>).state = "unknown"; }, "usage_dispatch_binding_invalid"],
+    ["an attestor grant ending inside the lease", () => { state.grantAtCall = { ...state.grant, validUntil: new Date(NOW.getTime() + 100).toISOString() }; }, "usage_dispatch_binding_invalid"],
     ["an expired lease", () => { (state.claim.row as Record<string, unknown>).dispatchLeaseExpiresAt = NOW; }, "usage_dispatch_binding_invalid"],
     ["a price for another model", () => { (state.record.price as { envelope: unknown }).envelope = { version: ROUTE.pricingVersion, validUntil: FAR.toISOString(), payload: { ...PRICE, model: "other" } }; }, "usage_price_binding_invalid"],
     ["an expired price", () => { (state.record.price as { grant: unknown }).grant = { validUntil: NOW }; }, "usage_price_expired"],
