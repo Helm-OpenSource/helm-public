@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MembershipStatus, WorkspaceRole } from "@prisma/client";
+import { RECENT_AUDIT_LOOKBACK_DAYS } from "@/lib/audit/capped-count";
 
 const { dbMock } = vi.hoisted(() => ({
   dbMock: {
@@ -742,6 +743,17 @@ describe("org admin governance support pack", () => {
     });
 
     expect(pack.version).toBe("v1");
+    // Recent-audit lists are time-bounded so MySQL ranges over (workspaceId, actionType, createdAt)
+    // instead of walking the whole workspace backwards by createdAt.
+    const recentAuditCalls = dbMock.auditLog.findMany.mock.calls.filter(
+      ([args]: [{ take?: number }]) => args?.take === 8,
+    );
+    expect(recentAuditCalls).toHaveLength(2);
+    for (const [args] of recentAuditCalls) {
+      const since = (args as { where: { createdAt: { gte: Date } } }).where.createdAt.gte;
+      expect(Date.now() - since.getTime()).toBeGreaterThanOrEqual((RECENT_AUDIT_LOOKBACK_DAYS - 1) * 86_400_000);
+      expect(Date.now() - since.getTime()).toBeLessThanOrEqual((RECENT_AUDIT_LOOKBACK_DAYS + 1) * 86_400_000);
+    }
     expect(pack.workspaceId).toBe("workspace-1");
     expect(pack.summary.membershipSummary.activeSeatCount).toBe(2);
     expect(pack.summary.membershipSummary.invitedSeatCount).toBe(1);

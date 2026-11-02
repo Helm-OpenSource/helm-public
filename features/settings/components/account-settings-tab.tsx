@@ -22,6 +22,7 @@ import {
   formatSettingsPromptTaskType,
   formatSettingsPromptVersion,
 } from "@/features/settings/display-copy";
+import { formatCappedAuditCount } from "@/lib/audit/capped-count";
 import { formatAccountDateLabel } from "./account-date-labels";
 import { Info } from "./settings-display";
 
@@ -80,6 +81,11 @@ export function AccountSettingsTab({
 }: AccountSettingsTabProps) {
   const canManageWorkspaceSetup = data.organizationSummary.canManageWorkspaceSetup;
   const settingsAdminView = data.organizationSummary.settingsAdminView ?? true;
+  const auditEvents7dLabel = formatCappedAuditCount(
+    data.governanceSummary.auditEvents7d,
+    data.governanceSummary.auditEvents7dCapped,
+    english,
+  );
   const selectedModelIds = [
     llmDraft.defaultModel,
     llmDraft.extractionModel,
@@ -238,7 +244,7 @@ export function AccountSettingsTab({
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <Info
                 label={english ? "Audit events (7d)" : "近 7 天审计事件"}
-                value={english ? `${data.governanceSummary.auditEvents7d}` : `${data.governanceSummary.auditEvents7d} 条`}
+                value={english ? auditEvents7dLabel : `${auditEvents7dLabel} 条`}
               />
               <Info
                 label={english ? "Pending approvals" : "当前待审批"}

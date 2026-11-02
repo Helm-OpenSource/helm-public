@@ -1364,6 +1364,8 @@ export type SettingsClientProps = {
     }>;
     governanceSummary: {
       auditEvents7d: number;
+      /** True when auditEvents7d stopped at AUDIT_COUNT_CAP. */
+      auditEvents7dCapped?: boolean;
       pendingApprovals: number;
       llmFallbacks7d: number;
       approvalProtectedActions: number;

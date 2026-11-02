@@ -27,6 +27,7 @@ import {
   isAuthSessionStale,
   type AuthSessionAnomalyScope,
 } from "@/lib/auth/session-governance";
+import { RECENT_AUDIT_LOOKBACK_DAYS } from "@/lib/audit/capped-count";
 import { db } from "@/lib/db";
 export {
   canExportWorkspaceAdminSupportPack as canExportAdminSupportPack,
@@ -1160,6 +1161,7 @@ export async function getOrgAdminGovernanceSummary(
 ) {
   const now = new Date();
   const thirtyDaysAgo = subDays(now, 30);
+  const recentAuditSince = subDays(now, RECENT_AUDIT_LOOKBACK_DAYS);
 
   const workspace = await db.workspace.findUnique({
     where: { id: workspaceId },
@@ -1275,6 +1277,7 @@ export async function getOrgAdminGovernanceSummary(
       where: {
         workspaceId,
         actionType: { in: [...ORG_ADMIN_AUDIT_ACTION_TYPES] },
+        createdAt: { gte: recentAuditSince },
       },
       orderBy: { createdAt: "desc" },
       take: 8,
@@ -1283,6 +1286,7 @@ export async function getOrgAdminGovernanceSummary(
       where: {
         workspaceId,
         actionType: { in: [...DATA_GOVERNANCE_AUDIT_ACTION_TYPES] },
+        createdAt: { gte: recentAuditSince },
       },
       orderBy: { createdAt: "desc" },
       take: 8,
