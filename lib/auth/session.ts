@@ -23,6 +23,12 @@ import {
   SESSION_ID_COOKIE,
 } from "@/lib/auth/session-cookies";
 import { safeWriteAuditLog } from "@/lib/audit";
+import {
+  externalLandingPath,
+  externalScopeOf,
+  mayUseExternalSurface,
+  type ExternalMemberScope,
+} from "@/lib/auth/external-member-scope";
 import { isWriteConflictError } from "@/lib/db/conflict-aware-write";
 import { ensureWorkspaceCommercialFoundation, syncWorkspaceAccessState } from "@/lib/billing/foundation";
 import { db } from "@/lib/db";
@@ -787,10 +793,28 @@ export async function getCurrentWorkspaceSession() {
   const session = await getCurrentWorkspaceSessionOrNull();
 
   if (!session) {
-    redirect("/login");
+    // An external member is signed in but may not hold a Core workspace session: send them to their own
+    // surface, not back to /login (whose signed-in redirect would bring them here again).
+    const external = await getCurrentExternalMemberScope();
+    redirect(external === null ? "/login" : externalLandingPath(external));
   }
 
   return session;
+}
+
+/**
+ * The external member scope of the membership the current auth session seats on (lib/auth/external-member-scope.ts),
+ * or null for a normal member or no session. Read only: no invite activation, no workspace realignment, no audit row.
+ */
+export async function getCurrentExternalMemberScope(): Promise<ExternalMemberScope | "unknown" | null> {
+  const authSession = await getCurrentAuthSessionRecord();
+  if (!authSession) return null;
+  const cookieStore = await cookies();
+  const membership = resolvePreferredMembership(
+    filterDeploymentMemberships(authSession.user.memberships),
+    authSession.activeWorkspaceId ?? cookieStore.get(ACTIVE_WORKSPACE_COOKIE)?.value,
+  );
+  return externalScopeOf(membership);
 }
 
 export async function getCurrentWorkspaceSessionOrNull() {
@@ -811,6 +835,14 @@ export async function getCurrentWorkspaceSessionOrNull() {
   );
 
   if (!membership) {
+    return null;
+  }
+
+  // EXTERNAL MEMBERS NEVER SEAT A CORE WORKSPACE SESSION (external member prefix lock). Judged on the
+  // snapshot before any side effect below, and again on the live re-read, so a scope written while this
+  // request runs is honoured too. Every Core page loader, API route and server action resolves its
+  // session here, so this one refusal keeps an external member out of all of them.
+  if (externalScopeOf(membership) !== null) {
     return null;
   }
 
@@ -891,7 +923,8 @@ export async function getCurrentWorkspaceSessionOrNull() {
   if (
     !currentMembership ||
     (currentMembership.status !== MembershipStatus.ACTIVE &&
-      currentMembership.status !== MembershipStatus.INVITED)
+      currentMembership.status !== MembershipStatus.INVITED) ||
+    externalScopeOf(currentMembership) !== null
   ) {
     return null;
   }
@@ -954,6 +987,7 @@ export async function getCurrentCaioOperatorSessionOrNull() {
       userId: true,
       role: true,
       status: true,
+      accessScope: true,
       user: { select: { id: true, name: true } },
       workspace: {
         select: {
@@ -972,6 +1006,8 @@ export async function getCurrentCaioOperatorSessionOrNull() {
     !membership ||
     membership.userId !== authSession.userId ||
     membership.status !== MembershipStatus.ACTIVE ||
+    // An external member never reaches the CAIO operator surface (external member prefix lock).
+    externalScopeOf(membership) !== null ||
     membership.workspace.status !== WorkspaceStatus.ACTIVE ||
     !isWorkspaceAllowedForDeployment(membership.workspace)
   ) {
@@ -1155,9 +1191,27 @@ export async function clearSession() {
   cookieStore.delete(FIRST_LOGIN_IDENTITY_SETUP_COOKIE);
 }
 
-export async function getSessionId() {
+/**
+ * The current auth session's id, for extensions that authorize the request themselves. An external member's
+ * session is returned only to the surface that names the member's scope (`{ externalMemberSurface }`); every
+ * other caller sees no session, so an extension route that does not opt in refuses external members by default.
+ */
+export async function getSessionId(options?: { externalMemberSurface?: ExternalMemberScope }) {
   const authSession = await getCurrentAuthSessionRecord();
-  return authSession?.id ?? null;
+  if (!authSession) return null;
+  const cookieStore = await cookies();
+  const membership = resolvePreferredMembership(
+    filterDeploymentMemberships(authSession.user.memberships),
+    authSession.activeWorkspaceId ?? cookieStore.get(ACTIVE_WORKSPACE_COOKIE)?.value,
+  );
+  // Judge the membership the session is seated on (activeWorkspaceId), and also any external membership of the
+  // user in that workspace: an extension reads activeWorkspaceId itself, so it must not see a session whose
+  // active workspace holds an external membership the preferred-membership rule happened not to pick.
+  const active = authSession.user.memberships.find((m) => m.workspaceId === authSession.activeWorkspaceId) ?? membership;
+  if (!mayUseExternalSurface(membership, options?.externalMemberSurface) || !mayUseExternalSurface(active, options?.externalMemberSurface)) {
+    return null;
+  }
+  return authSession.id;
 }
 
 export async function rotateCurrentAuthSession(input?: {
