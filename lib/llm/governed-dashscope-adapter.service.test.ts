@@ -19,7 +19,7 @@ import { authorityHash } from "./trusted-spend-authority";
 const HASH_A = sha256("a");
 /** Owner-signed price record version: letter-led authorityRef shape, independent of the adapter's internal table. */
 const ROUTE_PRICING_VERSION = "price-qwen3.8-max-0902-cn-beijing-20261031";
-const SECRET = "synthetic-not-a-provider-credential";
+const SECRET = "<synthetic-loopback-credential>";
 const REGISTRATION = buildGovernedDashScopeAdapterRegistration({ registrationRef: "adapter-registration:dashscope-test" });
 
 const PAYLOAD: CaioInferenceInput = {
