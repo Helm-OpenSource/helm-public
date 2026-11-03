@@ -125,6 +125,7 @@ vi.mock("@/lib/workspace-ops", () => ({
 }));
 
 import {
+  selectLoginWorkspaceAction,
   completeFirstLoginIdentityCompletionAction,
   completeTrialSignupVerificationAction,
   loginAction,
@@ -1842,5 +1843,34 @@ describe("governed trial entry", () => {
     const result = await startTrialSignupAction(createSignupInput());
     expect(result.ok).toBe(false);
     expect(mocks.db.authEnrollment.create).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("authenticated workspace selection", () => {
+  it("rechecks the destination membership for the signed-in user before switching", async () => {
+    const user = { ...createActiveUser(), lastLoginAt: now };
+    mocks.session.requireCurrentUser.mockResolvedValue(user);
+    mocks.db.membership.findUnique.mockResolvedValue(user.memberships[0]);
+    expect(await selectLoginWorkspaceAction({ workspaceId: "workspace-1", locale: "en-US" })).toMatchObject({ ok: true, redirectTo: "/dashboard" });
+    expect(mocks.db.membership.findUnique).toHaveBeenCalledWith({
+      where: { workspaceId_userId: { workspaceId: "workspace-1", userId: user.id } },
+      include: { workspace: true },
+    });
+    expect(mocks.session.setActiveWorkspace).toHaveBeenCalledWith("workspace-1");
+    expect(mocks.session.createSession).not.toHaveBeenCalled();
+  });
+  it.each([null, { status: MembershipStatus.INACTIVE }])("refuses missing or revoked memberships: %s", async (membership) => {
+    mocks.db.membership.findUnique.mockResolvedValue(membership);
+    expect(await selectLoginWorkspaceAction({ workspaceId: "other", locale: "en-US" })).toMatchObject({ ok: false });
+    expect(mocks.session.setActiveWorkspace).not.toHaveBeenCalled();
+  });
+  it("refuses a destination outside the deployment allowlist", async () => {
+    vi.stubEnv("HELM_DEPLOYMENT_ENTRY_PROFILE", "tenant");
+    vi.stubEnv("HELM_DEPLOYMENT_ENTRY_HOME_PATH", "/workspace");
+    vi.stubEnv("HELM_DEPLOYMENT_ALLOWED_WORKSPACE_SLUGS", "allowed");
+    mocks.db.membership.findUnique.mockResolvedValue({ ...createActiveUser().memberships[0], workspace: { slug: "other" } });
+    expect(await selectLoginWorkspaceAction({ workspaceId: "other", locale: "zh-CN" })).toEqual({ ok: false, error: "选择的组织当前不可用。" });
+    expect(mocks.session.setActiveWorkspace).not.toHaveBeenCalled();
   });
 });

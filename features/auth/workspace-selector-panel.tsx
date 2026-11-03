@@ -9,12 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { selectLoginWorkspaceAction } from "@/features/auth/actions";
 import type { UiLocale } from "@/lib/i18n/config";
 
-type WorkspaceChoice = {
-  workspaceId: string;
-  workspaceName: string;
-  roleLabel: string;
-  status: "ACTIVE" | "INVITED";
-};
+import type { WorkspaceChoice } from "@/lib/auth/workspace-choices";
 
 export function WorkspaceSelectorPanel({
   locale,

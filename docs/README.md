@@ -43,6 +43,9 @@ the next layer.
 `/tmp/helm-golden-path-proof` 本地证据包；它不是客户部署、发布 ready、
 connector 授权、写回、外发或审批证明。
 
+
+顶部姓名／组织区域支持在当前账号可进入的工作区间切换；详见 [开发者上手指引](getting-started.md#工作区切换)。
+
 ## 从这里开始 / Start Here
 
 - [README](../README.md) / [README English](../README.en.md)
