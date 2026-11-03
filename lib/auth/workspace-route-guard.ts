@@ -1,4 +1,4 @@
-const WORKSPACE_PAGE_PREFIXES = [
+export const WORKSPACE_PAGE_PREFIXES = [
   "/analytics",
   "/approvals",
   "/admin",
@@ -47,7 +47,7 @@ const WORKSPACE_PAGE_PREFIXES = [
   "/success-checks",
 ] as const;
 
-const PUBLIC_PAGE_PREFIXES = [
+export const PUBLIC_PAGE_PREFIXES = [
   "/activate-member",
   "/",
   "/contrast-test",

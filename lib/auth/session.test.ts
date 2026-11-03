@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MembershipStatus, WorkspaceRole, WorkspaceStatus } from "@prisma/client";
 import { AUTH_SESSION_PROVIDER_TYPES } from "@/lib/auth/provider-seam";
 
@@ -77,7 +77,9 @@ import {
   getCurrentWorkspaceSession,
   getCurrentWorkspaceSessionOrNull,
   getCurrentCaioOperatorSessionOrNull,
+  getCurrentExternalMemberScope,
   getCurrentUser,
+  getSessionId,
   rotateCurrentAuthSession,
   revokeWorkspaceAuthSessionsByScope,
   revokeWorkspaceAuthSessionById,
@@ -85,6 +87,7 @@ import {
   setActiveWorkspace,
 } from "@/lib/auth/session";
 import { buildAuthSessionAnomalyInventorySummary } from "@/lib/auth/session-governance";
+import { __resetPackRegistryForTest, registerPackContributions } from "@/lib/extensions/registry-contract";
 
 const ACTIVE_SESSION_EXPIRES_AT = new Date("2099-04-20T00:00:00Z");
 
@@ -1566,6 +1569,7 @@ describe("CAIO operator session projection", () => {
         userId: true,
         role: true,
         status: true,
+        accessScope: true,
         user: { select: { id: true, name: true } },
         workspace: {
           select: {
@@ -1610,5 +1614,149 @@ describe("CAIO operator session projection", () => {
     });
 
     await expect(getCurrentCaioOperatorSessionOrNull()).resolves.toBeNull();
+  });
+
+  it("rejects an external member (prefix lock)", async () => {
+    dbMock.membership.findUnique.mockResolvedValue({
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      role: WorkspaceRole.MEMBER,
+      status: MembershipStatus.ACTIVE,
+      accessScope: "partner-portal",
+      user: { id: "user-1", name: "Firm staff" },
+      workspace: {
+        id: "workspace-1",
+        name: "Demo workspace",
+        slug: "demo-workspace",
+        systemKey: "demo-workspace",
+        status: WorkspaceStatus.ACTIVE,
+        defaultLocale: "zh-CN",
+      },
+    });
+
+    await expect(getCurrentCaioOperatorSessionOrNull()).resolves.toBeNull();
+  });
+});
+
+describe("external member prefix lock", () => {
+  afterEach(() => __resetPackRegistryForTest());
+  // A membership with accessScope set belongs to someone outside the workspace's own team (a partner firm's staff on an
+  // extension surface). Core never seats a workspace session on it; only the surface its scope names sees the session.
+  beforeEach(() => {
+    vi.clearAllMocks();
+    cookiesMock.mockResolvedValue(createCookieStore({ [SESSION_ID_COOKIE]: "session-key-1" }));
+    headersMock.mockResolvedValue(createHeaderStore());
+    writeAuditLogMock.mockResolvedValue(undefined);
+    ensureWorkspaceCommercialFoundationMock.mockResolvedValue(undefined);
+    syncWorkspaceAccessStateMock.mockResolvedValue(null);
+    dbMock.authSession.updateMany.mockResolvedValue({ count: 0 });
+    dbMock.authSession.update.mockResolvedValue({});
+    dbMock.membership.updateMany.mockResolvedValue({ count: 0 });
+    dbMock.$executeRaw.mockResolvedValue(0);
+    __resetPackRegistryForTest();
+    registerPackContributions("demo-pack", {
+      externalMemberSurfaces: [{ scope: "partner-portal", landingPath: "/ext-demo/portal", pathPrefixes: ["/ext-demo/portal", "/api/ext-demo/portal"] }],
+    });
+  });
+
+  function seatOn(accessScope: string | null, activeWorkspaceId = "workspace-1") {
+    dbMock.authSession.findUnique.mockResolvedValue(
+      buildAuthSessionRecord({
+        activeWorkspaceId,
+        user: {
+          id: "user-1",
+          name: "Firm staff",
+          email: "staff@example.com",
+          memberships: [{ ...buildMembership("workspace-1", MembershipStatus.ACTIVE), accessScope }],
+        },
+      }),
+    );
+  }
+  function liveRow(accessScope: string | null) {
+    return {
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      status: MembershipStatus.ACTIVE,
+      accessScope,
+      user: { id: "user-1", name: "Firm staff", email: "staff@example.com" },
+      workspace: { id: "workspace-1", name: "Workspace workspace-1", slug: "workspace-1", systemKey: null, billingAccount: null, trialState: null, workerEntitlements: [] },
+    };
+  }
+
+  it("seats a normal member (control)", async () => {
+    seatOn(null);
+    dbMock.membership.findUnique.mockResolvedValue(liveRow(null));
+    expect(await getCurrentWorkspaceSessionOrNull()).not.toBeNull();
+    expect(await getCurrentExternalMemberScope()).toBeNull();
+  });
+
+  it("refuses an external member before any side effect", async () => {
+    seatOn("partner-portal");
+    dbMock.membership.findUnique.mockResolvedValue(liveRow("partner-portal"));
+    await expect(getCurrentWorkspaceSessionOrNull()).resolves.toBeNull();
+    expect(ensureWorkspaceCommercialFoundationMock).not.toHaveBeenCalled();
+    expect(dbMock.membership.findUnique).not.toHaveBeenCalled();
+    expect(dbMock.authSession.update).not.toHaveBeenCalled();
+    expect(writeAuditLogMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses when the scope is written while the request runs (live re-read)", async () => {
+    seatOn(null);
+    dbMock.membership.findUnique.mockResolvedValue(liveRow("partner-portal"));
+    await expect(getCurrentWorkspaceSessionOrNull()).resolves.toBeNull();
+  });
+
+  it("refuses a scope this build does not know, as an external member with no surface", async () => {
+    seatOn("some-future-scope");
+    await expect(getCurrentWorkspaceSessionOrNull()).resolves.toBeNull();
+    expect(await getCurrentExternalMemberScope()).toBe("unknown");
+    await expect(getSessionId({ externalMemberSurface: "partner-portal" })).resolves.toBeNull();
+  });
+
+  it("sends an external member to their surface, everyone else to /login", async () => {
+    seatOn("partner-portal");
+    await getCurrentWorkspaceSession();
+    expect(redirectMock).toHaveBeenLastCalledWith("/ext-demo/portal");
+
+    seatOn("some-future-scope");
+    await getCurrentWorkspaceSession();
+    expect(redirectMock).toHaveBeenLastCalledWith("/login");
+
+    dbMock.authSession.findUnique.mockResolvedValue(null);
+    await getCurrentWorkspaceSession();
+    expect(redirectMock).toHaveBeenLastCalledWith("/login");
+  });
+
+  it("gives the session id only to the surface the scope names", async () => {
+    seatOn("partner-portal");
+    await expect(getSessionId()).resolves.toBeNull();
+    await expect(getSessionId({ externalMemberSurface: "partner-portal" })).resolves.toBe("auth-session-1");
+
+    seatOn(null);
+    await expect(getSessionId()).resolves.toBe("auth-session-1");
+    await expect(getSessionId({ externalMemberSurface: "partner-portal" })).resolves.toBe("auth-session-1");
+
+    dbMock.authSession.findUnique.mockResolvedValue(null);
+    await expect(getSessionId({ externalMemberSurface: "partner-portal" })).resolves.toBeNull();
+  });
+
+  it("judges the active workspace's membership too, not only the preferred one", async () => {
+    // The session's activeWorkspaceId names a workspace whose membership is external, while another (normal) membership
+    // would be preferred: an extension reads activeWorkspaceId itself, so it must still see no session.
+    dbMock.authSession.findUnique.mockResolvedValue(
+      buildAuthSessionRecord({
+        activeWorkspaceId: "workspace-2",
+        user: {
+          id: "user-1",
+          name: "Firm staff",
+          email: "staff@example.com",
+          memberships: [
+            { ...buildMembership("workspace-1", MembershipStatus.ACTIVE), accessScope: null },
+            { ...buildMembership("workspace-2", MembershipStatus.INACTIVE), accessScope: "partner-portal" },
+          ],
+        },
+      }),
+    );
+    await expect(getSessionId()).resolves.toBeNull();
   });
 });

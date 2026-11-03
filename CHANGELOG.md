@@ -6,6 +6,7 @@ This project follows a release-note-first changelog until the first public tag.
 
 ## 未发布 / Unreleased
 
+- 新增外部成员范围锁：`Membership.accessScope`（可空列，只追加迁移）。设了范围的成员是工作区之外的人（例如在某个扩展里处理部分案件的合作机构员工），Core 的工作区会话解析一律拒绝他们，所以 Core 页面、API 和 server action 都不可用；工作区布局只给最小外壳，不加载导航和工作区数据；登录后直接去扩展登记的入口；`getSessionId()` 只把会话交给声明了同一范围的扩展入口，由扩展自己逐个请求判权（`getCurrentUser()` 不拦，扩展不能拿它当工作区授权）；CAIO 操作员会话、成员 MCP 令牌、QoderWork 连接和连接器 OAuth 回调的角色判定也拒绝。范围由 Pack / Overlay 通过 `registerPackContributions({ externalMemberSurfaces })` 登记（落地页和路径前缀不能占用 Core 自己的登录、设置、首页等路径）；没有登记的值一律当作无入口的外部成员拒绝。普通成员不受影响。
 - 客户推进页（`/opportunities`）改为客户与原始需求优先（owner 2026-10-15 批准原型）：列表卡片只显示客户、原话摘要、下一步与负责人；详情改为「客户 / 客户原话 / 处理」三张卡，系统判断折叠到处理卡末尾，页面级判断面板下线。查询改为显式字段选择，负责人、成员与公司只下发 id / 名称，个人 Gmail 线程不在本页展示。
 - 继续收口底层 UI select / switch primitive 的双语 aria fallback；本批只改缺省无障碍标签文案，不改视觉样式、Radix 行为、调用方传入 label 或表单状态。
 - 继续收口共享 guidance preferences 控件双语化；本批只改系统说明偏好设置的标题、描述、状态、开关、按钮和提示说明文案，不改偏好 localStorage key、默认开关状态或工作区偏好事件。

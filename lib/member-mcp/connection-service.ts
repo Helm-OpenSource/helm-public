@@ -2,6 +2,7 @@ import "server-only";
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { ActorType, MembershipStatus, Prisma, type WorkspaceRole } from "@prisma/client";
+import { externalScopeOf } from "@/lib/auth/external-member-scope";
 import { writeAuditLog } from "@/lib/audit";
 import { db } from "@/lib/db";
 import type { MemberObjectClassification } from "@/lib/member-gateway/types";
@@ -577,7 +578,7 @@ export async function authenticateMemberMcpToken(token: string, now = new Date()
     db.workspace.findUnique({ where: { id: row.workspaceId }, select: { featureFlagsJson: true } }),
     db.membership.findUnique({
       where: { workspaceId_userId: { workspaceId: row.workspaceId, userId: row.userId } },
-      select: { status: true },
+      select: { status: true, accessScope: true },
     }),
   ]);
   const flags = readMemberMcpWorkspaceFlags(workspace?.featureFlagsJson);
@@ -587,6 +588,12 @@ export async function authenticateMemberMcpToken(token: string, now = new Date()
     throw new MemberAgentConnectionError("EXPIRED", "Credential expired");
   }
   if (membership?.status !== MembershipStatus.ACTIVE) {
+    await recordFailure(row.id, "MEMBERSHIP_INACTIVE");
+    throw new MemberAgentConnectionError("UNAUTHENTICATED", "Membership is not active");
+  }
+  // An external member (lib/auth/external-member-scope.ts) never reads Core data over MCP, even with a connection
+  // approved before the scope was written.
+  if (externalScopeOf(membership) !== null) {
     await recordFailure(row.id, "MEMBERSHIP_INACTIVE");
     throw new MemberAgentConnectionError("UNAUTHENTICATED", "Membership is not active");
   }

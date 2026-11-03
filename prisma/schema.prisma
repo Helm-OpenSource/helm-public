@@ -1761,6 +1761,9 @@ model Membership {
   jobResponsibilities    String?          @db.LongText
   persona                String?
   rolePresetKey          String?
+  /// External member scope (lib/auth/external-member-scope.ts): null for the workspace's own team; set, the member may use only that
+  /// scope's surface. Written by the scope's operator tooling, never by the settings pages.
+  accessScope            String?          @db.VarChar(64)
   definitionDraftJson    String?          @db.LongText
   definitionAcceptedJson String?          @db.LongText
   definitionAcceptedAt   DateTime?

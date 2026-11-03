@@ -280,6 +280,17 @@ describeMysql("member MCP P0 with an isolated MySQL database", () => {
     await db.membership.update({ where: { id: actors.seatB.membershipId }, data: { status: MembershipStatus.ACTIVE } });
   });
 
+  it("stops serving a member once they are marked external (prefix lock), even on an approved connection", async () => {
+    const requested = await request("seatB");
+    await decideMemberAgentConnection({ workspaceId, connectionId: requested.id, actor: actors.owner, decision: "approve" });
+    const claimed = await claimMemberAgentConnection({ workspaceId, connectionId: requested.id, actor: actors.seatB });
+    await authenticateMemberMcpToken(claimed.token);
+    await db.membership.update({ where: { id: actors.seatB.membershipId }, data: { accessScope: "partner-portal" } });
+    await expectCode(authenticateMemberMcpToken(claimed.token), "UNAUTHENTICATED");
+    await db.membership.update({ where: { id: actors.seatB.membershipId }, data: { accessScope: null } });
+    expect((await revokeMemberAgentConnection({ workspaceId, connectionId: requested.id, actor: actors.owner })).status).toBe("revoked");
+  });
+
   it("records a work signal through prepare/submit as an untrusted candidate receipt", async () => {
     const writer = await activeToken("seatA", true);
     expect(writer.scopes).toEqual(["member:brief:read", "member:prompt:read", "member:signal:write", "member:report:write", "member:prompt:respond"]);
