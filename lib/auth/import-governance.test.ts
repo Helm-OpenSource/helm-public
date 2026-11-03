@@ -78,6 +78,18 @@ describe("import governance auth seam", () => {
     ).resolves.toBeNull();
   });
 
+  it("returns null for an external member (prefix lock), so no OAuth callback or import decision acts for them", async () => {
+    dbMock.membership.findUnique.mockResolvedValue({
+      role: WorkspaceRole.MEMBER,
+      status: MembershipStatus.ACTIVE,
+      accessScope: "partner-portal",
+    });
+
+    await expect(
+      getWorkspaceRoleForUser({ workspaceId: "workspace-1", userId: "user-1" }),
+    ).resolves.toBeNull();
+  });
+
   it("returns the active workspace role for a user", async () => {
     dbMock.membership.findUnique.mockResolvedValue({
       role: WorkspaceRole.OPERATOR,

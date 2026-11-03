@@ -191,9 +191,12 @@ export type PackContributions = {
    */
   auditDisplayLabels?: AuditDisplayLabelContribution;
   /**
-   * External member surfaces (lib/auth/external-member-scope.ts, **first wins** per scope). A membership whose
-   * `accessScope` names a registered scope may use only that surface's path prefixes and the sign-in pages; Core's
-   * session resolvers refuse it everywhere else. An unregistered scope value is refused everywhere.
+   * External member surfaces (lib/auth/external-member-scope.ts, **first wins** per scope). Core's session resolvers
+   * refuse a membership whose `accessScope` is set everywhere; the registered surface gets the session only by naming
+   * the scope (`getSessionId({ externalMemberSurface })`) and authorizes every request itself. The landing path is
+   * where Core sends such a member; the path prefixes bound the landing path and are not themselves an allowlist.
+   * Note that `getCurrentUser()` / `requireCurrentUser()` still return an external member's user: an extension route
+   * must not treat them as workspace authorization. An unregistered scope value is refused everywhere.
    */
   externalMemberSurfaces?: ReadonlyArray<ExternalMemberSurfaceContribution>;
 };
@@ -333,6 +336,19 @@ export function registerPackContributions(
 
 const EXTERNAL_SCOPE = /^[a-z][a-z0-9-]{1,62}$/;
 const SURFACE_PATH = /^\/[A-Za-z0-9._~-]+(?:\/[A-Za-z0-9._~-]+)*$/;
+/**
+ * First path segments an extension surface may not claim: Core's own sign-in, setup and shell pages (an external
+ * member landing there would be sent straight back). An API prefix must sit at least two segments under /api.
+ */
+const RESERVED_SURFACE_SEGMENTS = new Set(["", "_next", "activate-member", "admin", "assets", "caio", "dashboard", "getting-started",
+  "health", "login", "portal", "settings", "setup", "trial"]);
+function isSurfacePath(path: unknown): path is string {
+  if (typeof path !== "string" || !SURFACE_PATH.test(path)) return false;
+  const segments = path.split("/").slice(1);
+  if (segments.some((s) => s === "." || s === "..")) return false;
+  if (segments.length < 2 || RESERVED_SURFACE_SEGMENTS.has(segments[0])) return false;
+  return segments[0] !== "api" || segments.length >= 3;
+}
 
 /** A scope key, absolute path prefixes without a trailing slash, and a landing path inside one of them; null otherwise. */
 function normalizeExternalMemberSurface(value: unknown): ExternalMemberSurfaceContribution | null {
@@ -340,9 +356,9 @@ function normalizeExternalMemberSurface(value: unknown): ExternalMemberSurfaceCo
   const v = value as Record<string, unknown>;
   if (typeof v.scope !== "string" || !EXTERNAL_SCOPE.test(v.scope)) return null;
   if (!Array.isArray(v.pathPrefixes) || v.pathPrefixes.length < 1 || v.pathPrefixes.length > 16) return null;
-  if (!v.pathPrefixes.every((p) => typeof p === "string" && SURFACE_PATH.test(p))) return null;
+  if (!v.pathPrefixes.every(isSurfacePath)) return null;
   const prefixes = v.pathPrefixes as string[];
-  if (typeof v.landingPath !== "string" || !SURFACE_PATH.test(v.landingPath)) return null;
+  if (!isSurfacePath(v.landingPath) || v.landingPath.split("/")[1] === "api") return null;
   const landing = v.landingPath;
   if (!prefixes.some((p) => landing === p || landing.startsWith(p + "/"))) return null;
   return Object.freeze({ scope: v.scope, landingPath: landing, pathPrefixes: Object.freeze([...prefixes]) });

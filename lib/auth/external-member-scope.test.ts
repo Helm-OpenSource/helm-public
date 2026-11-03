@@ -67,12 +67,27 @@ describe("external member scope", () => {
         { scope: "no-prefixes", landingPath: "/a", pathPrefixes: [] },
       ],
     });
-    registerPackContributions("first", { externalMemberSurfaces: [{ scope: "partner-portal", landingPath: "/one", pathPrefixes: ["/one"] }] });
-    registerPackContributions("second", { externalMemberSurfaces: [{ scope: "partner-portal", landingPath: "/two", pathPrefixes: ["/two"] }] });
+    registerPackContributions("first", { externalMemberSurfaces: [{ scope: "partner-portal", landingPath: "/demo/one", pathPrefixes: ["/demo/one"] }] });
+    registerPackContributions("second", { externalMemberSurfaces: [{ scope: "partner-portal", landingPath: "/demo/two", pathPrefixes: ["/demo/two"] }] });
     for (const scope of ["Bad Scope", "outside-landing", "relative-prefix", "trailing-slash", "no-prefixes"]) {
       expect(externalScopeOf({ accessScope: scope })).toBe("unknown");
     }
-    expect(externalLandingPath("partner-portal")).toBe("/one");
-    expect(isPathInExternalScope("partner-portal", "/two")).toBe(false);
+    expect(externalLandingPath("partner-portal")).toBe("/demo/one");
+    expect(isPathInExternalScope("partner-portal", "/demo/two")).toBe(false);
+  });
+
+  it("refuses a surface that would claim Core's own pages or a whole API namespace", () => {
+    __resetPackRegistryForTest();
+    const cases: Array<[string, string, string[]]> = [
+      ["single-segment", "/portal", ["/portal"]],
+      ["core-dashboard", "/dashboard/x", ["/dashboard/x"]],
+      ["core-login", "/login/x", ["/login/x"]],
+      ["core-settings", "/settings/x", ["/settings/x"]],
+      ["api-namespace", "/demo/portal", ["/demo/portal", "/api/demo"]],
+      ["dot-segment", "/demo/../dashboard", ["/demo/../dashboard"]],
+      ["api-landing", "/api/demo/portal", ["/api/demo/portal"]],
+    ];
+    for (const [scope, landingPath, pathPrefixes] of cases) registerPackContributions("pack-" + scope, { externalMemberSurfaces: [{ scope, landingPath, pathPrefixes }] });
+    for (const [scope] of cases) expect(externalScopeOf({ accessScope: scope })).toBe("unknown");
   });
 });

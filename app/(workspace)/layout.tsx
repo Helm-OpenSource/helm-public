@@ -72,15 +72,21 @@ export default async function WorkspaceLayout({
   // An external member (lib/auth/external-member-scope.ts) never gets the workspace shell: no navigation, no
   // command palette, no quick create, and none of the shell's workspace reads. The page under it decides on its
   // own: a Core page's loader refuses them (and sends them to their surface); their own surface opts in.
-  const session = await getCurrentWorkspaceSessionOrNull().catch((error: unknown) => {
+  // A database that cannot be reached is kept as the error and shown by the banner below, as before.
+  const unreachable = (error: unknown) => {
     if (error instanceof Error && error.message.includes("Can't reach database server")) return error;
     throw error;
-  });
+  };
+  let session = await getCurrentWorkspaceSessionOrNull().catch(unreachable);
   if (session === null) {
-    const external = await getCurrentExternalMemberScope();
-    if (external === null) redirect("/login");
-    if (external === "unknown") redirect(EXTERNAL_MEMBER_FALLBACK_PATH);
-    return <div className="min-h-screen bg-[color:var(--surface-subtle)] px-4 py-6 lg:px-8">{children}</div>;
+    const external = await getCurrentExternalMemberScope().catch(unreachable);
+    if (external instanceof Error) {
+      session = external;
+    } else {
+      if (external === null) redirect("/login");
+      if (external === "unknown") redirect(EXTERNAL_MEMBER_FALLBACK_PATH);
+      return <div className="min-h-screen bg-[color:var(--surface-subtle)] px-4 py-6 lg:px-8">{children}</div>;
+    }
   }
 
   try {
