@@ -79,6 +79,7 @@ import {
   setActiveWorkspace,
 } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { resolveMemberIdentifier } from "./member-identifier";
 import { recordPolicyChangedDelta } from "@/lib/evolution/delta-event.service";
 import { refreshEvolutionState } from "@/lib/evolution/pattern-detection.service";
 import {
@@ -162,22 +163,6 @@ const optionalMemberIdentifierField = z.preprocess((value) => {
   const trimmed = value.trim();
   return trimmed.length === 0 ? undefined : trimmed;
 }, z.string().max(191).optional());
-
-function resolveMemberIdentifier(rawValue: string | null | undefined) {
-  const raw = String(rawValue ?? "").trim();
-  if (!raw) {
-    return { normalizedEmail: null, normalizedPhone: null };
-  }
-
-  const emailCandidate = z.string().email().safeParse(raw).success
-    ? normalizeEmailAddress(raw)
-    : null;
-  const phoneCandidate = emailCandidate ? null : normalizePhoneNumber(raw);
-  return {
-    normalizedEmail: emailCandidate,
-    normalizedPhone: phoneCandidate,
-  };
-}
 
 const DINGTALK_USER_BY_MOBILE_URL = "https://oapi.dingtalk.com/topapi/v2/user/getbymobile";
 
