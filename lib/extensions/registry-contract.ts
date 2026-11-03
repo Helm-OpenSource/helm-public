@@ -23,6 +23,7 @@ import type {
 } from "@/lib/bi-report-skill/types";
 import type { IndustryDemoPack } from "@/lib/demo/industry-fixtures/types";
 import type { SignalCollectionJob } from "@/lib/signal-collection/types";
+import { PUBLIC_PAGE_PREFIXES, WORKSPACE_PAGE_PREFIXES } from "@/lib/auth/workspace-route-guard";
 
 import {
   registerExtensionApiRoutes,
@@ -340,8 +341,15 @@ const SURFACE_PATH = /^\/[A-Za-z0-9._~-]+(?:\/[A-Za-z0-9._~-]+)*$/;
  * First path segments an extension surface may not claim: Core's own sign-in, setup and shell pages (an external
  * member landing there would be sent straight back). An API prefix must sit at least two segments under /api.
  */
-const RESERVED_SURFACE_SEGMENTS = new Set(["", "_next", "activate-member", "admin", "assets", "caio", "dashboard", "getting-started",
-  "health", "login", "portal", "settings", "setup", "trial"]);
+const RESERVED_SURFACE_SEGMENTS = new Set([
+  "", "_next", "activate-member", "admin", "assets", "caio", "dashboard", "getting-started", "health", "login", "portal", "settings", "setup", "trial",
+  // Every Core workspace and public page prefix the route guard knows (review P3: a landing under a Core page would loop).
+  ...[...WORKSPACE_PAGE_PREFIXES, ...PUBLIC_PAGE_PREFIXES].map((prefix) => prefix.split("/")[1] ?? ""),
+]);
+/** Test helper: whether a first path segment is reserved for Core. */
+export function __isReservedSurfaceSegmentForTest(segment: string): boolean {
+  return RESERVED_SURFACE_SEGMENTS.has(segment);
+}
 function isSurfacePath(path: unknown): path is string {
   if (typeof path !== "string" || !SURFACE_PATH.test(path)) return false;
   const segments = path.split("/").slice(1);

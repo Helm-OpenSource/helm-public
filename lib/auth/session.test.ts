@@ -1655,7 +1655,7 @@ describe("external member prefix lock", () => {
     dbMock.$executeRaw.mockResolvedValue(0);
     __resetPackRegistryForTest();
     registerPackContributions("demo-pack", {
-      externalMemberSurfaces: [{ scope: "partner-portal", landingPath: "/demo/portal", pathPrefixes: ["/demo/portal", "/api/demo/portal"] }],
+      externalMemberSurfaces: [{ scope: "partner-portal", landingPath: "/ext-demo/portal", pathPrefixes: ["/ext-demo/portal", "/api/ext-demo/portal"] }],
     });
   });
 
@@ -1716,7 +1716,7 @@ describe("external member prefix lock", () => {
   it("sends an external member to their surface, everyone else to /login", async () => {
     seatOn("partner-portal");
     await getCurrentWorkspaceSession();
-    expect(redirectMock).toHaveBeenLastCalledWith("/demo/portal");
+    expect(redirectMock).toHaveBeenLastCalledWith("/ext-demo/portal");
 
     seatOn("some-future-scope");
     await getCurrentWorkspaceSession();

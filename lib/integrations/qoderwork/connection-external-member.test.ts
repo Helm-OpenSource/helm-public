@@ -17,7 +17,7 @@ describe("QoderWork connection and the external member prefix lock", () => {
     vi.clearAllMocks();
     vi.stubEnv("HELM_QODERWORK_MCP_ENABLED", "true");
     __resetPackRegistryForTest();
-    registerPackContributions("demo-pack", { externalMemberSurfaces: [{ scope: "partner-portal", landingPath: "/demo/portal", pathPrefixes: ["/demo/portal"] }] });
+    registerPackContributions("demo-pack", { externalMemberSurfaces: [{ scope: "partner-portal", landingPath: "/ext-demo/portal", pathPrefixes: ["/ext-demo/portal"] }] });
     dbMock.externalAgentConnection.findUnique.mockResolvedValue({
       id: "conn-1", providerId: QODERWORK_PROVIDER_ID, revokedAt: null, expiresAt: new Date(Date.now() + 3_600_000),
       workspaceId: "workspace-1", userId: "user-1",
