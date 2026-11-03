@@ -188,6 +188,7 @@ export type WorkspaceNavExtensionItem = {
 };
 
 export type WorkspaceNavExtensionCluster = {
+  placement?: "customer-assets";
   extensionKey: string;
   label: string;
   items: WorkspaceNavExtensionItem[];

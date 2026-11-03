@@ -325,6 +325,12 @@ export function Sidebar({
   const drawerItems = catalog
     ? toNavItems(catalog.drawer, english, settingsHrefs)
     : [];
+  const customerAssetsClusters = navExtensionClusters.filter(
+    (cluster) => cluster.placement === "customer-assets",
+  );
+  const extensionClusters = navExtensionClusters.filter(
+    (cluster) => catalog || cluster.placement !== "customer-assets",
+  );
   const renderedSections: SidebarNavSection[] = [
     ...(showCaioPrimaryNavigation ? [caioPrimarySection] : []),
     ...(catalog
@@ -369,7 +375,18 @@ export function Sidebar({
         }))
       : navSections.map((section) => ({
           ...section,
-          items: section.items.filter(
+          items: [
+            ...section.items,
+            ...(section.key === "work"
+              ? customerAssetsClusters.flatMap((cluster) =>
+                  cluster.items.map((item): SidebarNavItem => ({
+                    href: item.href,
+                    label: item.label,
+                    icon: <ExtensionNavIcon iconKey={item.iconKey} />,
+                  })),
+                )
+              : []),
+          ].filter(
             (item) =>
               !reviewPresentation.excludedHrefs.some((href) =>
                 item.href.startsWith(href),
@@ -467,7 +484,7 @@ export function Sidebar({
           ))}
 
           {workstationPresentation.showExtensionClusters &&
-          navExtensionClusters.length > 0 ? (
+          extensionClusters.length > 0 ? (
             <div
               className="mt-4 space-y-2"
               data-testid="workspace-nav-extensions"
@@ -475,7 +492,7 @@ export function Sidebar({
               <p className="px-1 pb-1 text-xs font-medium text-[color:var(--muted-foreground)]">
                 {english ? "Extensions" : "扩展"}
               </p>
-              {navExtensionClusters.map((cluster) =>
+              {extensionClusters.map((cluster) =>
                 cluster.items.map((item) => (
                   <NavLink
                     key={item.key}
