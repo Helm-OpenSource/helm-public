@@ -167,6 +167,10 @@ describe("settings display copy", () => {
         "Membership, workspace governance, auth-session, and support-pack follow-through remain tenant-scoped audit truth, not a broader tenant-admin platform.",
         false,
       ),
+      formatSettingsBoundaryNote(
+        "Recent org-admin and data-governance audit lists hold at most 8 events from the last 90 days; older events stay in the audit log and are not part of these lists.",
+        false,
+      ),
     ].join(" ");
 
     expect(rendered).toContain("会话状态");
@@ -176,8 +180,9 @@ describe("settings display copy", () => {
     expect(rendered).toContain("工作区切换标记缺口");
     expect(rendered).toContain("后续治理信号");
     expect(rendered).toContain("不是更宽的租户管理平台");
+    expect(rendered).toContain("只包含近 90 天内最多 8 条事件；更早的事件仍保存在审计日志中");
     expect(rendered).not.toMatch(
-      /posture|workflow|execution authority|review-first|tenant-scoped|marketplace platform|tenant-admin authority|Entry-source|action-source|operator review|Workspace-switch|implicit proof|follow-through signals|support-pack/i,
+      /posture|workflow|execution authority|review-first|tenant-scoped|marketplace platform|tenant-admin authority|Entry-source|action-source|operator review|Workspace-switch|implicit proof|follow-through signals|support-pack|recentAuditWindow|audit lists/i,
     );
   });
 

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MembershipStatus, WorkspaceRole } from "@prisma/client";
+import { RECENT_AUDIT_LOOKBACK_DAYS } from "@/lib/audit/capped-count";
 
 const { dbMock } = vi.hoisted(() => ({
   dbMock: {
@@ -742,6 +743,17 @@ describe("org admin governance support pack", () => {
     });
 
     expect(pack.version).toBe("v1");
+    // Recent-audit lists are time-bounded so MySQL ranges over (workspaceId, actionType, createdAt)
+    // instead of walking the whole workspace backwards by createdAt.
+    const recentAuditCalls = dbMock.auditLog.findMany.mock.calls.filter(
+      ([args]: [{ take?: number }]) => args?.take === 8,
+    );
+    expect(recentAuditCalls).toHaveLength(2);
+    for (const [args] of recentAuditCalls) {
+      const since = (args as { where: { createdAt: { gte: Date } } }).where.createdAt.gte;
+      expect(Date.now() - since.getTime()).toBeGreaterThanOrEqual((RECENT_AUDIT_LOOKBACK_DAYS - 1) * 86_400_000);
+      expect(Date.now() - since.getTime()).toBeLessThanOrEqual((RECENT_AUDIT_LOOKBACK_DAYS + 1) * 86_400_000);
+    }
     expect(pack.workspaceId).toBe("workspace-1");
     expect(pack.summary.membershipSummary.activeSeatCount).toBe(2);
     expect(pack.summary.membershipSummary.invitedSeatCount).toBe(1);
@@ -1241,6 +1253,17 @@ describe("org admin governance support pack", () => {
     expect(pack.summary.recentOrgAdminAudit[0]?.actionType).toBe("ORGANIZATION_MEMBER_ROLE_UPDATED");
     expect(pack.summary.recentDataGovernanceAudit[0]?.actionType).toBe("MEMORY_SUMMARY_EXPORTED");
     expect(pack.summary.boundaryNotes.length).toBeGreaterThan(0);
+    // The support pack says the two recent lists are a bounded window, not the full history.
+    expect(pack.summary.recentAuditWindow).toMatchObject({ days: RECENT_AUDIT_LOOKBACK_DAYS, limit: 8 });
+    expect(Date.now() - pack.summary.recentAuditWindow.since.getTime()).toBeGreaterThanOrEqual(
+      (RECENT_AUDIT_LOOKBACK_DAYS - 1) * 86_400_000,
+    );
+    // Appended last: the settings boundary card renders only boundaryNotes[0], which stays the tenant-scope note.
+    expect(pack.summary.boundaryNotes[0]).toBe("Support pack is tenant-scoped to the active workspace only.");
+    expect(pack.summary.boundaryNotes.at(-1)).toBe(
+      `Recent org-admin and data-governance audit lists hold at most 8 events from the last ${RECENT_AUDIT_LOOKBACK_DAYS} days; older events stay in the audit log and are not part of these lists.`,
+    );
+    expect(pack.summary.boundaryNotes.join(" ")).not.toContain("recentAuditWindow");
     expect(pack.summary.boundaryNotes).toContain(
       "Webhook tenancy governance only records callbacks once tenant mapping is asserted; unresolved external callbacks remain outside workspace-scoped support-pack truth.",
     );
