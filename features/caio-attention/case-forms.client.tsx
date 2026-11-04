@@ -30,6 +30,12 @@ const toLocalInput = (iso: string | null) => {
 const toIso = (local: string) => (local && !Number.isNaN(new Date(local).getTime()) ? new Date(local).toISOString() : "");
 const toggle = (list: readonly string[], id: string) => (list.includes(id) ? list.filter((item) => item !== id) : [...list, id]);
 
+// randomUUID exists only in secure contexts; getRandomValues is available everywhere. Both fit the request-id pattern.
+export function newCaioAttentionRequestId(): string {
+  if (typeof globalThis.crypto.randomUUID === "function") return globalThis.crypto.randomUUID();
+  return Array.from(globalThis.crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 /**
  * Each form instance owns its request id, created in the browser before its first submission and kept across
  * retries of a failed one (so the service can treat a retry as the same request), then replaced after a success.
@@ -37,7 +43,7 @@ const toggle = (list: readonly string[], id: string) => (list.includes(id) ? lis
 export function useCaioAttentionCommandAction() {
   const requestId = useRef<string | null>(null);
   return useActionState(async (previous: CaioAttentionActionState, formData: FormData) => {
-    requestId.current ??= crypto.randomUUID();
+    requestId.current ??= newCaioAttentionRequestId();
     formData.set("clientRequestId", requestId.current);
     const next = await runCaioAttentionCommandAction(previous, formData);
     if (next.status === "ok") requestId.current = null;
