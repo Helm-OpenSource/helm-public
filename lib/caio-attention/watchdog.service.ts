@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 
-import { parseCaioAttentionRouteConfig } from "./contracts";
+import { parseCaioAttentionRouteConfig, type CaioAttentionRouteConfig, type CaioAttentionRouteRule } from "./contracts";
 
 /**
  * Attention watchdogs W1-W5, run by the web nodes' five-minute scan (design v4 §8.1).
@@ -37,44 +37,73 @@ async function notifyOnce(client: PrismaClient, workspaceId: string, userId: str
     WHERE NOT EXISTS (SELECT 1 FROM Notification WHERE workspaceId = ${workspaceId} AND dedupeKey = ${dedupeKey})`;
 }
 
+/** Active members, same rule as the lifecycle service: ACTIVE and no external access scope. */
+async function activeMembers(client: PrismaClient, workspaceId: string) {
+  return client.$queryRaw<Array<{ userId: string; role: string }>>`
+    SELECT userId, role FROM Membership WHERE workspaceId = ${workspaceId} AND status = 'ACTIVE' AND accessScope IS NULL
+    ORDER BY joinedAt, userId`;
+}
+
+async function activeRouteConfig(client: PrismaClient, workspaceId: string): Promise<CaioAttentionRouteConfig | null> {
+  const [row] = await client.$queryRaw<Array<{ configJson: string }>>`
+    SELECT c.configJson FROM CaioAttentionRouteConfigHead h
+    JOIN CaioAttentionRouteConfig c ON c.workspaceId = h.workspaceId AND c.version = h.activeVersion
+    WHERE h.workspaceId = ${workspaceId}`;
+  const parsed = row ? parseCaioAttentionRouteConfig(parseJson(row.configJson)) : null;
+  return parsed?.ok ? parsed.config : null;
+}
+
 async function recipientsFor(client: PrismaClient, workspaceId: string, roleKey: string | undefined): Promise<string[]> {
-  const members = await client.$queryRaw<Array<{ userId: string; role: string }>>`
-    SELECT userId, role FROM Membership WHERE workspaceId = ${workspaceId} AND status = 'ACTIVE' ORDER BY joinedAt, userId`;
+  const members = await activeMembers(client, workspaceId);
   const active = new Set(members.map((member) => member.userId));
   if (roleKey) {
-    const [config] = await client.$queryRaw<Array<{ configJson: string }>>`
-      SELECT c.configJson FROM CaioAttentionRouteConfigHead h
-      JOIN CaioAttentionRouteConfig c ON c.workspaceId = h.workspaceId AND c.version = h.activeVersion
-      WHERE h.workspaceId = ${workspaceId}`;
-    const parsed = config ? parseCaioAttentionRouteConfig(parseJson(config.configJson)) : null;
-    const bound = parsed?.ok ? (parsed.config.roleBindings[roleKey] ?? []).filter((id) => active.has(id)) : [];
+    const config = await activeRouteConfig(client, workspaceId);
+    const bound = (config?.roleBindings[roleKey] ?? []).filter((id) => active.has(id));
     if (bound.length > 0) return bound;
   }
   // Unbound or unconfigured: the alert still reaches a human instead of being dropped.
   return members.filter((member) => member.role === "OWNER").map((member) => member.userId);
 }
 
+/**
+ * Detectors routed in this workspace: a registered rule whose primary chain has at least one active holder in the
+ * workspace's active route config. Rules are registered by the overlay only for enabled detectors.
+ */
+function routedDetectorIds(rules: readonly CaioAttentionRouteRule[], config: CaioAttentionRouteConfig | null,
+  active: ReadonlySet<string>): string[] {
+  if (!config) return [];
+  const held = (roleKey: string) => (config.roleBindings[roleKey] ?? []).some((id) => active.has(id));
+  return [...new Set(rules.filter((rule) => [rule.primaryRoleKey, ...rule.primaryFallbackRoleKeys].some(held))
+    .map((rule) => rule.detectorId))].sort();
+}
+
 export async function runCaioAttentionEvaluationWatchdog(input: {
   client: PrismaClient;
   now: Date;
-  monitoredDetectorIds: readonly string[];
+  routeRules: readonly CaioAttentionRouteRule[];
   watchdogRoleKey?: string;
 }): Promise<CaioAttentionWatchdogAlert[]> {
   const { client } = input;
   const alerts: CaioAttentionWatchdogAlert[] = [];
-  if (input.monitoredDetectorIds.length === 0) return alerts;
+  if (input.routeRules.length === 0) return alerts;
   const workspaces = await client.$queryRaw<Array<{ workspaceId: string }>>`
     SELECT workspaceId FROM CaioAttentionRouteConfigHead ORDER BY workspaceId`;
   for (const { workspaceId } of workspaces) {
+    const active = new Set((await activeMembers(client, workspaceId)).map((member) => member.userId));
+    const detectorIds = routedDetectorIds(input.routeRules, await activeRouteConfig(client, workspaceId), active);
+    if (detectorIds.length === 0) continue;
+    // A RUNNING tick has not committed its evaluations yet; only finished buckets count.
     const ticks = await client.$queryRaw<Array<{ id: string; bucketStart: Date }>>`
       SELECT id, bucketStart FROM CaioQuickCheckTick WHERE workspaceId = ${workspaceId} AND bucketStart <= ${input.now}
+        AND status <> 'RUNNING'
       ORDER BY bucketStart DESC LIMIT ${CAIO_ATTENTION_WATCHDOG_BUCKETS}`;
     if (ticks.length < CAIO_ATTENTION_WATCHDOG_BUCKETS) continue;
     const oldest = ticks[ticks.length - 1].bucketStart;
-    for (const detectorId of input.monitoredDetectorIds) {
+    for (const detectorId of detectorIds) {
       const outcomes = await client.$queryRaw<Array<{ outcome: string }>>`
         SELECT outcome FROM CaioDetectorEvaluation
-        WHERE workspaceId = ${workspaceId} AND detectorId = ${detectorId} AND bucketStart >= ${oldest} AND bucketStart <= ${input.now}`;
+        WHERE workspaceId = ${workspaceId} AND detectorId = ${detectorId} AND bucketStart >= ${oldest}
+          AND bucketStart <= ${ticks[0].bucketStart}`;
       if (outcomes.some((row) => row.outcome === "HIT" || row.outcome === "NO_HIT")) continue;
       const kind = outcomes.length === 0 ? "W3a" : "W3b";
       const [lastValid] = await client.$queryRaw<Array<{ bucketStart: Date }>>`
@@ -151,8 +180,7 @@ export async function runCaioAttentionPeopleWatchdog(input: { client: PrismaClie
     SELECT id, workspaceId, shortNo, commandVersion, primaryUserId, escalationUserId, reviewerUserIdsJson FROM CaioAttentionCase
     WHERE status IN ('DISPATCHED', 'DISPOSITION_SUBMITTED') ORDER BY id`;
   for (const row of cases) {
-    const members = await client.$queryRaw<Array<{ userId: string; role: string }>>`
-      SELECT userId, role FROM Membership WHERE workspaceId = ${row.workspaceId} AND status = 'ACTIVE'`;
+    const members = await activeMembers(client, row.workspaceId);
     const active = new Set(members.map((member) => member.userId));
     const reviewers = parseJson(row.reviewerUserIdsJson);
     const people = [row.primaryUserId, row.escalationUserId, ...(Array.isArray(reviewers) ? reviewers : [])]
@@ -215,6 +243,20 @@ export async function runCaioAttentionGenerationWatchdog(input: { client: Prisma
  * epoch is read under FOR SHARE in the same transaction as the insert, so it serialises with resume (REREVIEW5 P2-2).
  */
 export const CAIO_ATTENTION_HEARTBEAT_STALE_MS = 3 * 60_000;
+const MAX_ATTEMPTS = 4;
+
+/** Deadlock (1213), lock wait timeout (1205), duplicate key from a concurrent node (1062), write conflict (P2034). */
+async function withRetry<T>(run: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await run();
+    } catch (error) {
+      const code = error instanceof Prisma.PrismaClientKnownRequestError
+        ? String((error.meta as { code?: unknown } | undefined)?.code ?? error.code) : "";
+      if (attempt >= MAX_ATTEMPTS || !["1213", "1205", "1062", "P2034"].includes(code)) throw error;
+    }
+  }
+}
 type PauseReason = "node_heartbeat_stale" | "deployment_mismatch" | "watchdog";
 
 export async function runCaioAttentionNodeWatchdog(input: { client: PrismaClient; now: Date; watchdogRoleKey?: string }) {
@@ -239,7 +281,7 @@ export async function runCaioAttentionNodeWatchdog(input: { client: PrismaClient
     else if (beat.closeCapabilityVersion < control.requiredCloseCapability) reason = "watchdog";
     if (!reason) continue;
     const requestedByRef = `w4:${reason}:${nodeId}`.slice(0, 191);
-    const paused = await client.$transaction(async (tx) => {
+    const paused = await withRetry(() => client.$transaction(async (tx) => {
       const [row] = await tx.$queryRaw<Array<{ openEpoch: number }>>`
         SELECT openEpoch FROM CaioAttentionControl WHERE id = 'global' FOR SHARE`;
       const inserted = await tx.$executeRaw`
@@ -247,7 +289,7 @@ export async function runCaioAttentionNodeWatchdog(input: { client: PrismaClient
         SELECT ${randomUUID()}, ${row.openEpoch}, ${reason}, ${requestedByRef}, NOW(3) FROM DUAL
         WHERE NOT EXISTS (SELECT 1 FROM CaioAttentionPauseRequest WHERE openEpoch = ${row.openEpoch} AND requestedByRef = ${requestedByRef})`;
       return { inserted: inserted === 1, openEpoch: row.openEpoch };
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted }));
     const workspaces = await client.$queryRaw<Array<{ workspaceId: string }>>`
       SELECT workspaceId FROM CaioAttentionRouteConfigHead ORDER BY workspaceId`;
     for (const { workspaceId } of workspaces) {

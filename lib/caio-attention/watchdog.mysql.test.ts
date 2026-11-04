@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import { parseCaioAttentionRouteRule, type CaioAttentionRouteRule } from "./contracts";
 import {
   runCaioAttentionEvaluationWatchdog, runCaioAttentionGenerationWatchdog, runCaioAttentionNodeWatchdog, runCaioAttentionPeopleWatchdog,
   runCaioAttentionQuickCheckWatchdog,
@@ -20,6 +21,15 @@ const describeMysql = configured ? describe.sequential : describe.skip;
 const WS = "ws-watchdog";
 const USERS = [["u-w-owner", "OWNER"], ["u-w-tech", "ADMIN"]] as const;
 const at = (minute: number) => new Date(Date.UTC(2026, 10, 4, 2, minute));
+const rule = (detectorId: string, primaryRoleKey: string): CaioAttentionRouteRule => {
+  const parsed = parseCaioAttentionRouteRule({ detectorId, category: "technical", primaryRoleKey, primaryFallbackRoleKeys: [],
+    ccRoleKeys: [], escalationRoleKey: "sup", escalationFallbackRoleKey: "sup", reviewerRoleKey: "sup",
+    reviewerFallbackRoleKey: "sup", compatibleRuleVersions: ["v1"], committedDue: "suggest" });
+  if (!parsed.ok) throw new Error("fixture rule invalid");
+  return parsed.rule;
+};
+// det-d's primary role has no holder in the workspace: not routed there, never watched.
+const RULES = [rule("det-a", "sup"), rule("det-b", "sup"), rule("det-c", "sup"), rule("det-d", "unbound")];
 
 describeMysql("CAIO attention watchdogs on MySQL as the web identity", () => {
   let admin: PrismaClient, web: PrismaClient;
@@ -61,7 +71,8 @@ describeMysql("CAIO attention watchdogs on MySQL as the web identity", () => {
   });
 
   async function seed(bindTech: boolean) {
-    const config = { schemaVersion: "caio-attention-routes/v1", roleBindings: bindTech ? { tech: ["user:u-w-tech"] } : {} };
+    const config = { schemaVersion: "caio-attention-routes/v1",
+      roleBindings: { sup: ["user:u-w-owner"], ...(bindTech ? { tech: ["user:u-w-tech"] } : {}) } };
     await admin.$executeRaw`INSERT INTO CaioAttentionRouteConfig (id, workspaceId, version, schemaVersion, configJson, contentHash,
       createdByRef) VALUES ('rc-w', ${WS}, 1, 'caio-attention-routes/v1', ${JSON.stringify(config)}, 'h', 'test')`;
     await admin.$executeRaw`INSERT INTO CaioAttentionRouteConfigHead (id, workspaceId, activeVersion, updatedByRef) VALUES ('h-w', ${WS}, 1, 't')`;
@@ -74,7 +85,7 @@ describeMysql("CAIO attention watchdogs on MySQL as the web identity", () => {
     (id, workspaceId, tickId, bucketStart, detectorId, ruleVersion, outcome, hitMergeKeysJson)
     VALUES (${`ev-${detectorId}-${minute}`}, ${WS}, ${`t-w-${minute}`}, ${at(minute)}, ${detectorId}, 'v1', ${outcome}, '[]')`;
   const run = () => runCaioAttentionEvaluationWatchdog({ client: web, now: at(35),
-    monitoredDetectorIds: ["det-a", "det-b", "det-c"], watchdogRoleKey: "tech" });
+    routeRules: RULES, watchdogRoleKey: "tech" });
   const notices = () => admin.$queryRaw<Array<{ userId: string; type: string; dedupeKey: string }>>`
     SELECT userId, type, dedupeKey FROM Notification WHERE workspaceId = ${WS} ORDER BY dedupeKey`;
 
@@ -86,6 +97,11 @@ describeMysql("CAIO attention watchdogs on MySQL as the web identity", () => {
     // det-c: no records at all -> W3a
     expect((await run()).map((a) => [a.detectorId, a.kind, a.created])).toEqual([["det-a", "W3b", 1], ["det-c", "W3a", 1]]);
     expect((await run()).map((a) => a.created)).toEqual([0, 0]);
+    // A tick still RUNNING has no evaluations yet and does not count as an empty bucket.
+    await admin.$executeRaw`INSERT INTO CaioQuickCheckTick (id, workspaceId, bucketStart, status) VALUES ('t-w-40', ${WS}, ${at(40)}, 'RUNNING')`;
+    await evaluation("det-b", 30, "HIT");
+    const later = await runCaioAttentionEvaluationWatchdog({ client: web, now: at(45), routeRules: RULES, watchdogRoleKey: "tech" });
+    expect(later.map((a) => [a.detectorId, a.created])).toEqual([["det-a", 0], ["det-c", 0]]);
     expect((await notices()).map((n) => `${n.userId} ${n.type} ${n.dedupeKey}`)).toEqual([
       `u-w-tech SYSTEM ca-w3:det-a:${at(0).toISOString()}:u-w-tech`, "u-w-tech SYSTEM ca-w3:det-c:none:u-w-tech",
     ]);
