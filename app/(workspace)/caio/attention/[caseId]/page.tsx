@@ -45,7 +45,8 @@ export default async function CaioAttentionCasePage({ params }: { params: Promis
   const current = view.currentDisposition;
   const parsedEvidence = current ? parseCaioAttentionEvidenceRefs(current.evidenceRefs) : null;
   const externalRefs = parsedEvidence?.ok ? parsedEvidence.refs.filter((item) => item.role === "external").map((item) => item.ref) : [];
-  // OWNER-only forms additionally need the owner role on this case, so a loader slip cannot expose them to ADMIN.
+  // OWNER-only forms additionally need the viewer's workspace OWNER role ("owner" in viewerRoles), not the case's
+  // confirmer: any workspace OWNER may act. Presentation only; the service re-authorizes in its transaction.
   const ownerOnly: ReadonlySet<CaioAttentionOperation> = new Set(["confirm", "dismiss", "defer", "cancel", "reissue", "assignReviewers"]);
   const may = (op: CaioAttentionOperation) => allowed.has(op) && (!ownerOnly.has(op) || view.viewerRoles.includes("owner"));
   const show = {

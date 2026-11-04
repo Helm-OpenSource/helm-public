@@ -26,7 +26,7 @@ Status: pages and guards are formed. Until the lifecycle service and its authori
 | `/caio/attention/mine` | My cases: where the member is the primary, informed, escalation person or a reviewer of the current confirmed command |
 | `/caio/attention/[caseId]` | Detail: object → confirmed command and its changes from the prefill (prefill before confirmation) → receipts, reviews, events → next-step forms |
 
-Forms follow the loader's `allowedOperations`: confirm (prefill editable, live diff against the prefill), ack, note, disposition receipt, review accept/return; for the OWNER also dismiss (awaiting confirmation only), defer (pick an end time), cancel (in progress or awaiting review), reissue a new command version (diff against the current command) and change reviewers. Dismiss and cancel require a reason. The review form asks the reviewer to tick each external evidence item and requires a conclusion.
+Forms follow the loader's `allowedOperations`: confirm (prefill editable, live diff against the prefill), ack, note, disposition receipt, review accept/return; for the OWNER also dismiss (awaiting confirmation only), defer (pick an end time), cancel (in progress or awaiting review), reissue a new command version (diff against the current command) and change reviewers. Dismiss and cancel require a reason. OWNER here means the workspace OWNER role, not "the person who confirmed this case"; any workspace OWNER may perform the OWNER operations above. The review form asks the reviewer to tick each external evidence item and requires a conclusion.
 
 ## Visibility
 
@@ -47,6 +47,6 @@ Until wired, `features/caio-attention/service.ts` serves a fail-closed stub (emp
 - `lib/caio-attention/capability.json` is `closeCapabilityVersion: 0` for now; the change that binds the lifecycle service raises it to 1, meaning the release can close cases. The intake gate opens only when `requiredCloseCapability` is 1 and every expected node reports capability 1.
 - `npm run check:caio-attention` (CI repo-guards): no generic governed-task tables; no direct database access from the page layer; pages read through the page service only; the capability declaration equals the binding-derived value and ships with the close-chain forms; the stub stays closed while unbound.
 
-## Navigation entry
+## Not included
 
-The workspace sidebar and mobile navigation show "Attention cases" as presentation only: hidden while the service is unbound or the member is inactive; shown to OWNER and ADMIN; shown to other members only when they take part in at least one current confirmed command. A failing loader hides the entry and never breaks the shell.
+The workspace navigation entry is outside this page slice.
