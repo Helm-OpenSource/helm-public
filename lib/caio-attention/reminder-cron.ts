@@ -1,3 +1,4 @@
+import type { CaioAttentionRouteRule } from "./contracts";
 import type { CaioAttentionPolicy } from "./schedule";
 
 /**
@@ -11,20 +12,24 @@ const INITIAL_DELAY_MS = 60_000;
 
 export type CaioAttentionScanConfig = Readonly<{
   policy: CaioAttentionPolicy;
-  /** Detectors that are enabled and routed; only these are watched by W3. */
-  monitoredDetectorIds: readonly string[];
+  /** Route rules of the enabled detectors; W3 watches those routed in each workspace's active config. */
+  routeRules: readonly CaioAttentionRouteRule[];
   /** Role key in the route config whose holders receive watchdog alerts; OWNERs when absent or unbound. */
   watchdogRoleKey?: string;
 }>;
 
-type CronState = { started: boolean; running: boolean; timer: NodeJS.Timeout | null; config: CaioAttentionScanConfig | null };
+type CronState = {
+  started: boolean; running: boolean; timer: NodeJS.Timeout | null; config: CaioAttentionScanConfig | null;
+  /** Cases that failed last tick; skipped for one tick. */
+  lastFailedCaseIds: string[];
+};
 
 declare global {
   var __caioAttentionReminderCronState: CronState | undefined;
 }
 
 function state(): CronState {
-  globalThis.__caioAttentionReminderCronState ??= { started: false, running: false, timer: null, config: null };
+  globalThis.__caioAttentionReminderCronState ??= { started: false, running: false, timer: null, config: null, lastFailedCaseIds: [] };
   return globalThis.__caioAttentionReminderCronState;
 }
 
@@ -55,9 +60,11 @@ export async function runCaioAttentionScanTick(now: Date = new Date()): Promise<
       import("@/lib/db"), import("./reminder-scanner.service"), import("./watchdog.service"),
     ]);
     try {
-      const result = await runCaioAttentionReminderScan({ client: db, now, policy: config.policy });
+      const result = await runCaioAttentionReminderScan({ client: db, now, policy: config.policy, skipCaseIds: current.lastFailedCaseIds });
+      current.lastFailedCaseIds = result.failedCaseIds;
       console.info(`[caio-attention-reminders] ${result.casesScanned} cases, ${result.notificationsCreated} notices, `
-        + `${result.notificationsDeduplicated} deduplicated, ${result.failedCaseIds.length} failed`);
+        + `${result.notificationsDeduplicated} deduplicated, ${result.failedCaseIds.length} failed, `
+        + `${Object.values(result.skippedNoRecipient).reduce((sum, n) => sum + (n ?? 0), 0)} without recipient`);
     } catch (error) {
       console.error("[caio-attention-reminders] scan failed", error instanceof Error ? error.message : String(error));
     }
@@ -66,7 +73,7 @@ export async function runCaioAttentionScanTick(now: Date = new Date()): Promise<
       ["W1", () => watchdogs.runCaioAttentionGenerationWatchdog({ client: db, now, watchdogRoleKey: config.watchdogRoleKey })],
       ["W2", () => watchdogs.runCaioAttentionQuickCheckWatchdog({ client: db, now, watchdogRoleKey: config.watchdogRoleKey })],
       ["W3", () => watchdogs.runCaioAttentionEvaluationWatchdog({
-        client: db, now, monitoredDetectorIds: config.monitoredDetectorIds, watchdogRoleKey: config.watchdogRoleKey })],
+        client: db, now, routeRules: config.routeRules, watchdogRoleKey: config.watchdogRoleKey })],
       ["W4", () => watchdogs.runCaioAttentionNodeWatchdog({ client: db, now, watchdogRoleKey: config.watchdogRoleKey })],
       ["W5", () => watchdogs.runCaioAttentionPeopleWatchdog({ client: db })],
     ];
