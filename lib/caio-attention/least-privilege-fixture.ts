@@ -61,6 +61,7 @@ export const CAIO_ATTENTION_NEIGHBOUR_GRANTS: typeof CAIO_ATTENTION_GRANT_MATRIX
   CaioAnomalyCandidate: { attention_generator: { privileges: ["SELECT", "UPDATE"] } },
   Membership: { attention_generator: { privileges: S }, attention_web: { privileges: S } },
   Notification: { attention_web: { privileges: SI } },
+  User: { attention_web: { privileges: S } }, // display names on the case page
 };
 
 export function caioAttentionTableGrant(identity: CaioAttentionFixtureIdentity, table: string): CaioAttentionTableGrant | null {
