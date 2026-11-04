@@ -1,4 +1,4 @@
-import { caioAttentionBoundPageService } from "@/lib/caio-attention-runtime/bound-page-service";
+import { caioAttentionBoundPageService, getCaioAttentionBoundPagePolicy } from "@/lib/caio-attention-runtime/bound-page-service";
 
 import type { CaioAttentionPageService } from "./service-contract";
 
@@ -23,7 +23,12 @@ export const CAIO_ATTENTION_UNAVAILABLE_SERVICE: CaioAttentionPageService = {
 // Bound to the lifecycle service and its authorized loader (lib/caio-attention-runtime/page-service.ts).
 const boundService: CaioAttentionPageService | null = caioAttentionBoundPageService;
 
-export const CAIO_ATTENTION_PAGE_SERVICE_BOUND = boundService !== null;
+/**
+ * Closable binding: the lifecycle service is bound AND a tenant policy is registered, so commands can actually run.
+ * A bound service without a policy still serves reads, but every command answers `service_unavailable`; reporting it
+ * as bound would let the capability probe declare a node closable that cannot close anything (S5c review P1-3).
+ */
+export const CAIO_ATTENTION_PAGE_SERVICE_BOUND = boundService !== null && getCaioAttentionBoundPagePolicy() !== null;
 
 /**
  * Close capability follows the binding: 1 only when the real lifecycle service serves these pages. The release

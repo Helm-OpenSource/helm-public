@@ -44,7 +44,7 @@ Until wired, `features/caio-attention/service.ts` serves a fail-closed stub (emp
 
 ## Capability and guard
 
-- `lib/caio-attention/capability.json` is `closeCapabilityVersion: 0` for now; the change that binds the lifecycle service raises it to 1, meaning the release can close cases. The intake gate opens only when `requiredCloseCapability` is 1 and every expected node reports capability 1.
+- `lib/caio-attention/capability.json` is `closeCapabilityVersion: 0` for now; the change that binds the lifecycle service and registers the tenant policy raises it to 1, meaning the release can close cases (with the service bound but no policy, reads work, every command answers `service_unavailable`, the binding flag is false and the file stays 0). The intake gate opens only when `requiredCloseCapability` is 1 and every expected node reports capability 1.
 - `npm run check:caio-attention` (CI repo-guards): no generic governed-task tables; no direct database access from the page layer; pages read through the page service only; the capability declaration equals the binding-derived value and ships with the close-chain forms; the stub stays closed while unbound.
 
 ## Navigation entry

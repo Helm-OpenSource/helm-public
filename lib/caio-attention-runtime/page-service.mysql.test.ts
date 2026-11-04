@@ -74,6 +74,15 @@ describeMysql("CAIO attention page service bound to the lifecycle (web identity)
     expect(await service.listCases({ viewer: viewer("primary"), scope: "mine", page: 1, pageSize: 20 })).toMatchObject({ total: 1, items: [{ caseId, viewerRoles: ["primary"] }] });
     const dispatched = await service.loadCase({ viewer: viewer("primary"), caseId, sourcePage: "/t" });
     expect(dispatched.ok && dispatched.view.allowedOperations).toEqual(["ack", "note", "submitDisposition"]);
+    // A `user:<id>` viewer is the same person as the bare id (canonicalised like the loader).
+    const prefixed = { workspaceId, actor: { ...viewer("primary").actor, userId: `user:${people.primary}` } };
+    expect(await service.listCases({ viewer: prefixed, scope: "mine", page: 1, pageSize: 20 })).toMatchObject({ items: [{ caseId, viewerRoles: ["primary"] }] });
+    // Bound without a policy: reads still work, nothing is offered, every command fails closed.
+    const readOnly = await unbound.loadCase({ viewer: viewer("primary"), caseId, sourcePage: "/t" });
+    expect(readOnly.ok && readOnly.view).toMatchObject({ status: "DISPATCHED", viewerRoles: ["primary"], allowedOperations: [] });
+    expect(await unbound.listCases({ viewer: viewer("primary"), scope: "mine", page: 1, pageSize: 20 })).toMatchObject({ total: 1 });
+    expect(await unbound.runCommand({ viewer: viewer("primary"), caseId, op: "ack", expectedCommandVersion: 1, clientRequestId: rid() }))
+      .toEqual({ ok: false, reason: "service_unavailable" });
 
     const submit = { viewer: viewer("primary"), caseId, expectedCommandVersion: 1, clientRequestId: rid(), op: "submitDisposition" as const,
       disposedAt: new Date(), actionTaken: "restarted the job", note: null, evidenceRefs: ["ticket:OPS-9"] };
