@@ -85,10 +85,9 @@ describe("check:caio-attention", () => {
     expect(route).toContain("resolveCaioAttentionNodeCloseCapability(");
     expect(route).not.toMatch(/closeCapabilityVersion:\s*parseCaioAttentionCapabilityFile/u);
     expect(read("lib/caio-attention/heartbeat.service.ts")).toContain("getRegisteredCaioAttentionPack()?.policy != null");
-    expect(read("lib/runtime/node-instrumentation.ts")).toContain("CAIO_ATTENTION_CLOSE_CHAIN_BINDING.pageServiceBound");
-    // The resolver must actually be handed to the heartbeat (lib/runtime/node-instrumentation.caio-heartbeat.test.ts
-    // proves the call at runtime).
-    expect(read("lib/runtime/node-instrumentation.ts")).toMatch(/startCaioAttentionHeartbeat\([^;]*,\s*closeChainBound\)/u);
+    // The reminder cron and the RuntimeNode heartbeat are not wired into process startup in this release: the bootstrap
+    // file stays byte-identical to the admitted one and is wired together with the next admission update.
+    expect(read("lib/runtime/node-instrumentation.ts")).not.toMatch(/caio-attention|CaioAttention/u);
     const detail = read("app/(workspace)/caio/attention/[caseId]/page.tsx");
     for (const marker of ['kind="disposition"', 'kind="review"', "CaioAttentionConfirmForm"]) expect(detail, marker).toContain(marker);
     expect(read("features/caio-attention/actions.ts")).toMatch(/getCaioAttentionPageService\(\)\.runCommand\(/u);
