@@ -94,7 +94,8 @@ describe("module purity", () => {
     for (const exempt of IO_EXEMPT) expect(files, exempt).toContain(exempt);
     expect(files.some((name) => name.includes("/")), "subdirectories are scanned").toBe(true);
     for (const file of files.filter((name) => !name.endsWith(".service.ts") && !IO_EXEMPT.includes(name))) {
-      const specifiers = [...readFileSync(path.join(root, file), "utf8").matchAll(/from "([^"]+)"/gu)].map((match) => match[1]);
+      // `from "x"`, side-effect `import "x"` and dynamic `import("x")` all count.
+      const specifiers = [...readFileSync(path.join(root, file), "utf8").matchAll(/(?:from|import)\s*\(?\s*"([^"]+)"/gu)].map((match) => match[1]);
       for (const specifier of specifiers) expect(specifier.startsWith(".") || allowed.has(specifier), `${file}: ${specifier}`).toBe(true);
     }
   });

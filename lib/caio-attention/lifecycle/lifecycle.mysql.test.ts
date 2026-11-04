@@ -141,6 +141,8 @@ describeMysql("CAIO attention OWNER lifecycle on MySQL (web identity)", () => {
     expect(await confirmCaioAttentionCase(deps, request)).toMatchObject({ ok: true, replayed: false });
     expect(await confirmCaioAttentionCase(deps, request)).toMatchObject({ ok: true, replayed: true, commandVersion: 1 });
     expect(await cancelCaioAttentionCase(deps, { ...request, expectedCommandVersion: 1 })).toEqual({ ok: false, reason: "client_request_conflict" });
+    // Someone who cannot read the case learns nothing from a colliding request id: readability is checked first.
+    expect(await cancelCaioAttentionCase(deps, { ...request, actorUserId: people.outsider, expectedCommandVersion: 1 })).toEqual({ ok: false, reason: "not_found" });
     expect((await events(caseId)).map((e) => e.kind)).toEqual(["SUGGESTED", "CONFIRMED"]);
   });
 
