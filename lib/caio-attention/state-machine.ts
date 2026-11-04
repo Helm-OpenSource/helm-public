@@ -114,7 +114,7 @@ export function authorizeCaioAttentionOperation(input: Readonly<{
 
 /**
  * Before confirmation only OWNER and ADMIN can read a case. After it, the current command's people and
- * reviewer set can too. ADMIN reads are supervisory and must write a READ audit event each time.
+ * reviewer set can too. Every ADMIN read, participant or not, must write a READ audit event.
  * Earlier command versions' participants keep read-only access once the case is terminal.
  */
 export function canReadCaioAttentionCase(
@@ -128,6 +128,6 @@ export function canReadCaioAttentionCase(
     actor.userId === parties.primaryUserId || parties.ccUserIds.includes(actor.userId)
     || actor.userId === parties.escalationUserId || parties.reviewerUserIds.includes(actor.userId)
     || (isCaioAttentionTerminal(parties.status) && historicalParticipantIds.includes(actor.userId)));
-  if (participant) return { ok: true, auditRead: false };
-  return actor.role === "ADMIN" ? { ok: true, auditRead: true } : { ok: false, auditRead: false };
+  if (actor.role === "ADMIN") return { ok: true, auditRead: true };
+  return { ok: participant, auditRead: false };
 }
