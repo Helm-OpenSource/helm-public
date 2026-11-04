@@ -9,7 +9,7 @@ import {
   type CaioAttentionOwnerCommandInput,
 } from "./core";
 import { diffCaioAttentionPrefill, validateCaioAttentionOwnerCommand, type CaioAttentionOwnerCommandPeople } from "../routing";
-import { caioAttentionDispatchFields } from "../schedule";
+import { caioAttentionDispatchFields, caioAttentionResumeDeferredFields } from "../schedule";
 import { authorizeCaioAttentionOperation } from "../state-machine";
 
 /**
@@ -118,7 +118,9 @@ function ownerTransition(
       }
       status = "DEFERRED";
       payload.deferredUntil = until.toISOString();
-      await casCaioAttentionCase(tx, row, { status, deferredUntil: until });
+      // A deferred case owes the OWNER no pending-confirmation notice: disarm R0a / R0b (a notice not yet sent by the
+      // scanner never goes out). Resume re-arms them; a raise to critical while deferred arms R0a once (v5 §3).
+      await casCaioAttentionCase(tx, row, { status, deferredUntil: until, r0aDueAt: null, r0aSentAt: null, r0bDueAt: null, r0bSentAt: null });
     } else {
       status = op === "dismiss" ? "DISMISSED" : "CANCELLED";
       if (row.status === "DISPOSITION_SUBMITTED") {
@@ -174,7 +176,8 @@ export function assignCaioAttentionReviewers(
 
 /**
  * System step once `deferredUntil` has passed (DEFERRED -> SUGGESTED), behind the intake gate. A critical case
- * re-arms the pending-confirmation reminder pair, so the OWNER is told again (S1 review P1-1).
+ * re-arms the pending-confirmation reminder pair, so the OWNER is told again (S1 review P1-1); the R0a dedupe key
+ * carries the re-armed due time, so the second notice is not swallowed by the first round's key.
  */
 export function resumeDeferredCaioAttentionCase(
   deps: CaioAttentionLifecycleDeps, request: Readonly<{ workspaceId: string; caseId: string }>,
@@ -186,14 +189,14 @@ export function resumeDeferredCaioAttentionCase(
     if (row.status !== "DEFERRED") return rejectCaioAttention("invalid_status");
     const now = deps.now?.() ?? new Date();
     if (!row.deferredUntil || row.deferredUntil.getTime() > now.getTime()) return rejectCaioAttention("not_due");
-    const rearm = row.effectiveSeverity === "critical";
-    await casCaioAttentionCase(tx, row, {
-      status: "SUGGESTED", deferredUntil: null,
-      ...(rearm ? { r0aDueAt: now, r0aSentAt: null, r0bDueAt: null, r0bSentAt: null } : {}),
-    });
+    const rearm = caioAttentionResumeDeferredFields(row.effectiveSeverity as CaioAttentionSeverity, now);
+    await casCaioAttentionCase(tx, row, { status: "SUGGESTED", deferredUntil: null, ...rearm });
+    // One RESUMED per defer cycle: the ordinal (counted under the case lock) keeps two cycles with the same
+    // deferredUntil from colliding on the event's unique (caseId, kind, dedupeKey).
+    const cycle = (await tx.caioAttentionCaseEvent.count({ where: { caseId: row.id, kind: "RESUMED" } })) + 1;
     await appendCaioAttentionEvent(tx, {
-      caseId: row.id, kind: "RESUMED", commandVersion: row.commandVersion, dedupeKey: `resume:${row.deferredUntil.toISOString()}`,
-      payload: { deferredUntil: row.deferredUntil.toISOString(), rearmedPendingReminder: rearm },
+      caseId: row.id, kind: "RESUMED", commandVersion: row.commandVersion, dedupeKey: `resume:${cycle}:${row.deferredUntil.toISOString()}`,
+      payload: { deferredUntil: row.deferredUntil.toISOString(), rearmedPendingReminder: Object.keys(rearm).length > 0 },
     });
     return accepted(row.id, "SUGGESTED", row.commandVersion);
   });
