@@ -5,6 +5,8 @@
 //   2. Pages and page components never reach the database directly; case content is read only through the
 //      authorized loader behind getCaioAttentionPageService().
 //   3. Until the lifecycle service is bound, the page service is fail closed: no rows, no case, no command.
+//   4. lib/caio-attention/capability.json declares close capability >= 1 only while the close chain's pages
+//      (disposition and review forms through the single command action) are present in the same release.
 // Passing it is a structural statement, not a readiness or activation claim.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
@@ -48,6 +50,15 @@ describe("check:caio-attention", () => {
     const pages = sourceFiles("app/(workspace)/caio/attention").filter((file) => file.endsWith("page.tsx"));
     expect(pages.length).toBeGreaterThanOrEqual(3);
     for (const page of pages) expect(read(page), page).toMatch(/getCaioAttentionPageService\(\)/u);
+  });
+
+  it("declares close capability only together with the close-chain forms", () => {
+    const capability = JSON.parse(read("lib/caio-attention/capability.json")) as { schemaVersion?: unknown; closeCapabilityVersion?: unknown };
+    expect(capability.schemaVersion).toBe("caio-attention-capability/v1");
+    expect(Number.isInteger(capability.closeCapabilityVersion) && (capability.closeCapabilityVersion as number) >= 1).toBe(true);
+    const detail = read("app/(workspace)/caio/attention/[caseId]/page.tsx");
+    for (const marker of ['kind="disposition"', 'kind="review"', "CaioAttentionConfirmForm"]) expect(detail, marker).toContain(marker);
+    expect(read("features/caio-attention/actions.ts")).toMatch(/getCaioAttentionPageService\(\)\.runCommand\(/u);
   });
 
   it("serves nothing while the lifecycle service is unbound", async () => {
