@@ -79,7 +79,7 @@ describe("enterprise suffix", () => {
 describe("module purity", () => {
   // IO boundary (database access): every `*.service.ts` plus the explicitly listed shared plumbing. Everything else,
   // in every subdirectory, stays pure. A listed exemption that no longer exists fails, so the list cannot go stale.
-  const IO_EXEMPT = ["lifecycle/core.ts"];
+  const IO_EXEMPT = ["lifecycle/core.ts", "lifecycle/case-loader.ts"];
   const root = path.dirname(new URL(import.meta.url).pathname);
   const walk = (dir: string): string[] => readdirSync(path.join(root, dir), { withFileTypes: true }).flatMap((entry) => {
     const relative = dir ? `${dir}/${entry.name}` : entry.name;

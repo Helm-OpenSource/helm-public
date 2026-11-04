@@ -93,6 +93,7 @@ export type CaioAttentionOwnerCommandPeople = Readonly<{
 
 export type CaioAttentionCommandError = "enterprise_unverified" | "primary_missing" | "primary_inactive"
   | "primary_is_confirmer" | "cc_inactive" | "escalation_missing" | "escalation_inactive" | "escalation_is_primary" | "escalation_in_cc"
+  | "primary_in_cc"
   | "reviewer_missing"
   | "reviewer_inactive" | "reviewer_not_capable" | "reviewer_conflict" | "committed_due_missing";
 
@@ -111,6 +112,8 @@ export function validateCaioAttentionOwnerCommand(input: Readonly<{
   else if (!isActive(command.primaryUserId)) errors.add("primary_inactive");
   if (command.primaryUserId && command.primaryUserId === input.confirmerUserId) errors.add("primary_is_confirmer");
   if (command.ccUserIds.some((id) => !isActive(id))) errors.add("cc_inactive");
+  // cc is "for information": the primary (and, below, the escalation person) never doubles as a cc recipient.
+  if (command.primaryUserId && command.ccUserIds.includes(command.primaryUserId)) errors.add("primary_in_cc");
   if (!command.escalationUserId) errors.add("escalation_missing");
   else if (!isActive(command.escalationUserId)) errors.add("escalation_inactive");
   if (command.escalationUserId && command.escalationUserId === command.primaryUserId) errors.add("escalation_is_primary");

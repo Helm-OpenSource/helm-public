@@ -219,7 +219,8 @@ export function resumeDeferredCaioAttentionCase(
  * System step consuming the generator's SEVERITY_RAISED event (warning -> critical). The CAS on effectiveSeverity is
  * the consumption mark, so a replay is a no-op. committedDueAt and the owner command never change; only the system
  * escalation and reminder times move (design v4 §6.2, v6 §3.3, owner ruling §6.8). Not gated: it creates nothing.
- * A DEFERRED case only switches severity here; resuming it re-arms the pending reminder.
+ * A SUGGESTED or DEFERRED case arms R0a at the raise time (r0aSentAt cleared), so the scanner tells the OWNER once
+ * even while deferred (v5 §3, owner ruling); resuming later re-arms the pending pair again.
  */
 export function applyCaioAttentionSeverityRaise(
   deps: CaioAttentionLifecycleDeps, request: Readonly<{ workspaceId: string; caseId: string }>,

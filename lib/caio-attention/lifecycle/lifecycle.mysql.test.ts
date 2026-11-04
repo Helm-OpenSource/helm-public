@@ -6,7 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { CaioAttentionLifecycleDeps } from "./core";
 import {
   assignCaioAttentionReviewers, cancelCaioAttentionCase, confirmCaioAttentionCase, deferCaioAttentionCase,
-  dismissCaioAttentionCase, reissueCaioAttentionCase, resumeDeferredCaioAttentionCase,
+  applyCaioAttentionSeverityRaise, dismissCaioAttentionCase, reissueCaioAttentionCase, resumeDeferredCaioAttentionCase,
 } from "./lifecycle.service";
 import type { CaioAttentionSeverity } from "../contracts";
 import { CAIO_ATTENTION_TEST_DEFAULT_POLICY, collectDueCaioAttentionReminders } from "../schedule";
@@ -262,6 +262,18 @@ describeMysql("CAIO attention OWNER lifecycle on MySQL (web identity)", () => {
       deferredUntil: new Date(now.getTime() + 60_000) })).toMatchObject({ ok: true, status: "DEFERRED" });
     await scanR0a(caseId, new Date(now.getTime() + 30_000));
     expect(await r0aNotices()).toEqual([]);
+  });
+
+  it("arms R0a once when a deferred case is raised to critical, so the OWNER is told while it stays deferred", async () => {
+    const caseId = await seedCase("warning", "DEFERRED");
+    await admin.$executeRaw`UPDATE CaioAttentionCase SET deferredUntil = ${new Date(now.getTime() + 3_600_000)} WHERE id = ${caseId}`;
+    const raisedAt = new Date(now.getTime() + 60_000);
+    await admin.caioAttentionCaseEvent.create({ data: { caseId, kind: "SEVERITY_RAISED", dedupeKey: "critical", payloadJson: "{}", createdAt: raisedAt } });
+    expect(await applyCaioAttentionSeverityRaise(deps, { workspaceId, caseId })).toMatchObject({ ok: true, status: "DEFERRED", replayed: false });
+    expect(await caseRow(caseId)).toMatchObject({ status: "DEFERRED", effectiveSeverity: "critical", r0aDueAt: raisedAt, r0aSentAt: null });
+    await scanR0a(caseId, raisedAt);
+    await scanR0a(caseId, new Date(raisedAt.getTime() + 45 * 60_000)); // no R0b repeat while deferred
+    expect(await r0aNotices()).toEqual([`ca:${caseId}:R0a:${raisedAt.toISOString()}:${people.owner}`]);
   });
 
   it("records one RESUMED event per defer cycle", async () => {
