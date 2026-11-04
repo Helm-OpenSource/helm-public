@@ -1849,7 +1849,10 @@ export async function getOrgAdminGovernanceSummary(
     workspaceIsolationAssertions,
     recentOrgAdminAudit: recentOrgAdminAudit.map(mapAuditRecord),
     recentDataGovernanceAudit: recentDataGovernanceAudit.map(mapAuditRecord),
+    // The two lists above hold at most 8 events created on or after `since`; they are not the full history.
+    recentAuditWindow: { days: RECENT_AUDIT_LOOKBACK_DAYS, since: recentAuditSince, limit: 8 },
     boundaryNotes: [
+      `Recent org-admin and data-governance audit lists hold at most 8 events from the last ${RECENT_AUDIT_LOOKBACK_DAYS} days (recentAuditWindow); older events stay in the audit log and are not part of these lists.`,
       "Support pack is tenant-scoped to the active workspace only.",
       "This export is audit-oriented and does not expand execution authority.",
       "Retention, export, delete, and session posture remain review-first governance controls.",

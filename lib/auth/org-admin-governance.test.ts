@@ -1253,6 +1253,14 @@ describe("org admin governance support pack", () => {
     expect(pack.summary.recentOrgAdminAudit[0]?.actionType).toBe("ORGANIZATION_MEMBER_ROLE_UPDATED");
     expect(pack.summary.recentDataGovernanceAudit[0]?.actionType).toBe("MEMORY_SUMMARY_EXPORTED");
     expect(pack.summary.boundaryNotes.length).toBeGreaterThan(0);
+    // The support pack says the two recent lists are a bounded window, not the full history.
+    expect(pack.summary.recentAuditWindow).toMatchObject({ days: RECENT_AUDIT_LOOKBACK_DAYS, limit: 8 });
+    expect(Date.now() - pack.summary.recentAuditWindow.since.getTime()).toBeGreaterThanOrEqual(
+      (RECENT_AUDIT_LOOKBACK_DAYS - 1) * 86_400_000,
+    );
+    expect(pack.summary.boundaryNotes).toContain(
+      `Recent org-admin and data-governance audit lists hold at most 8 events from the last ${RECENT_AUDIT_LOOKBACK_DAYS} days (recentAuditWindow); older events stay in the audit log and are not part of these lists.`,
+    );
     expect(pack.summary.boundaryNotes).toContain(
       "Webhook tenancy governance only records callbacks once tenant mapping is asserted; unresolved external callbacks remain outside workspace-scoped support-pack truth.",
     );
