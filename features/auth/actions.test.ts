@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { AuthCodeChannel, AuthCodePurpose, MembershipStatus, WorkspaceRole } from "@prisma/client";
 import { hashPassword, hashVerificationCode } from "@/lib/auth/formal-auth";
 import { writePublicOauthSignupPrefillCookie } from "@/lib/auth/public-oauth";
@@ -1733,6 +1734,21 @@ describe("password login action", () => {
       error: "Incorrect email/phone or password.",
     });
     expect(mocks.session.createSession).not.toHaveBeenCalled();
+  });
+});
+
+describe("invite-pending bilingual copy", () => {
+  it("describes only this workspace's pending invitation and member-owned next steps", () => {
+    const page = readFileSync(new URL("../../app/(auth)/invite-pending/page.tsx", import.meta.url), "utf8");
+
+    expect(page).toContain(
+      "This workspace invitation is still pending, so this workspace is not available yet. Automatic invite activation is disabled for this workspace. Ask its owner or an admin to review the setting; they cannot accept the invitation for you. If enabled, sign in and choose this workspace yourself.",
+    );
+    expect(page).toContain(
+      "此工作区邀请仍待处理，当前工作区尚未激活，暂不可访问。此工作区已关闭自动激活邀请。请联系工作区负责人或管理员检查设置；他们不能代替你接受邀请。若设置开启，请由你本人重新登录并选择此工作区。",
+    );
+    expect(page).not.toContain("no workspace access was granted");
+    expect(page).not.toContain("尚未授予工作区访问权限");
   });
 });
 
