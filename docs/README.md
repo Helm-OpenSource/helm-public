@@ -158,6 +158,7 @@ Those materials belong in private repositories or private issue / PR records,
 not in `helm-public`.
 
 - [CAIO governed read extension](product/CAIO_GOVERNED_READ_EXTENSION.md) — explicit, default-off read composition; deployment identity and source ports required.
+- [CAIO 运营关注事项页面 / attention pages](product/HELM_CAIO_ATTENTION_PAGES.md) — 默认关闭；页面只经授权 loader 读取，确认、处置、复核由真人完成。Default-off; reads only through the authorized loader.
 
 LLM 预算交付请核对 [签名金额元数据注册与原子预约边界](operations/LLM_SPEND_RESERVATION_CONTRACT.md)：默认无发行记录且收费权威未启用；本地合成验证不证明真实定价、用量或生产限额。
 
