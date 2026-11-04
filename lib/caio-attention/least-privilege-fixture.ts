@@ -41,6 +41,14 @@ export const CAIO_ATTENTION_GRANT_MATRIX: Readonly<Record<string, Readonly<Parti
   CaioDetectorEvaluation: { attention_generator: { privileges: SI }, attention_web: { privileges: S } },
 };
 
+/**
+ * Existing tables outside the attention set that a fixture identity touches, mirroring the deployed ACLs: the web
+ * identity re-reads membership and role (FOR SHARE) inside every lifecycle transaction.
+ */
+export const CAIO_ATTENTION_NEIGHBOUR_GRANTS: typeof CAIO_ATTENTION_GRANT_MATRIX = {
+  Membership: { attention_web: { privileges: S } },
+};
+
 export function caioAttentionTableGrant(identity: CaioAttentionFixtureIdentity, table: string): CaioAttentionTableGrant | null {
   return CAIO_ATTENTION_GRANT_MATRIX[table]?.[identity] ?? null;
 }
@@ -54,7 +62,7 @@ function identifier(value: string): string {
 export function renderCaioAttentionGrantSql(database: string, host = "%"): string {
   if (!/^[A-Za-z0-9_.%-]+$/u.test(host)) throw new Error(`unsafe MySQL host: ${host}`);
   const lines: string[] = [];
-  for (const [table, byIdentity] of Object.entries(CAIO_ATTENTION_GRANT_MATRIX)) {
+  for (const [table, byIdentity] of Object.entries({ ...CAIO_ATTENTION_GRANT_MATRIX, ...CAIO_ATTENTION_NEIGHBOUR_GRANTS })) {
     for (const identity of CAIO_ATTENTION_FIXTURE_IDENTITIES) {
       const grant = byIdentity[identity];
       if (!grant) continue;
