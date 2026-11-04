@@ -59,7 +59,7 @@ const PROBES: Record<CaioAttentionPrivilege, (table: string, column: string) => 
   DELETE: (table) => `DELETE FROM \`${table}\` WHERE 1 = 0`,
 };
 
-describeMysql("CAIO attention control plane on MySQL with least-privilege identities", () => {
+describeMysql("CAIO attention tables on MySQL with least-privilege identities", () => {
   const clients = {} as Record<"admin" | CaioAttentionFixtureIdentity, PrismaClient>;
   let admin: PrismaClient, generator: PrismaClient, web: PrismaClient, ops: PrismaClient;
 
@@ -114,6 +114,10 @@ describeMysql("CAIO attention control plane on MySQL with least-privilege identi
     await admin.$executeRaw`DELETE FROM CaioAttentionPauseRequest`;
     await admin.$executeRaw`DELETE FROM CaioAttentionNodeReadiness`;
     await admin.$executeRaw`DELETE FROM CaioAttentionRuntimeNode`;
+    for (const table of ["CaioAttentionCase", "CaioAttentionCaseEvent", "CaioAttentionDisposition", "CaioAttentionReview",
+      "CaioAttentionRouteConfig", "CaioAttentionRouteConfigHead", "CaioDetectorEvaluation"]) {
+      await admin.$executeRawUnsafe(`DELETE FROM \`${table}\``);
+    }
     await admin.$executeRaw`UPDATE CaioAttentionControl SET intakeState = 'PAUSED', epoch = 0, openEpoch = 0, leaseToken = NULL,
       leaseNodeId = NULL, leaseTargetDeploymentId = NULL, leaseAcquiredAt = NULL, leaseExpiresAt = NULL WHERE id = 'global'`;
   });
@@ -225,6 +229,88 @@ describeMysql("CAIO attention control plane on MySQL with least-privilege identi
     expect(await errnoOf(ops.$executeRaw`UPDATE CaioAttentionNodeReadiness SET revokedAt = NOW(3), revokedByRef = 'x', revokedEpoch = 0
       WHERE id = 'node-x-3'`)).toBe("3819");
     expect(await errnoOf(ops.$executeRaw`UPDATE CaioAttentionControl SET intakeState = 'DEPLOYING' WHERE id = 'global'`)).toBe("3819");
+  });
+
+  /** A SUGGESTED case as the generator writes it; ids are synthetic (no foreign keys). */
+  function insertCase(client: PrismaClient | Prisma.TransactionClient, id: string, shortNo: number, activeKey: string | null,
+    status = "SUGGESTED", origin = `cand-${id}`) {
+    return client.$executeRaw`INSERT INTO CaioAttentionCase (id, workspaceId, shortNo, detectorId, mergeKey, objectKey, category,
+      originCandidateId, activeKey, status, ccUserIdsJson, reviewerUserIdsJson, severityAtSuggest, effectiveSeverity, reminderPolicy)
+      VALUES (${id}, 'ws-a', ${shortNo}, 'det', 'mk', 'obj', 'business', ${origin}, ${activeKey}, ${status}, '[]', '[]',
+        'warning', 'warning', 'warning')`;
+  }
+  const event = (client: PrismaClient, id: string, kind: string, extra: { candidateId?: string; dedupeKey?: string; clientRequestId?: string }) =>
+    client.$executeRaw`INSERT INTO CaioAttentionCaseEvent (id, caseId, kind, candidateId, dedupeKey, clientRequestId, payloadJson)
+      VALUES (${id}, 'case-1', ${kind}, ${extra.candidateId ?? null}, ${extra.dedupeKey ?? null}, ${extra.clientRequestId ?? null}, '{}')`;
+
+  it("reports tables an identity holds no grant on as missing", async () => {
+    await expect(probeCaioAttentionSchemaReadiness(generator)).resolves.toEqual({ ready: false, reason: "schema_incomplete",
+      missing: expect.arrayContaining(["CaioAttentionDisposition.id", "CaioAttentionReview.id"]) });
+  });
+
+  it("lets the generator suggest under the intake gate and keeps one live case per active key", async () => {
+    await generator.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT intakeState FROM CaioAttentionControl WHERE id = 'global' FOR SHARE`;
+      await tx.$queryRaw`SELECT id FROM CaioAttentionCase WHERE workspaceId = 'ws-a' AND activeKey = 'det:mk'`;
+      await insertCase(tx, "case-1", 1, "det:mk");
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    expect(await errnoOf(insertCase(generator, "case-2", 2, "det:mk"))).toBe("1062");
+    expect(await errnoOf(insertCase(generator, "case-9", 9, "det:other", "SUGGESTED", "cand-case-1"))).toBe("1062");
+    expect(await errnoOf(insertCase(generator, "case-3", 3, null))).toBe("3819");
+    expect(await errnoOf(insertCase(generator, "case-4", 4, "det:mk", "CLOSED"))).toBe("3819");
+    expect(await errnoOf(insertCase(generator, "case-5", 5, "det:other", "BOGUS"))).toBe("3819");
+
+    const cas = () => web.$executeRaw`UPDATE CaioAttentionCase SET status = 'CLOSED', activeKey = NULL, closedAt = NOW(3)
+      WHERE id = 'case-1' AND status = 'SUGGESTED' AND commandVersion = 0`;
+    expect(await cas()).toBe(1);
+    expect(await cas()).toBe(0);
+    await insertCase(generator, "case-6", 6, "det:mk");
+    await insertCase(admin, "case-7", 7, null, "DISMISSED");
+    expect(await errnoOf(insertCase(generator, "case-8", 6, "det:x"))).toBe("1062");
+  });
+
+  it("deduplicates events, dispositions, reviews and evaluations by their unique keys", async () => {
+    await event(generator, "e1", "RECURRED", { candidateId: "c1" });
+    expect(await errnoOf(event(generator, "e2", "RECURRED", { candidateId: "c1" }))).toBe("1062");
+    await event(generator, "e3", "SEVERITY_RAISED", { dedupeKey: "critical" });
+    expect(await errnoOf(event(web, "e4", "SEVERITY_RAISED", { dedupeKey: "critical" }))).toBe("1062");
+    await event(web, "e5", "NOTE", { clientRequestId: "req-1" });
+    expect(await errnoOf(event(web, "e6", "ACK", { clientRequestId: "req-1" }))).toBe("1062");
+    await event(web, "e7", "NOTE", {});
+    await event(web, "e8", "NOTE", {});
+
+    const disposition = (id: string, sequence: number) => web.$executeRaw`INSERT INTO CaioAttentionDisposition (id, workspaceId, caseId,
+      commandVersion, sequence, submittedByUserId, disposedAt, outcome, actionTaken, evidenceRefsJson, contentHash)
+      VALUES (${id}, 'ws-a', 'case-1', 1, ${sequence}, 'u1', NOW(3), 'resolved', 'restarted the job', '[]', 'h')`;
+    const review = (id: string, dispositionId: string, decision: string) => web.$executeRaw`INSERT INTO CaioAttentionReview (id, caseId,
+      dispositionId, reviewerUserId, reviewerVersion, decision, attestedExternalRefsJson, note)
+      VALUES (${id}, 'case-1', ${dispositionId}, 'u2', 0, ${decision}, '[]', 'checked')`;
+    await disposition("d1", 1);
+    expect(await errnoOf(disposition("d2", 1))).toBe("1062");
+    await review("r1", "d1", "RETURN");
+    expect(await errnoOf(review("r2", "d1", "ACCEPT"))).toBe("1062");
+    expect(await errnoOf(review("r3", "d9", "APPROVE"))).toBe("3819");
+
+    const evaluation = (id: string, outcome: string) => generator.$executeRaw`INSERT INTO CaioDetectorEvaluation (id, workspaceId, tickId,
+      bucketStart, detectorId, ruleVersion, outcome, hitMergeKeysJson) VALUES (${id}, 'ws-a', 'tick-1', NOW(3), 'det', 'v1', ${outcome}, '[]')`;
+    await evaluation("ev1", "NO_HIT");
+    expect(await errnoOf(evaluation("ev2", "HIT"))).toBe("1062");
+    expect(await errnoOf(generator.$executeRaw`INSERT INTO CaioDetectorEvaluation (id, workspaceId, tickId, bucketStart, detectorId,
+      ruleVersion, outcome, hitMergeKeysJson) VALUES ('ev3', 'ws-a', 'tick-2', NOW(3), 'det', 'v1', 'UNKNOWN', '[]')`)).toBe("3819");
+  });
+
+  it("versions route configs append-only and moves the head optimistically, operator identity only", async () => {
+    const config = (version: number) => ops.$executeRaw`INSERT INTO CaioAttentionRouteConfig (id, workspaceId, version, schemaVersion,
+      configJson, contentHash, createdByRef) VALUES (${`rc-${version}`}, 'ws-a', ${version}, 'caio-attention-routes/v1', '{}', 'h', 'test')`;
+    await config(1);
+    await config(2);
+    expect(await errnoOf(config(2))).toBe("1062");
+    await ops.$executeRaw`INSERT INTO CaioAttentionRouteConfigHead (id, workspaceId, activeVersion, updatedByRef) VALUES ('h1', 'ws-a', 1, 'test')`;
+    const move = () => ops.$executeRaw`UPDATE CaioAttentionRouteConfigHead SET activeVersion = 2, rowVersion = rowVersion + 1
+      WHERE workspaceId = 'ws-a' AND rowVersion = 0`;
+    expect(await move()).toBe(1);
+    expect(await move()).toBe(0);
+    expect(await errnoOf(web.$executeRaw`UPDATE CaioAttentionRouteConfigHead SET activeVersion = 1 WHERE workspaceId = 'ws-a'`)).toBe("1142");
   });
 
   it("lets generator and web upsert their own heartbeat while the operator cannot write one", async () => {
