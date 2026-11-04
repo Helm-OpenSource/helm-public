@@ -45,9 +45,22 @@ export default async function CaioAttentionCasePage({ params }: { params: Promis
   const current = view.currentDisposition;
   const parsedEvidence = current ? parseCaioAttentionEvidenceRefs(current.evidenceRefs) : null;
   const externalRefs = parsedEvidence?.ok ? parsedEvidence.refs.filter((item) => item.role === "external").map((item) => item.ref) : [];
-  const canReview = current !== null && (allowed.has("reviewAccept") || allowed.has("reviewReturn"));
-  const formOps: readonly CaioAttentionOperation[] = ["confirm", "ack", "note", "submitDisposition", "dismiss", "defer", "cancel", "reissue", "assignReviewers"];
-  const hasNextStep = formOps.some((op) => allowed.has(op)) || canReview;
+  // OWNER-only forms additionally need the owner role on this case, so a loader slip cannot expose them to ADMIN.
+  const ownerOnly: ReadonlySet<CaioAttentionOperation> = new Set(["confirm", "dismiss", "defer", "cancel", "reissue", "assignReviewers"]);
+  const may = (op: CaioAttentionOperation) => allowed.has(op) && (!ownerOnly.has(op) || view.viewerRoles.includes("owner"));
+  const show = {
+    confirm: may("confirm"),
+    dismiss: may("dismiss"),
+    defer: may("defer"),
+    reissue: may("reissue") && view.command !== null,
+    assignReviewers: may("assignReviewers") && view.command !== null,
+    cancel: may("cancel"),
+    ack: may("ack"),
+    note: may("note"),
+    disposition: may("submitDisposition"),
+    review: current !== null && (may("reviewAccept") || may("reviewReturn")),
+  };
+  const hasNextStep = Object.values(show).some(Boolean);
   const members = view.assignableUserIds.map((id) => ({ id, label: person(id) }));
   const asProps = (fields: CaioAttentionCommandFields) => ({ ...fields, committedDueAt: fields.committedDueAt?.toISOString() ?? null });
 
@@ -119,15 +132,15 @@ export default async function CaioAttentionCasePage({ params }: { params: Promis
       {hasNextStep ? (
         <section className="space-y-3" data-testid="caio-attention-next-steps">
           <h2 className="font-semibold">{copy.nextStepsTitle}</h2>
-          {allowed.has("confirm") ? (
+          {show.confirm ? (
             <CaioAttentionConfirmForm common={common} prefill={asProps(view.prefill)} members={members} />
           ) : null}
-          {allowed.has("dismiss") ? <CaioAttentionOwnerForm common={common} kind="dismiss" /> : null}
-          {allowed.has("defer") ? <CaioAttentionOwnerForm common={common} kind="defer" /> : null}
-          {allowed.has("reissue") && view.command ? (
+          {show.dismiss ? <CaioAttentionOwnerForm common={common} kind="dismiss" /> : null}
+          {show.defer ? <CaioAttentionOwnerForm common={common} kind="defer" /> : null}
+          {show.reissue && view.command ? (
             <CaioAttentionConfirmForm common={common} op="reissue" prefill={asProps(view.command)} members={members} />
           ) : null}
-          {allowed.has("assignReviewers") && view.command ? (
+          {show.assignReviewers && view.command ? (
             <CaioAttentionOwnerForm
               common={common}
               kind="assignReviewers"
@@ -135,11 +148,11 @@ export default async function CaioAttentionCasePage({ params }: { params: Promis
               reviewers={{ reviewerVersion: view.reviewerVersion, reviewerUserIds: view.command.reviewerUserIds }}
             />
           ) : null}
-          {allowed.has("cancel") ? <CaioAttentionOwnerForm common={common} kind="cancel" /> : null}
-          {allowed.has("ack") ? <CaioAttentionOperationForm common={common} kind="ack" /> : null}
-          {allowed.has("note") ? <CaioAttentionOperationForm common={common} kind="note" /> : null}
-          {allowed.has("submitDisposition") ? <CaioAttentionOperationForm common={common} kind="disposition" /> : null}
-          {canReview && current ? (
+          {show.cancel ? <CaioAttentionOwnerForm common={common} kind="cancel" /> : null}
+          {show.ack ? <CaioAttentionOperationForm common={common} kind="ack" /> : null}
+          {show.note ? <CaioAttentionOperationForm common={common} kind="note" /> : null}
+          {show.disposition ? <CaioAttentionOperationForm common={common} kind="disposition" /> : null}
+          {show.review && current ? (
             <CaioAttentionOperationForm
               common={common}
               kind="review"

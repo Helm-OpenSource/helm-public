@@ -219,7 +219,7 @@ export function CaioAttentionOwnerForm({
   reviewers?: Readonly<{ reviewerVersion: number; reviewerUserIds: readonly string[] }>;
 }) {
   const copy = caioAttentionCopy(common.english);
-  const [state, action, pending] = useActionState(runCaioAttentionCommandAction, IDLE);
+  const [state, action, pending] = useCaioAttentionCommandAction();
   const [untilLocal, setUntilLocal] = useState("");
   const [selected, setSelected] = useState<readonly string[]>(reviewers?.reviewerUserIds ?? []);
   const titles = { dismiss: copy.dismissTitle, defer: copy.deferTitle, cancel: copy.cancelTitle, assignReviewers: copy.assignReviewersTitle };
