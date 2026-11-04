@@ -59,6 +59,8 @@ describe("route rule schema", () => {
   it.each([
     [{ ...rule, primaryFallbackRoleKeys: ["cc_role"] }],
     [{ ...rule, reviewerFallbackRoleKey: "cc_role" }],
+    [{ ...rule, escalationRoleKey: "cc_role" }],
+    [{ ...rule, escalationFallbackRoleKey: "cc_role" }],
     [{ ...rule, compatibleRuleVersions: [] }],
     [{ ...rule, category: "sales" }],
   ])("rejects %j", (raw) => {

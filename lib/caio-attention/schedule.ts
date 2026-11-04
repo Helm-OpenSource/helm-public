@@ -23,9 +23,15 @@ const policySchema = z.object({
   warningPeriodicMinute: minuteOfDay,
   warningDigestMinute: minuteOfDay,
   pendingRepeatMinutes: z.number().int().positive(),
+  // Scans landing just after the window end still send daytime-only reminders that fell due inside it.
+  windowEndGraceMinutes: z.number().int().min(0).max(30),
   consecutiveBuckets: z.object({ warning: z.number().int().min(1).max(12), critical: z.number().int().min(1).max(12) }).strict(),
   maxEvidenceAgeMinutes: z.number().int().positive(),
-}).strict().refine((p) => p.daytimeStartMinute < p.daytimeEndMinute && p.criticalCutoffMinute <= p.criticalSameDayDueMinute, "policy_order");
+}).strict().refine((p) => {
+  const inWindow = (m: number) => m >= p.daytimeStartMinute && m <= p.daytimeEndMinute;
+  return p.daytimeStartMinute < p.daytimeEndMinute && p.criticalCutoffMinute <= p.criticalSameDayDueMinute
+    && [p.criticalSameDayDueMinute, p.criticalNextDayDueMinute, p.warningPeriodicMinute, p.warningDigestMinute].every(inWindow);
+}, "policy_order");
 
 export type CaioAttentionPolicy = z.infer<typeof policySchema>;
 
@@ -38,7 +44,7 @@ export const CAIO_ATTENTION_TEST_DEFAULT_POLICY: CaioAttentionPolicy = {
   utcOffsetMinutes: 480, daytimeStartMinute: 8 * 60, daytimeEndMinute: 20 * 60,
   criticalCutoffMinute: 18 * 60, criticalSameDayDueMinute: 20 * 60, criticalNextDayDueMinute: 12 * 60,
   warningResolveMinutes: 72 * 60, noResponseMinutes: 120, criticalPeriodicMinutes: 120,
-  warningPeriodicMinute: 10 * 60, warningDigestMinute: 9 * 60 + 30, pendingRepeatMinutes: 30,
+  warningPeriodicMinute: 10 * 60, warningDigestMinute: 9 * 60 + 30, pendingRepeatMinutes: 30, windowEndGraceMinutes: 10,
   consecutiveBuckets: { warning: 2, critical: 1 }, maxEvidenceAgeMinutes: 15,
 };
 
@@ -57,6 +63,12 @@ function localDay(at: Date, p: CaioAttentionPolicy): { start: number; offsetMs: 
 export function isWithinCaioAttentionDaytime(at: Date, p: CaioAttentionPolicy): boolean {
   const { offsetMs } = localDay(at, p);
   return offsetMs >= p.daytimeStartMinute * MIN && offsetMs <= p.daytimeEndMinute * MIN;
+}
+
+/** Send gate for daytime-only rules: the window plus a short grace after its end for late scans. */
+export function isWithinCaioAttentionSendWindow(at: Date, p: CaioAttentionPolicy): boolean {
+  const { offsetMs } = localDay(at, p);
+  return offsetMs >= p.daytimeStartMinute * MIN && offsetMs <= (p.daytimeEndMinute + p.windowEndGraceMinutes) * MIN;
 }
 
 /** Daytime-only rules: a due time outside the window moves to the next window opening (one send). */
@@ -127,20 +139,31 @@ export function caioAttentionDispatchFields(severity: CaioAttentionSeverity, dis
   };
 }
 
+const rearmPending = (at: Date): Partial<CaioAttentionReminderFields> =>
+  ({ r0aDueAt: at, r0aSentAt: null, r0bDueAt: null, r0bSentAt: null });
+
 /**
- * Warning -> critical while being worked. `committedDueAt` and the owner command are untouched.
- * R1 restarts from the raise if the primary has not responded, and is dropped if they already have.
+ * Warning -> critical. `committedDueAt` and the owner command are untouched. Idempotent: a case that is
+ * already critical gets no change. Pending (SUGGESTED) or deferred cases notify the OWNER at once.
+ * While working, R1 restarts from the raise if the primary has not responded and is dropped if they have.
  */
 export function caioAttentionSeverityRaiseFields(
-  status: CaioAttentionStatus, fields: CaioAttentionReminderFields, respondedAt: Date | null, raisedAt: Date, p: CaioAttentionPolicy,
+  status: CaioAttentionStatus, effectiveSeverity: CaioAttentionSeverity, fields: CaioAttentionReminderFields,
+  respondedAt: Date | null, raisedAt: Date, p: CaioAttentionPolicy,
 ): Partial<CaioAttentionReminderFields> {
-  if (status === "SUGGESTED") return fields.r0aSentAt ? {} : { r0aDueAt: raisedAt };
+  if (effectiveSeverity === "critical") return {};
+  if (status === "SUGGESTED" || status === "DEFERRED") return rearmPending(raisedAt);
   if (status !== "DISPATCHED" && status !== "DISPOSITION_SUBMITTED") return {};
   return {
     noResponseDueAt: respondedAt ? null : plus(raisedAt, p.noResponseMinutes),
     unresolvedEscalateAt: earlier(fields.unresolvedEscalateAt, caioAttentionCriticalDueAt(raisedAt, p)),
     nextPeriodicAt: clampToCaioAttentionDaytime(earlier(fields.nextPeriodicAt, raisedAt), p),
   };
+}
+
+/** deferredUntil reached, back to SUGGESTED: a critical case starts R0a / R0b again; warnings use the digest. */
+export function caioAttentionResumeDeferredFields(severity: CaioAttentionSeverity, resumedAt: Date): Partial<CaioAttentionReminderFields> {
+  return severity === "critical" ? rearmPending(resumedAt) : {};
 }
 
 export type CaioAttentionReminderCase = Readonly<{
@@ -164,7 +187,7 @@ export function collectDueCaioAttentionReminders(
   const sends: CaioAttentionReminderSend[] = [];
   const updates: Partial<CaioAttentionReminderFields> = {};
   const due = (at: Date | null): at is Date => at !== null && at.getTime() <= now.getTime();
-  const daytime = isWithinCaioAttentionDaytime(now, p);
+  const daytime = isWithinCaioAttentionSendWindow(now, p);
   const send = (rule: CaioAttentionReminderRule, recipients: (string | null)[], key: (userId: string) => string) => {
     const ids = [...new Set(recipients.filter((id): id is string => Boolean(id)))];
     sends.push({ rule, notifications: ids.map((userId) => ({ userId, dedupeKey: key(userId) })) });
@@ -181,13 +204,17 @@ export function collectDueCaioAttentionReminders(
     send("R2", [c.escalationUserId], (u) => `${base}:R2:${v}:${c.effectiveSeverity}:${u}`);
     updates.r2FiredSeverity = c.effectiveSeverity;
   }
-  if (c.status === "SUGGESTED" && c.effectiveSeverity === "critical") {
+  // R0 only. A deferred case gets the single OWNER notice (R0a) but no repeat until it resumes.
+  const pending = c.status === "SUGGESTED" || c.status === "DEFERRED";
+  if (pending && c.effectiveSeverity === "critical") {
     if (!f.r0aSentAt && due(f.r0aDueAt)) {
-      send("R0a", [...c.ownerUserIds], (u) => `${base}:R0a:${u}`);
+      const slot = f.r0aDueAt.toISOString(); // re-armed after resume, so the key carries the due time
+      send("R0a", [...c.ownerUserIds], (u) => `${base}:R0a:${slot}:${u}`);
       updates.r0aSentAt = now;
       updates.r0bDueAt = plus(now, p.pendingRepeatMinutes);
-    } else if (f.r0aSentAt && !f.r0bSentAt && due(f.r0bDueAt)) {
-      send("R0b", [...c.ownerUserIds], (u) => `${base}:R0b:${u}`);
+    } else if (c.status === "SUGGESTED" && f.r0aSentAt && !f.r0bSentAt && due(f.r0bDueAt)) {
+      const slot = f.r0bDueAt.toISOString();
+      send("R0b", [...c.ownerUserIds], (u) => `${base}:R0b:${slot}:${u}`);
       updates.r0bSentAt = now;
     }
   }
@@ -202,13 +229,13 @@ export function collectDueCaioAttentionReminders(
 
 /** R3 recurrence notices: working statuses only, daytime only. */
 export function isCaioAttentionRecurrenceSendable(status: CaioAttentionStatus, now: Date, p: CaioAttentionPolicy): boolean {
-  return working(status) && isWithinCaioAttentionDaytime(now, p);
+  return working(status) && isWithinCaioAttentionSendWindow(now, p);
 }
 
 /** R0w warning digest: one per OWNER per local date, from the digest minute, daytime only. */
 export function caioAttentionWarningDigest(workspaceId: string, ownerUserId: string, now: Date, p: CaioAttentionPolicy) {
   const { start, offsetMs } = localDay(now, p);
   const date = new Date(start + p.utcOffsetMinutes * MIN).toISOString().slice(0, 10);
-  const due = offsetMs >= p.warningDigestMinute * MIN && isWithinCaioAttentionDaytime(now, p);
+  const due = offsetMs >= p.warningDigestMinute * MIN && isWithinCaioAttentionSendWindow(now, p);
   return { due, dedupeKey: `ca-digest:${workspaceId}:${ownerUserId}:${date}` };
 }
