@@ -434,7 +434,15 @@ export function Sidebar({
       : navSections.map((section) => ({
           ...section,
           items: [
-            ...section.items,
+            ...section.items.filter(
+              (item) =>
+                !reviewPresentation.excludedHrefs.some((href) =>
+                  item.href.startsWith(href),
+                ),
+            ),
+            // Extension links keep the Extensions area's semantics: the
+            // registering pack's access probe decides visibility, so Core's
+            // review-capability filter only applies to Core's own items.
             ...(section.key === "work"
               ? customerAssetsItems.map(
                   (item): SidebarNavItem => ({
@@ -445,12 +453,7 @@ export function Sidebar({
                   }),
                 )
               : []),
-          ].filter(
-            (item) =>
-              !reviewPresentation.excludedHrefs.some((href) =>
-                item.href.startsWith(href),
-              ),
-          ),
+          ],
         }))),
   ].filter((section) => section.items.length > 0);
 

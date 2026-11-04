@@ -87,6 +87,16 @@ const legacyCluster: WorkspaceNavExtensionCluster = {
   ],
 };
 
+// Href shares the Core review prefix ("/approvals") on purpose: Core's
+// review-capability filter must not hide a pack-authorized extension link.
+const approvalsArchiveItem: WorkspaceNavExtensionCluster["items"][number] = {
+  key: "approvals-archive",
+  href: "/approvals-archive",
+  label: "审批归档",
+  iconKey: "boxes",
+  statusBadge: { label: "已上线", tone: "live" },
+};
+
 const boundWorkstation: MemberRoleHomeWorkstation = {
   key: "sample-seat",
   href: "/sample/seat-desk",
@@ -99,6 +109,7 @@ function renderSidebar(input: {
   controlTowerHome: boolean;
   clusters: ReadonlyArray<WorkspaceNavExtensionCluster>;
   workstation?: MemberRoleHomeWorkstation | null;
+  canReviewGovernedActions?: boolean;
 }) {
   uiState.controlTowerHome = input.controlTowerHome;
   return render(
@@ -107,7 +118,7 @@ function renderSidebar(input: {
       pendingApprovals={0}
       navExtensionClusters={input.clusters}
       showCaioPrimaryNavigation={false}
-      canReviewGovernedActions
+      canReviewGovernedActions={input.canReviewGovernedActions ?? false}
       workstationHomeEntry={input.workstation ?? null}
     />,
   );
@@ -235,6 +246,57 @@ describe("Sidebar extension placement", () => {
     const mutedLink = linkFor("案件归档");
     expect(within(mutedLink).queryByText("只读")).toBeNull();
     expect(mutedLink.querySelector(".ml-auto")).toBeNull();
+  });
+
+  it.each([false, true])(
+    "keeps the extension's own access semantics for links sharing the Core review prefix (canReviewGovernedActions=%s)",
+    (canReviewGovernedActions) => {
+      renderSidebar({
+        controlTowerHome: false,
+        canReviewGovernedActions,
+        clusters: [
+          {
+            placement: "customer-assets",
+            extensionKey: "archive-sample",
+            label: "Archive sample",
+            items: [approvalsArchiveItem],
+          },
+        ],
+      });
+
+      const section = customerAssetsSection();
+      expect(linkHrefs(section)).toEqual([
+        ...CORE_CUSTOMER_ASSET_HREFS,
+        approvalsArchiveItem.href,
+      ]);
+      expect(within(section).getByText("已上线")).toBeInTheDocument();
+      // Core's own review entry still follows the review capability.
+      expect(
+        document.querySelector('a[href="/approvals"]') !== null,
+      ).toBe(canReviewGovernedActions);
+    },
+  );
+
+  it("shows the same review-prefixed link in the Extensions area without placement", () => {
+    renderSidebar({
+      controlTowerHome: false,
+      canReviewGovernedActions: false,
+      clusters: [
+        {
+          extensionKey: "archive-sample",
+          label: "Archive sample",
+          items: [approvalsArchiveItem],
+        },
+      ],
+    });
+
+    expect(
+      linkHrefs(screen.getByTestId("workspace-nav-extensions")),
+    ).toEqual([approvalsArchiveItem.href]);
+    expect(linkHrefs(customerAssetsSection())).toEqual(
+      CORE_CUSTOMER_ASSET_HREFS,
+    );
+    expect(document.querySelector('a[href="/approvals"]')).toBeNull();
   });
 
   it("hides customer-assets links when a dedicated workstation is bound and control tower home is off", () => {
