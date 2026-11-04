@@ -1,11 +1,12 @@
 import type { CaioAttentionActor } from "@/lib/caio-attention/state-machine";
 
-import { CAIO_ATTENTION_PAGE_SERVICE_BOUND, getCaioAttentionPageService } from "./service";
+import { getCaioAttentionPageService, isCaioAttentionPageServiceAvailable } from "./service";
 import type { CaioAttentionViewer } from "./service-contract";
 
 /**
  * Whether the workspace shell shows the attention entry. Presentation only: the pages and the loader still
- * authorize every read. Hidden while the service is unbound or the member is inactive; OWNER and ADMIN can
+ * authorize every read. Hidden while the service is unavailable (unbound or no registered pack policy) or the member
+ * is inactive; OWNER and ADMIN can
  * always read cases, everyone else only once they take part in at least one current confirmed command.
  */
 export function shouldShowCaioAttentionNavigation(input: Readonly<{
@@ -18,7 +19,8 @@ export function shouldShowCaioAttentionNavigation(input: Readonly<{
 }
 
 export async function resolveCaioAttentionNavigation(viewer: CaioAttentionViewer): Promise<boolean> {
-  const base = { bound: CAIO_ATTENTION_PAGE_SERVICE_BOUND, actor: viewer.actor, participantCaseCount: 0 };
+  // Runtime rule (bound AND a registered pack policy); false returns before any database access.
+  const base = { bound: isCaioAttentionPageServiceAvailable(), actor: viewer.actor, participantCaseCount: 0 };
   if (!shouldShowCaioAttentionNavigation({ ...base, actor: { ...viewer.actor, role: "OWNER" } })) return false;
   if (shouldShowCaioAttentionNavigation(base)) return true;
   try {

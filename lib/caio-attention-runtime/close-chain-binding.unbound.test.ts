@@ -7,7 +7,9 @@ import { CAIO_ATTENTION_TEST_DEFAULT_POLICY as policy } from "@/lib/caio-attenti
 import { CAIO_ATTENTION_CLOSE_CHAIN_BINDING, resolveCaioAttentionNodeCloseCapability } from "./close-chain-binding";
 
 // A build whose pages are still on the fail-closed stub (BOUND = false).
-vi.mock("@/features/caio-attention/service", () => ({ CAIO_ATTENTION_PAGE_SERVICE_BOUND: false, CAIO_ATTENTION_CLOSE_CAPABILITY_VERSION: 0 }));
+vi.mock("@/features/caio-attention/service", () => ({
+  CAIO_ATTENTION_PAGE_SERVICE_BOUND: false, CAIO_ATTENTION_CLOSE_CAPABILITY_VERSION: 0, isCaioAttentionPageServiceAvailable: () => false,
+}));
 
 const rule: CaioAttentionRouteRule = {
   detectorId: "det-a", category: "business", primaryRoleKey: "lead", primaryFallbackRoleKeys: [], ccRoleKeys: [],

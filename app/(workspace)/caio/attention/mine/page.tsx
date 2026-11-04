@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { CaioAttentionCaseList } from "@/features/caio-attention/case-list";
 import { caioAttentionCopy } from "@/features/caio-attention/copy";
 import { getCaioAttentionPageContext } from "@/features/caio-attention/page-context";
-import { CAIO_ATTENTION_PAGE_SERVICE_BOUND, getCaioAttentionPageService } from "@/features/caio-attention/service";
+import { getCaioAttentionPageService, isCaioAttentionPageServiceAvailable } from "@/features/caio-attention/service";
 import { CAIO_ATTENTION_PAGE_SIZE, parseCaioAttentionPageParam } from "@/features/caio-attention/view-model";
 
 // "My attention cases": only cases where the viewer is a participant of the current confirmed command.
@@ -26,7 +26,7 @@ export default async function CaioAttentionMinePage({ searchParams }: { searchPa
         description={copy.mineDescription}
         actions={<Link href="/caio/attention">{copy.viewQueue}</Link>}
       />
-      <CaioAttentionCaseList result={result} english={english} basePath="/caio/attention/mine" serviceBound={CAIO_ATTENTION_PAGE_SERVICE_BOUND} />
+      <CaioAttentionCaseList result={result} english={english} basePath="/caio/attention/mine" serviceBound={isCaioAttentionPageServiceAvailable()} />
     </div>
   );
 }

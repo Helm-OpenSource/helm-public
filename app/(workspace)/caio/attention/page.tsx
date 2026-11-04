@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { CaioAttentionCaseList } from "@/features/caio-attention/case-list";
 import { caioAttentionCopy } from "@/features/caio-attention/copy";
 import { getCaioAttentionPageContext } from "@/features/caio-attention/page-context";
-import { CAIO_ATTENTION_PAGE_SERVICE_BOUND, getCaioAttentionPageService } from "@/features/caio-attention/service";
+import { getCaioAttentionPageService, isCaioAttentionPageServiceAvailable } from "@/features/caio-attention/service";
 import { CAIO_ATTENTION_PAGE_SIZE, parseCaioAttentionPageParam } from "@/features/caio-attention/view-model";
 
 // Attention queue: every case this viewer may read, pending first, paged. Filtering happens in the loader.
@@ -26,7 +26,7 @@ export default async function CaioAttentionQueuePage({ searchParams }: { searchP
         description={copy.queueDescription}
         actions={<Link href="/caio/attention/mine">{copy.viewMine}</Link>}
       />
-      <CaioAttentionCaseList result={result} english={english} basePath="/caio/attention" serviceBound={CAIO_ATTENTION_PAGE_SERVICE_BOUND} />
+      <CaioAttentionCaseList result={result} english={english} basePath="/caio/attention" serviceBound={isCaioAttentionPageServiceAvailable()} />
     </div>
   );
 }

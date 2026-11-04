@@ -17,6 +17,7 @@ vi.mock("./page-context", () => ({
 }));
 vi.mock("./service", () => ({
   CAIO_ATTENTION_PAGE_SERVICE_BOUND: true,
+  isCaioAttentionPageServiceAvailable: () => true,
   getCaioAttentionPageService: () => ({ loadCase, listCases, runCommand: vi.fn() }),
 }));
 

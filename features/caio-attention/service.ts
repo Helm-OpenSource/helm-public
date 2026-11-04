@@ -1,4 +1,4 @@
-import { caioAttentionBoundPageService } from "@/lib/caio-attention-runtime/bound-page-service";
+import { caioAttentionBoundPageService, getCaioAttentionBoundPagePolicy } from "@/lib/caio-attention-runtime/bound-page-service";
 
 import type { CaioAttentionPageService } from "./service-contract";
 
@@ -38,6 +38,16 @@ export const CAIO_ATTENTION_PAGE_SERVICE_BOUND = boundService !== null;
  */
 export const CAIO_ATTENTION_CLOSE_CAPABILITY_VERSION = CAIO_ATTENTION_PAGE_SERVICE_BOUND ? 1 : 0;
 
+/**
+ * Runtime availability, decided at every call: the real service is bound AND the overlay has registered the attention
+ * pack with its policy. Until then the pages, the navigation entry and the commands use the fail-closed stub, so a
+ * deployment that never registers a pack (or has not migrated the attention tables) never queries them. The
+ * close-chain probe and the heartbeat follow the same rule (lib/caio-attention-runtime/close-chain-binding.ts).
+ */
+export function isCaioAttentionPageServiceAvailable(): boolean {
+  return boundService !== null && getCaioAttentionBoundPagePolicy() !== null;
+}
+
 export function getCaioAttentionPageService(): CaioAttentionPageService {
-  return boundService ?? CAIO_ATTENTION_UNAVAILABLE_SERVICE;
+  return boundService !== null && isCaioAttentionPageServiceAvailable() ? boundService : CAIO_ATTENTION_UNAVAILABLE_SERVICE;
 }

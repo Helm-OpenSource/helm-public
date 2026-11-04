@@ -23,6 +23,7 @@ import {
   CAIO_ATTENTION_PAGE_SERVICE_BOUND,
   CAIO_ATTENTION_UNAVAILABLE_SERVICE,
   getCaioAttentionPageService,
+  isCaioAttentionPageServiceAvailable,
 } from "@/features/caio-attention/service";
 import { getCaioAttentionBoundPagePolicy } from "@/lib/caio-attention-runtime/bound-page-service";
 import { CAIO_ATTENTION_CLOSE_CHAIN_BINDING } from "@/lib/caio-attention-runtime/close-chain-binding";
@@ -93,7 +94,14 @@ describe("check:caio-attention", () => {
     // BOUND is the build-time binding; closable is decided at call time (bound AND a registered pack policy).
     expect(CAIO_ATTENTION_PAGE_SERVICE_BOUND).toBe(true);
     expect(CAIO_ATTENTION_CLOSE_CHAIN_BINDING.pageServiceBound).toBe(CAIO_ATTENTION_PAGE_SERVICE_BOUND && getCaioAttentionBoundPagePolicy() !== null);
-    expect(getCaioAttentionPageService()).not.toBe(CAIO_ATTENTION_UNAVAILABLE_SERVICE); // reads go to the authorized loader
+    // Without a registered pack policy the pages use the fail-closed stub (no attention-table query at all).
+    expect(isCaioAttentionPageServiceAvailable()).toBe(CAIO_ATTENTION_CLOSE_CHAIN_BINDING.pageServiceBound);
+    if (!isCaioAttentionPageServiceAvailable()) expect(getCaioAttentionPageService()).toBe(CAIO_ATTENTION_UNAVAILABLE_SERVICE);
+    // Pages and navigation read the runtime rule, never the build-time constant.
+    for (const file of ["app/(workspace)/caio/attention/page.tsx", "app/(workspace)/caio/attention/mine/page.tsx", "features/caio-attention/navigation.ts"]) {
+      expect(read(file), file).toContain("isCaioAttentionPageServiceAvailable()");
+      expect(read(file), file).not.toContain("CAIO_ATTENTION_PAGE_SERVICE_BOUND");
+    }
     const untouchable = new Proxy({}, { get: () => { throw new Error("database touched"); } }) as never;
     const noPolicy = createCaioAttentionLifecyclePageService({ db: untouchable, getPolicy: () => null });
     const viewer = { workspaceId: "w1", actor: { userId: "u1", sameWorkspace: true, active: true, role: "OWNER" as const, canReviewGovernedActions: true } };

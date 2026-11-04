@@ -6,6 +6,7 @@ const viewer = { workspaceId: "w1", actor: { userId: "u1", sameWorkspace: true, 
 
 vi.mock("./service", () => ({
   get CAIO_ATTENTION_PAGE_SERVICE_BOUND() { return bound.value; },
+  isCaioAttentionPageServiceAvailable: () => bound.value,
   getCaioAttentionPageService: () => ({ listCases, loadCase: vi.fn(), runCommand: vi.fn() }),
 }));
 
