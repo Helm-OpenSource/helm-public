@@ -1,4 +1,5 @@
--- Rollback of 20261104120000_caio_attention_control_plane. Run as the migration identity, after the case tables
+-- Rollback of 20261104120000_caio_attention_control_plane. Run as the migration identity, after the control events
+-- (20261104170000_caio_attention_control_events, refused here while that table exists) and the case tables
 -- (20261104120100_caio_attention_cases) have been rolled back. Refuses while the control plane has ever been used:
 -- any readiness proof, pause request or heartbeat, or a Control row that left its seeded PAUSED / epoch 0 state.
 -- Also refused once the Control row was ever written by anyone but the migration (rowVersion, updatedByRef) or
@@ -10,6 +11,11 @@ DELIMITER $$
 
 CREATE PROCEDURE `rollback_unused_caio_attention_control_plane`()
 BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.TABLES
+             WHERE `TABLE_SCHEMA` = DATABASE() AND `TABLE_NAME` = 'CaioAttentionControlEvent') THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'rollback refused: roll back CAIO attention control events first';
+  END IF;
+
   IF (SELECT COUNT(*) FROM `CaioAttentionNodeReadiness`) + (SELECT COUNT(*) FROM `CaioAttentionPauseRequest`)
      + (SELECT COUNT(*) FROM `CaioAttentionRuntimeNode`)
      + (SELECT COUNT(*) FROM `CaioAttentionControl`

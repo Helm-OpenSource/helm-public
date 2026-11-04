@@ -16,6 +16,7 @@ export const CAIO_ATTENTION_SCHEMA_MANIFEST = {
     "revokedAt", "revokedByRef", "revokedEpoch",
   ],
   CaioAttentionPauseRequest: ["id", "openEpoch", "reasonCode", "requestedByRef", "createdAt"],
+  CaioAttentionControlEvent: ["id", "op", "actorRef", "epoch", "openEpoch", "payloadJson", "createdAt"],
   CaioAttentionCase: [
     "id", "workspaceId", "shortNo", "detectorId", "mergeKey", "objectKey", "enterpriseSlug", "category", "originCandidateId",
     "activeKey", "previousCaseId", "routeConfigVersion", "routingBlocked", "routingBlockedReasonsJson", "status", "commandVersion",

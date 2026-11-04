@@ -1,6 +1,8 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import { appendCaioAttentionControlEvent } from "./control-event.service";
+import { readCaioAttentionIntakeGate } from "./intake-gate.service";
 import { CAIO_ATTENTION_FIXTURE_IDENTITIES, caioAttentionTableGrant, type CaioAttentionFixtureIdentity, type CaioAttentionPrivilege } from "./least-privilege-fixture";
 import { CAIO_ATTENTION_TABLES, probeCaioAttentionSchemaReadiness, type CaioAttentionTable } from "./schema-readiness";
 
@@ -63,15 +65,9 @@ describeMysql("CAIO attention tables on MySQL with least-privilege identities", 
   const clients = {} as Record<"admin" | CaioAttentionFixtureIdentity, PrismaClient>;
   let admin: PrismaClient, generator: PrismaClient, web: PrismaClient, ops: PrismaClient;
 
-  /** The intake gate every entry runs: FOR SHARE on Control, then no pause request at the open epoch. */
+  /** The intake gate every entry runs (intake-gate.service.ts): FOR SHARE on Control, then no pause request at the open epoch. */
   async function gateOpen(client: PrismaClient) {
-    return client.$transaction(async (tx) => {
-      const [control] = await tx.$queryRaw<Array<{ intakeState: string; openEpoch: number }>>`
-        SELECT intakeState, openEpoch FROM CaioAttentionControl WHERE id = 'global' FOR SHARE`;
-      const [pending] = await tx.$queryRaw<Array<{ n: bigint }>>`
-        SELECT COUNT(*) AS n FROM CaioAttentionPauseRequest WHERE openEpoch = ${control.openEpoch}`;
-      return control.intakeState === "OPEN" && Number(pending.n) === 0;
-    });
+    return client.$transaction(async (tx) => (await readCaioAttentionIntakeGate(tx)).open);
   }
 
   /** Pause write path (REREVIEW5 P2-2): read the open epoch under FOR SHARE, then INSERT, in one transaction. */
@@ -111,6 +107,7 @@ describeMysql("CAIO attention tables on MySQL with least-privilege identities", 
   });
 
   beforeEach(async () => {
+    await admin.$executeRaw`DELETE FROM CaioAttentionControlEvent`;
     await admin.$executeRaw`DELETE FROM CaioAttentionPauseRequest`;
     await admin.$executeRaw`DELETE FROM CaioAttentionNodeReadiness`;
     await admin.$executeRaw`DELETE FROM CaioAttentionRuntimeNode`;
@@ -156,6 +153,27 @@ describeMysql("CAIO attention tables on MySQL with least-privilege identities", 
       }
     }
     expect(failures).toEqual([]);
+  });
+
+  it("keeps the control event trail append-only: operator INSERT only, closed op set, epochs per op kind", async () => {
+    const event = { op: "resume", actorRef: "operator:t", epoch: 0, openEpoch: 1, payload: { acknowledgedPauseRequestIds: ["pr-1"] } } as const;
+    const id = await ops.$transaction((tx) => appendCaioAttentionControlEvent(tx, event));
+    await ops.$transaction((tx) => appendCaioAttentionControlEvent(tx, { ...event, op: "routes-publish", epoch: null, openEpoch: null }));
+    expect(await ops.$queryRaw`SELECT op, actorRef, epoch, openEpoch, payloadJson FROM CaioAttentionControlEvent WHERE id = ${id}`)
+      .toEqual([{ op: "resume", actorRef: "operator:t", epoch: 0, openEpoch: 1, payloadJson: "{\"acknowledgedPauseRequestIds\":[\"pr-1\"]}" }]);
+    expect(await errnoOf(ops.$executeRaw`UPDATE CaioAttentionControlEvent SET op = 'pause' WHERE id = ${id}`)).toBe("1142");
+    expect(await errnoOf(ops.$executeRaw`DELETE FROM CaioAttentionControlEvent WHERE id = ${id}`)).toBe("1142");
+    for (const client of [web, generator]) {
+      expect(await errnoOf(client.$transaction((tx) => appendCaioAttentionControlEvent(tx, event)))).toBe("1142");
+    }
+    const insert = (op: string, epoch: number | null, payloadJson = "{}") => ops.$executeRaw`INSERT INTO CaioAttentionControlEvent
+      (id, op, actorRef, epoch, openEpoch, payloadJson) VALUES (${`ce-${op}-${String(epoch)}`}, ${op}, 'operator:t', ${epoch}, ${epoch}, ${payloadJson})`;
+    expect(await errnoOf(insert("bogus", 0))).toBe("3819");
+    expect(await errnoOf(insert("guard-downgrade", null))).toBe("3819");
+    expect(await errnoOf(insert("routes-activate", 0))).toBe("3819");
+    expect(await errnoOf(insert("pause", -1))).toBe("3819");
+    expect(await errnoOf(insert("pause", 0, "not json"))).toBe("3819");
+    expect(await admin.$queryRaw`SELECT COUNT(*) AS n FROM CaioAttentionControlEvent`).toEqual([{ n: 2n }]);
   });
 
   it("the web identity cannot reopen intake: any UPDATE of Control is refused with errno 1142", async () => {
