@@ -37,9 +37,16 @@ export function isCaioAttentionRemindersEnabled(raw: string | undefined = proces
   return raw === "true" || raw === "1";
 }
 
-/** Overlay registration of the tenant policy and watch set. A repeat replaces the previous one. */
+/**
+ * Scan inputs, set only by registerCaioAttentionPack (registry.ts) from the same pack the generator and the page
+ * service use; overlays never call this directly.
+ */
 export function registerCaioAttentionScanConfig(config: CaioAttentionScanConfig): void {
   state().config = config;
+}
+
+export function resetCaioAttentionScanConfigForTests(): void {
+  state().config = null;
 }
 
 export function getRegisteredCaioAttentionScanConfig(): CaioAttentionScanConfig | null {

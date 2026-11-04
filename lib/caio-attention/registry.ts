@@ -1,10 +1,13 @@
 import { parseCaioAttentionRouteRule, type CaioAttentionRouteRule } from "./contracts";
+import { registerCaioAttentionScanConfig, resetCaioAttentionScanConfigForTests } from "./reminder-cron";
 import type { CaioAttentionEnterpriseScope } from "./routing";
 import { parseCaioAttentionPolicy, type CaioAttentionPolicy } from "./schedule";
 
 /**
  * Tenant registration for attention suggestions: the static route rules, the cadence policy and two hooks.
- * Core ships no rule and no policy; until an overlay registers a pack, the generator does nothing.
+ * Core ships no rule and no policy; until an overlay registers a pack, the generator does nothing, the page service
+ * refuses every command and the reminder scan skips. This is the only registration: the same call hands the policy,
+ * the route rules and the watchdog role to the reminder scan (reminder-cron.ts), so the two can never disagree.
  *
  *   verifyEnterpriseScope — is this `:enterprise:<slug>` suffix one the workspace really serves? Missing hook = unverified.
  *   applicableAt          — the static rule's applicable window, re-checked at generation time. Missing hook = always.
@@ -15,6 +18,8 @@ export type CaioAttentionPack = Readonly<{
   rules: readonly CaioAttentionRouteRule[];
   verifyEnterpriseScope?: (input: { workspaceId: string; slug: string }) => Promise<boolean>;
   applicableAt?: (input: { detectorId: string; reasonCode: string; now: Date }) => boolean;
+  /** Route-config role whose holders receive watchdog alerts; OWNERs when absent or unbound. */
+  watchdogRoleKey?: string;
 }>;
 
 declare global {
@@ -28,6 +33,7 @@ export function registerCaioAttentionPack(pack: CaioAttentionPack): void {
   if (!parseCaioAttentionPolicy(pack.policy).ok) throw new Error("caio_attention_policy_invalid");
   if (pack.rules.some((rule) => !parseCaioAttentionRouteRule(rule).ok)) throw new Error("caio_attention_route_rule_invalid");
   globalThis.__helmCaioAttentionPack = pack;
+  registerCaioAttentionScanConfig({ policy: pack.policy, routeRules: pack.rules, watchdogRoleKey: pack.watchdogRoleKey });
 }
 
 export function getRegisteredCaioAttentionPack(): CaioAttentionPack | null {
@@ -36,6 +42,7 @@ export function getRegisteredCaioAttentionPack(): CaioAttentionPack | null {
 
 export function resetCaioAttentionPackForTests(): void {
   globalThis.__helmCaioAttentionPack = undefined;
+  resetCaioAttentionScanConfigForTests();
 }
 
 /** First rule for the detector whose reason filter (if any) admits the candidate's reason code. */
