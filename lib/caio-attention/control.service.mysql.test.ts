@@ -4,7 +4,9 @@ import path from "node:path";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import type { CaioAttentionCapabilityReport } from "./capability";
 import {
+  attestCaioAttentionNode,
   beginCaioAttentionDeployment,
   CaioAttentionControlRefusal,
   downgradeCaioAttentionGuard,
@@ -16,6 +18,7 @@ import {
   resumeCaioAttentionIntake,
   setCaioAttentionExpectedNodes,
 } from "./control.service";
+import { recordCaioAttentionHeartbeat } from "./heartbeat.service";
 import { readCaioAttentionIntakeGate } from "./intake-gate.service";
 
 /**
@@ -40,6 +43,11 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
   return { promise: new Promise<void>((done) => { resolve = done; }), resolve };
 }
 
+async function errnoOf(promise: Promise<unknown>): Promise<string | null> {
+  const result = await refusal(promise);
+  return result === "ok" ? null : result.replace(/^errno:/u, "");
+}
+
 async function refusal(promise: Promise<unknown>): Promise<string> {
   try {
     await promise;
@@ -54,7 +62,7 @@ async function refusal(promise: Promise<unknown>): Promise<string> {
 function runCli(op: string, input: string, opts: { closeAfterReady?: boolean } = {}) {
   return new Promise<{ code: number | null; stdout: string }>((resolve) => {
     const child = spawn(path.resolve("node_modules/.bin/tsx"), ["scripts/caio-attention-control.ts", op], {
-      env: { PATH: process.env.PATH ?? "", DATABASE_URL: urls.ops! },
+      env: { PATH: process.env.PATH ?? "", DATABASE_URL: urls.ops!, PORT: "1" },
       stdio: ["pipe", "pipe", "pipe"],
     });
     let stdout = "";
@@ -386,6 +394,39 @@ describeMysql("CAIO attention Control service and CLI on MySQL", () => {
     expect(waited).toBeGreaterThanOrEqual(9_000);
     expect(waited).toBeLessThan(25_000);
   }, 60_000);
+
+  it("attest-node: fenced on a stale tuple, refused below the guard floor or on any probe gap, else one proof at the lease epoch", async () => {
+    const begun = await beginCaioAttentionDeployment(ops, { nodeId: "node-a", targetDeploymentId: "dep-1" });
+    const request = { lease: begun.lease, nodeId: "node-a", targetDeploymentId: "dep-1", epoch: begun.epoch, guardVersion: 1 };
+    const report: CaioAttentionCapabilityReport = {
+      nodeId: "node-a", deploymentId: "dep-1", closeCapabilityVersion: 1, pageServiceBound: true, lifecycleRoutes: true, migrationReady: true,
+    };
+    const attest = (patch: Partial<typeof request>, reportPatch: Partial<CaioAttentionCapabilityReport> = {}) =>
+      refusal(attestCaioAttentionNode(ops, { ...request, ...patch }, { ...report, ...reportPatch }));
+    expect(await attest({ epoch: begun.epoch + 1 })).toBe("fenced:lease_fenced");
+    expect(await attest({ guardVersion: 0 })).toBe("refused:guard_too_low");
+    expect(await attest({}, { pageServiceBound: false })).toBe("refused:attest_blocked:page_service_unbound");
+    expect(await attest({}, { deploymentId: "dep-0", closeCapabilityVersion: 0 })).toBe("refused:attest_blocked:deployment_mismatch,capability_too_low");
+    expect(await attest({}, { nodeId: "node-b", lifecycleRoutes: false, migrationReady: false }))
+      .toBe("refused:attest_blocked:node_mismatch,lifecycle_routes_missing,migration_not_ready");
+    expect(await attestCaioAttentionNode(generator, request, report).then(() => "ok", () => "denied")).toBe("denied");
+    expect(await attestCaioAttentionNode(ops, request, report)).toEqual({ attested: true, epoch: 1 });
+    await endCaioAttentionDeployment(ops, { lease: begun.lease });
+    expect(await refusal(attestCaioAttentionNode(ops, request, report))).toBe("fenced:not_deploying");
+    const proofs = await admin.$queryRaw<Array<{ epoch: number; guardVersion: number }>>`
+      SELECT epoch, guardVersion FROM CaioAttentionNodeReadiness WHERE nodeId = 'node-a'`;
+    expect(proofs).toEqual([{ epoch: 1, guardVersion: 1 }]);
+
+    // Heartbeat fallback: a mismatching deployment id blocks resume until the node reports the attested one.
+    const beat = { nodeId: "node-a", role: "http", deploymentId: "dep-0", closeCapabilityVersion: 1, remindersEnabled: true };
+    await recordCaioAttentionHeartbeat(web, beat);
+    expect(await refusal(resume())).toBe("refused:resume_blocked:heartbeat_mismatch");
+    await recordCaioAttentionHeartbeat(generator, { ...beat, remindersEnabled: false, deploymentId: "dep-1" });
+    expect(await refusal(resume())).toBe("refused:resume_blocked:reminders_disabled");
+    await recordCaioAttentionHeartbeat(web, { ...beat, deploymentId: "dep-1" });
+    expect(await resume()).toMatchObject({ intakeState: "OPEN", openEpoch: 1 });
+    expect(await errnoOf(recordCaioAttentionHeartbeat(ops, beat))).toBe("1142");
+  });
 
   it("the web and generator identities cannot pause, resume, deploy or recover: Control writes are refused with errno 1142", async () => {
     await deploy("node-a");

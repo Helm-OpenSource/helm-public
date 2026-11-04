@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 
 import { Prisma, type PrismaClient } from "@prisma/client";
 
+import { evaluateCaioAttentionCapability, type CaioAttentionCapabilityReport } from "./capability";
 import {
   caioAttentionDeployBegin,
   caioAttentionRevokeInPlace,
@@ -278,6 +279,40 @@ export async function holdCaioAttentionLease(
     onReady();
     await released;
   }, CAIO_ATTENTION_HOLD_TX);
+}
+
+/**
+ * attest-node (design v5 §1.2, v6 §2.3–2.4): the lease tuple must still be current (else fenced); the deploy guard
+ * version must meet minGuardVersion; the node's own loopback capability report (fetched by the caller before this
+ * transaction, so no network call runs under the lock) must show this node, the lease target, capability at the
+ * floor, the page service and lifecycle routes bound, and the schema ready. Writes one proof at the lease epoch.
+ */
+export async function attestCaioAttentionNode(
+  client: PrismaClient,
+  input: Readonly<{ lease: unknown; nodeId: unknown; targetDeploymentId: unknown; epoch: unknown; guardVersion: unknown }>,
+  report: CaioAttentionCapabilityReport,
+) {
+  const request = {
+    token: requireMatch(input.lease, LEASE_PATTERN, "lease_invalid"),
+    nodeId: requireMatch(input.nodeId, CAIO_ATTENTION_NODE_ID_PATTERN, "node_id_invalid"),
+    targetDeploymentId: requireMatch(input.targetDeploymentId, DEPLOYMENT_ID_PATTERN, "deployment_id_invalid"),
+    epoch: requireCount(input.epoch, "epoch_invalid"),
+  };
+  const guardVersion = requireCount(input.guardVersion, "guard_version_invalid");
+  return client.$transaction(async (tx) => {
+    const control = await lockControl(tx, "UPDATE");
+    const verdict = evaluateCaioAttentionLeaseHold(control, request);
+    if (!verdict.ok) fence(verdict.reason);
+    if (guardVersion < control.minGuardVersion) refuse("guard_too_low");
+    const blocks = evaluateCaioAttentionCapability(report, {
+      nodeId: request.nodeId, deploymentId: request.targetDeploymentId, requiredCloseCapability: control.requiredCloseCapability,
+    });
+    if (blocks.length > 0) refuse(`attest_blocked:${blocks.join(",")}`);
+    await tx.$executeRaw`INSERT INTO CaioAttentionNodeReadiness (id, nodeId, deploymentId, closeCapabilityVersion, guardVersion, epoch,
+      verifiedAt, verifiedByRef) VALUES (${`nr_${randomBytes(12).toString("hex")}`}, ${request.nodeId}, ${request.targetDeploymentId},
+      ${report.closeCapabilityVersion}, ${guardVersion}, ${request.epoch}, NOW(3), ${auditRef(`host_deploy:${request.nodeId}`, "attest-node")})`;
+    return { attested: true, epoch: request.epoch };
+  }, CAIO_ATTENTION_CONTROL_TX);
 }
 
 /** deploy-end: only the lease holder ends its lease; intake always returns to PAUSED, never OPEN. */
