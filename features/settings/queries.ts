@@ -1144,17 +1144,23 @@ export async function getSettingsData(
         }),
       )
       .find((item) => item !== null) ?? null;
+  // One newest-first seek per type on (workspaceId, actionType, createdAt), merged: an IN over both types
+  // cannot be read from that index in createdAt order and sorts every matching row.
   const recentDingTalkDirectoryInviteAudits = connectorManagementEnabled
-    ? await db.auditLog.findMany({
-        where: {
-          workspaceId,
-          actionType: {
-            in: [...dingtalkDirectoryInviteAuditActionTypes],
-          },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 12,
-      })
+    ? (
+        await Promise.all(
+          dingtalkDirectoryInviteAuditActionTypes.map((actionType) =>
+            db.auditLog.findMany({
+              where: { workspaceId, actionType },
+              orderBy: { createdAt: "desc" },
+              take: 12,
+            }),
+          ),
+        )
+      )
+        .flat()
+        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+        .slice(0, 12)
     : [];
   const auditDryRunSummary =
     recentDingTalkDirectoryInviteAudits
