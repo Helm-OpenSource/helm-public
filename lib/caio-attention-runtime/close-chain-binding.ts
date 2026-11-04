@@ -1,8 +1,7 @@
 import "server-only";
 
 import { CAIO_ATTENTION_CLOSE_CAPABILITY_VERSION, CAIO_ATTENTION_PAGE_SERVICE_BOUND } from "@/features/caio-attention/service";
-import { getRegisteredCaioAttentionPack } from "@/lib/caio-attention/registry";
-
+import { getCaioAttentionBoundPagePolicy } from "./bound-page-service";
 import { CAIO_ATTENTION_PAGE_OPERATIONS } from "./page-service";
 
 /** Operations the close chain needs from the bound page service (design v5 §1.4: submit, review, reissue, reviewers). */
@@ -17,7 +16,7 @@ export const CAIO_ATTENTION_CLOSE_CHAIN_OPERATIONS = ["submitDisposition", "revi
  */
 export const CAIO_ATTENTION_CLOSE_CHAIN_BINDING: Readonly<{ pageServiceBound: boolean; lifecycleRoutes: boolean }> = {
   get pageServiceBound() {
-    return CAIO_ATTENTION_PAGE_SERVICE_BOUND && getRegisteredCaioAttentionPack()?.policy != null;
+    return CAIO_ATTENTION_PAGE_SERVICE_BOUND && getCaioAttentionBoundPagePolicy() !== null;
   },
   get lifecycleRoutes() {
     return CAIO_ATTENTION_PAGE_SERVICE_BOUND

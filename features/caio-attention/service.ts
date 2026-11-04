@@ -23,12 +23,18 @@ export const CAIO_ATTENTION_UNAVAILABLE_SERVICE: CaioAttentionPageService = {
 // Bound to the lifecycle service and its authorized loader (lib/caio-attention-runtime/page-service.ts).
 const boundService: CaioAttentionPageService | null = caioAttentionBoundPageService;
 
+/**
+ * Build-time binding: these pages are served by the real lifecycle service (not the fail-closed stub). Whether a
+ * node can actually close cases is decided at call time, not here: it also needs the overlay's pack policy, which
+ * may register after this module loads. That runtime rule lives in lib/caio-attention-runtime/close-chain-binding.ts
+ * (pageServiceBound = BOUND && getCaioAttentionBoundPagePolicy() != null) and drives the probe and the heartbeat.
+ */
 export const CAIO_ATTENTION_PAGE_SERVICE_BOUND = boundService !== null;
 
 /**
- * Close capability follows the binding: 1 only when the real lifecycle service serves these pages. The release
- * file lib/caio-attention/capability.json (read by the heartbeat and the deploy check) must carry the same value;
- * check:caio-attention asserts equality, so binding the service and raising the file land in one change.
+ * Release close capability follows the build-time binding: 1 only when the real lifecycle service serves these
+ * pages. lib/caio-attention/capability.json must carry the same value (check:caio-attention asserts equality); what
+ * a node reports is that value only while the runtime rule holds, otherwise 0.
  */
 export const CAIO_ATTENTION_CLOSE_CAPABILITY_VERSION = CAIO_ATTENTION_PAGE_SERVICE_BOUND ? 1 : 0;
 

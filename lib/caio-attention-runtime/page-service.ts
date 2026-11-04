@@ -1,13 +1,13 @@
 import type { CaioAttentionCase, PrismaClient } from "@prisma/client";
 
 import {
-  CAIO_ATTENTION_DISPOSITION_OUTCOMES, type CaioAttentionCaseView, type CaioAttentionCommandFailure, type CaioAttentionCommandFields,
+  type CaioAttentionCaseView, type CaioAttentionCommandFailure, type CaioAttentionCommandFields,
   type CaioAttentionCommandInput, type CaioAttentionPageService, type CaioAttentionViewerRole,
 } from "@/features/caio-attention/service-contract";
-import type { CaioAttentionCategory, CaioAttentionSeverity } from "@/lib/caio-attention/contracts";
+import { CAIO_ATTENTION_DISPOSITION_OUTCOMES, type CaioAttentionCategory, type CaioAttentionSeverity } from "@/lib/caio-attention/contracts";
 import { listCaioAttentionCasesForViewer, loadCaioAttentionCaseForViewer } from "@/lib/caio-attention/lifecycle/case-loader";
 import {
-  caioAttentionActor, caioAttentionParties, parseCaioAttentionIdList, type CaioAttentionLifecycleDeps, type CaioAttentionLifecycleResult,
+  caioAttentionActor, caioAttentionParties, canonicalCaioAttentionUserId, parseCaioAttentionIdList, type CaioAttentionLifecycleDeps, type CaioAttentionLifecycleResult,
 } from "@/lib/caio-attention/lifecycle/core";
 import {
   ackCaioAttentionCase, noteCaioAttentionCase, reviewCaioAttentionDisposition, submitCaioAttentionDisposition,
@@ -52,9 +52,13 @@ function viewerRoles(row: CaioAttentionCase, actor: CaioAttentionActor): CaioAtt
   return roles;
 }
 
-async function actorOf(db: PrismaClient, workspaceId: string, userId: string): Promise<CaioAttentionActor> {
-  const member = await db.membership.findUnique({ where: { workspaceId_userId: { workspaceId, userId } }, select: { role: true, status: true, accessScope: true } });
-  return caioAttentionActor(userId, member ? { role: member.role, active: member.status === "ACTIVE" && member.accessScope === null } : undefined);
+/** Same identity rule as the loader: `user:<id>` or a bare id, compared canonically; anything else is no member. */
+async function actorOf(db: PrismaClient, workspaceId: string, viewerUserId: string): Promise<CaioAttentionActor> {
+  const userId = canonicalCaioAttentionUserId(viewerUserId);
+  const member = userId ? await db.membership.findUnique({
+    where: { workspaceId_userId: { workspaceId, userId } }, select: { role: true, status: true, accessScope: true },
+  }) : null;
+  return caioAttentionActor(userId ?? "", member ? { role: member.role, active: member.status === "ACTIVE" && member.accessScope === null } : undefined);
 }
 
 function failure(result: Extract<CaioAttentionLifecycleResult, { ok: false }>): CaioAttentionCommandFailure {
@@ -126,7 +130,8 @@ export function createCaioAttentionLifecyclePageService(deps: CaioAttentionPageS
         ...dispositions.map((d) => d.submittedByUserId), ...reviews.map((r) => r.reviewerUserId), ...events.map((e) => e.actorUserId)]);
       named.delete(null);
       const users = await db.user.findMany({ where: { id: { in: [...named] as string[] } }, select: { id: true, name: true } });
-      const allowedOperations = CAIO_ATTENTION_PAGE_OPERATIONS.filter((op) => authorizeCaioAttentionOperation({
+      // Without a policy every command fails closed, so none is offered.
+      const allowedOperations = deps.getPolicy() === null ? [] : CAIO_ATTENTION_PAGE_OPERATIONS.filter((op) => authorizeCaioAttentionOperation({
         op: op as Exclude<CaioAttentionOperation, "resumeDeferred">, actor, parties, expectedCommandVersion: row.commandVersion, reviewerVersion: row.reviewerVersion,
         disposition: currentDisposition ? { commandVersion: currentDisposition.commandVersion, superseded: false, isLatestInVersion: true, submittedByUserId: currentDisposition.submittedByUserId } : undefined,
       }).ok);
