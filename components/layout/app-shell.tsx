@@ -49,6 +49,7 @@ type AppShellProps = {
   shellChromeProfiles: ReadonlyArray<ShellChromeProfile>;
   basePresetKey: string | null;
   showCaioPrimaryNavigation: boolean;
+  showCaioAttentionNavigation?: boolean;
   canReviewGovernedActions: boolean;
   workstationHomeEntry: MemberRoleHomeWorkstation | null;
   children: React.ReactNode;
@@ -75,6 +76,7 @@ export function AppShell({
   shellChromeProfiles,
   basePresetKey,
   showCaioPrimaryNavigation,
+  showCaioAttentionNavigation = false,
   canReviewGovernedActions,
   workstationHomeEntry,
   children,
@@ -106,6 +108,7 @@ export function AppShell({
             navExtensionClusters={navExtensionClusters}
             basePresetKey={basePresetKey}
             showCaioPrimaryNavigation={showCaioPrimaryNavigation}
+            showCaioAttentionNavigation={showCaioAttentionNavigation}
             canReviewGovernedActions={canReviewGovernedActions}
             workstationHomeEntry={workstationHomeEntry}
           />
@@ -118,6 +121,7 @@ export function AppShell({
               navExtensionClusters={navExtensionClusters}
               basePresetKey={basePresetKey}
               showCaioPrimaryNavigation={showCaioPrimaryNavigation}
+              showCaioAttentionNavigation={showCaioAttentionNavigation}
               canReviewGovernedActions={canReviewGovernedActions}
               workstationHomeEntry={workstationHomeEntry}
             />
@@ -133,6 +137,7 @@ export function AppShell({
             alerts={alerts}
             quickCreateData={quickCreateData}
             showCaioPrimaryNavigation={showCaioPrimaryNavigation}
+            showCaioAttentionNavigation={showCaioAttentionNavigation}
           />
           <main className="mx-auto flex min-w-0 w-full max-w-[1580px] flex-col gap-6 px-4 pt-5 lg:px-8 lg:pt-6">
             {false ? <DemoTourBanner /> : null}

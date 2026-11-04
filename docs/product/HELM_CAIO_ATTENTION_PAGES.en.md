@@ -47,6 +47,6 @@ Until wired, `features/caio-attention/service.ts` serves a fail-closed stub (emp
 - The lifecycle service is bound (`lib/caio-attention-runtime/bound-page-service.ts`), so `lib/caio-attention/capability.json` is `closeCapabilityVersion: 1`, meaning the release can close cases. The probe's `pageServiceBound` is decided at runtime: true only when the pages are bound and the overlay has registered the attention pack (with its reminder policy); without it every command answers `service_unavailable` and attestation is blocked by `page_service_unbound`. The intake gate opens only when `requiredCloseCapability` is 1 and every expected node reports capability 1.
 - `npm run check:caio-attention` (CI repo-guards): no generic governed-task tables; no direct database access from the page layer; pages read through the page service only; the capability declaration equals the binding-derived value and ships with the close-chain forms; the stub stays closed while unbound.
 
-## Not included
+## Navigation entry
 
-The workspace navigation entry is outside this page slice.
+The workspace sidebar and mobile navigation show "Attention cases" as presentation only: hidden while the service is unbound or the member is inactive; shown to workspace OWNER and ADMIN; shown to other members only when they take part in at least one current confirmed command. A failing loader hides the entry, logs one warning (error name only) and never breaks the shell.
