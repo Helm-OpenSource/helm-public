@@ -5,10 +5,11 @@ import { parseCaioAttentionCommandForm } from "./command-form";
 const base = { caseId: ["c1"], expectedCommandVersion: ["2"], clientRequestId: ["0b0a6f7e-1c2d-4e5f-8a9b-0c1d2e3f4a5b"] };
 
 describe("parseCaioAttentionCommandForm", () => {
-  it("rejects missing identity fields and unknown operations", () => {
+  it("rejects malformed identity fields, system-only operations and OWNER operations without a reason", () => {
     expect(parseCaioAttentionCommandForm({ ...base, op: ["ack"], caseId: ["../x"] })).toEqual({ ok: false });
     expect(parseCaioAttentionCommandForm({ ...base, op: ["ack"], clientRequestId: ["short"] })).toEqual({ ok: false });
     expect(parseCaioAttentionCommandForm({ ...base, op: ["resumeDeferred"] })).toEqual({ ok: false });
+    expect(parseCaioAttentionCommandForm({ ...base, op: ["applySeverityRaise"] })).toEqual({ ok: false });
     expect(parseCaioAttentionCommandForm({ ...base, op: ["dismiss"] })).toEqual({ ok: false });
     expect(parseCaioAttentionCommandForm({ ...base, op: ["cancel"], reason: [" "] })).toEqual({ ok: false });
   });
