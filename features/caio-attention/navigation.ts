@@ -24,7 +24,9 @@ export async function resolveCaioAttentionNavigation(viewer: CaioAttentionViewer
   try {
     const mine = await getCaioAttentionPageService().listCases({ viewer, scope: "mine", page: 1, pageSize: 1 });
     return shouldShowCaioAttentionNavigation({ ...base, participantCaseCount: mine.total });
-  } catch {
-    return false; // a failing loader never breaks the shell; the entry just stays hidden
+  } catch (error) {
+    // A failing loader never breaks the shell; the entry stays hidden. Only the error name is logged, no case data.
+    console.warn("caio-attention navigation: participant lookup failed", error instanceof Error ? error.name : "unknown");
+    return false;
   }
 }

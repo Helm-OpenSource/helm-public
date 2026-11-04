@@ -67,9 +67,38 @@ describe("attention case page", () => {
     expect(review).toContain('value="ticket:T-9"');
     expect(review).not.toContain('value="audit-log:a1"');
 
-    loadCase.mockResolvedValue({ ok: true, view: view({ status: "SUGGESTED", command: null, allowedOperations: ["confirm"], assignableUserIds: ["u1", "u5"] }) });
+    loadCase.mockResolvedValue({ ok: true, view: view({ status: "SUGGESTED", command: null, allowedOperations: ["confirm"], viewerRoles: ["owner"], assignableUserIds: ["u1", "u5"] }) });
     const confirm = await renderDetail();
     expect(confirm).toContain("系统预填（仅建议）");
     expect(confirm).toContain("caio-attention-confirm-form");
+  });
+
+  const ownerOps = ["dismiss", "defer", "cancel", "reissue", "assignReviewers"] as const;
+  const ownerForms = ownerOps.map((op) => `caio-attention-${op}-form`);
+
+  it("renders every OWNER form the loader allows to the owner", async () => {
+    loadCase.mockResolvedValue({ ok: true, view: view({ allowedOperations: [...ownerOps], viewerRoles: ["owner"], assignableUserIds: ["u1", "u5"] }) });
+    const html = await renderDetail();
+    for (const form of ownerForms) expect(html, form).toContain(form);
+    expect(html).toContain("与当前命令的差异");
+  });
+
+  it("renders no OWNER form without allowed operations, or for a supervisory ADMIN even if the loader slips", async () => {
+    loadCase.mockResolvedValue({ ok: true, view: view({ viewerRoles: ["owner"] }) });
+    const none = await renderDetail();
+    loadCase.mockResolvedValue({ ok: true, view: view({ allowedOperations: [...ownerOps, "confirm"], viewerRoles: ["admin"] }) });
+    const admin = await renderDetail();
+    for (const html of [none, admin]) {
+      for (const form of [...ownerForms, "caio-attention-confirm-form"]) expect(html, form).not.toContain(form);
+      expect(html).not.toContain("caio-attention-next-steps");
+    }
+  });
+
+  it("does not offer reissue or reviewer changes before a command exists", async () => {
+    loadCase.mockResolvedValue({ ok: true, view: view({ status: "SUGGESTED", command: null, allowedOperations: ["reissue", "assignReviewers"], viewerRoles: ["owner"] }) });
+    const html = await renderDetail();
+    expect(html).not.toContain("caio-attention-reissue-form");
+    expect(html).not.toContain("caio-attention-assignReviewers-form");
+    expect(html).not.toContain("caio-attention-next-steps");
   });
 });
