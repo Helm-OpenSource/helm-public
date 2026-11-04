@@ -6,7 +6,12 @@ import type { PrismaClient } from "@prisma/client";
 
 import { resolveRuntimeHealthAttestation } from "@/lib/production-health/runtime-deployment-identity";
 
-import { CAIO_ATTENTION_CAPABILITY_FILE, parseCaioAttentionCapabilityFile, resolveCaioAttentionNodeId } from "./capability";
+import {
+  CAIO_ATTENTION_CAPABILITY_FILE,
+  parseCaioAttentionCapabilityFile,
+  resolveCaioAttentionNodeId,
+  resolveCaioAttentionNodeRole,
+} from "./capability";
 
 /**
  * RuntimeNode heartbeat (design v5 §1.5, fallback only): each runtime process upserts its own row every 60 s with its
@@ -23,11 +28,12 @@ export type CaioAttentionHeartbeat = Readonly<{
 export function resolveCaioAttentionHeartbeat(env: Readonly<Record<string, string | undefined>>, capabilityFileText: string | null):
   CaioAttentionHeartbeat | null {
   const nodeId = resolveCaioAttentionNodeId(env);
+  const role = resolveCaioAttentionNodeRole(env);
   const attestation = resolveRuntimeHealthAttestation(env);
-  if (!nodeId || attestation.mode !== "artifact-bound") return null;
+  if (!nodeId || !role || attestation.mode !== "artifact-bound") return null;
   return {
     nodeId,
-    role: "http",
+    role,
     deploymentId: attestation.runtimeDeploymentId,
     closeCapabilityVersion: parseCaioAttentionCapabilityFile(capabilityFileText) ?? 0,
     remindersEnabled: ["true", "1"].includes(env.HELM_CAIO_ATTENTION_REMINDERS_ENABLED?.trim().toLowerCase() ?? ""),

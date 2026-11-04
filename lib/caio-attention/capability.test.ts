@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { evaluateCaioAttentionCapability, parseCaioAttentionCapabilityFile, resolveCaioAttentionNodeId } from "./capability";
+import {
+  evaluateCaioAttentionCapability,
+  isCaioAttentionLoopbackRequest,
+  parseCaioAttentionCapabilityFile,
+  resolveCaioAttentionNodeId,
+} from "./capability";
 import { resolveCaioAttentionHeartbeat } from "./heartbeat.service";
 
 const report = { nodeId: "web-1", deploymentId: "dep-1", closeCapabilityVersion: 1, pageServiceBound: true, lifecycleRoutes: true, migrationReady: true };
@@ -32,5 +37,39 @@ describe("close-capability probe", () => {
     expect(resolveCaioAttentionHeartbeat({ ...env, HELM_CAIO_ATTENTION_REMINDERS_ENABLED: "true" }, "{\"closeCapabilityVersion\":1}"))
       .toEqual({ nodeId: "web-1", role: "http", deploymentId: "dep-1", closeCapabilityVersion: 1, remindersEnabled: true });
     expect(resolveCaioAttentionHeartbeat(env, "{")).toMatchObject({ closeCapabilityVersion: 0, remindersEnabled: false });
+  });
+
+  it("heartbeat role comes from HELM_RUNTIME_NODE_ROLE: empty is http, malformed turns the heartbeat off", () => {
+    const env = { HELM_RUNTIME_NODE_ID: "caio-1", HELM_HEALTH_ATTESTATION_MODE: "artifact-bound", HELM_RUNTIME_DEPLOYMENT_ID: "dep-1" };
+    expect(resolveCaioAttentionHeartbeat({ ...env, HELM_RUNTIME_NODE_ROLE: " caio " }, null)).toMatchObject({ role: "caio" });
+    expect(resolveCaioAttentionHeartbeat({ ...env, HELM_RUNTIME_NODE_ROLE: "" }, null)).toMatchObject({ role: "http" });
+    for (const role of ["Caio", "caio worker", "-x", "a".repeat(33)]) {
+      expect(resolveCaioAttentionHeartbeat({ ...env, HELM_RUNTIME_NODE_ROLE: role }, null), role).toBeNull();
+    }
+  });
+});
+
+describe("capability probe loopback check", () => {
+  const local = (headers: Record<string, string>) => isCaioAttentionLoopbackRequest(new Headers(headers));
+
+  it("accepts a loopback Host with or without a port, IPv6 included", () => {
+    for (const host of ["127.0.0.1", "127.0.0.1:3000", "localhost", "LOCALHOST:3000", "[::1]", "[::1]:3000"]) {
+      expect(local({ host }), host).toBe(true);
+    }
+  });
+
+  it("rejects any other Host, a missing Host and look-alike names", () => {
+    for (const host of ["", "::1", "127.0.0.2", "198.51.100.5:3000", "127.0.0.1.example.com", "localhost.example.com:3000",
+      "example.com", "127.0.0.1:3000:3000", "[::1]x"]) {
+      expect(local({ host }), host).toBe(false);
+    }
+    expect(local({})).toBe(false);
+  });
+
+  it("rejects a loopback Host whenever a forwarding header is present (the load balancer always adds X-Forwarded-For)", () => {
+    for (const name of ["x-forwarded-for", "X-Forwarded-Host", "x-forwarded-proto", "x-forwarded-port", "forwarded", "x-real-ip"]) {
+      expect(local({ host: "127.0.0.1:3000", [name]: "203.0.113.7" }), name).toBe(false);
+    }
+    expect(local({ host: "127.0.0.1:3000", "x-forwarded-for": "" })).toBe(false);
   });
 });

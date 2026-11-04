@@ -417,6 +417,9 @@ describeMysql("CAIO attention Control service and CLI on MySQL", () => {
     const proofs = await admin.$queryRaw<Array<{ epoch: number; guardVersion: number }>>`
       SELECT epoch, guardVersion FROM CaioAttentionNodeReadiness WHERE nodeId = 'node-a'`;
     expect(proofs).toEqual([{ epoch: 1, guardVersion: 1 }]);
+    const attested = await events("attest-node");
+    expect(attested).toEqual([{ op: "attest-node", actorRef: "host_deploy:node-a", epoch: 1, openEpoch: 0, payload: {
+      nodeId: "node-a", deploymentId: "dep-1", readinessId: expect.stringMatching(/^nr_/u) as unknown, closeCapabilityVersion: 1, guardVersion: 1 } }]);
 
     // Heartbeat fallback: a mismatching deployment id blocks resume until the node reports the attested one.
     const beat = { nodeId: "node-a", role: "http", deploymentId: "dep-0", closeCapabilityVersion: 1, remindersEnabled: true };
@@ -447,6 +450,10 @@ describeMysql("CAIO attention Control service and CLI on MySQL", () => {
     expect(head).toEqual({ activeVersion: 1, rowVersion: 2, updatedByRef: ACTOR });
     expect(await activate(2, 2, web)).toBe("errno:1142");
     expect(await refusal(publishCaioAttentionRouteConfig(web, { workspaceId: "ws-a", actorRef: ACTOR, config }))).toBe("errno:1142");
+    // One event per accepted publish / activate, in the same transaction; refused and denied attempts left none.
+    expect((await events("routes-publish")).map((event) => [event.epoch, event.payload.version])).toEqual([[null, 1], [null, 2]]);
+    expect((await events("routes-activate")).map((event) => [event.actorRef, event.payload.activeVersion, event.payload.rowVersion]))
+      .toEqual([[ACTOR, 1, 0], [ACTOR, 2, 1], [ACTOR, 1, 2]]);
   });
 
   it("the web and generator identities cannot pause, resume, deploy or recover: Control writes are refused with errno 1142", async () => {

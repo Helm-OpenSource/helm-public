@@ -35,6 +35,12 @@ export const CAIO_ATTENTION_HEARTBEAT_FRESH_MS = 3 * 60_000;
 /** Interactive transactions wait for lock holders; a hold barrier spans one link() on the deploy host. */
 export const CAIO_ATTENTION_CONTROL_TX = { maxWait: 10_000, timeout: 60_000 } as const;
 export const CAIO_ATTENTION_HOLD_TX = { maxWait: 10_000, timeout: 120_000 } as const;
+/**
+ * attest-node runs after the CLI's 10 s capability fetch; 10 + 5 + 40 = 55 s stays under the deploy script's 60 s call
+ * budget, so a slow attest ends as this CLI's own failure (rolled back, no proof) rather than the caller's kill.
+ */
+export const CAIO_ATTENTION_ATTEST_FETCH_MS = 10_000;
+export const CAIO_ATTENTION_ATTEST_TX = { maxWait: 5_000, timeout: 40_000 } as const;
 export const CAIO_ATTENTION_NODE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/u;
 const DEPLOYMENT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 const LEASE_PATTERN = /^[a-f0-9]{48}$/u;
@@ -308,11 +314,15 @@ export async function attestCaioAttentionNode(
       nodeId: request.nodeId, deploymentId: request.targetDeploymentId, requiredCloseCapability: control.requiredCloseCapability,
     });
     if (blocks.length > 0) refuse(`attest_blocked:${blocks.join(",")}`);
+    const readinessId = `nr_${randomBytes(12).toString("hex")}`;
     await tx.$executeRaw`INSERT INTO CaioAttentionNodeReadiness (id, nodeId, deploymentId, closeCapabilityVersion, guardVersion, epoch,
-      verifiedAt, verifiedByRef) VALUES (${`nr_${randomBytes(12).toString("hex")}`}, ${request.nodeId}, ${request.targetDeploymentId},
+      verifiedAt, verifiedByRef) VALUES (${readinessId}, ${request.nodeId}, ${request.targetDeploymentId},
       ${report.closeCapabilityVersion}, ${guardVersion}, ${request.epoch}, NOW(3), ${auditRef(`host_deploy:${request.nodeId}`, "attest-node")})`;
+    await appendCaioAttentionControlEvent(tx, { op: "attest-node", actorRef: `host_deploy:${request.nodeId}`, epoch: request.epoch,
+      openEpoch: control.openEpoch, payload: { nodeId: request.nodeId, deploymentId: request.targetDeploymentId, readinessId,
+        closeCapabilityVersion: report.closeCapabilityVersion, guardVersion } });
     return { attested: true, epoch: request.epoch };
-  }, CAIO_ATTENTION_CONTROL_TX);
+  }, CAIO_ATTENTION_ATTEST_TX);
 }
 
 /** deploy-end: only the lease holder ends its lease; intake always returns to PAUSED, never OPEN. */
