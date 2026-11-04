@@ -1,3 +1,6 @@
+import { spawn } from "node:child_process";
+import path from "node:path";
+
 import { Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -16,7 +19,7 @@ import {
 import { readCaioAttentionIntakeGate } from "./intake-gate.service";
 
 /**
- * Control service on an isolated MySQL database through the least-privilege fixture identities (same
+ * Control service and CLI on an isolated MySQL database through the least-privilege fixture identities (same
  * environment as schema.mysql.test.ts; run by `npm run test:caio-attention:mysql`).
  */
 const urls = {
@@ -48,7 +51,24 @@ async function refusal(promise: Promise<unknown>): Promise<string> {
   }
 }
 
-describeMysql("CAIO attention Control service on MySQL", () => {
+function runCli(op: string, input: string, opts: { closeAfterReady?: boolean } = {}) {
+  return new Promise<{ code: number | null; stdout: string }>((resolve) => {
+    const child = spawn(path.resolve("node_modules/.bin/tsx"), ["scripts/caio-attention-control.ts", op], {
+      env: { PATH: process.env.PATH ?? "", DATABASE_URL: urls.ops! },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    let stdout = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+      if (opts.closeAfterReady && stdout.includes("READY\n")) child.stdin.end();
+    });
+    child.on("close", (code) => resolve({ code, stdout }));
+    child.stdin.write(`${input}\n`);
+    if (!opts.closeAfterReady) child.stdin.end();
+  });
+}
+
+describeMysql("CAIO attention Control service and CLI on MySQL", () => {
   let admin: PrismaClient, generator: PrismaClient, web: PrismaClient, ops: PrismaClient;
 
   async function control() {
@@ -326,6 +346,46 @@ describeMysql("CAIO attention Control service on MySQL", () => {
     expect(ready).toBe(true);
     expect(await control()).toMatchObject({ intakeState: "DEPLOYING", leaseToken: begun.lease });
   }, 40_000);
+
+  it("CLI: exact input keys, one JSON line out, READY barrier released on EOF, exit 3 when fenced and 4 when refused", async () => {
+    expect(await runCli("deploy-begin", JSON.stringify({ nodeId: "node-a" }))).toEqual({ code: 4, stdout: "" });
+    expect((await runCli("deploy-begin", JSON.stringify({ nodeId: "node-a", targetDeploymentId: "dep-1", extra: 1 }))).code).toBe(4);
+    const begin = await runCli("deploy-begin", JSON.stringify({ nodeId: "node-a", targetDeploymentId: "dep-1" }));
+    expect(begin.code).toBe(0);
+    expect(begin.stdout.split("\n")).toHaveLength(2);
+    const result = JSON.parse(begin.stdout) as { lease: string; epoch: number; revokedEpoch: number };
+    expect(Object.keys(result).sort()).toEqual(["epoch", "lease", "minGuardVersion", "openCaseCount", "requiredCloseCapability", "revokedEpoch"]);
+    expect(result).toMatchObject({ epoch: 1, revokedEpoch: 0, openCaseCount: 0 });
+    const hold = { lease: result.lease, nodeId: "node-a", targetDeploymentId: "dep-1", epoch: 1, phase: "switch" };
+    expect(await runCli("hold", JSON.stringify(hold), { closeAfterReady: true })).toEqual({ code: 0, stdout: "READY\n" });
+    expect(await runCli("hold", JSON.stringify({ ...hold, epoch: 2 }), { closeAfterReady: true })).toEqual({ code: 3, stdout: "" });
+    expect((await runCli("attest-node", JSON.stringify({ ...hold, phase: undefined, guardVersion: 1 }))).code).toBe(4);
+    expect(await runCli("deploy-end", JSON.stringify({ lease: "0".repeat(48) }))).toEqual({ code: 3, stdout: "" });
+    expect(await runCli("deploy-end", JSON.stringify({ lease: result.lease }))).toEqual({ code: 0, stdout: "{\"ended\":true}\n" });
+    expect(await runCli("resume", JSON.stringify({ actorRef: ACTOR, ackPauseRequestIds: [] }))).toEqual({ code: 4, stdout: "" });
+    expect((await events()).map((event) => event.op)).toEqual(["expected-nodes", "deploy-begin", "deploy-end"]);
+  }, 60_000);
+
+  it("CLI hold behind a FOR UPDATE holder exits non-zero within the lock wait and never prints READY", async () => {
+    const begun = await beginCaioAttentionDeployment(ops, { nodeId: "node-a", targetDeploymentId: "dep-1" });
+    const hold = { lease: begun.lease, nodeId: "node-a", targetDeploymentId: "dep-1", epoch: begun.epoch, phase: "restore" };
+    const locked = deferred();
+    const release = deferred();
+    const holder = admin.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM CaioAttentionControl WHERE id = 'global' FOR UPDATE`;
+      locked.resolve();
+      await release.promise;
+    }, { timeout: 40_000 });
+    await locked.promise;
+    const started = Date.now();
+    const outcome = await runCli("hold", JSON.stringify(hold), { closeAfterReady: true });
+    const waited = Date.now() - started;
+    release.resolve();
+    await holder;
+    expect(outcome).toEqual({ code: 1, stdout: "" });
+    expect(waited).toBeGreaterThanOrEqual(9_000);
+    expect(waited).toBeLessThan(25_000);
+  }, 60_000);
 
   it("the web and generator identities cannot pause, resume, deploy or recover: Control writes are refused with errno 1142", async () => {
     await deploy("node-a");
