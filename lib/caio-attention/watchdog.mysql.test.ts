@@ -29,7 +29,8 @@ const rule = (detectorId: string, primaryRoleKey: string): CaioAttentionRouteRul
   return parsed.rule;
 };
 // det-d's primary role has no holder in the workspace: not routed there, never watched.
-const RULES = [rule("det-a", "sup"), rule("det-b", "sup"), rule("det-c", "sup"), rule("det-d", "unbound")];
+// det-e's primary role is held only under an enterprise override: routed, watched.
+const RULES = [rule("det-a", "sup"), rule("det-b", "sup"), rule("det-c", "sup"), rule("det-d", "unbound"), rule("det-e", "ent")];
 
 describeMysql("CAIO attention watchdogs on MySQL as the web identity", () => {
   let admin: PrismaClient, web: PrismaClient;
@@ -72,7 +73,8 @@ describeMysql("CAIO attention watchdogs on MySQL as the web identity", () => {
 
   async function seed(bindTech: boolean) {
     const config = { schemaVersion: "caio-attention-routes/v1",
-      roleBindings: { sup: ["user:u-w-owner"], ...(bindTech ? { tech: ["user:u-w-tech"] } : {}) } };
+      roleBindings: { sup: ["user:u-w-owner"], ...(bindTech ? { tech: ["user:u-w-tech"] } : {}) },
+      enterpriseOverrides: { "ent-1": { ent: ["user:u-w-tech"] } } };
     await admin.$executeRaw`INSERT INTO CaioAttentionRouteConfig (id, workspaceId, version, schemaVersion, configJson, contentHash,
       createdByRef) VALUES ('rc-w', ${WS}, 1, 'caio-attention-routes/v1', ${JSON.stringify(config)}, 'h', 'test')`;
     await admin.$executeRaw`INSERT INTO CaioAttentionRouteConfigHead (id, workspaceId, activeVersion, updatedByRef) VALUES ('h-w', ${WS}, 1, 't')`;
@@ -94,22 +96,25 @@ describeMysql("CAIO attention watchdogs on MySQL as the web identity", () => {
     await evaluation("det-a", 0, "NO_HIT");
     for (const minute of [10, 20, 30]) await evaluation("det-a", minute, "SKIPPED"); // W3b, even if not applicable
     await evaluation("det-b", 20, "NO_HIT"); // one valid evaluation in the window: healthy
-    // det-c: no records at all -> W3a
-    expect((await run()).map((a) => [a.detectorId, a.kind, a.created])).toEqual([["det-a", "W3b", 1], ["det-c", "W3a", 1]]);
-    expect((await run()).map((a) => a.created)).toEqual([0, 0]);
+    // det-c and det-e: no records at all -> W3a (det-e is routed through an enterprise override); det-d unrouted.
+    expect((await run()).map((a) => [a.detectorId, a.kind, a.created]))
+      .toEqual([["det-a", "W3b", 1], ["det-c", "W3a", 1], ["det-e", "W3a", 1]]);
+    expect((await run()).map((a) => a.created)).toEqual([0, 0, 0]);
     // A tick still RUNNING has no evaluations yet and does not count as an empty bucket.
     await admin.$executeRaw`INSERT INTO CaioQuickCheckTick (id, workspaceId, bucketStart, status) VALUES ('t-w-40', ${WS}, ${at(40)}, 'RUNNING')`;
     await evaluation("det-b", 30, "HIT");
     const later = await runCaioAttentionEvaluationWatchdog({ client: web, now: at(45), routeRules: RULES, watchdogRoleKey: "tech" });
-    expect(later.map((a) => [a.detectorId, a.created])).toEqual([["det-a", 0], ["det-c", 0]]);
+    expect(later.map((a) => [a.detectorId, a.created])).toEqual([["det-a", 0], ["det-c", 0], ["det-e", 0]]);
     expect((await notices()).map((n) => `${n.userId} ${n.type} ${n.dedupeKey}`)).toEqual([
       `u-w-tech SYSTEM ca-w3:det-a:${at(0).toISOString()}:u-w-tech`, "u-w-tech SYSTEM ca-w3:det-c:none:u-w-tech",
+      "u-w-tech SYSTEM ca-w3:det-e:none:u-w-tech",
     ]);
   });
 
   it("falls back to the OWNER when the watchdog role is unbound, and waits for three buckets of history", async () => {
     await seed(false);
-    expect((await run()).map((a) => [a.detectorId, a.kind])).toEqual([["det-a", "W3a"], ["det-b", "W3a"], ["det-c", "W3a"]]);
+    expect((await run()).map((a) => [a.detectorId, a.kind])).toEqual([["det-a", "W3a"], ["det-b", "W3a"], ["det-c", "W3a"],
+      ["det-e", "W3a"]]);
     expect(new Set((await notices()).map((n) => n.userId))).toEqual(new Set(["u-w-owner"]));
     await admin.$executeRaw`DELETE FROM CaioQuickCheckTick WHERE workspaceId = ${WS} AND bucketStart >= ${at(10)}`;
     await admin.$executeRaw`DELETE FROM Notification WHERE workspaceId = ${WS}`;
