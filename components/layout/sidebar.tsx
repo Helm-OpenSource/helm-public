@@ -27,7 +27,10 @@ import { NavLink } from "@/components/layout/nav-link";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { getDemoModeProfile } from "@/lib/demo/demo-modes";
-import type { WorkspaceNavExtensionCluster } from "@/lib/extensions/registry";
+import type {
+  WorkspaceNavExtensionCluster,
+  WorkspaceNavExtensionItem,
+} from "@/lib/extensions/registry";
 import {
   CAIO_PRIMARY_DESTINATION,
   getDestinationCatalog,
@@ -122,6 +125,61 @@ export function getSidebarWorkstationPresentation(
     showExtensionClusters: false,
     showUtilityPanel: false,
   };
+}
+
+/**
+ * Split registry nav clusters between the Core "Customer assets" section and
+ * the legacy Extensions area. Clusters stay subject to the same visibility
+ * gate as the Extensions area (`showExtensionClusters`): a bound dedicated
+ * workstation hides them in both places. `placement: "customer-assets"` only
+ * applies to the fixed Core sections; when a destination catalog drives the
+ * navigation, those clusters fall back to the Extensions area.
+ */
+export function getSidebarExtensionPlacement(input: {
+  clusters: ReadonlyArray<WorkspaceNavExtensionCluster>;
+  catalogActive: boolean;
+  showExtensionClusters: boolean;
+}): {
+  customerAssetsItems: WorkspaceNavExtensionItem[];
+  extensionClusters: WorkspaceNavExtensionCluster[];
+} {
+  if (!input.showExtensionClusters) {
+    return { customerAssetsItems: [], extensionClusters: [] };
+  }
+  const injectIntoCustomerAssets = (cluster: WorkspaceNavExtensionCluster) =>
+    !input.catalogActive && cluster.placement === "customer-assets";
+  return {
+    customerAssetsItems: input.clusters
+      .filter(injectIntoCustomerAssets)
+      .flatMap((cluster) => cluster.items),
+    extensionClusters: input.clusters.filter(
+      (cluster) => !injectIntoCustomerAssets(cluster),
+    ),
+  };
+}
+
+function renderExtensionStatusBadge(
+  statusBadge: WorkspaceNavExtensionItem["statusBadge"],
+): React.ReactNode | undefined {
+  // "muted" (e.g. the ubiquitous 只读) is the default read-only
+  // state — noise, not signal — so we suppress its pill entirely.
+  // Only informative tones (live / planned / blocked) render.
+  if (!statusBadge || statusBadge.tone === "muted") return undefined;
+  return (
+    <span
+      className={cn(
+        "rounded-full px-2 py-0.5 text-[11px] font-medium",
+        statusBadge.tone === "live" &&
+          "bg-[color:var(--status-success-bg)] text-[color:var(--status-success-text)]",
+        statusBadge.tone === "planned" &&
+          "bg-[color:var(--status-warning-bg)] text-[color:var(--status-warning-text)]",
+        statusBadge.tone === "blocked" &&
+          "bg-[color:var(--status-danger-bg)] text-[color:var(--status-danger-text)]",
+      )}
+    >
+      {statusBadge.label}
+    </span>
+  );
 }
 
 export function Sidebar({
@@ -325,12 +383,12 @@ export function Sidebar({
   const drawerItems = catalog
     ? toNavItems(catalog.drawer, english, settingsHrefs)
     : [];
-  const customerAssetsClusters = navExtensionClusters.filter(
-    (cluster) => cluster.placement === "customer-assets",
-  );
-  const extensionClusters = navExtensionClusters.filter(
-    (cluster) => catalog || cluster.placement !== "customer-assets",
-  );
+  const { customerAssetsItems, extensionClusters } =
+    getSidebarExtensionPlacement({
+      clusters: navExtensionClusters,
+      catalogActive: catalog !== null,
+      showExtensionClusters: workstationPresentation.showExtensionClusters,
+    });
   const renderedSections: SidebarNavSection[] = [
     ...(showCaioPrimaryNavigation ? [caioPrimarySection] : []),
     ...(catalog
@@ -378,12 +436,13 @@ export function Sidebar({
           items: [
             ...section.items,
             ...(section.key === "work"
-              ? customerAssetsClusters.flatMap((cluster) =>
-                  cluster.items.map((item): SidebarNavItem => ({
+              ? customerAssetsItems.map(
+                  (item): SidebarNavItem => ({
                     href: item.href,
                     label: item.label,
                     icon: <ExtensionNavIcon iconKey={item.iconKey} />,
-                  })),
+                    trailing: renderExtensionStatusBadge(item.statusBadge),
+                  }),
                 )
               : []),
           ].filter(
@@ -499,26 +558,7 @@ export function Sidebar({
                     href={item.href}
                     icon={<ExtensionNavIcon iconKey={item.iconKey} />}
                     label={item.label}
-                    trailing={
-                      // "muted" (e.g. the ubiquitous 只读) is the default read-only
-                      // state — noise, not signal — so we suppress its pill entirely.
-                      // Only informative tones (live / planned / blocked) render.
-                      item.statusBadge && item.statusBadge.tone !== "muted" ? (
-                        <span
-                          className={cn(
-                            "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                            item.statusBadge.tone === "live" &&
-                              "bg-[color:var(--status-success-bg)] text-[color:var(--status-success-text)]",
-                            item.statusBadge.tone === "planned" &&
-                              "bg-[color:var(--status-warning-bg)] text-[color:var(--status-warning-text)]",
-                            item.statusBadge.tone === "blocked" &&
-                              "bg-[color:var(--status-danger-bg)] text-[color:var(--status-danger-text)]",
-                          )}
-                        >
-                          {item.statusBadge.label}
-                        </span>
-                      ) : undefined
-                    }
+                    trailing={renderExtensionStatusBadge(item.statusBadge)}
                   />
                 )),
               )}
