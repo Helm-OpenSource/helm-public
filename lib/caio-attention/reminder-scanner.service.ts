@@ -7,6 +7,7 @@ import {
   caioAttentionWarningDigest,
   collectDueCaioAttentionReminders,
   isCaioAttentionRecurrenceSendable,
+  isWithinCaioAttentionDaytime,
   isWithinCaioAttentionSendWindow,
   type CaioAttentionPolicy,
   type CaioAttentionReminderFields,
@@ -35,12 +36,15 @@ export type CaioAttentionReminderScanResult = {
   notificationsCreated: number;
   notificationsDeduplicated: number;
   failedCaseIds: string[];
-  /** Rules that fell due with nobody to notify (e.g. no active OWNER): left unconsumed and logged. */
+  /** Rules newly found due with nobody to notify (e.g. no active OWNER): left unconsumed, logged once per due value. */
   skippedNoRecipient: Partial<Record<CaioAttentionScanRule, number>>;
 };
 
 const MAX_CASES_PER_SCAN = 500;
 const MAX_ATTEMPTS = 4;
+/** First confirmation of the case (the lifecycle service's CONFIRMED event); dispatchedAt when none is recorded. */
+const RECURRENCE_CUTOFF = Prisma.sql`COALESCE((SELECT MIN(x.createdAt) FROM CaioAttentionCaseEvent x
+  WHERE x.caseId = c.id AND x.kind = 'CONFIRMED'), c.dispatchedAt)`;
 
 /** MySQL deadlock (1213) / lock wait timeout (1205), as raw-query errors or Prisma's transaction write conflict. */
 function isRetryable(error: unknown): boolean {
@@ -104,17 +108,24 @@ async function notifyOnce(client: Tx | PrismaClient, input: {
 }
 
 async function appendEvent(tx: Tx, input: {
-  caseId: string; kind: "REMINDED" | "ESCALATED" | "R3_SENT"; commandVersion: number; candidateId?: string;
+  caseId: string; kind: "REMINDED" | "ESCALATED" | "R3_SENT" | "NO_RECIPIENT"; commandVersion: number; candidateId?: string;
   dedupeKey?: string; payload: Record<string, unknown>;
-}) {
-  await tx.$executeRaw`
+}): Promise<boolean> {
+  const inserted = await tx.$executeRaw`
     INSERT INTO CaioAttentionCaseEvent (id, caseId, kind, commandVersion, candidateId, dedupeKey, actorUserId, payloadJson, createdAt)
     SELECT ${randomUUID()}, ${input.caseId}, ${input.kind}, ${input.commandVersion}, ${input.candidateId ?? null},
       ${input.dedupeKey ?? null}, NULL, ${JSON.stringify(input.payload)}, NOW(3) FROM DUAL
     WHERE NOT EXISTS (SELECT 1 FROM CaioAttentionCaseEvent WHERE caseId = ${input.caseId} AND kind = ${input.kind}
       AND ((${input.candidateId ?? null} IS NOT NULL AND candidateId = ${input.candidateId ?? null})
         OR (${input.dedupeKey ?? null} IS NOT NULL AND dedupeKey = ${input.dedupeKey ?? null})))`;
+  return inserted === 1;
 }
+
+/**
+ * R3 and R0w are daytime-only without the window-end grace: the grace exists for reminders that fell due inside the
+ * window and are consumed by the first scan after 20:00 (R4, warning R2), not for new recurrences or a late digest.
+ */
+const strictDaytime = (now: Date, policy: CaioAttentionPolicy) => isWithinCaioAttentionDaytime(now, policy);
 
 /**
  * Ids of cases with at least one rule due; each branch is a range scan on one (status, due column) index and mirrors
@@ -125,7 +136,7 @@ async function dueCaseIds(client: PrismaClient, now: Date, includeRecurrence: bo
   skip: readonly string[]): Promise<string[]> {
   const recurrence = includeRecurrence
     ? Prisma.sql`UNION SELECT e.caseId AS id FROM CaioAttentionCaseEvent e JOIN CaioAttentionCase c ON c.id = e.caseId
-        WHERE e.kind = 'RECURRED' AND c.status IN ${WORKING}
+        WHERE e.kind = 'RECURRED' AND c.status IN ${WORKING} AND e.createdAt >= ${RECURRENCE_CUTOFF}
           AND NOT EXISTS (SELECT 1 FROM CaioAttentionCaseEvent s WHERE s.caseId = e.caseId AND s.kind = 'R3_SENT'
             AND s.candidateId = e.candidateId)`
     : Prisma.empty;
@@ -209,10 +220,15 @@ async function scanOneCase(client: PrismaClient, caseId: string, now: Date, poli
     };
     for (const send of sends) {
       if (send.notifications.length === 0) {
-        // Nobody to tell (e.g. no active OWNER): keep the rule due so it fires once someone exists, and say so.
+        // Nobody to tell (e.g. no active OWNER): keep the rule due so it fires once someone exists. A NO_RECIPIENT
+        // event per due value makes the warning (and the count) once, not every tick.
         for (const key of RULE_FIELDS[send.rule]) delete updates[key];
-        result.skippedNoRecipient[send.rule] = (result.skippedNoRecipient[send.rule] ?? 0) + 1;
-        console.warn(`[caio-attention-reminders] case ${row.id} ${send.rule} due but has no recipient; left due`);
+        const first = await appendEvent(tx, { caseId: row.id, kind: "NO_RECIPIENT", commandVersion: row.commandVersion,
+          dedupeKey: ruleKey[send.rule](), payload: { rule: send.rule, scannedAt: now.toISOString() } });
+        if (first) {
+          result.skippedNoRecipient[send.rule] = (result.skippedNoRecipient[send.rule] ?? 0) + 1;
+          console.warn(`[caio-attention-reminders] case ${row.id} ${send.rule} due but has no recipient; left due`);
+        }
         continue;
       }
       await deliver(send.rule, send.notifications);
@@ -223,19 +239,24 @@ async function scanOneCase(client: PrismaClient, caseId: string, now: Date, poli
       });
     }
 
-    // R3: each RECURRED event not yet followed by an R3_SENT notifies the primary and cc once; never the escalation
-    // holder. Not cut at dispatchedAt, so a recurrence recorded at night survives a reissue before 08:00.
-    if (isCaioAttentionRecurrenceSendable(status, now, policy)) {
+    // R3: each RECURRED event since the case was first confirmed, not yet followed by an R3_SENT, notifies the primary
+    // and cc once; never the escalation holder. Recurrences before confirmation stay on the OWNER's confirm view. The
+    // cut is the first CONFIRMED event, not dispatchedAt, so a night recurrence survives a reissue before 08:00.
+    if (isCaioAttentionRecurrenceSendable(status, now, policy) && strictDaytime(now, policy)) {
       const recurrences = await tx.$queryRaw<Array<{ candidateId: string }>>`
-        SELECT e.candidateId FROM CaioAttentionCaseEvent e
-        WHERE e.caseId = ${row.id} AND e.kind = 'RECURRED' AND e.candidateId IS NOT NULL
+        SELECT e.candidateId FROM CaioAttentionCaseEvent e JOIN CaioAttentionCase c ON c.id = e.caseId
+        WHERE e.caseId = ${row.id} AND e.kind = 'RECURRED' AND e.candidateId IS NOT NULL AND e.createdAt >= ${RECURRENCE_CUTOFF}
           AND NOT EXISTS (SELECT 1 FROM CaioAttentionCaseEvent s WHERE s.caseId = e.caseId AND s.kind = 'R3_SENT'
             AND s.candidateId = e.candidateId)
         ORDER BY e.createdAt`;
       const recipients = [...new Set([row.primaryUserId, ...parseIds(row.ccUserIdsJson)].filter((id): id is string => Boolean(id)))];
-      if (recurrences.length > 0 && recipients.length === 0) {
-        result.skippedNoRecipient.R3 = (result.skippedNoRecipient.R3 ?? 0) + recurrences.length;
-        console.warn(`[caio-attention-reminders] case ${row.id} R3 due but has no recipient; left due`);
+      for (const { candidateId } of recipients.length === 0 ? recurrences : []) {
+        const first = await appendEvent(tx, { caseId: row.id, kind: "NO_RECIPIENT", commandVersion: row.commandVersion,
+          dedupeKey: `R3:${candidateId}`, payload: { rule: "R3", scannedAt: now.toISOString() } });
+        if (first) {
+          result.skippedNoRecipient.R3 = (result.skippedNoRecipient.R3 ?? 0) + 1;
+          console.warn(`[caio-attention-reminders] case ${row.id} R3 due but has no recipient; left due`);
+        }
       }
       for (const { candidateId } of recipients.length > 0 ? recurrences : []) {
         await deliver("R3", recipients.map((userId) => ({ userId, dedupeKey: `ca:${row.id}:R3:${candidateId}:${userId}` })));
@@ -325,7 +346,7 @@ async function sendWarningDigests(client: PrismaClient, now: Date, policy: CaioA
   for (const { workspaceId, n } of workspaces) {
     for (const ownerUserId of await activeOwnerIds(client, workspaceId)) {
       const digest = caioAttentionWarningDigest(workspaceId, ownerUserId, now, policy);
-      if (!digest.due) continue;
+      if (!digest.due || !strictDaytime(now, policy)) continue;
       const created = await notifyOnce(client, {
         workspaceId, userId: ownerUserId, dedupeKey: digest.dedupeKey,
         title: `CAIO 关注事项 · ${STAGE_LABEL.R0w}`, body: `${Number(n)} 项警告待确认`,
@@ -350,7 +371,8 @@ export async function runCaioAttentionReminderScan(input: {
 }): Promise<CaioAttentionReminderScanResult> {
   const result = emptyResult();
   // Recurrence notices are daytime-only; outside the window those cases are not even locked.
-  const includeRecurrence = isCaioAttentionRecurrenceSendable("DISPATCHED", input.now, input.policy);
+  const includeRecurrence = isCaioAttentionRecurrenceSendable("DISPATCHED", input.now, input.policy)
+    && strictDaytime(input.now, input.policy);
   const ids = await dueCaseIds(input.client, input.now, includeRecurrence, input.maxCases ?? MAX_CASES_PER_SCAN,
     input.skipCaseIds ?? []);
   for (const caseId of ids) {

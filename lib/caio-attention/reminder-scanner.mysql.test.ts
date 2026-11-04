@@ -234,6 +234,11 @@ describeMysql("CAIO attention reminder scanner on MySQL as the web identity", ()
     expect(blind.sends).toEqual({});
     expect(blind.skippedNoRecipient).toEqual({ R0a: 1 });
     expect((await caseRow("s9")).r0aSentAt).toBeNull();
+    // Still due next tick, but the missing recipient is recorded and logged once, not every five minutes.
+    expect((await scan(local(5, 9, 6))).skippedNoRecipient).toEqual({});
+    const marks = await admin.$queryRaw<Array<{ n: bigint }>>`
+      SELECT COUNT(*) AS n FROM CaioAttentionCaseEvent WHERE caseId = 's9' AND kind = 'NO_RECIPIENT'`;
+    expect(Number(marks[0].n)).toBe(1);
     await admin.$executeRaw`UPDATE Membership SET accessScope = NULL WHERE workspaceId = ${WS} AND userId = 'u-owner'`;
     expect((await scan(local(5, 9, 8))).sends).toEqual({ R0a: 1 });
   });
@@ -296,8 +301,11 @@ describeMysql("CAIO attention reminder scanner on MySQL as the web identity", ()
 
   it("sends recurrence notices to primary and cc in daytime only, across a reissue, and the warning digest once a day (T-N3, T-N16)", async () => {
     await dispatched("r1", "warning", local(4, 9), { respondedAt: local(4, 9, 30), fields: { nextPeriodicAt: local(9, 10) } });
+    // A recurrence recorded before the OWNER confirmed (08:00) stays on the confirm view; the one at 21:00 is owed.
     await admin.$executeRaw`INSERT INTO CaioAttentionCaseEvent (id, caseId, kind, candidateId, payloadJson, createdAt)
-      VALUES ('ev-r1', 'r1', 'RECURRED', 'cand-2', '{}', ${local(4, 21)})`;
+      VALUES ('ev-before', 'r1', 'RECURRED', 'cand-old', '{}', ${local(4, 8)}),
+        ('ev-confirm', 'r1', 'CONFIRMED', NULL, '{}', ${local(4, 9)}),
+        ('ev-r1', 'r1', 'RECURRED', 'cand-2', '{}', ${local(4, 21)})`;
     expect((await scan(local(4, 21, 5))).sends).toEqual({});
     // Reissued at 07:00, after the night recurrence: the notice is still owed (not cut at the new dispatchedAt).
     await admin.$executeRaw`UPDATE CaioAttentionCase SET commandVersion = 2, dispatchedAt = ${local(5, 7)} WHERE id = 'r1'`;
@@ -305,13 +313,25 @@ describeMysql("CAIO attention reminder scanner on MySQL as the web identity", ()
     expect((await scan(local(5, 8, 6))).sends).toEqual({});
     const r3 = (await notices()).filter((n) => n.dedupeKey.includes(":R3:")).map((n) => n.dedupeKey);
     expect(r3).toEqual(["ca:r1:R3:cand-2:u-cc", "ca:r1:R3:cand-2:u-primary"]);
+    expect(r3.some((key) => key.includes("cand-old"))).toBe(false);
+
+    await retire();
+    // The window-end grace serves reminders that fell due inside the window (R4 here), not R3 or the digest.
+    await dispatched("late", "warning", local(6, 9), { respondedAt: local(6, 9, 5), fields: { nextPeriodicAt: local(6, 20) } });
+    await admin.$executeRaw`INSERT INTO CaioAttentionCaseEvent (id, caseId, kind, candidateId, payloadJson, createdAt)
+      VALUES ('ev-late', 'late', 'RECURRED', 'cand-late', '{}', ${local(6, 19)})`;
+    await insertCase({ id: "g0", status: "SUGGESTED", severity: "warning" });
+    expect((await scan(local(6, 20, 5))).sends).toEqual({ R4: 1 });
+    expect((await scan(local(7, 8, 1))).sends).toEqual({ R3: 1 });
+    expect((await notices()).some((n) => n.dedupeKey.startsWith(`ca-digest:${WS}:u-owner:2026-11-06`))).toBe(false);
+    await retire();
 
     await insertCase({ id: "g1", status: "SUGGESTED", severity: "warning" });
     await insertCase({ id: "g2", status: "SUGGESTED", severity: "warning" });
-    expect((await scan(local(6, 9, 25))).sends).toEqual({});
-    expect((await scan(local(6, 9, 31))).sends).toEqual({ R0w: 1 });
-    expect((await scan(local(6, 15))).sends).toEqual({});
+    expect((await scan(local(8, 9, 25))).sends).toEqual({});
+    expect((await scan(local(8, 9, 31))).sends).toEqual({ R0w: 1 });
+    expect((await scan(local(8, 15))).sends).toEqual({});
     const digest = (await notices()).filter((n) => n.dedupeKey.startsWith("ca-digest:"));
-    expect(digest).toEqual([expect.objectContaining({ userId: "u-owner", dedupeKey: `ca-digest:${WS}:u-owner:2026-11-06` })]);
+    expect(digest).toEqual([expect.objectContaining({ userId: "u-owner", dedupeKey: `ca-digest:${WS}:u-owner:2026-11-08` })]);
   });
 });
