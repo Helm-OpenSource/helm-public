@@ -112,10 +112,11 @@ describeMysql("CAIO attention disposition, review and read access on MySQL (web 
     expect(await load(people.admin)).toMatchObject({ ok: true });
     expect(await load(people.escalation)).toMatchObject({ ok: true }); // ADMIN who is also the escalation person
     expect((await listCaioAttentionCasesForViewer(web, { workspaceId, viewerUserId: people.admin })).total).toBe(1);
-    expect(await reads(caseId)).toBe(3);
+    // Two case reads are recorded; the ADMIN list is not (pending owner ruling on list reads).
+    expect(await reads(caseId)).toBe(2);
     const detail = await load(people.owner);
     expect(detail.ok && detail.detail.events.map((e) => e.kind)).toEqual(["CONFIRMED"]);
-    expect(await reads(caseId)).toBe(3);
+    expect(await reads(caseId)).toBe(2);
     await admin.membership.update({ where: { workspaceId_userId: { workspaceId, userId: people.primary } }, data: { status: "INACTIVE" } });
     expect(await load(people.primary)).toEqual({ ok: false, reason: "not_found" });
     expect(await submit(caseId, [])).toEqual({ ok: false, reason: "not_found" });

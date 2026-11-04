@@ -101,6 +101,7 @@ function issueCommand(
         changedFields: diffCaioAttentionPrefill(previous, people), previous: serializeCaioAttentionPeople(previous),
         command: serializeCaioAttentionPeople(people), ownerCommandHash: record.hash,
         dispatchNoticeAt: dispatchNoticeAt.toISOString(), dispatchNoticeSent: noticeNow, supersededDispositionId, note: noteOf(request.note),
+        requestHash: ctx.requestHash,
       },
     });
     return accepted(row.id, "DISPATCHED", commandVersion);
@@ -118,10 +119,10 @@ function ownerTransition(
   deps: CaioAttentionLifecycleDeps, op: "defer" | "dismiss" | "cancel", request: OwnerRequest & Readonly<{ deferredUntil?: Date }>,
 ): Promise<CaioAttentionLifecycleResult> {
   const eventKind = ({ defer: "DEFERRED", dismiss: "DISMISSED", cancel: "CANCELLED" } as const)[op];
-  return runCaioAttentionActorOperation(deps, request, { eventKind, gated: false }, async ({ tx, row, parties, actor, now, requestId }) => {
+  return runCaioAttentionActorOperation(deps, request, { eventKind, gated: false }, async ({ tx, row, parties, actor, now, requestId, requestHash }) => {
     const auth = authorizeCaioAttentionOperation({ op, actor, parties, expectedCommandVersion: request.expectedCommandVersion });
     if (!auth.ok) return rejectCaioAttention(auth.reason);
-    const payload: Record<string, unknown> = { fromStatus: row.status, note: noteOf(request.note) };
+    const payload: Record<string, unknown> = { fromStatus: row.status, note: noteOf(request.note), requestHash };
     let status: "DEFERRED" | "DISMISSED" | "CANCELLED";
     if (op === "defer") {
       const until = request.deferredUntil;
@@ -162,7 +163,7 @@ export function assignCaioAttentionReviewers(
   const reviewers = normalizeCaioAttentionIds(request.reviewerUserIds);
   if (!reviewers || reviewers.length === 0) return Promise.resolve(rejectCaioAttention("input_invalid"));
   return runCaioAttentionActorOperation(deps, request, { eventKind: "REVIEWERS_ASSIGNED", gated: false, involvedUserIds: reviewers },
-    async ({ tx, row, parties, actor, members, requestId }) => {
+    async ({ tx, row, parties, actor, members, requestId, requestHash }) => {
       const auth = authorizeCaioAttentionOperation({ op: "assignReviewers", actor, parties, expectedCommandVersion: request.expectedCommandVersion });
       if (!auth.ok) return rejectCaioAttention(auth.reason);
       if (request.expectedReviewerVersion !== row.reviewerVersion) return rejectCaioAttention("stale_reviewer_version");
@@ -178,7 +179,7 @@ export function assignCaioAttentionReviewers(
       await casCaioAttentionCase(tx, row, { reviewerUserIdsJson: JSON.stringify(reviewers), reviewerVersion });
       await appendCaioAttentionEvent(tx, {
         caseId: row.id, kind: "REVIEWERS_ASSIGNED", commandVersion: row.commandVersion, actorUserId: actor.userId, clientRequestId: requestId,
-        payload: { previous: parties.reviewerUserIds, reviewerUserIds: reviewers, reviewerVersion, note: noteOf(request.note) },
+        payload: { previous: parties.reviewerUserIds, reviewerUserIds: reviewers, reviewerVersion, note: noteOf(request.note), requestHash },
       });
       return accepted(row.id, parties.status, row.commandVersion);
     });

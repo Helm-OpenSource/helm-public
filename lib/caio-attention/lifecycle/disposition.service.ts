@@ -30,14 +30,14 @@ function respond(deps: CaioAttentionLifecycleDeps, op: "ack" | "note", request: 
   const note = op === "note" ? text(request.note, 2000) : null;
   if (op === "note" && !note) return Promise.resolve(rejectCaioAttention("input_invalid", ["note_required"]));
   const eventKind = op === "ack" ? "ACK" : "NOTE";
-  return runCaioAttentionActorOperation(deps, request, { eventKind, gated: false }, async ({ tx, row, parties, actor, now, requestId }) => {
+  return runCaioAttentionActorOperation(deps, request, { eventKind, gated: false }, async ({ tx, row, parties, actor, now, requestId, requestHash }) => {
     const auth = authorizeCaioAttentionOperation({ op, actor, parties, expectedCommandVersion: request.expectedCommandVersion });
     if (!auth.ok) return rejectCaioAttention(auth.reason);
     const response = isCaioAttentionResponse(op, actor.userId, parties);
     if (response && !row.respondedAt) await casCaioAttentionCase(tx, row, { respondedAt: now });
     await appendCaioAttentionEvent(tx, {
       caseId: row.id, kind: eventKind, commandVersion: row.commandVersion, actorUserId: actor.userId, clientRequestId: requestId,
-      payload: { note, response },
+      payload: { note, response, requestHash },
     });
     return accepted(row.id, parties.status, row.commandVersion);
   });
@@ -63,7 +63,7 @@ export function submitCaioAttentionDisposition(
     return Promise.resolve(rejectCaioAttention("input_invalid", parsed.ok ? undefined : [parsed.errorCode]));
   }
   return runCaioAttentionActorOperation(deps, request, { eventKind: "DISPOSITION_SUBMITTED", gated: false },
-    async ({ tx, row, parties, actor, now, requestId }) => {
+    async ({ tx, row, parties, actor, now, requestId, requestHash }) => {
       const auth = authorizeCaioAttentionOperation({ op: "submitDisposition", actor, parties, expectedCommandVersion: request.expectedCommandVersion });
       if (!auth.ok) return rejectCaioAttention(auth.reason);
       if (input.disposedAt.getTime() > now.getTime()) return rejectCaioAttention("input_invalid", ["disposed_in_future"]);
@@ -92,7 +92,7 @@ export function submitCaioAttentionDisposition(
       await casCaioAttentionCase(tx, row, { status: "DISPOSITION_SUBMITTED", respondedAt: row.respondedAt ?? now });
       await appendCaioAttentionEvent(tx, {
         caseId: row.id, kind: "DISPOSITION_SUBMITTED", commandVersion: row.commandVersion, actorUserId: actor.userId, clientRequestId: requestId,
-        payload: { dispositionId: disposition.id, sequence },
+        payload: { dispositionId: disposition.id, sequence, requestHash },
       });
       return accepted(row.id, "DISPOSITION_SUBMITTED", row.commandVersion);
     });
@@ -116,7 +116,7 @@ export function reviewCaioAttentionDisposition(
   }
   const op = request.decision === "ACCEPT" ? "reviewAccept" : "reviewReturn";
   const eventKind = request.decision === "ACCEPT" ? "REVIEW_ACCEPTED" : "REVIEW_RETURNED";
-  return runCaioAttentionActorOperation(deps, request, { eventKind, gated: false }, async ({ tx, row, parties, actor, now, requestId }) => {
+  return runCaioAttentionActorOperation(deps, request, { eventKind, gated: false }, async ({ tx, row, parties, actor, now, requestId, requestHash }) => {
     const disposition = await tx.caioAttentionDisposition.findFirst({ where: { id: request.dispositionId, caseId: row.id } });
     const latest = await tx.caioAttentionDisposition.findFirst({ where: { caseId: row.id }, orderBy: { sequence: "desc" }, select: { id: true } });
     const superseded = disposition ? await tx.caioAttentionCaseEvent.count({
@@ -152,7 +152,7 @@ export function reviewCaioAttentionDisposition(
     await casCaioAttentionCase(tx, row, status === "CLOSED" ? { status, activeKey: null, closedAt: now } : { status });
     await appendCaioAttentionEvent(tx, {
       caseId: row.id, kind: eventKind, commandVersion: row.commandVersion, actorUserId: actor.userId, clientRequestId: requestId,
-      payload: { reviewId: review.id, dispositionId: disposition.id, reviewerVersion: row.reviewerVersion },
+      payload: { reviewId: review.id, dispositionId: disposition.id, reviewerVersion: row.reviewerVersion, requestHash },
     });
     return accepted(row.id, status, row.commandVersion);
   });

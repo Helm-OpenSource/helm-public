@@ -171,12 +171,35 @@ export type CaioAttentionActorRequest = Readonly<{
 export type CaioAttentionActorContext = Readonly<{
   tx: Prisma.TransactionClient; row: CaioAttentionCase; parties: CaioAttentionCaseParties; actor: CaioAttentionActor;
   members: Map<string, CaioAttentionMember>; now: Date; requestId: string;
+  /** Hash of the operation's inputs; every event written under `requestId` stores it as `payload.requestHash`. */
+  requestHash: string;
 }>;
+
+function canonicalJson(value: unknown): unknown {
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) return value.map(canonicalJson);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, v]) => [k, canonicalJson(v)]));
+  }
+  return value;
+}
+
+/**
+ * Stable hash of one human operation's inputs (everything but the routing fields). A clientRequestId replayed with
+ * the same operation and the same inputs is a retry; with different inputs it is a conflict, never a silent replay.
+ */
+export function caioAttentionRequestHash(eventKind: string, request: Readonly<Record<string, unknown>>): string {
+  const { workspaceId: _w, caseId: _c, actorUserId: _a, clientRequestId: _r, ...inputs } = request;
+  void _w; void _c; void _a; void _r;
+  return createHash("sha256").update(JSON.stringify(canonicalJson({ eventKind, inputs }))).digest("hex");
+}
 
 /**
  * Runs one human operation: optional gate, case lock, membership re-read, readability (anything else answers
  * `not_found`, so callers cannot probe existence) and request idempotency, then the operation body. A replayed
- * clientRequestId returns the current state without writing again.
+ * clientRequestId with the same operation, actor and inputs returns the current state without writing again; any
+ * difference is `client_request_conflict`.
  */
 export async function checkGate(deps: CaioAttentionLifecycleDeps, tx: Prisma.TransactionClient): Promise<boolean> {
   return (await (deps.gate ?? readCaioAttentionIntakeGate)(tx)).open;
@@ -198,15 +221,17 @@ export function runCaioAttentionActorOperation(
     const members = await lockCaioAttentionMembers(tx, row.workspaceId, [actorUserId, ...(options.involvedUserIds ?? [])]);
     const actor = caioAttentionActor(actorUserId, members.get(actorUserId));
     if (!canReadCaioAttentionCase(actor, parties).ok) return rejectCaioAttention("not_found");
+    const requestHash = caioAttentionRequestHash(options.eventKind, request);
     const prior = await tx.caioAttentionCaseEvent.findFirst({
-      where: { caseId: row.id, clientRequestId: request.clientRequestId }, select: { kind: true, actorUserId: true },
+      where: { caseId: row.id, clientRequestId: request.clientRequestId }, select: { kind: true, actorUserId: true, payloadJson: true },
     });
     if (prior) {
-      return prior.kind === options.eventKind && prior.actorUserId === actorUserId
+      const priorHash = (JSON.parse(prior.payloadJson) as { requestHash?: unknown }).requestHash;
+      return prior.kind === options.eventKind && prior.actorUserId === actorUserId && priorHash === requestHash
         ? { ok: true, caseId: row.id, status: parties.status, commandVersion: row.commandVersion, replayed: true }
         : rejectCaioAttention("client_request_conflict");
     }
-    return body({ tx, row, parties, actor, members, now: deps.now?.() ?? new Date(), requestId: request.clientRequestId });
+    return body({ tx, row, parties, actor, members, now: deps.now?.() ?? new Date(), requestId: request.clientRequestId, requestHash });
   });
 }
 

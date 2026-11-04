@@ -9,8 +9,8 @@ import { canReadCaioAttentionCase, isCaioAttentionTerminal, type CaioAttentionAc
  * The only read path for attention cases (design v4 §5.2, v5 §3, owner ruling §6.6). Before confirmation only OWNER
  * and ADMIN can read; afterwards the current command's people and reviewer set can too, and once terminal the
  * participants of earlier command versions keep read-only access. Anyone else gets `not_found` / an empty list, so
- * they cannot learn that a case exists. Every ADMIN read writes a READ event first, including when the ADMIN is also
- * a participant; if the audit write fails nothing is returned.
+ * they cannot learn that a case exists. Every ADMIN case read (loadCase) writes a READ event first, including when the
+ * ADMIN is also a participant; if the audit write fails nothing is returned. Lists are not recorded (pending owner).
  */
 
 const PARTICIPANT_EVENT_KINDS = ["CONFIRMED", "REISSUED", "REVIEWERS_ASSIGNED"];
@@ -82,8 +82,8 @@ export async function loadCaioAttentionCaseForViewer(
 }
 
 /**
- * One page of cases the viewer may see. `queue`: OWNER and ADMIN see the whole workspace (ADMIN reads are audited per
- * listed case); everyone else only confirmed cases where they are in the current command or reviewer set. `mine`:
+ * One page of cases the viewer may see. `queue`: OWNER and ADMIN see the whole workspace (an ADMIN list is not
+ * audited as READ until the owner rules on it; opening a case is); everyone else only confirmed cases where they are in the current command or reviewer set. `mine`:
  * that participant filter for every role. Order: non-terminal first, then critical, then newest.
  */
 export async function listCaioAttentionCasesForViewer(
@@ -106,6 +106,6 @@ export async function listCaioAttentionCasesForViewer(
     .map((row) => [row.id, row]));
   const rows = ids.map((r) => byId.get(r.id)).filter((row): row is CaioAttentionCase =>
     row !== undefined && canReadCaioAttentionCase(actor, caioAttentionParties(row)).ok);
-  await recordAdminReads(db, actor, rows.map((row) => row.id), "list");
+  // Listing is not recorded as a READ for now (pending owner confirmation); only opening a case is (loadCase).
   return { rows, total: Number(n) };
 }
