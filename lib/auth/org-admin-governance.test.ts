@@ -1277,9 +1277,11 @@ describe("org admin governance support pack", () => {
     );
     for (const [args] of dbMock.auditLog.groupBy.mock.calls) {
       expect(args).toMatchObject({ by: ["actionType"], _max: { createdAt: true } });
+      expect(args.where).toMatchObject({ workspaceId: "workspace-1" });
       expect(args).not.toHaveProperty("orderBy");
     }
     for (const [args] of dbMock.auditLog.findFirst.mock.calls) {
+      expect(args.where.workspaceId).toBe("workspace-1");
       expect(typeof args.where.actionType).toBe("string");
       expect(args.where.createdAt).toBeInstanceOf(Date);
       expect(args).not.toHaveProperty("orderBy");
