@@ -4,7 +4,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { parseCaioAttentionRouteConfig, parseCaioAttentionRouteRule, type CaioAttentionSeverity } from "./contracts";
 import { runCaioAttentionReminderScan } from "./reminder-scanner.service";
 import { resolveCaioAttentionPrefill } from "./routing";
-import { CAIO_ATTENTION_TEST_DEFAULT_POLICY as P, caioAttentionDispatchFields, caioAttentionSuggestFields } from "./schedule";
+import {
+  CAIO_ATTENTION_TEST_DEFAULT_POLICY as P, caioAttentionDispatchFields, caioAttentionResumeDeferredFields, caioAttentionSuggestFields,
+} from "./schedule";
 
 /**
  * Reminder scanner on an isolated MySQL database. Setup rows are written by the migration identity
@@ -155,7 +157,7 @@ describeMysql("CAIO attention reminder scanner on MySQL as the web identity", ()
     expect((await scan(local(7, 3, 30))).sends).toEqual({});
     const owner = (await notices()).filter((n) => n.dedupeKey.startsWith("ca:s1:"));
     expect(owner.map((n) => n.userId)).toEqual(["u-owner", "u-owner"]);
-    expect(owner.map((n) => n.dedupeKey)).toEqual([expect.stringMatching(/^ca:s1:R0a:u-owner/u), expect.stringMatching(/^ca:s1:R0b:u-owner/u)]);
+    expect(owner.map((n) => n.dedupeKey)).toEqual([expect.stringMatching(/^ca:s1:R0a:.+:u-owner$/u), expect.stringMatching(/^ca:s1:R0b:.+:u-owner$/u)]);
 
     await retire();
     // Terminal cases never remind, whatever their fields say.
@@ -234,6 +236,28 @@ describeMysql("CAIO attention reminder scanner on MySQL as the web identity", ()
     expect((await caseRow("s9")).r0aSentAt).toBeNull();
     await admin.$executeRaw`UPDATE Membership SET accessScope = NULL WHERE workspaceId = ${WS} AND userId = 'u-owner'`;
     expect((await scan(local(5, 9, 8))).sends).toEqual({ R0a: 1 });
+  });
+
+  it("re-arms R0a / R0b after a deferral resumes, so the OWNER is told again under new keys (owner ruling §6.10)", async () => {
+    await insertCase({ id: "rr", status: "SUGGESTED", severity: "critical", fields: caioAttentionSuggestFields("critical", local(4, 10)) });
+    expect((await scan(local(4, 10, 3))).sends).toEqual({ R0a: 1 });
+    expect((await scan(local(4, 10, 35))).sends).toEqual({ R0b: 1 });
+    // OWNER defers; deferredUntil passes and the lifecycle service resumes it with S1's re-arm fields.
+    await admin.$executeRaw`UPDATE CaioAttentionCase SET status = 'DEFERRED' WHERE id = 'rr'`;
+    expect((await scan(local(4, 12))).sends).toEqual({});
+    await admin.$executeRaw`UPDATE CaioAttentionCase SET status = 'SUGGESTED' WHERE id = 'rr'`;
+    for (const [column, value] of Object.entries(caioAttentionResumeDeferredFields("critical", local(5, 9)))) {
+      await admin.$executeRawUnsafe(`UPDATE CaioAttentionCase SET \`${column}\` = ? WHERE id = 'rr'`, value ?? null);
+    }
+    expect((await scan(local(5, 9, 3))).sends).toEqual({ R0a: 1 });
+    expect((await scan(local(5, 9, 35))).sends).toEqual({ R0b: 1 });
+    expect((await scan(local(5, 10, 30))).sends).toEqual({});
+    const keys = (await notices()).filter((n) => n.dedupeKey.startsWith("ca:rr:")).map((n) => n.dedupeKey);
+    expect(keys).toHaveLength(4);
+    expect(new Set(keys).size).toBe(4);
+    const events = await admin.$queryRaw<Array<{ n: bigint }>>`
+      SELECT COUNT(*) AS n FROM CaioAttentionCaseEvent WHERE caseId = 'rr' AND kind = 'REMINDED'`;
+    expect(Number(events[0].n)).toBe(4);
   });
 
   it("holds a warning R2 for the daytime window, while a critical one goes out at night", async () => {
