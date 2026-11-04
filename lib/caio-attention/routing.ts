@@ -66,7 +66,9 @@ export function resolveCaioAttentionPrefill(input: CaioAttentionRouteInput): Cai
     for (const id of people) if (!ccUserIds.includes(id)) ccUserIds.push(id);
   }
 
-  const escalationUserId = candidates(rule.escalationRoleKey)[0] ?? null;
+  const notPrimary = (id: string) => id !== primaryUserId;
+  const escalationUserId = candidates(rule.escalationRoleKey).find(notPrimary)
+    ?? candidates(rule.escalationFallbackRoleKey).find(notPrimary) ?? null;
   if (!escalationUserId) blocks.push("escalation_unavailable");
 
   const eligibleReviewer = (id: string) => id !== primaryUserId && !ccUserIds.includes(id);
@@ -86,7 +88,7 @@ export type CaioAttentionOwnerCommandPeople = Readonly<{
 }>;
 
 export type CaioAttentionCommandError = "enterprise_unverified" | "primary_missing" | "primary_inactive"
-  | "primary_is_confirmer" | "cc_inactive" | "escalation_missing" | "escalation_inactive" | "reviewer_missing"
+  | "primary_is_confirmer" | "cc_inactive" | "escalation_missing" | "escalation_inactive" | "escalation_is_primary" | "reviewer_missing"
   | "reviewer_inactive" | "reviewer_not_capable" | "reviewer_conflict" | "committed_due_missing";
 
 /** Confirm / reissue check on the final (possibly edited) command. Empty result means dispatchable. */
@@ -106,6 +108,7 @@ export function validateCaioAttentionOwnerCommand(input: Readonly<{
   if (command.ccUserIds.some((id) => !isActive(id))) errors.add("cc_inactive");
   if (!command.escalationUserId) errors.add("escalation_missing");
   else if (!isActive(command.escalationUserId)) errors.add("escalation_inactive");
+  if (command.escalationUserId && command.escalationUserId === command.primaryUserId) errors.add("escalation_is_primary");
   if (command.reviewerUserIds.length === 0) errors.add("reviewer_missing");
   for (const id of command.reviewerUserIds) {
     if (!isActive(id)) errors.add("reviewer_inactive");
