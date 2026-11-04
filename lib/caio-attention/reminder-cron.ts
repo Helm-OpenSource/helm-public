@@ -66,6 +66,8 @@ export async function runCaioAttentionScanTick(now: Date = new Date()): Promise<
         + `${result.notificationsDeduplicated} deduplicated, ${result.failedCaseIds.length} failed, `
         + `${Object.values(result.skippedNoRecipient).reduce((sum, n) => sum + (n ?? 0), 0)} without recipient`);
     } catch (error) {
+      // The whole scan failed (e.g. selecting due cases): last tick's skip list is stale, never carry it further.
+      current.lastFailedCaseIds = [];
       console.error("[caio-attention-reminders] scan failed", error instanceof Error ? error.message : String(error));
     }
     // Each watchdog is isolated: one failing must not silence the others.

@@ -67,12 +67,14 @@ async function recipientsFor(client: PrismaClient, workspaceId: string, roleKey:
 
 /**
  * Detectors routed in this workspace: a registered rule whose primary chain has at least one active holder in the
- * workspace's active route config. Rules are registered by the overlay only for enabled detectors.
+ * workspace's active route config, in the default bindings or in any enterprise override. Rules are registered by the overlay only for enabled detectors.
  */
 function routedDetectorIds(rules: readonly CaioAttentionRouteRule[], config: CaioAttentionRouteConfig | null,
   active: ReadonlySet<string>): string[] {
   if (!config) return [];
-  const held = (roleKey: string) => (config.roleBindings[roleKey] ?? []).some((id) => active.has(id));
+  // A role held only under an enterprise override still routes that enterprise's anomalies.
+  const bindings = [config.roleBindings, ...Object.values(config.enterpriseOverrides)];
+  const held = (roleKey: string) => bindings.some((roles) => (roles[roleKey] ?? []).some((id) => active.has(id)));
   return [...new Set(rules.filter((rule) => [rule.primaryRoleKey, ...rule.primaryFallbackRoleKeys].some(held))
     .map((rule) => rule.detectorId))].sort();
 }

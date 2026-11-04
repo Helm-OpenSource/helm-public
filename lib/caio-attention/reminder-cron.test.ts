@@ -76,11 +76,20 @@ describe("CAIO attention reminder cron", () => {
     await expect(runCaioAttentionScanTick(now)).resolves.toBe("done");
     expect(mocks.scan).toHaveBeenLastCalledWith(expect.objectContaining({ skipCaseIds: ["c-bad"] }));
 
+    // A scan that throws as a whole drops the skip list instead of carrying a stale one forward.
+    mocks.scan.mockResolvedValueOnce(result(["c-bad-2"])).mockRejectedValueOnce(new Error("db down")).mockResolvedValueOnce(result([]));
+    await runCaioAttentionScanTick(now);
+    await runCaioAttentionScanTick(now);
+    expect(mocks.scan).toHaveBeenLastCalledWith(expect.objectContaining({ skipCaseIds: ["c-bad-2"] }));
+    await runCaioAttentionScanTick(now);
+    expect(mocks.scan).toHaveBeenLastCalledWith(expect.objectContaining({ skipCaseIds: [] }));
+    mocks.scan.mockClear();
+
     // A tick still running blocks the next one instead of overlapping it.
     let finish!: (value: unknown) => void;
     mocks.scan.mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
     const slow = runCaioAttentionScanTick(now);
-    await vi.waitFor(() => expect(mocks.scan).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(mocks.scan).toHaveBeenCalledTimes(1));
     await expect(runCaioAttentionScanTick(now)).resolves.toBe("skipped_overlap");
     finish(result([]));
     await expect(slow).resolves.toBe("done");
