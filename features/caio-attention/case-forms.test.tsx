@@ -3,7 +3,7 @@
  */
 
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CaioAttentionActionState } from "./command-form";
 
@@ -16,7 +16,7 @@ vi.mock("./actions", () => ({
   },
 }));
 
-const { CaioAttentionOperationForm } = await import("./case-forms.client");
+const { CaioAttentionOperationForm, newCaioAttentionRequestId } = await import("./case-forms.client");
 const common = { caseId: "c1", commandVersion: 1, english: true };
 const requestIds = () => submitted.map((data) => data.get("clientRequestId"));
 
@@ -50,5 +50,14 @@ describe("attention form request ids", () => {
     expect(ackOk).toBe(ackFailed);
     expect(ackNext).not.toBe(ackOk);
     expect(submitted.map((data) => data.get("op"))).toEqual(["ack", "ack", "note", "ack", "ack"]);
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("falls back to getRandomValues where randomUUID is missing (insecure context)", () => {
+    vi.stubGlobal("crypto", { getRandomValues: globalThis.crypto.getRandomValues.bind(globalThis.crypto) });
+    const first = newCaioAttentionRequestId();
+    expect(first).toMatch(/^[0-9a-f]{32}$/u);
+    expect(newCaioAttentionRequestId()).not.toBe(first);
   });
 });

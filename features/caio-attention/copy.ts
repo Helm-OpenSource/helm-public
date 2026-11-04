@@ -23,7 +23,7 @@ const CATEGORY: Record<CaioAttentionCategory, Pair> = {
   compliance: ["合规", "Compliance"],
 };
 const ROLE: Record<CaioAttentionViewerRole, Pair> = {
-  owner: ["确认人", "Owner"],
+  owner: ["工作区 OWNER", "Workspace OWNER"],
   primary: ["主责", "Primary"],
   cc: ["知悉", "Informed"],
   escalation: ["升级人", "Escalation"],

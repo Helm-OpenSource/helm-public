@@ -13,7 +13,13 @@ import type { CaioAttentionActor, CaioAttentionAuthorization, CaioAttentionOpera
 
 export type CaioAttentionViewer = Readonly<{ workspaceId: string; actor: CaioAttentionActor }>;
 
-/** "admin" means supervisory read only; it never grants an operation. */
+/**
+ * How the viewer relates to a case, as returned by the loader:
+ * - "owner": the viewer holds the workspace OWNER role (mirrors `actor.role`). It is not "the person who confirmed
+ *   this case": every workspace OWNER may confirm, defer, dismiss, cancel, reissue and change reviewers.
+ * - "primary" / "cc" / "escalation" / "reviewer": a participant of the current confirmed command.
+ * - "admin": supervisory read only; it never grants an operation.
+ */
 export type CaioAttentionViewerRole = "owner" | "primary" | "cc" | "escalation" | "reviewer" | "admin";
 
 /** Proposed closed set for the disposition outcome; the service validates the same values. */

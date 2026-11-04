@@ -26,7 +26,7 @@ Status: pages and guards are formed. Until the lifecycle service and its authori
 | `/caio/attention/mine` | My cases: where the member is the primary, informed, escalation person or a reviewer of the current confirmed command |
 | `/caio/attention/[caseId]` | Detail: object → confirmed command and its changes from the prefill (prefill before confirmation) → receipts, reviews, events → next-step forms |
 
-Forms follow the loader's `allowedOperations`: confirm (prefill editable, live diff against the prefill), ack, note, disposition receipt, review accept/return; for the OWNER also dismiss (awaiting confirmation only), defer (pick an end time), cancel (in progress or awaiting review), reissue a new command version (diff against the current command) and change reviewers. Dismiss and cancel require a reason. The review form asks the reviewer to tick each external evidence item and requires a conclusion.
+Forms follow the loader's `allowedOperations`: confirm (prefill editable, live diff against the prefill), ack, note, disposition receipt, review accept/return; for the OWNER also dismiss (awaiting confirmation only), defer (pick an end time), cancel (in progress or awaiting review), reissue a new command version (diff against the current command) and change reviewers. Dismiss and cancel require a reason. OWNER here means the workspace OWNER role, not "the person who confirmed this case"; any workspace OWNER may perform the OWNER operations above. The review form asks the reviewer to tick each external evidence item and requires a conclusion.
 
 ## Visibility
 
@@ -49,4 +49,4 @@ Until wired, `features/caio-attention/service.ts` serves a fail-closed stub (emp
 
 ## Navigation entry
 
-The workspace sidebar and mobile navigation show "Attention cases" as presentation only: hidden while the service is unbound or the member is inactive; shown to OWNER and ADMIN; shown to other members only when they take part in at least one current confirmed command. A failing loader hides the entry and never breaks the shell.
+The workspace sidebar and mobile navigation show "Attention cases" as presentation only: hidden while the service is unbound or the member is inactive; shown to workspace OWNER and ADMIN; shown to other members only when they take part in at least one current confirmed command. A failing loader hides the entry, logs one warning (error name only) and never breaks the shell.

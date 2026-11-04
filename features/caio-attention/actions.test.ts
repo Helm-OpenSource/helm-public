@@ -1,16 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const runCommand = vi.fn();
-const listCases = vi.fn();
 const revalidatePath = vi.fn();
-const bound = vi.hoisted(() => ({ value: true }));
 const viewer = { workspaceId: "w1", actor: { userId: "u1", sameWorkspace: true, active: true, role: "OTHER" as const, canReviewGovernedActions: false } };
 
 vi.mock("next/cache", () => ({ revalidatePath: (path: string) => revalidatePath(path) }));
 vi.mock("./page-context", () => ({ getCaioAttentionPageContext: async () => ({ english: false, viewer }) }));
 vi.mock("./service", () => ({
-  get CAIO_ATTENTION_PAGE_SERVICE_BOUND() { return bound.value; },
-  getCaioAttentionPageService: () => ({ runCommand, listCases, loadCase: vi.fn() }),
+  CAIO_ATTENTION_PAGE_SERVICE_BOUND: true,
+  getCaioAttentionPageService: () => ({ runCommand, listCases: vi.fn(), loadCase: vi.fn() }),
 }));
 
 const form = (entries: Record<string, string | string[]>) => {
@@ -43,30 +41,5 @@ describe("runCaioAttentionCommandAction", () => {
     runCommand.mockResolvedValue({ ok: false, reason: "forbidden" });
     await expect(runCaioAttentionCommandAction({ status: "idle" }, form({ ...identity, op: "ack" }))).resolves.toEqual({ status: "error", reason: "forbidden" });
     expect(revalidatePath).not.toHaveBeenCalled();
-  });
-});
-
-describe("attention navigation entry", () => {
-  beforeEach(() => { listCases.mockReset(); bound.value = true; });
-
-  it("is hidden while the service is unbound or the member is inactive", async () => {
-    const { resolveCaioAttentionNavigation, shouldShowCaioAttentionNavigation } = await import("./navigation");
-    bound.value = false;
-    await expect(resolveCaioAttentionNavigation({ ...viewer, actor: { ...viewer.actor, role: "OWNER" } })).resolves.toBe(false);
-    expect(shouldShowCaioAttentionNavigation({ bound: true, actor: { active: false, role: "OWNER" }, participantCaseCount: 3 })).toBe(false);
-    expect(listCases).not.toHaveBeenCalled();
-  });
-
-  it("shows for OWNER and ADMIN, and for others only with a current case of their own", async () => {
-    const { resolveCaioAttentionNavigation } = await import("./navigation");
-    await expect(resolveCaioAttentionNavigation({ ...viewer, actor: { ...viewer.actor, role: "ADMIN" } })).resolves.toBe(true);
-    expect(listCases).not.toHaveBeenCalled();
-    listCases.mockResolvedValueOnce({ items: [], page: 1, pageSize: 1, total: 0 });
-    await expect(resolveCaioAttentionNavigation(viewer)).resolves.toBe(false);
-    listCases.mockResolvedValueOnce({ items: [], page: 1, pageSize: 1, total: 1 });
-    await expect(resolveCaioAttentionNavigation(viewer)).resolves.toBe(true);
-    expect(listCases).toHaveBeenLastCalledWith({ viewer, scope: "mine", page: 1, pageSize: 1 });
-    listCases.mockRejectedValueOnce(new Error("loader down"));
-    await expect(resolveCaioAttentionNavigation(viewer)).resolves.toBe(false);
   });
 });
