@@ -194,8 +194,14 @@ describe("severity raise", () => {
     expect(after.sends.find((s) => s.rule === "R2")?.notifications[0].dedupeKey).toBe("ca:c1:R2:v1:critical:u_escalation");
   });
 
-  it("a pending suggestion raised to critical notifies the OWNER once", () => {
-    expect(caioAttentionSeverityRaiseFields("SUGGESTED", emptyFields, null, t("5 03:00"), P)).toEqual({ r0aDueAt: t("5 03:00") });
+  it("a pending suggestion raised to critical notifies the OWNER at once and again 30 minutes later, night included", () => {
+    const raised = caioAttentionSeverityRaiseFields("SUGGESTED", emptyFields, null, t("5 03:00"), P);
+    expect(raised).toEqual({ r0aDueAt: t("5 03:00") });
+    const log = simulate(kase({ status: "SUGGESTED", commandVersion: 0 }), { ...emptyFields, ...raised }, t("5 03:00"), t("5 06:00"));
+    expect(log).toEqual([
+      { at: iso("5 03:00"), rule: "R0a", users: ["u_owner"] },
+      { at: iso("5 03:30"), rule: "R0b", users: ["u_owner"] },
+    ]);
     expect(caioAttentionSeverityRaiseFields("SUGGESTED", { ...emptyFields, r0aSentAt: t("5 01:00") }, null, t("5 03:00"), P)).toEqual({});
     expect(caioAttentionSeverityRaiseFields("CLOSED", warning, null, t("5 03:00"), P)).toEqual({});
   });
