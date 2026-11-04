@@ -46,6 +46,11 @@ export type CaioDetector = Readonly<{
   detectorId: string;
   title: Readonly<{ zh: string; en: string }>;
   requiredTemplateIds: readonly string[];
+  /**
+   * Version of the detector's rule, recorded on every evaluation row. Attention suggestions only trust evaluations whose
+   * version a route rule lists as compatible, so a detector without one is evaluated but never suggests a case.
+   */
+  ruleVersion?: string;
   evaluate: (input: { observations: ReadonlyMap<string, CaioMetricObservationView>; now: Date }) => readonly unknown[];
 }>;
 
@@ -111,6 +116,7 @@ export function assertCaioOperatingContextPack(pack: {
     if (detector.requiredTemplateIds.length === 0) reasons.add("detector_requires_inputs");
     if (detector.requiredTemplateIds.some((id) => !templateIds.has(id))) reasons.add("detector_unknown_template");
     if (!detector.title.zh.trim() || !detector.title.en.trim()) reasons.add("detector_title_required");
+    if (detector.ruleVersion !== undefined && !CAIO_REF_PATTERN.test(detector.ruleVersion)) reasons.add("detector_rule_version_invalid");
   }
   if (reasons.size > 0) throw new CaioOperatingContextContractError([...reasons].sort());
 }

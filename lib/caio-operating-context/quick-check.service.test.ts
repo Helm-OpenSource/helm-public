@@ -1,23 +1,28 @@
 import { Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { dbMock, observationMock, projectionMock } = vi.hoisted(() => {
+const { dbMock, observationMock, projectionMock, generatorMock } = vi.hoisted(() => {
   const dbMock = {
     caioQuickCheckTick: { create: vi.fn(), update: vi.fn() },
     caioMetricObservation: { create: vi.fn() },
     caioAnomalyCandidate: { findMany: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    caioDetectorEvaluation: { createMany: vi.fn() },
     $transaction: vi.fn(),
   };
   return {
     dbMock,
     observationMock: { beginObservationSourceRun: vi.fn(), completeObservationSourceRun: vi.fn() },
     projectionMock: { projectCaioQuickCheckContext: vi.fn(), isCaioContextProjectionEnabled: vi.fn() },
+    generatorMock: { runCaioAttentionGenerator: vi.fn() },
   };
 });
 
 vi.mock("@/lib/db", () => ({ db: dbMock }));
 vi.mock("@/lib/stage1-owner-loop/observation.service", () => observationMock);
 vi.mock("./context-projection.service", () => projectionMock);
+vi.mock("@/lib/caio-attention/generator.service", () => generatorMock);
+
+import { CAIO_ATTENTION_GENERATOR_ENABLED_ENV } from "@/lib/caio-attention/detector-evaluation";
 
 import type { CaioDetector, CaioMetricQueryTemplate } from "./contracts";
 import { caioQuickCheckBucketStart, runCaioQuickCheck } from "./quick-check.service";
@@ -59,6 +64,7 @@ beforeEach(() => {
   observationMock.completeObservationSourceRun.mockResolvedValue({});
   projectionMock.isCaioContextProjectionEnabled.mockReturnValue(false);
   projectionMock.projectCaioQuickCheckContext.mockResolvedValue("projected");
+  delete process.env[CAIO_ATTENTION_GENERATOR_ENABLED_ENV];
 });
 
 describe("caioQuickCheckBucketStart", () => {
@@ -210,5 +216,50 @@ describe("runCaioQuickCheck", () => {
     const failed = await runCaioQuickCheck({ workspaceId: "ws", now: new Date(now.getTime() + 600_000), templates, detectors: [deadLetterDetector] });
     expect(failed).toMatchObject({ status: "completed", contextProjection: "failed" });
     expect(JSON.stringify(failed)).not.toMatch(/private/u);
+  });
+
+  describe("attention generator switch", () => {
+    const templates = [template("dead-letters", "source-a", async () => ({ values: { count: 12 }, denominator: null }))];
+    const versioned: CaioDetector = { ...deadLetterDetector, ruleVersion: "dead-letter-surge.v1" };
+
+    it("writes no evaluation row, runs no generator and returns the unchanged result shape while off", async () => {
+      process.env[CAIO_ATTENTION_GENERATOR_ENABLED_ENV] = "1";
+      const result = await runCaioQuickCheck({ workspaceId: "ws", now, templates, detectors: [versioned] });
+      expect(Object.keys(result).sort()).toEqual([
+        "cleared", "contextProjection", "failedDetectors", "known", "opened", "refreshed", "skippedDetectors", "status", "tickId", "unknown",
+      ]);
+      expect(dbMock.caioDetectorEvaluation.createMany).not.toHaveBeenCalled();
+      expect(generatorMock.runCaioAttentionGenerator).not.toHaveBeenCalled();
+    });
+
+    it("records evaluations in the candidate transaction and runs the generator after the tick completes", async () => {
+      process.env[CAIO_ATTENTION_GENERATOR_ENABLED_ENV] = "true";
+      let tickCompletedFirst = false;
+      generatorMock.runCaioAttentionGenerator.mockImplementation(async () => {
+        tickCompletedFirst = dbMock.caioQuickCheckTick.update.mock.calls.some(([arg]) => arg.data.status === "COMPLETED");
+        return { status: "intake_closed", created: 0, recurred: 0, severityRaised: 0, skipped: {} };
+      });
+      const result = await runCaioQuickCheck({ workspaceId: "ws", now, templates, detectors: [versioned] });
+      expect(dbMock.caioDetectorEvaluation.createMany).toHaveBeenCalledWith({ data: [{
+        workspaceId: "ws", tickId: "tick_1", bucketStart: new Date("2026-09-16T02:00:00Z"), detectorId: "dead-letter-surge",
+        ruleVersion: "dead-letter-surge.v1", outcome: "HIT", hitMergeKeysJson: "[\"closure\"]",
+      }] });
+      expect(generatorMock.runCaioAttentionGenerator).toHaveBeenCalledWith({
+        workspaceId: "ws", tickId: "tick_1", latestBucketStart: new Date("2026-09-16T02:00:00Z"), bucketMinutes: 10, now,
+      });
+      expect(tickCompletedFirst).toBe(true);
+      expect(result).toMatchObject({ status: "completed", attention: { status: "intake_closed" } });
+      const summary = JSON.parse(dbMock.caioQuickCheckTick.update.mock.calls[0][0].data.summaryJson as string);
+      expect(summary).not.toHaveProperty("attention");
+    });
+
+    it("keeps the tick completed when the generator throws", async () => {
+      process.env[CAIO_ATTENTION_GENERATOR_ENABLED_ENV] = "true";
+      generatorMock.runCaioAttentionGenerator.mockRejectedValue(new Error("private generator detail"));
+      const result = await runCaioQuickCheck({ workspaceId: "ws", now, templates, detectors: [versioned] });
+      expect(result).toMatchObject({ status: "completed", attention: { status: "failed" } });
+      expect(JSON.stringify(result)).not.toMatch(/private/u);
+      expect(dbMock.caioQuickCheckTick.update).toHaveBeenCalledTimes(1);
+    });
   });
 });

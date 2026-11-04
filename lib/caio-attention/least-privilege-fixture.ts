@@ -41,6 +41,15 @@ export const CAIO_ATTENTION_GRANT_MATRIX: Readonly<Record<string, Readonly<Parti
   CaioDetectorEvaluation: { attention_generator: { privileges: SI }, attention_web: { privileges: S } },
 };
 
+/**
+ * Existing tables the generator touches on the quick-check host, mirroring that host identity's current ACL: it locks the
+ * candidate it suggests from (FOR UPDATE needs UPDATE) and reads memberships to skip inactive people in the prefill.
+ */
+export const CAIO_ATTENTION_NEIGHBOUR_GRANTS: typeof CAIO_ATTENTION_GRANT_MATRIX = {
+  CaioAnomalyCandidate: { attention_generator: { privileges: ["SELECT", "UPDATE"] } },
+  Membership: { attention_generator: { privileges: S } },
+};
+
 export function caioAttentionTableGrant(identity: CaioAttentionFixtureIdentity, table: string): CaioAttentionTableGrant | null {
   return CAIO_ATTENTION_GRANT_MATRIX[table]?.[identity] ?? null;
 }
@@ -54,7 +63,7 @@ function identifier(value: string): string {
 export function renderCaioAttentionGrantSql(database: string, host = "%"): string {
   if (!/^[A-Za-z0-9_.%-]+$/u.test(host)) throw new Error(`unsafe MySQL host: ${host}`);
   const lines: string[] = [];
-  for (const [table, byIdentity] of Object.entries(CAIO_ATTENTION_GRANT_MATRIX)) {
+  for (const [table, byIdentity] of Object.entries({ ...CAIO_ATTENTION_GRANT_MATRIX, ...CAIO_ATTENTION_NEIGHBOUR_GRANTS })) {
     for (const identity of CAIO_ATTENTION_FIXTURE_IDENTITIES) {
       const grant = byIdentity[identity];
       if (!grant) continue;
