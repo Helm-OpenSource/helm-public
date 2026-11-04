@@ -20,6 +20,7 @@ import {
 } from "./control.service";
 import { recordCaioAttentionHeartbeat } from "./heartbeat.service";
 import { readCaioAttentionIntakeGate } from "./intake-gate.service";
+import { activateCaioAttentionRouteConfig, publishCaioAttentionRouteConfig } from "./route-config.service";
 
 /**
  * Control service and CLI on an isolated MySQL database through the least-privilege fixture identities (same
@@ -118,7 +119,7 @@ describeMysql("CAIO attention Control service and CLI on MySQL", () => {
   /** Empties every table this suite writes; `pristine` also restores the seeded Control row (rollback-ready). */
   async function reset(pristine: boolean) {
     for (const table of ["CaioAttentionControlEvent", "CaioAttentionPauseRequest", "CaioAttentionNodeReadiness", "CaioAttentionRuntimeNode",
-      "CaioAttentionCase"]) {
+      "CaioAttentionCase", "CaioAttentionRouteConfig", "CaioAttentionRouteConfigHead"]) {
       await admin.$executeRawUnsafe(`DELETE FROM \`${table}\``);
     }
     await admin.$executeRaw`UPDATE CaioAttentionControl SET intakeState = 'PAUSED', epoch = 0, openEpoch = 0, leaseToken = NULL,
@@ -426,6 +427,26 @@ describeMysql("CAIO attention Control service and CLI on MySQL", () => {
     await recordCaioAttentionHeartbeat(web, { ...beat, deploymentId: "dep-1" });
     expect(await resume()).toMatchObject({ intakeState: "OPEN", openEpoch: 1 });
     expect(await errnoOf(recordCaioAttentionHeartbeat(ops, beat))).toBe("1142");
+  });
+
+  it("route configs: publish validates and appends versions, activate moves the head by CAS, web cannot write either", async () => {
+    const config = { schemaVersion: "caio-attention-routes/v1", roleBindings: { lead: ["user:u1"] } };
+    expect(await refusal(publishCaioAttentionRouteConfig(ops, { workspaceId: "ws-a", actorRef: ACTOR, config: { ...config, extra: 1 } })))
+      .toBe("refused:route_config_invalid");
+    expect(await publishCaioAttentionRouteConfig(ops, { workspaceId: "ws-a", actorRef: ACTOR, config })).toMatchObject({ version: 1 });
+    expect(await publishCaioAttentionRouteConfig(ops, { workspaceId: "ws-a", actorRef: ACTOR, config })).toMatchObject({ version: 2 });
+    const activate = (version: number, expectedRowVersion: number, client = ops) =>
+      refusal(activateCaioAttentionRouteConfig(client, { workspaceId: "ws-a", actorRef: ACTOR, version, expectedRowVersion }));
+    expect(await activate(3, 0)).toBe("refused:version_missing");
+    expect(await activate(1, 0)).toBe("ok");
+    expect(await activate(2, 0)).toBe("ok");
+    expect(await activate(1, 0)).toBe("refused:head_conflict");
+    expect(await activate(1, 1)).toBe("ok");
+    const [head] = await admin.$queryRaw<Array<{ activeVersion: number; rowVersion: number; updatedByRef: string }>>`
+      SELECT activeVersion, rowVersion, updatedByRef FROM CaioAttentionRouteConfigHead WHERE workspaceId = 'ws-a'`;
+    expect(head).toEqual({ activeVersion: 1, rowVersion: 2, updatedByRef: ACTOR });
+    expect(await activate(2, 2, web)).toBe("errno:1142");
+    expect(await refusal(publishCaioAttentionRouteConfig(web, { workspaceId: "ws-a", actorRef: ACTOR, config }))).toBe("errno:1142");
   });
 
   it("the web and generator identities cannot pause, resume, deploy or recover: Control writes are refused with errno 1142", async () => {

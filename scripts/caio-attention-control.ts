@@ -11,7 +11,8 @@
  *
  * Deploy ops: deploy-begin, hold, deploy-end, deploy-recover (host-locked recovery entry only), guard-downgrade.
  * attest-node reads this node's loopback capability probe (http://127.0.0.1:$PORT, default 3000) before its transaction.
- * Operator ops: pause, resume (acks every pause request of the current open epoch by id), expected-nodes.
+ * Operator ops: pause, resume (acks every pause request of the current open epoch by id), expected-nodes,
+ * routes-publish (append a validated people-binding version) and routes-activate (CAS on the workspace head).
  */
 import { PrismaClient } from "@prisma/client";
 
@@ -28,6 +29,7 @@ import {
   resumeCaioAttentionIntake,
   setCaioAttentionExpectedNodes,
 } from "@/lib/caio-attention/control.service";
+import { activateCaioAttentionRouteConfig, publishCaioAttentionRouteConfig } from "@/lib/caio-attention/route-config.service";
 
 export const CAIO_ATTENTION_CONTROL_OPS = {
   "deploy-begin": ["nodeId", "targetDeploymentId"],
@@ -39,6 +41,8 @@ export const CAIO_ATTENTION_CONTROL_OPS = {
   pause: ["actorRef"],
   resume: ["actorRef", "ackPauseRequestIds"],
   "expected-nodes": ["actorRef", "nodeIds"],
+  "routes-publish": ["workspaceId", "actorRef", "config"],
+  "routes-activate": ["workspaceId", "actorRef", "version", "expectedRowVersion"],
 } as const satisfies Record<string, readonly string[]>;
 type Op = keyof typeof CAIO_ATTENTION_CONTROL_OPS;
 
@@ -99,6 +103,8 @@ async function run(op: Op, request: Record<string, unknown>, prisma: PrismaClien
     case "pause": return pauseCaioAttentionIntake(prisma, request as never);
     case "resume": return resumeCaioAttentionIntake(prisma, request as never);
     case "expected-nodes": return setCaioAttentionExpectedNodes(prisma, request as never);
+    case "routes-publish": return publishCaioAttentionRouteConfig(prisma, request as never);
+    case "routes-activate": return activateCaioAttentionRouteConfig(prisma, request as never);
     case "attest-node": return attestCaioAttentionNode(prisma, request as never, await fetchCapabilityReport());
     case "hold": {
       let ready = false;
