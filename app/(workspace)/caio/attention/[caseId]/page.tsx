@@ -1,6 +1,9 @@
+import { randomUUID } from "node:crypto";
+
 import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/shared/page-header";
+import { CaioAttentionConfirmForm, CaioAttentionOperationForm } from "@/features/caio-attention/case-forms.client";
 import {
   caioAttentionCategoryLabel,
   caioAttentionCopy,
@@ -13,6 +16,7 @@ import { getCaioAttentionPageContext } from "@/features/caio-attention/page-cont
 import { getCaioAttentionPageService } from "@/features/caio-attention/service";
 import type { CaioAttentionCommandFields } from "@/features/caio-attention/service-contract";
 import { diffCaioAttentionCommand } from "@/features/caio-attention/view-model";
+import { parseCaioAttentionEvidenceRefs } from "@/lib/caio-attention/evidence";
 import { formatLocalizedDateLabel } from "@/lib/i18n/date-labels";
 
 // Case detail: object, then the confirmed command and its changes from the prefill, then receipts, reviews and
@@ -36,6 +40,14 @@ export default async function CaioAttentionCasePage({ params }: { params: Promis
     </dl>
   );
   const changes = view.command ? diffCaioAttentionCommand(view.prefill, view.command) : [];
+  // Forms follow the loader's allowedOperations; each command is re-authorized in its own transaction.
+  const allowed = new Set(view.allowedOperations);
+  const common = { caseId: view.caseId, commandVersion: view.commandVersion, clientRequestId: randomUUID(), english };
+  const current = view.currentDisposition;
+  const parsedEvidence = current ? parseCaioAttentionEvidenceRefs(current.evidenceRefs) : null;
+  const externalRefs = parsedEvidence?.ok ? parsedEvidence.refs.filter((item) => item.role === "external").map((item) => item.ref) : [];
+  const canReview = current !== null && (allowed.has("reviewAccept") || allowed.has("reviewReturn"));
+  const hasNextStep = allowed.has("confirm") || allowed.has("ack") || allowed.has("note") || allowed.has("submitDisposition") || canReview;
 
   return (
     <div className="space-y-6" data-source-page="/caio/attention/[caseId]" data-case-status={view.status}>
@@ -100,6 +112,28 @@ export default async function CaioAttentionCasePage({ params }: { params: Promis
               {copy.decision(review.decision === "ACCEPT")} · {person(review.reviewerUserId)} · {date(review.createdAt)} · {review.note}
             </p>
           ))}
+        </section>
+      ) : null}
+      {hasNextStep ? (
+        <section className="space-y-3" data-testid="caio-attention-next-steps">
+          <h2 className="font-semibold">{copy.nextStepsTitle}</h2>
+          {allowed.has("confirm") ? (
+            <CaioAttentionConfirmForm
+              common={common}
+              prefill={{ ...view.prefill, committedDueAt: view.prefill.committedDueAt?.toISOString() ?? null }}
+              members={view.assignableUserIds.map((id) => ({ id, label: person(id) }))}
+            />
+          ) : null}
+          {allowed.has("ack") ? <CaioAttentionOperationForm common={common} kind="ack" /> : null}
+          {allowed.has("note") ? <CaioAttentionOperationForm common={common} kind="note" /> : null}
+          {allowed.has("submitDisposition") ? <CaioAttentionOperationForm common={common} kind="disposition" /> : null}
+          {canReview && current ? (
+            <CaioAttentionOperationForm
+              common={common}
+              kind="review"
+              review={{ dispositionId: current.id, reviewerVersion: view.reviewerVersion, externalRefs }}
+            />
+          ) : null}
         </section>
       ) : null}
       <section className="space-y-1">

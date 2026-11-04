@@ -1,7 +1,7 @@
 import type { CaioAttentionCategory, CaioAttentionSeverity } from "@/lib/caio-attention/contracts";
 import type { CaioAttentionStatus } from "@/lib/caio-attention/state-machine";
 
-import type { CaioAttentionViewerRole } from "./service-contract";
+import type { CaioAttentionCommandFailure, CaioAttentionDispositionOutcome, CaioAttentionViewerRole } from "./service-contract";
 import type { CaioAttentionCommandField } from "./view-model";
 
 type Pair = readonly [zh: string, en: string];
@@ -43,6 +43,28 @@ export const caioAttentionSeverityLabel = (english: boolean, severity: CaioAtten
 export const caioAttentionCategoryLabel = (english: boolean, category: CaioAttentionCategory) => pick(english, CATEGORY[category]);
 export const caioAttentionRoleLabel = (english: boolean, role: CaioAttentionViewerRole) => pick(english, ROLE[role]);
 export const caioAttentionFieldLabel = (english: boolean, field: CaioAttentionCommandField) => pick(english, FIELD[field]);
+
+const OUTCOME: Record<CaioAttentionDispositionOutcome, Pair> = {
+  handled: ["已处置", "Handled"],
+  mitigated: ["已缓解，仍需观察", "Mitigated, still watching"],
+  not_actionable: ["无需处置", "No action needed"],
+};
+const FAILURE: Record<CaioAttentionCommandFailure, Pair> = {
+  not_found: ["事项不存在或你无权查看。", "The case does not exist or you cannot view it."],
+  invalid_status: ["事项状态已变化，请刷新后重试。", "The case status changed; refresh and try again."],
+  stale_command_version: ["命令版本已更新，请刷新后重试。", "The command was reissued; refresh and try again."],
+  forbidden: ["你不能执行这个操作。", "You cannot perform this operation."],
+  stale_reviewer_version: ["复核人名单已调整，请刷新后重试。", "The reviewer set changed; refresh and try again."],
+  separation_of_duties: ["提交人、主责和知悉人不能复核。", "The submitter, the primary and informed people cannot review."],
+  disposition_not_current: ["这份回执已不是当前有效回执。", "This receipt is no longer the current one."],
+  validation_failed: ["填写内容不完整或格式不对。", "Some fields are missing or malformed."],
+  intake_closed: ["入口闸门已暂停，暂时不能确认。", "Intake is paused, so confirmation is not possible now."],
+  conflict: ["与其他操作冲突，请刷新后重试。", "Another change happened at the same time; refresh and try again."],
+  service_unavailable: ["关注事项服务尚未启用，未做任何更改。", "The attention service is not enabled; nothing was changed."],
+};
+
+export const caioAttentionOutcomeLabel = (english: boolean, outcome: CaioAttentionDispositionOutcome) => pick(english, OUTCOME[outcome]);
+export const caioAttentionFailureLabel = (english: boolean, reason: CaioAttentionCommandFailure) => pick(english, FAILURE[reason]);
 
 export function caioAttentionCopy(english: boolean) {
   const t = (zh: string, en: string) => (english ? en : zh);
@@ -92,6 +114,27 @@ export function caioAttentionCopy(english: boolean) {
     note: t("备注", "Note"),
     outcome: t("结论", "Outcome"),
     decision: (accept: boolean) => (accept ? t("通过", "Accepted") : t("退回", "Returned")),
+    nextStepsTitle: t("你可以做的下一步", "What you can do next"),
+    confirmTitle: t("确认入列（可修改预填）", "Confirm and dispatch (prefill is editable)"),
+    confirmHint: t(
+      "确认后才会派发给主责并通知相关人；系统不会替你确认。",
+      "Nothing is dispatched or notified until you confirm; the system never confirms for you.",
+    ),
+    confirmSubmit: t("确认派发", "Confirm and dispatch"),
+    ackSubmit: t("我已收到，正在处理", "Acknowledge"),
+    noteTitle: t("补充说明", "Add a note"),
+    noteSubmit: t("提交说明", "Submit note"),
+    dispositionTitle: t("提交处置回执", "Submit a disposition receipt"),
+    disposedAt: t("处置完成时间", "Handled at"),
+    evidenceHint: t("每行一条证据引用，格式为 类型:编号，不填网址。", "One evidence reference per line as kind:id; no URLs."),
+    dispositionSubmit: t("提交回执", "Submit receipt"),
+    reviewTitle: t("复核当前回执", "Review the current receipt"),
+    attestHint: t("逐条勾选你已核实的外部证据。", "Tick each external evidence item you have verified."),
+    reviewNote: t("复核结论（必填）", "Review conclusion (required)"),
+    reviewAccept: t("复核通过并关闭", "Accept and close"),
+    reviewReturn: t("退回主责", "Return to the primary"),
+    submitting: t("提交中…", "Submitting…"),
+    saved: t("已提交。", "Submitted."),
     notBusinessOutcome: t(
       "关闭只表示运营处置已经复核，不计入业务成果。",
       "Closing only records that the operating handling was reviewed; it is not a business outcome.",
