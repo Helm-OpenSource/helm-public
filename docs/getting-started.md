@@ -167,7 +167,7 @@ DingTalk · WeCom · HubSpot · Salesforce · Stripe · 支付宝 · 微信支�
 |---|---|
 | `SIGNAL_COLLECTION_SCHEDULER_ENABLED` | 信号采集调度器；`true` 才启动 |
 | `LIGHT_CHAIN_FOLLOW_THROUGH_CRON_ENABLED` | 轻量任务链催办扫描（每日一次）：对逾期 / 停留的任务与承诺产出**内部提醒与审计**，不外发、不改任何任务状态。部署级开关，会扫描库内所有工作区；建议先在内部自用工作区验证节奏，参考[自身租户运营 runbook §5](./product/HELM_SELF_TENANT_OPERATING_RUNBOOK.md) |
-| `HELM_CAIO_ATTENTION_REMINDERS_ENABLED` | CAIO 运营关注事项的提醒、升级与评估看门狗（每 5 分钟）：只发站内定向通知，不外发、不改事项状态；`true` 或 `1` 才启动，且须由 overlay 注册租户提醒策略后才会实际扫描 |
+| `HELM_CAIO_ATTENTION_REMINDERS_ENABLED` | CAIO 运营关注事项的提醒、升级与评估看门狗（每 5 分钟）：只发站内定向通知，不外发、不改事项状态；`true` 或 `1` 才启动，且须由 overlay 注册租户提醒策略后才会实际扫描（本版本未接入进程启动，设置不生效；随下一次启动文件准入更新接线） |
 
 三个调度器都不影响首次启动，留空 / `false` 即可。
 
@@ -207,8 +207,8 @@ DingTalk · WeCom · HubSpot · Salesforce · Stripe · 支付宝 · 微信支�
 |---|---|
 | `HELM_HEALTH_ATTESTATION_MODE` | 缺失、空值或 `reachability` 时保持既有公开可达性检查；只有精确为 `artifact-bound` 才启用源码发布绑定 |
 | `HELM_RUNTIME_DEPLOYMENT_ID` | 私有发布流程注入的 non-secret opaque ID；仅允许 1–128 个 ASCII 字符，并匹配 `[A-Za-z0-9][A-Za-z0-9._:-]*` |
-| `HELM_RUNTIME_NODE_ID` | CAIO 运营关注事项的本机节点标识（每台主机一个，non-secret，匹配 `[A-Za-z0-9][A-Za-z0-9._-]{0,95}`）；与 `artifact-bound` 部署标识同时存在时才写 RuntimeNode 心跳，本机能力探针才报告该节点，就绪证明才可能签发；缺失或非法时不心跳，入口保持暂停 |
-| `HELM_RUNTIME_NODE_ROLE` | 心跳上报的进程角色，匹配 `[a-z][a-z0-9_-]{0,31}`；缺失或空值为 `http`，非法值不心跳 |
+| `HELM_RUNTIME_NODE_ID` | CAIO 运营关注事项的本机节点标识（每台主机一个，non-secret，匹配 `[A-Za-z0-9][A-Za-z0-9._-]{0,95}`）；与 `artifact-bound` 部署标识同时存在时才写 RuntimeNode 心跳，本机能力探针才报告该节点，就绪证明才可能签发；缺失或非法时不心跳，入口保持暂停（本版本未接入进程启动，设置不生效；随下一次启动文件准入更新接线） |
+| `HELM_RUNTIME_NODE_ROLE` | 心跳上报的进程角色，匹配 `[a-z][a-z0-9_-]{0,31}`；缺失或空值为 `http`，非法值不心跳（本版本未接入进程启动，设置不生效；随下一次启动文件准入更新接线） |
 
 `artifact-bound` 是显式选择：ID 缺失、超长、含空白、控制字符或其他非法字符时，
 `GET /api/health` 固定返回 `503`，且不会回显非法原值。合法时，该端点在
