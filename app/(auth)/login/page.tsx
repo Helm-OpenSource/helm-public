@@ -12,7 +12,8 @@ import { LoginPanel } from "@/features/auth/login-panel";
 import { readPublicOauthSignupPrefillCookie, PUBLIC_OAUTH_SIGNUP_PREFILL_COOKIE } from "@/lib/auth/public-oauth";
 import { isDingTalkOauthConfigured } from "@/lib/connectors/dingtalk";
 import { isFeishuOauthConfigured } from "@/lib/connectors/feishu";
-import { getCurrentUser } from "@/lib/auth/session";
+import { getCurrentExternalMemberScope, getCurrentUser } from "@/lib/auth/session";
+import { externalLandingPath } from "@/lib/auth/external-member-scope";
 import {
   resolveDeploymentEntryConfig,
   resolveDeploymentPostLoginPath,
@@ -322,7 +323,11 @@ export default async function LoginPage({
   );
 
   if (user) {
-    redirect(resolveDeploymentPostLoginPath("/dashboard", deploymentEntry));
+    // A signed-in external member goes to their own surface; one whose scope this build does not know stays on
+    // the sign-in page (sending them to /dashboard would only bring them back here).
+    const external = await getCurrentExternalMemberScope();
+    if (external === null) redirect(resolveDeploymentPostLoginPath("/dashboard", deploymentEntry));
+    if (external !== "unknown") redirect(externalLandingPath(external));
   }
 
   return (

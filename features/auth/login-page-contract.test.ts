@@ -2,11 +2,13 @@ import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { resolveTitle } from "next/dist/lib/metadata/resolvers/resolve-title";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { __resetPackRegistryForTest, registerPackContributions } from "@/lib/extensions/registry-contract";
 
 const mocks = vi.hoisted(() => ({
   cookiesMock: vi.fn(),
   redirectMock: vi.fn(),
   getCurrentUserMock: vi.fn(),
+  getCurrentExternalMemberScopeMock: vi.fn(),
   readPublicOauthSignupPrefillCookieMock: vi.fn(),
 }));
 
@@ -102,6 +104,7 @@ vi.mock("@/features/auth/login-panel", () => ({
 
 vi.mock("@/lib/auth/session", () => ({
   getCurrentUser: mocks.getCurrentUserMock,
+  getCurrentExternalMemberScope: mocks.getCurrentExternalMemberScopeMock,
 }));
 
 vi.mock("@/lib/connectors/dingtalk", () => ({
@@ -139,6 +142,7 @@ describe("login page salvage contract", () => {
     vi.clearAllMocks();
     mocks.cookiesMock.mockResolvedValue(createCookieStore());
     mocks.getCurrentUserMock.mockResolvedValue(null);
+    mocks.getCurrentExternalMemberScopeMock.mockResolvedValue(null);
     mocks.readPublicOauthSignupPrefillCookieMock.mockReturnValue(null);
   });
 
@@ -232,6 +236,28 @@ describe("login page salvage contract", () => {
         searchParams: Promise.resolve({}),
       }),
     ).rejects.toThrow("REDIRECT:/dashboard");
+  });
+
+  it("sends a signed-in external member to their own surface, and keeps one whose surface this build does not know on the sign-in page", async () => {
+    mocks.getCurrentUserMock.mockResolvedValue({ id: "user-1" });
+    mocks.redirectMock.mockImplementation((path: string) => {
+      throw buildRedirectError(path);
+    });
+    __resetPackRegistryForTest();
+    registerPackContributions("demo-pack", {
+      externalMemberSurfaces: [{ scope: "partner-portal", landingPath: "/ext-demo/portal", pathPrefixes: ["/ext-demo/portal", "/api/ext-demo/portal"] }],
+    });
+    try {
+      mocks.getCurrentExternalMemberScopeMock.mockResolvedValue("partner-portal");
+      await expect(LoginPage({ searchParams: Promise.resolve({}) })).rejects.toThrow("REDIRECT:/ext-demo/portal");
+    } finally {
+      __resetPackRegistryForTest();
+    }
+
+    mocks.getCurrentExternalMemberScopeMock.mockResolvedValue("unknown");
+    const html = renderToStaticMarkup(await LoginPage({ searchParams: Promise.resolve({}) }));
+    expect(html).toContain('data-helm-auth="login"');
+    expect(mocks.redirectMock).toHaveBeenCalledTimes(1);
   });
 
   it("prefills organization name from public oauth cookie when user is unmatched", async () => {

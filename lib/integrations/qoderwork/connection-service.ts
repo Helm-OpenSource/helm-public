@@ -7,6 +7,7 @@ import {
   type QoderWorkConnectionScope,
 } from "@/features/qoderwork-intake/mcp-contract";
 import { db } from "@/lib/db";
+import { externalScopeOf } from "@/lib/auth/external-member-scope";
 import {
   createExternalAgentBearerToken,
   hashExternalAgentBearerToken,
@@ -191,6 +192,16 @@ export async function authenticateQoderWorkConnection(rawToken: string, now = ne
   if (!isQoderWorkRuntimeEnabled(connection.workspace.featureFlagsJson)) {
     await recordKnownConnectionFailure(connection.id, "RUNTIME_DISABLED");
     throw new ExternalAgentConnectionError("RUNTIME_DISABLED", "External agent runtime is disabled");
+  }
+  // An external member (lib/auth/external-member-scope.ts) never reads Core data through an agent connection, even one
+  // issued before the scope was written.
+  const membership = await db.membership.findUnique({
+    where: { workspaceId_userId: { workspaceId: connection.workspaceId, userId: connection.userId } },
+    select: { accessScope: true },
+  });
+  if (externalScopeOf(membership) !== null) {
+    await recordKnownConnectionFailure(connection.id, "EXTERNAL_MEMBER");
+    throw new ExternalAgentConnectionError("UNAUTHENTICATED", "Invalid external agent credential");
   }
   await claimRateLimit(connection.id, now);
   await db.externalAgentConnection.update({

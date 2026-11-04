@@ -22,11 +22,18 @@ import {
   LEGACY_SESSION_COOKIE,
   SESSION_ID_COOKIE,
 } from "@/lib/auth/session-cookies";
-import { safeWriteAuditLog } from "@/lib/audit";
+import { safeWriteAuditLog, writeAuditLog } from "@/lib/audit";
+import {
+  externalLandingPath,
+  externalScopeOf,
+  mayUseExternalSurface,
+  type ExternalMemberScope,
+} from "@/lib/auth/external-member-scope";
 import { isWriteConflictError } from "@/lib/db/conflict-aware-write";
 import { ensureWorkspaceCommercialFoundation, syncWorkspaceAccessState } from "@/lib/billing/foundation";
 import { db } from "@/lib/db";
 import { safeParseJson } from "@/lib/utils";
+import { parseWorkspaceFeatureFlags } from "@/lib/workspace-ops";
 
 const AUTH_SESSION_TTL_DAYS = 14;
 
@@ -655,19 +662,33 @@ function readMembership(input: { workspaceId: string; userId: string }) {
 }
 
 async function markInvitedMembershipActive(input: { workspaceId: string; userId: string }) {
-  // Keep the INVITED pre-state in the UPDATE itself. Prisma's MySQL updateMany
-  // path can select ids first and then update by id, so its count is not a sound
-  // compare-and-swap result under concurrency.
-  const count = await db.$executeRaw`
-    UPDATE \`Membership\`
-       SET \`status\` = ${MembershipStatus.ACTIVE},
-           \`joinedAt\` = UTC_TIMESTAMP(3),
-           \`updatedAt\` = UTC_TIMESTAMP(3)
-     WHERE \`workspaceId\` = ${input.workspaceId}
-       AND \`userId\` = ${input.userId}
-       AND \`status\` = ${MembershipStatus.INVITED}
-  `;
-  return { count };
+  return db.$transaction(async (tx) => {
+    // Keep INVITED in the UPDATE predicate and write its evidence in the same transaction.
+    const count = await tx.$executeRaw`
+      UPDATE \`Membership\`
+         SET \`status\` = ${MembershipStatus.ACTIVE},
+             \`joinedAt\` = UTC_TIMESTAMP(3),
+             \`updatedAt\` = UTC_TIMESTAMP(3)
+       WHERE \`workspaceId\` = ${input.workspaceId}
+         AND \`userId\` = ${input.userId}
+         AND \`status\` = ${MembershipStatus.INVITED}
+    `;
+    if (count > 0) {
+      await writeAuditLog({
+        workspaceId: input.workspaceId,
+        userId: input.userId,
+        actor: input.userId,
+        actorType: ActorType.USER,
+        actionType: MEMBERSHIP_AUTO_ACTIVATED_AUDIT_ACTION,
+        targetType: "Membership",
+        targetId: `${input.workspaceId}:${input.userId}`,
+        summary: "Member auto-activated own invited membership on first authenticated workspace use",
+        payload: { workspaceId: input.workspaceId, userId: input.userId, mechanism: "member_first_authenticated_use" },
+        sourcePage: "/auth/session",
+      }, { client: tx });
+    }
+    return { count };
+  });
 }
 
 export const MEMBERSHIP_AUTO_ACTIVATED_AUDIT_ACTION = "MEMBERSHIP_AUTO_ACTIVATED_ON_FIRST_USE";
@@ -676,6 +697,14 @@ export async function activateMembershipIfInvited(input: {
   workspaceId: string;
   userId: string;
 }) {
+  const workspace = await db.workspace.findUnique({
+    where: { id: input.workspaceId },
+    select: { featureFlagsJson: true },
+  });
+  if (!workspace || !parseWorkspaceFeatureFlags(workspace.featureFlagsJson).membershipAutoActivation) {
+    return readMembership(input);
+  }
+
   let activation: Awaited<ReturnType<typeof markInvitedMembershipActive>>;
 
   try {
@@ -702,25 +731,6 @@ export async function activateMembershipIfInvited(input: {
   }
 
   if (activation.count > 0) {
-    // Implicit accept-invite: the user reached an invited workspace and we
-    // auto-flipped INVITED → ACTIVE. AGENTS.md §6 forbids broad auto-write
-    // without leaving a trace, so the transition itself is audited even
-    // though no explicit "accept" UI exists yet (see audit §3.5).
-    await safeWriteAuditLog({
-      workspaceId: input.workspaceId,
-      userId: input.userId,
-      actor: input.userId,
-      actorType: ActorType.SYSTEM,
-      actionType: MEMBERSHIP_AUTO_ACTIVATED_AUDIT_ACTION,
-      targetType: "Membership",
-      targetId: `${input.workspaceId}:${input.userId}`,
-      summary: "Membership auto-activated on first workspace use (implicit accept-invite)",
-      payload: {
-        workspaceId: input.workspaceId,
-        userId: input.userId,
-      },
-      sourcePage: "/auth/session",
-    });
     return readMembership(input);
   }
 
@@ -787,10 +797,28 @@ export async function getCurrentWorkspaceSession() {
   const session = await getCurrentWorkspaceSessionOrNull();
 
   if (!session) {
-    redirect("/login");
+    // An external member is signed in but may not hold a Core workspace session: send them to their own
+    // surface, not back to /login (whose signed-in redirect would bring them here again).
+    const external = await getCurrentExternalMemberScope();
+    redirect(external === null ? "/login" : externalLandingPath(external));
   }
 
   return session;
+}
+
+/**
+ * The external member scope of the membership the current auth session seats on (lib/auth/external-member-scope.ts),
+ * or null for a normal member or no session. Read only: no invite activation, no workspace realignment, no audit row.
+ */
+export async function getCurrentExternalMemberScope(): Promise<ExternalMemberScope | "unknown" | null> {
+  const authSession = await getCurrentAuthSessionRecord();
+  if (!authSession) return null;
+  const cookieStore = await cookies();
+  const membership = resolvePreferredMembership(
+    filterDeploymentMemberships(authSession.user.memberships),
+    authSession.activeWorkspaceId ?? cookieStore.get(ACTIVE_WORKSPACE_COOKIE)?.value,
+  );
+  return externalScopeOf(membership);
 }
 
 export async function getCurrentWorkspaceSessionOrNull() {
@@ -814,11 +842,25 @@ export async function getCurrentWorkspaceSessionOrNull() {
     return null;
   }
 
+  // EXTERNAL MEMBERS NEVER SEAT A CORE WORKSPACE SESSION (external member prefix lock). Judged on the
+  // snapshot before any side effect below, and again on the live re-read, so a scope written while this
+  // request runs is honoured too. Every Core page loader, API route and server action resolves its
+  // session here, so this one refusal keeps an external member out of all of them.
+  if (externalScopeOf(membership) !== null) {
+    return null;
+  }
+
+  if (membership.status === MembershipStatus.INVITED) {
+    const resultingMembership = await activateMembershipIfInvited({
+      workspaceId: membership.workspaceId,
+      userId: authSession.user.id,
+    });
+    if (!resultingMembership || resultingMembership.status !== MembershipStatus.ACTIVE) {
+      return null;
+    }
+  }
+
   await ensureWorkspaceCommercialFoundation(membership.workspaceId);
-  await activateMembershipIfInvited({
-    workspaceId: membership.workspaceId,
-    userId: authSession.user.id,
-  });
 
   if (membership.workspaceId !== authSession.activeWorkspaceId) {
     const realignedAt = new Date();
@@ -885,13 +927,13 @@ export async function getCurrentWorkspaceSessionOrNull() {
   // by the null check; one REVOKED in the same window was not, because an
   // INACTIVE row is still a row, and the session was seated on it.
   //
-  // Only ACTIVE and INVITED may seat a session. Anything else is refused rather
-  // than enumerated, so a status added to the enum later has to be admitted
-  // here deliberately instead of inheriting a session by default.
+  // INVITED is never authorization. The activation helper must have changed
+  // the member's own row to ACTIVE before this resolver returns a workspace
+  // session; this live reread also fails closed on a concurrent revoke.
   if (
     !currentMembership ||
-    (currentMembership.status !== MembershipStatus.ACTIVE &&
-      currentMembership.status !== MembershipStatus.INVITED)
+    currentMembership.status !== MembershipStatus.ACTIVE ||
+    externalScopeOf(currentMembership) !== null
   ) {
     return null;
   }
@@ -954,6 +996,7 @@ export async function getCurrentCaioOperatorSessionOrNull() {
       userId: true,
       role: true,
       status: true,
+      accessScope: true,
       user: { select: { id: true, name: true } },
       workspace: {
         select: {
@@ -972,6 +1015,8 @@ export async function getCurrentCaioOperatorSessionOrNull() {
     !membership ||
     membership.userId !== authSession.userId ||
     membership.status !== MembershipStatus.ACTIVE ||
+    // An external member never reaches the CAIO operator surface (external member prefix lock).
+    externalScopeOf(membership) !== null ||
     membership.workspace.status !== WorkspaceStatus.ACTIVE ||
     !isWorkspaceAllowedForDeployment(membership.workspace)
   ) {
@@ -1155,9 +1200,27 @@ export async function clearSession() {
   cookieStore.delete(FIRST_LOGIN_IDENTITY_SETUP_COOKIE);
 }
 
-export async function getSessionId() {
+/**
+ * The current auth session's id, for extensions that authorize the request themselves. An external member's
+ * session is returned only to the surface that names the member's scope (`{ externalMemberSurface }`); every
+ * other caller sees no session, so an extension route that does not opt in refuses external members by default.
+ */
+export async function getSessionId(options?: { externalMemberSurface?: ExternalMemberScope }) {
   const authSession = await getCurrentAuthSessionRecord();
-  return authSession?.id ?? null;
+  if (!authSession) return null;
+  const cookieStore = await cookies();
+  const membership = resolvePreferredMembership(
+    filterDeploymentMemberships(authSession.user.memberships),
+    authSession.activeWorkspaceId ?? cookieStore.get(ACTIVE_WORKSPACE_COOKIE)?.value,
+  );
+  // Judge the membership the session is seated on (activeWorkspaceId), and also any external membership of the
+  // user in that workspace: an extension reads activeWorkspaceId itself, so it must not see a session whose
+  // active workspace holds an external membership the preferred-membership rule happened not to pick.
+  const active = authSession.user.memberships.find((m) => m.workspaceId === authSession.activeWorkspaceId) ?? membership;
+  if (!mayUseExternalSurface(membership, options?.externalMemberSurface) || !mayUseExternalSurface(active, options?.externalMemberSurface)) {
+    return null;
+  }
+  return authSession.id;
 }
 
 export async function rotateCurrentAuthSession(input?: {

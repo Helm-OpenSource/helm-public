@@ -3,7 +3,9 @@ import { z } from "zod";
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
 import { getLoginLockStatus, recordFailedLogin, clearFailedLogins } from "@/lib/auth/login-rate-limit.service";
 import { consumeMemberActivation, issueMemberActivation } from "@/lib/auth/member-activation.service";
+import { MemberActivationError } from "@/lib/auth/member-activation-error";
 const failure = { ok: false as const, error: "无法完成成员激活。请检查凭证或联系组织管理员重新发放。" };
+const alreadyActivated = { ok: false as const, error: "该账号已完成激活，请直接使用密码登录。", alreadyActivated: true as const };
 export async function issueMemberActivationAction(input: { membershipId: string; password: string }) {
   const parsed = z.object({ membershipId: z.string().min(1).max(191), password: z.string().min(8).max(256) }).strict().safeParse(input);
   if (!parsed.success || process.env.HELM_AUTH_MEMBER_ACTIVATION_ENABLED !== "true") return failure;
@@ -20,5 +22,9 @@ export async function consumeMemberActivationAction(input: { token: string; pass
   const parsed = z.object({ token: z.string().length(43), password: z.string().min(8).max(256) }).strict().safeParse(input);
   if (!parsed.success) return failure;
   try { return await consumeMemberActivation(parsed.data); }
-  catch { return failure; }
+  catch (error) {
+    if (error instanceof MemberActivationError && (error.code === "target_already_activated" || error.code === "token_consumed"))
+      return alreadyActivated;
+    return failure;
+  }
 }

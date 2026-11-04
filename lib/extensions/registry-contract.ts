@@ -23,6 +23,7 @@ import type {
 } from "@/lib/bi-report-skill/types";
 import type { IndustryDemoPack } from "@/lib/demo/industry-fixtures/types";
 import type { SignalCollectionJob } from "@/lib/signal-collection/types";
+import { PUBLIC_PAGE_PREFIXES, WORKSPACE_PAGE_PREFIXES } from "@/lib/auth/workspace-route-guard";
 
 import {
   registerExtensionApiRoutes,
@@ -190,6 +191,22 @@ export type PackContributions = {
    * surfaces fall back to the raw code when no label exists.
    */
   auditDisplayLabels?: AuditDisplayLabelContribution;
+  /**
+   * External member surfaces (lib/auth/external-member-scope.ts, **first wins** per scope). Core's session resolvers
+   * refuse a membership whose `accessScope` is set everywhere; the registered surface gets the session only by naming
+   * the scope (`getSessionId({ externalMemberSurface })`) and authorizes every request itself. The landing path is
+   * where Core sends such a member; the path prefixes bound the landing path and are not themselves an allowlist.
+   * Note that `getCurrentUser()` / `requireCurrentUser()` still return an external member's user: an extension route
+   * must not treat them as workspace authorization. An unregistered scope value is refused everywhere.
+   */
+  externalMemberSurfaces?: ReadonlyArray<ExternalMemberSurfaceContribution>;
+};
+
+/** One external member surface: the `accessScope` value, where the member lands, and the path prefixes they may use. */
+export type ExternalMemberSurfaceContribution = {
+  scope: string;
+  landingPath: string;
+  pathPrefixes: ReadonlyArray<string>;
 };
 
 // ---------------------------------------------------------------------------
@@ -220,6 +237,7 @@ type MutableStore = {
     actors: Map<string, AuditDisplayLabel>;
     sourcePages: Map<string, AuditDisplayLabel>;
   };
+  externalMemberSurfaces: Map<string, ExternalMemberSurfaceContribution>;
   registeredPackIds: Set<string>;
 };
 
@@ -248,6 +266,7 @@ function emptyStore(): MutableStore {
       actors: new Map(),
       sourcePages: new Map(),
     },
+    externalMemberSurfaces: new Map(),
     registeredPackIds: new Set(),
   };
 }
@@ -308,6 +327,49 @@ export function registerPackContributions(
     registerExtensionApiRoutes(packId, contributions.apiRoutes);
   if (contributions.auditDisplayLabels)
     mergeAuditDisplayLabels(s.auditDisplayLabels, contributions.auditDisplayLabels);
+  if (contributions.externalMemberSurfaces)
+    for (const surface of contributions.externalMemberSurfaces) {
+      const usable = normalizeExternalMemberSurface(surface);
+      // First registration wins; a malformed surface is ignored, so its scope stays refused everywhere.
+      if (usable && !s.externalMemberSurfaces.has(usable.scope)) s.externalMemberSurfaces.set(usable.scope, usable);
+    }
+}
+
+const EXTERNAL_SCOPE = /^[a-z][a-z0-9-]{1,62}$/;
+const SURFACE_PATH = /^\/[A-Za-z0-9._~-]+(?:\/[A-Za-z0-9._~-]+)*$/;
+/**
+ * First path segments an extension surface may not claim: Core's own sign-in, setup and shell pages (an external
+ * member landing there would be sent straight back). An API prefix must sit at least two segments under /api.
+ */
+const RESERVED_SURFACE_SEGMENTS = new Set([
+  "", "_next", "activate-member", "admin", "assets", "caio", "dashboard", "getting-started", "health", "invite-pending", "login", "portal", "settings", "setup", "trial",
+  // Every Core workspace and public page prefix the route guard knows (review P3: a landing under a Core page would loop).
+  ...[...WORKSPACE_PAGE_PREFIXES, ...PUBLIC_PAGE_PREFIXES].map((prefix) => prefix.split("/")[1] ?? ""),
+]);
+/** Test helper: whether a first path segment is reserved for Core. */
+export function __isReservedSurfaceSegmentForTest(segment: string): boolean {
+  return RESERVED_SURFACE_SEGMENTS.has(segment);
+}
+function isSurfacePath(path: unknown): path is string {
+  if (typeof path !== "string" || !SURFACE_PATH.test(path)) return false;
+  const segments = path.split("/").slice(1);
+  if (segments.some((s) => s === "." || s === "..")) return false;
+  if (segments.length < 2 || RESERVED_SURFACE_SEGMENTS.has(segments[0])) return false;
+  return segments[0] !== "api" || segments.length >= 3;
+}
+
+/** A scope key, absolute path prefixes without a trailing slash, and a landing path inside one of them; null otherwise. */
+function normalizeExternalMemberSurface(value: unknown): ExternalMemberSurfaceContribution | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as Record<string, unknown>;
+  if (typeof v.scope !== "string" || !EXTERNAL_SCOPE.test(v.scope)) return null;
+  if (!Array.isArray(v.pathPrefixes) || v.pathPrefixes.length < 1 || v.pathPrefixes.length > 16) return null;
+  if (!v.pathPrefixes.every(isSurfacePath)) return null;
+  const prefixes = v.pathPrefixes as string[];
+  if (!isSurfacePath(v.landingPath) || v.landingPath.split("/")[1] === "api") return null;
+  const landing = v.landingPath;
+  if (!prefixes.some((p) => landing === p || landing.startsWith(p + "/"))) return null;
+  return Object.freeze({ scope: v.scope, landingPath: landing, pathPrefixes: Object.freeze([...prefixes]) });
 }
 
 const AUDIT_DISPLAY_LABEL_KINDS = [
@@ -413,6 +475,9 @@ export function getRegisteredSignalCollectionJobProviders(): ReadonlyArray<
   return store().signalCollectionJobProviders;
 }
 /** Merged audit display labels (plain objects, safe to pass to a client). */
+export function getRegisteredExternalMemberSurface(scope: string): ExternalMemberSurfaceContribution | null {
+  return store().externalMemberSurfaces.get(scope) ?? null;
+}
 export function getRegisteredAuditDisplayLabels(): RegisteredAuditDisplayLabels {
   const labels = store().auditDisplayLabels;
   return {

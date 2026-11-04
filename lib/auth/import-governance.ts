@@ -1,6 +1,7 @@
 import { MembershipStatus, WorkspaceRole } from "@prisma/client";
 import { WORKSPACE_CAPABILITIES, workspaceRoleHasCapability } from "@/lib/auth/authorization";
 import { db } from "@/lib/db";
+import { externalScopeOf } from "@/lib/auth/external-member-scope";
 
 export function canManageWorkspaceConnectors(role: WorkspaceRole | null | undefined) {
   return workspaceRoleHasCapability(role, WORKSPACE_CAPABILITIES.MANAGE_CONNECTORS);
@@ -46,10 +47,13 @@ export async function getWorkspaceRoleForUser(args: {
     select: {
       role: true,
       status: true,
+      accessScope: true,
     },
   });
 
-  if (!membership || membership.status !== MembershipStatus.ACTIVE) {
+  // An external member (lib/auth/external-member-scope.ts) has no Core workspace role, so no OAuth callback or import
+  // decision can act for them, even on a flow started before the scope was written.
+  if (!membership || membership.status !== MembershipStatus.ACTIVE || externalScopeOf(membership) !== null) {
     return null;
   }
 

@@ -1,6 +1,8 @@
 import { AppShell } from "@/components/layout/app-shell";
 import { getWorkspaceLayoutData } from "@/features/workspace/queries";
-import { getCurrentWorkspaceSession } from "@/lib/auth/session";
+import { getCurrentExternalMemberScope, getCurrentWorkspaceSessionOrNull } from "@/lib/auth/session";
+import { redirect } from "next/navigation";
+import { EXTERNAL_MEMBER_FALLBACK_PATH } from "@/lib/auth/external-member-scope";
 import { resolveWorkspaceNavExtensions } from "@/lib/extensions/registry";
 import { resolveWorkspaceUiLocale } from "@/lib/i18n/config";
 import {
@@ -67,8 +69,28 @@ export default async function WorkspaceLayout({
   let databaseErrorMessage: string | null = null;
   const requestLocale = await getRequestUiLocaleCandidate();
 
+  // An external member (lib/auth/external-member-scope.ts) never gets the workspace shell: no navigation, no
+  // command palette, no quick create, and none of the shell's workspace reads. The page under it decides on its
+  // own: a Core page's loader refuses them (and sends them to their surface); their own surface opts in.
+  // A database that cannot be reached is kept as the error and shown by the banner below, as before.
+  const unreachable = (error: unknown) => {
+    if (error instanceof Error && error.message.includes("Can't reach database server")) return error;
+    throw error;
+  };
+  let session = await getCurrentWorkspaceSessionOrNull().catch(unreachable);
+  if (session === null) {
+    const external = await getCurrentExternalMemberScope().catch(unreachable);
+    if (external instanceof Error) {
+      session = external;
+    } else {
+      if (external === null) redirect("/login");
+      if (external === "unknown") redirect(EXTERNAL_MEMBER_FALLBACK_PATH);
+      return <div className="min-h-screen bg-[color:var(--surface-subtle)] px-4 py-6 lg:px-8">{children}</div>;
+    }
+  }
+
   try {
-    const session = await getCurrentWorkspaceSession();
+    if (session instanceof Error) throw session;
     const { user, workspace, membership } = session;
 
     const layoutData = await getWorkspaceLayoutData(workspace.id, user.id);
