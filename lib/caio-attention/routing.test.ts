@@ -92,6 +92,7 @@ describe("validateCaioAttentionOwnerCommand", () => {
     expect(validate({ primaryUserId: "u_owner" })).toEqual(["primary_is_confirmer"]);
     expect(validate({ escalationUserId: "u_primary" })).toEqual(["escalation_is_primary"]);
     expect(validate({ escalationUserId: "u_cc" })).toEqual(["escalation_in_cc"]);
+    expect(validate({ ccUserIds: ["u_cc", "u_primary"] })).toEqual(["primary_in_cc"]);
     expect(validate({}, activeExcept("u_primary", "u_cc"))).toEqual(["cc_inactive", "primary_inactive"]);
     expect(validate({ reviewerUserIds: ["u_cc"] })).toEqual(["reviewer_conflict", "reviewer_not_capable"]);
     expect(validate({ reviewerUserIds: [], escalationUserId: null, committedDueAt: null as unknown as Date }))

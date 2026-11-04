@@ -7630,6 +7630,22 @@ model CaioAttentionPauseRequest {
   @@index([openEpoch])
 }
 
+// Append-only audit of every operator / deploy-host operation on the control plane, written in the operation's own
+// transaction. op is the CLI op name; epoch / openEpoch are the Control values after the operation (NULL for the
+// workspace-scoped route-config ops). Operator identity SELECT/INSERT only.
+model CaioAttentionControlEvent {
+  id          String   @id @default(cuid())
+  op          String // pause | resume | expected-nodes | deploy-begin | attest-node | deploy-end | deploy-recover | guard-downgrade | routes-publish | routes-activate
+  actorRef    String
+  epoch       Int?
+  openEpoch   Int?
+  payloadJson String   @db.Text
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([op, createdAt])
+}
+
 // CAIO attention — cases. Same rules as the control plane above: no foreign keys, append-only history by grants.
 model CaioAttentionCase {
   id                        String    @id @default(cuid())
@@ -7680,6 +7696,14 @@ model CaioAttentionCase {
   @@unique([workspaceId, activeKey])
   @@unique([workspaceId, shortNo])
   @@index([workspaceId, status, createdAt])
+  // Reminder scanner: one range branch per rule (20261104160000_caio_attention_reminder_due_indexes).
+  @@index([status, r0aDueAt])
+  @@index([status, r0bDueAt])
+  @@index([status, noResponseDueAt])
+  @@index([status, unresolvedEscalateAt])
+  @@index([status, nextPeriodicAt])
+  // System step: resume deferred cases whose deferral ended (20261104180000_caio_attention_deferred_until_index).
+  @@index([status, deferredUntil])
 }
 
 model CaioAttentionCaseEvent {

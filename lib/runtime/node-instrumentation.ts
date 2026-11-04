@@ -38,6 +38,15 @@ export async function registerNodeInstrumentation() {
 
   startLightChainFollowThroughCron();
 
+  // CAIO attention reminders and evaluation watchdog: five-minute scan, in-app
+  // notices only. Opt-in via HELM_CAIO_ATTENTION_REMINDERS_ENABLED and inert until
+  // an overlay registers the tenant policy. It never reads light-chain items.
+  const { startCaioAttentionReminderCron } = await import(
+    "@/lib/caio-attention/reminder-cron"
+  );
+
+  startCaioAttentionReminderCron();
+
   // T019.code P0 #2b — wire DB-derived spend provider so the LLM
   // spend-tracker can use max(in-memory, DB) on multi-instance
   // deployments. The provider is cached with 60s TTL inside spend-tracker;
@@ -61,6 +70,29 @@ export async function registerNodeInstrumentation() {
     logInstrumentationInfo("failed to register DB-derived LLM spend provider; falling back to in-memory only", {
       error: err instanceof Error ? err.message : String(err),
     });
+  }
+
+  // CAIO attention RuntimeNode heartbeat: a no-op unless the host sets HELM_RUNTIME_NODE_ID and an artifact-bound
+  // deployment id; failures are logged and never block startup.
+  try {
+    const [{ startCaioAttentionHeartbeat }, { db }] = await Promise.all([
+      import("@/lib/caio-attention/heartbeat.service"),
+      import("@/lib/db"),
+    ]);
+    // The heartbeat reports close capability from the same runtime binding as the loopback probe. If that module
+    // cannot load here, the heartbeat falls back to the policy check alone (still 0 without a registered pack).
+    let closeChainBound: (() => boolean) | undefined;
+    try {
+      const { CAIO_ATTENTION_CLOSE_CHAIN_BINDING } = await import("@/lib/caio-attention-runtime/close-chain-binding");
+      closeChainBound = () => CAIO_ATTENTION_CLOSE_CHAIN_BINDING.pageServiceBound;
+    } catch (err) {
+      logInstrumentationInfo("caio attention close-chain binding not loaded; heartbeat uses the policy check", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    await startCaioAttentionHeartbeat(db, (message) => logInstrumentationInfo(message), closeChainBound);
+  } catch (err) {
+    logInstrumentationInfo("caio attention heartbeat not started", { error: err instanceof Error ? err.message : String(err) });
   }
 
   if (

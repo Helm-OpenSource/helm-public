@@ -1,0 +1,138 @@
+// check:caio-attention — structural gate for the CAIO operating attention module (lib/caio-attention, the
+// page layer in features/caio-attention and the pages under app/(workspace)/caio/attention).
+//   1. The module never touches the generic governed-task tables: attention cases live only in their own
+//      tables, so closing one can never count as a business outcome. The one allowance is outside the scanned
+//      directories: lib/caio-attention-runtime/evidence-resolver.ts reads (findMany only) an ExecutionReceipt by id
+//      to verify an `execution-receipt:<id>` evidence ref; nothing in the runtime writes those tables.
+//   2. Pages and page components never reach the database directly; case content is read only through the
+//      authorized loader behind getCaioAttentionPageService().
+//   3. Until the lifecycle service is bound, the page service is fail closed: no rows, no case, no command. Bound
+//      without a tenant policy it serves reads only: every command is refused and the binding is not closable.
+//   4. lib/caio-attention/capability.json equals the binding-derived close capability (1 bound, 0 unbound), and
+//      the close chain's forms ship with it.
+// Passing it is a structural statement, not a readiness or activation claim.
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+
+import {
+  CAIO_ATTENTION_DISPOSITION_OUTCOMES as PAGE_OUTCOMES, type CaioAttentionCommandInput,
+} from "@/features/caio-attention/service-contract";
+import {
+  CAIO_ATTENTION_CLOSE_CAPABILITY_VERSION,
+  CAIO_ATTENTION_PAGE_SERVICE_BOUND,
+  CAIO_ATTENTION_UNAVAILABLE_SERVICE,
+  getCaioAttentionPageService,
+  isCaioAttentionPageServiceAvailable,
+} from "@/features/caio-attention/service";
+import { getCaioAttentionBoundPagePolicy } from "@/lib/caio-attention-runtime/bound-page-service";
+import { CAIO_ATTENTION_CLOSE_CHAIN_BINDING } from "@/lib/caio-attention-runtime/close-chain-binding";
+import { createCaioAttentionLifecyclePageService } from "@/lib/caio-attention-runtime/page-service";
+import { CAIO_ATTENTION_DISPOSITION_OUTCOMES } from "@/lib/caio-attention/contracts";
+
+const root = path.resolve(__dirname, "..");
+const MODULE_DIRS = ["lib/caio-attention", "features/caio-attention", "app/(workspace)/caio/attention"];
+const PAGE_LAYER_DIRS = MODULE_DIRS.slice(1);
+
+function sourceFiles(relativeDir: string): string[] {
+  const dir = path.join(root, relativeDir);
+  return readdirSync(dir).flatMap((name) => {
+    const full = path.join(dir, name);
+    if (statSync(full).isDirectory()) return sourceFiles(path.join(relativeDir, name));
+    return /\.(ts|tsx)$/u.test(name) ? [path.join(relativeDir, name)] : [];
+  });
+}
+
+const read = (relativePath: string) => readFileSync(path.join(root, relativePath), "utf8");
+
+describe("check:caio-attention", () => {
+  it("scans a non-empty module", () => {
+    for (const dir of MODULE_DIRS) expect(sourceFiles(dir).length, dir).toBeGreaterThan(0);
+  });
+
+  it("never references the generic governed-task tables", () => {
+    const forbidden = /\b(ActionItem|ApprovalTask|ExecutionReceipt|actionItem|approvalTask|executionReceipt)\b/u;
+    // Guard tests (e.g. lib/caio-attention/reminder-cron.test.ts) name these tables to assert their absence.
+    const hits = MODULE_DIRS.flatMap(sourceFiles).filter((file) => !/\.test\.tsx?$/u.test(file) && forbidden.test(read(file)));
+    expect(hits).toEqual([]);
+    // The runtime directory may name them only in the evidence resolver, and only to read.
+    const runtimeHits = sourceFiles("lib/caio-attention-runtime").filter((file) => forbidden.test(read(file)));
+    expect(runtimeHits).toEqual(["lib/caio-attention-runtime/evidence-resolver.ts"]);
+    const resolver = read(runtimeHits[0]);
+    expect(resolver).not.toMatch(/\.(create|createMany|update|updateMany|upsert|delete|deleteMany)\(|\$executeRaw/u);
+    expect([...resolver.matchAll(/executionReceipt\.(\w+)\(/gu)].map((match) => match[1])).toEqual(["findMany"]);
+  });
+
+  it("keeps the page layer away from direct database access", () => {
+    const forbidden = /from\s+"@\/lib\/db"|from\s+"[./]*lib\/db"|\bPrismaClient\b|\$queryRaw|\$executeRaw|\bdb\.[a-zA-Z]+\./u;
+    const hits = PAGE_LAYER_DIRS.flatMap(sourceFiles).filter((file) => forbidden.test(read(file)));
+    expect(hits).toEqual([]);
+  });
+
+  it("loads every attention page through the page service", () => {
+    const pages = sourceFiles("app/(workspace)/caio/attention").filter((file) => file.endsWith("page.tsx"));
+    expect(pages.length).toBeGreaterThanOrEqual(3);
+    for (const page of pages) expect(read(page), page).toMatch(/getCaioAttentionPageService\(\)/u);
+  });
+
+  it("declares close capability exactly as the service binding allows, with the close-chain forms present", () => {
+    const capability = JSON.parse(read("lib/caio-attention/capability.json")) as { schemaVersion?: unknown; closeCapabilityVersion?: unknown };
+    expect(capability.schemaVersion).toBe("caio-attention-capability/v1");
+    expect(CAIO_ATTENTION_CLOSE_CAPABILITY_VERSION).toBe(CAIO_ATTENTION_PAGE_SERVICE_BOUND ? 1 : 0);
+    expect(capability.closeCapabilityVersion).toBe(CAIO_ATTENTION_CLOSE_CAPABILITY_VERSION);
+    // What a node reports is decided at runtime: never more than the file, and 0 until the pack policy is registered.
+    const route = read("app/api/caio-attention/capability/route.ts");
+    expect(route).toContain("resolveCaioAttentionNodeCloseCapability(");
+    expect(route).not.toMatch(/closeCapabilityVersion:\s*parseCaioAttentionCapabilityFile/u);
+    expect(read("lib/caio-attention/heartbeat.service.ts")).toContain("getRegisteredCaioAttentionPack()?.policy != null");
+    expect(read("lib/runtime/node-instrumentation.ts")).toContain("CAIO_ATTENTION_CLOSE_CHAIN_BINDING.pageServiceBound");
+    // The resolver must actually be handed to the heartbeat (lib/runtime/node-instrumentation.caio-heartbeat.test.ts
+    // proves the call at runtime).
+    expect(read("lib/runtime/node-instrumentation.ts")).toMatch(/startCaioAttentionHeartbeat\([^;]*,\s*closeChainBound\)/u);
+    const detail = read("app/(workspace)/caio/attention/[caseId]/page.tsx");
+    for (const marker of ['kind="disposition"', 'kind="review"', "CaioAttentionConfirmForm"]) expect(detail, marker).toContain(marker);
+    expect(read("features/caio-attention/actions.ts")).toMatch(/getCaioAttentionPageService\(\)\.runCommand\(/u);
+  });
+
+  it("reports the binding closable only with a tenant policy, and then refuses all 11 commands without touching the database", async () => {
+    // BOUND is the build-time binding; closable is decided at call time (bound AND a registered pack policy).
+    expect(CAIO_ATTENTION_PAGE_SERVICE_BOUND).toBe(true);
+    expect(CAIO_ATTENTION_CLOSE_CHAIN_BINDING.pageServiceBound).toBe(CAIO_ATTENTION_PAGE_SERVICE_BOUND && getCaioAttentionBoundPagePolicy() !== null);
+    // Without a registered pack policy the pages use the fail-closed stub (no attention-table query at all).
+    expect(isCaioAttentionPageServiceAvailable()).toBe(CAIO_ATTENTION_CLOSE_CHAIN_BINDING.pageServiceBound);
+    if (!isCaioAttentionPageServiceAvailable()) expect(getCaioAttentionPageService()).toBe(CAIO_ATTENTION_UNAVAILABLE_SERVICE);
+    // Pages and navigation read the runtime rule, never the build-time constant.
+    for (const file of ["app/(workspace)/caio/attention/page.tsx", "app/(workspace)/caio/attention/mine/page.tsx", "features/caio-attention/navigation.ts"]) {
+      expect(read(file), file).toContain("isCaioAttentionPageServiceAvailable()");
+      expect(read(file), file).not.toContain("CAIO_ATTENTION_PAGE_SERVICE_BOUND");
+    }
+    // The detail page and the command action go through getCaioAttentionPageService(), never the build-time constant.
+    for (const file of ["app/(workspace)/caio/attention/[caseId]/page.tsx", "features/caio-attention/actions.ts"]) {
+      expect(read(file), file).not.toContain("CAIO_ATTENTION_PAGE_SERVICE_BOUND");
+    }
+    const untouchable = new Proxy({}, { get: () => { throw new Error("database touched"); } }) as never;
+    const noPolicy = createCaioAttentionLifecyclePageService({ db: untouchable, getPolicy: () => null });
+    const viewer = { workspaceId: "w1", actor: { userId: "u1", sameWorkspace: true, active: true, role: "OWNER" as const, canReviewGovernedActions: true } };
+    const ops = ["confirm", "defer", "dismiss", "cancel", "reissue", "assignReviewers", "ack", "note", "submitDisposition", "reviewAccept", "reviewReturn"];
+    for (const op of ops) {
+      const input = { viewer, caseId: "c1", op, expectedCommandVersion: 1, clientRequestId: "r1" } as unknown as CaioAttentionCommandInput;
+      await expect(noPolicy.runCommand(input), op).resolves.toEqual({ ok: false, reason: "service_unavailable" });
+    }
+    if (getCaioAttentionBoundPagePolicy() === null) {
+      for (const op of ops) {
+        const input = { viewer, caseId: "c1", op, expectedCommandVersion: 1, clientRequestId: "r1" } as unknown as CaioAttentionCommandInput;
+        await expect(getCaioAttentionPageService().runCommand(input), op).resolves.toEqual({ ok: false, reason: "service_unavailable" });
+      }
+    }
+    expect(PAGE_OUTCOMES).toEqual(CAIO_ATTENTION_DISPOSITION_OUTCOMES); // the form offers exactly what the service accepts
+  });
+
+  it("keeps the fallback stub closed", async () => {
+    const service = CAIO_ATTENTION_UNAVAILABLE_SERVICE;
+    const viewer = { workspaceId: "w1", actor: { userId: "u1", sameWorkspace: true, active: true, role: "OWNER" as const, canReviewGovernedActions: true } };
+    await expect(service.listCases({ viewer, scope: "queue", page: 1, pageSize: 20 })).resolves.toMatchObject({ items: [], total: 0 });
+    await expect(service.loadCase({ viewer, caseId: "c1", sourcePage: "/test" })).resolves.toEqual({ ok: false, reason: "not_found" });
+    await expect(service.runCommand({ viewer, caseId: "c1", op: "ack", expectedCommandVersion: 1, clientRequestId: "r1" }))
+      .resolves.toEqual({ ok: false, reason: "service_unavailable" });
+  });
+});

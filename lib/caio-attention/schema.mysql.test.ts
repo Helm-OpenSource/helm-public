@@ -1,6 +1,8 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import { appendCaioAttentionControlEvent } from "./control-event.service";
+import { readCaioAttentionIntakeGate } from "./intake-gate.service";
 import { CAIO_ATTENTION_FIXTURE_IDENTITIES, caioAttentionTableGrant, type CaioAttentionFixtureIdentity, type CaioAttentionPrivilege } from "./least-privilege-fixture";
 import { CAIO_ATTENTION_TABLES, probeCaioAttentionSchemaReadiness, type CaioAttentionTable } from "./schema-readiness";
 
@@ -63,15 +65,9 @@ describeMysql("CAIO attention tables on MySQL with least-privilege identities", 
   const clients = {} as Record<"admin" | CaioAttentionFixtureIdentity, PrismaClient>;
   let admin: PrismaClient, generator: PrismaClient, web: PrismaClient, ops: PrismaClient;
 
-  /** The intake gate every entry runs: FOR SHARE on Control, then no pause request at the open epoch. */
+  /** The intake gate every entry runs (intake-gate.service.ts): FOR SHARE on Control, then no pause request at the open epoch. */
   async function gateOpen(client: PrismaClient) {
-    return client.$transaction(async (tx) => {
-      const [control] = await tx.$queryRaw<Array<{ intakeState: string; openEpoch: number }>>`
-        SELECT intakeState, openEpoch FROM CaioAttentionControl WHERE id = 'global' FOR SHARE`;
-      const [pending] = await tx.$queryRaw<Array<{ n: bigint }>>`
-        SELECT COUNT(*) AS n FROM CaioAttentionPauseRequest WHERE openEpoch = ${control.openEpoch}`;
-      return control.intakeState === "OPEN" && Number(pending.n) === 0;
-    });
+    return client.$transaction(async (tx) => (await readCaioAttentionIntakeGate(tx)).open);
   }
 
   /** Pause write path (REREVIEW5 P2-2): read the open epoch under FOR SHARE, then INSERT, in one transaction. */
@@ -94,7 +90,7 @@ describeMysql("CAIO attention tables on MySQL with least-privilege identities", 
       await tx.$executeRaw`UPDATE CaioAttentionControl c
         JOIN (SELECT COALESCE(MAX(openEpoch), -1) AS m FROM CaioAttentionPauseRequest) p
         SET c.intakeState = 'OPEN', c.openEpoch = GREATEST(c.openEpoch, p.m) + 1, c.rowVersion = c.rowVersion + 1,
-            c.updatedByRef = 'test:resume'
+            c.updatedByRef = 'test:resume', c.updatedAt = NOW(3)
         WHERE c.id = 'global'`;
       await hold;
       const [row] = await tx.$queryRaw<Array<{ openEpoch: number }>>`SELECT openEpoch FROM CaioAttentionControl WHERE id = 'global'`;
@@ -110,7 +106,11 @@ describeMysql("CAIO attention tables on MySQL with least-privilege identities", 
     ({ admin, attention_generator: generator, attention_web: web, attention_ops: ops } = clients);
   });
 
-  beforeEach(async () => {
+  beforeEach(() => reset(false));
+
+  /** Empties every attention table; `pristine` also restores the seeded Control row, so the rollback scripts run after. */
+  async function reset(pristine: boolean) {
+    await admin.$executeRaw`DELETE FROM CaioAttentionControlEvent`;
     await admin.$executeRaw`DELETE FROM CaioAttentionPauseRequest`;
     await admin.$executeRaw`DELETE FROM CaioAttentionNodeReadiness`;
     await admin.$executeRaw`DELETE FROM CaioAttentionRuntimeNode`;
@@ -119,10 +119,16 @@ describeMysql("CAIO attention tables on MySQL with least-privilege identities", 
       await admin.$executeRawUnsafe(`DELETE FROM \`${table}\``);
     }
     await admin.$executeRaw`UPDATE CaioAttentionControl SET intakeState = 'PAUSED', epoch = 0, openEpoch = 0, leaseToken = NULL,
-      leaseNodeId = NULL, leaseTargetDeploymentId = NULL, leaseAcquiredAt = NULL, leaseExpiresAt = NULL WHERE id = 'global'`;
-  });
+      leaseNodeId = NULL, leaseTargetDeploymentId = NULL, leaseAcquiredAt = NULL, leaseExpiresAt = NULL, updatedAt = NOW(3)
+      WHERE id = 'global'`;
+    if (pristine) {
+      await admin.$executeRaw`UPDATE CaioAttentionControl SET rowVersion = 0, expectedNodesJson = '[]',
+        updatedByRef = 'migration:20261104120000_caio_attention_control_plane', updatedAt = NOW(3) WHERE id = 'global'`;
+    }
+  }
 
   afterAll(async () => {
+    await reset(true);
     await Promise.all(Object.values(clients).map((client) => client.$disconnect()));
   });
 
@@ -157,13 +163,34 @@ describeMysql("CAIO attention tables on MySQL with least-privilege identities", 
     expect(failures).toEqual([]);
   });
 
+  it("keeps the control event trail append-only: operator INSERT only, closed op set, epochs per op kind", async () => {
+    const event = { op: "resume", actorRef: "operator:t", epoch: 0, openEpoch: 1, payload: { acknowledgedPauseRequestIds: ["pr-1"] } } as const;
+    const id = await ops.$transaction((tx) => appendCaioAttentionControlEvent(tx, event));
+    await ops.$transaction((tx) => appendCaioAttentionControlEvent(tx, { ...event, op: "routes-publish", epoch: null, openEpoch: null }));
+    expect(await ops.$queryRaw`SELECT op, actorRef, epoch, openEpoch, payloadJson FROM CaioAttentionControlEvent WHERE id = ${id}`)
+      .toEqual([{ op: "resume", actorRef: "operator:t", epoch: 0, openEpoch: 1, payloadJson: "{\"acknowledgedPauseRequestIds\":[\"pr-1\"]}" }]);
+    expect(await errnoOf(ops.$executeRaw`UPDATE CaioAttentionControlEvent SET op = 'pause' WHERE id = ${id}`)).toBe("1142");
+    expect(await errnoOf(ops.$executeRaw`DELETE FROM CaioAttentionControlEvent WHERE id = ${id}`)).toBe("1142");
+    for (const client of [web, generator]) {
+      expect(await errnoOf(client.$transaction((tx) => appendCaioAttentionControlEvent(tx, event)))).toBe("1142");
+    }
+    const insert = (op: string, epoch: number | null, payloadJson = "{}") => ops.$executeRaw`INSERT INTO CaioAttentionControlEvent
+      (id, op, actorRef, epoch, openEpoch, payloadJson) VALUES (${`ce-${op}-${String(epoch)}`}, ${op}, 'operator:t', ${epoch}, ${epoch}, ${payloadJson})`;
+    expect(await errnoOf(insert("bogus", 0))).toBe("3819");
+    expect(await errnoOf(insert("guard-downgrade", null))).toBe("3819");
+    expect(await errnoOf(insert("routes-activate", 0))).toBe("3819");
+    expect(await errnoOf(insert("pause", -1))).toBe("3819");
+    expect(await errnoOf(insert("pause", 0, "not json"))).toBe("3819");
+    expect(await admin.$queryRaw`SELECT COUNT(*) AS n FROM CaioAttentionControlEvent`).toEqual([{ n: 2n }]);
+  });
+
   it("the web identity cannot reopen intake: any UPDATE of Control is refused with errno 1142", async () => {
     await resume();
     await requestPause(web, "watchdog:1");
     expect(await gateOpen(generator)).toBe(false);
     for (const statement of [
-      web.$executeRaw`UPDATE CaioAttentionControl SET intakeState = 'OPEN' WHERE id = 'global'`,
-      web.$executeRaw`UPDATE CaioAttentionControl SET openEpoch = openEpoch + 1 WHERE id = 'global'`,
+      web.$executeRaw`UPDATE CaioAttentionControl SET intakeState = 'OPEN', updatedAt = NOW(3) WHERE id = 'global'`,
+      web.$executeRaw`UPDATE CaioAttentionControl SET openEpoch = openEpoch + 1, updatedAt = NOW(3) WHERE id = 'global'`,
       web.$queryRaw`SELECT id FROM CaioAttentionControl WHERE id = 'global' FOR UPDATE`,
       web.$executeRaw`UPDATE CaioAttentionPauseRequest SET openEpoch = 99`,
       web.$executeRaw`DELETE FROM CaioAttentionPauseRequest`,
@@ -211,12 +238,12 @@ describeMysql("CAIO attention tables on MySQL with least-privilege identities", 
         await tx.$executeRaw`UPDATE CaioAttentionNodeReadiness SET revokedAt = NOW(3), revokedByRef = 'test:begin', revokedEpoch = ${epoch}
           WHERE nodeId = ${node} AND revokedAt IS NULL`;
         await tx.$executeRaw`UPDATE CaioAttentionControl SET epoch = epoch + 1, intakeState = 'DEPLOYING', leaseToken = 't',
-          leaseNodeId = ${node}, leaseTargetDeploymentId = 'd', leaseAcquiredAt = NOW(3), leaseExpiresAt = NOW(3) + INTERVAL 30 MINUTE
-          WHERE id = 'global'`;
+          leaseNodeId = ${node}, leaseTargetDeploymentId = 'd', leaseAcquiredAt = NOW(3), leaseExpiresAt = NOW(3) + INTERVAL 30 MINUTE,
+          updatedAt = NOW(3) WHERE id = 'global'`;
         await tx.$executeRaw`INSERT INTO CaioAttentionNodeReadiness (id, nodeId, deploymentId, closeCapabilityVersion, guardVersion,
           epoch, verifiedAt, verifiedByRef) VALUES (${`${node}-${epoch + 1}`}, ${node}, 'd', 1, 1, ${epoch + 1}, NOW(3), 'test:attest')`;
         await tx.$executeRaw`UPDATE CaioAttentionControl SET intakeState = 'PAUSED', leaseToken = NULL, leaseNodeId = NULL,
-          leaseTargetDeploymentId = NULL, leaseAcquiredAt = NULL, leaseExpiresAt = NULL WHERE id = 'global'`;
+          leaseTargetDeploymentId = NULL, leaseAcquiredAt = NULL, leaseExpiresAt = NULL, updatedAt = NOW(3) WHERE id = 'global'`;
       });
     }
     const valid = () => ops.$queryRaw<Array<{ id: string }>>`SELECT r.id FROM CaioAttentionNodeReadiness r
@@ -228,7 +255,7 @@ describeMysql("CAIO attention tables on MySQL with least-privilege identities", 
     expect(await valid()).toEqual([{ id: "node-x-3" }, { id: "node-y-2" }]);
     expect(await errnoOf(ops.$executeRaw`UPDATE CaioAttentionNodeReadiness SET revokedAt = NOW(3), revokedByRef = 'x', revokedEpoch = 0
       WHERE id = 'node-x-3'`)).toBe("3819");
-    expect(await errnoOf(ops.$executeRaw`UPDATE CaioAttentionControl SET intakeState = 'DEPLOYING' WHERE id = 'global'`)).toBe("3819");
+    expect(await errnoOf(ops.$executeRaw`UPDATE CaioAttentionControl SET intakeState = 'DEPLOYING', updatedAt = NOW(3) WHERE id = 'global'`)).toBe("3819");
   });
 
   /** A SUGGESTED case as the generator writes it; ids are synthetic (no foreign keys). */
@@ -260,7 +287,7 @@ describeMysql("CAIO attention tables on MySQL with least-privilege identities", 
     expect(await errnoOf(insertCase(generator, "case-4", 4, "det:mk", "CLOSED"))).toBe("3819");
     expect(await errnoOf(insertCase(generator, "case-5", 5, "det:other", "BOGUS"))).toBe("3819");
 
-    const cas = () => web.$executeRaw`UPDATE CaioAttentionCase SET status = 'CLOSED', activeKey = NULL, closedAt = NOW(3)
+    const cas = () => web.$executeRaw`UPDATE CaioAttentionCase SET status = 'CLOSED', activeKey = NULL, closedAt = NOW(3), updatedAt = NOW(3)
       WHERE id = 'case-1' AND status = 'SUGGESTED' AND commandVersion = 0`;
     expect(await cas()).toBe(1);
     expect(await cas()).toBe(0);
@@ -306,11 +333,11 @@ describeMysql("CAIO attention tables on MySQL with least-privilege identities", 
     await config(2);
     expect(await errnoOf(config(2))).toBe("1062");
     await ops.$executeRaw`INSERT INTO CaioAttentionRouteConfigHead (id, workspaceId, activeVersion, updatedByRef) VALUES ('h1', 'ws-a', 1, 'test')`;
-    const move = () => ops.$executeRaw`UPDATE CaioAttentionRouteConfigHead SET activeVersion = 2, rowVersion = rowVersion + 1
+    const move = () => ops.$executeRaw`UPDATE CaioAttentionRouteConfigHead SET activeVersion = 2, rowVersion = rowVersion + 1, updatedAt = NOW(3)
       WHERE workspaceId = 'ws-a' AND rowVersion = 0`;
     expect(await move()).toBe(1);
     expect(await move()).toBe(0);
-    expect(await errnoOf(web.$executeRaw`UPDATE CaioAttentionRouteConfigHead SET activeVersion = 1 WHERE workspaceId = 'ws-a'`)).toBe("1142");
+    expect(await errnoOf(web.$executeRaw`UPDATE CaioAttentionRouteConfigHead SET activeVersion = 1, updatedAt = NOW(3) WHERE workspaceId = 'ws-a'`)).toBe("1142");
   });
 
   it("lets generator and web upsert their own heartbeat while the operator cannot write one", async () => {

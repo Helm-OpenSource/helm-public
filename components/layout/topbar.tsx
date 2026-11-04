@@ -1,5 +1,6 @@
 "use client";
 
+import { CAIO_ATTENTION_DESTINATION } from "@/features/caio-attention/copy";
 import Link from "next/link";
 import type { FormEvent } from "react";
 import { useState, useTransition } from "react";
@@ -94,6 +95,7 @@ type TopbarProps = {
     }>;
   };
   showCaioPrimaryNavigation: boolean;
+  showCaioAttentionNavigation?: boolean;
 };
 
 type OpportunityFormState = {
@@ -132,6 +134,7 @@ export function Topbar({
   alerts,
   quickCreateData,
   showCaioPrimaryNavigation,
+  showCaioAttentionNavigation = false,
 }: TopbarProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -366,6 +369,21 @@ export function Topbar({
                 label: english
                   ? CAIO_PRIMARY_DESTINATION.labelEn
                   : CAIO_PRIMARY_DESTINATION.labelZh,
+                icon: <BrainCircuit className="h-4 w-4" />,
+              },
+            ],
+          },
+        ]
+      : []),
+    ...(showCaioAttentionNavigation
+      ? [
+          {
+            key: "caio-attention",
+            label: english ? CAIO_ATTENTION_DESTINATION.labelEn : CAIO_ATTENTION_DESTINATION.labelZh,
+            items: [
+              {
+                href: CAIO_ATTENTION_DESTINATION.href,
+                label: english ? CAIO_ATTENTION_DESTINATION.labelEn : CAIO_ATTENTION_DESTINATION.labelZh,
                 icon: <BrainCircuit className="h-4 w-4" />,
               },
             ],
