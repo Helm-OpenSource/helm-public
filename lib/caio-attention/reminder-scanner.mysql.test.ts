@@ -164,26 +164,90 @@ describeMysql("CAIO attention reminder scanner on MySQL as the web identity", ()
     expect((await scan(local(7, 12))).sends).toEqual({});
   });
 
-  it("delivers each notice once under concurrent scans and pre-existing keys (T-N10, T-N21)", async () => {
-    await dispatched("d1", "critical", local(4, 10));
-    await dispatched("d2", "critical", local(4, 10));
+  it("delivers each notice once when two nodes interleave on the same and on different cases (T-N10, T-N21)", async () => {
+    const ids = ["d1", "d2", "d3", "d4", "d5", "d6"];
+    for (const id of ids) await dispatched(id, "critical", local(4, 10));
     // A notice written earlier under the same key (e.g. a crashed attempt replayed by another node) is not repeated.
     await admin.$executeRaw`INSERT INTO Notification (id, workspaceId, userId, type, title, body, dedupeKey)
       VALUES ('pre', ${WS}, 'u-lead', 'REMINDER', 't', 'b', 'ca:d2:R1:v1:u-lead')`;
-    const [a, b] = await Promise.all([scan(local(4, 12, 3), web), scan(local(4, 12, 3), web2)]);
-    expect([...a.failedCaseIds, ...b.failedCaseIds]).toEqual([]);
+
+    // Node A is stuck on d1's row lock (a lifecycle write holds it) while node B, which skips d1, works d2..d6.
+    let release!: () => void;
+    let locked!: () => void;
+    const hold = new Promise<void>((resolve) => { release = resolve; });
+    const isLocked = new Promise<void>((resolve) => { locked = resolve; });
+    const holder = admin.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM CaioAttentionCase WHERE id = 'd1' FOR UPDATE`;
+      locked();
+      await hold;
+    }, { timeout: 20_000 });
+    await isLocked;
+    let aSettled = false;
+    const a = scan(local(4, 12, 3), web).finally(() => { aSettled = true; });
+    const b = await runCaioAttentionReminderScan({ client: web2, now: local(4, 12, 3), policy: P, skipCaseIds: ["d1"] });
+    expect(aSettled).toBe(false);
+    expect(b.casesScanned).toBe(5);
+    release();
+    await holder;
+    const resultA = await a;
+    expect([...resultA.failedCaseIds, ...b.failedCaseIds]).toEqual([]);
+    expect(resultA.sends).toEqual({ R1: 1, R4: 1 }); // only d1 was left for A; d2..d6 were already consumed by B
+
+    // Then both nodes write side by side on disjoint cases: adjacent dedupe keys, no deadlock, no duplicate.
+    const [left, right] = await Promise.all([
+      runCaioAttentionReminderScan({ client: web, now: local(4, 14, 5), policy: P, skipCaseIds: ["d4", "d5", "d6"] }),
+      runCaioAttentionReminderScan({ client: web2, now: local(4, 14, 5), policy: P, skipCaseIds: ["d1", "d2", "d3"] }),
+    ]);
+    expect([...left.failedCaseIds, ...right.failedCaseIds]).toEqual([]);
+    expect([left.sends, right.sends]).toEqual([{ R4: 3 }, { R4: 3 }]);
     const all = await notices();
     expect(new Set(all.map((n) => n.dedupeKey)).size).toBe(all.length);
-    expect(all.filter((n) => n.dedupeKey.startsWith("ca:d1:"))).toHaveLength(3);
-    expect(all.filter((n) => n.dedupeKey.startsWith("ca:d2:"))).toHaveLength(3);
+    for (const id of ids) expect(all.filter((n) => n.dedupeKey.startsWith(`ca:${id}:`))).toHaveLength(4);
     const escalations = await admin.$queryRaw<Array<{ caseId: string; n: bigint }>>`
       SELECT caseId, COUNT(*) AS n FROM CaioAttentionCaseEvent WHERE kind = 'ESCALATED' GROUP BY caseId ORDER BY caseId`;
-    expect(escalations.map((row) => [row.caseId, Number(row.n)])).toEqual([["d1", 1], ["d2", 1]]);
+    expect(escalations.map((row) => [row.caseId, Number(row.n)])).toEqual(ids.map((id) => [id, 1]));
     // The dedupe key carries recipient, stage and command version: a reissued command escalates again.
     await admin.$executeRaw`UPDATE CaioAttentionCase SET commandVersion = 2, r1FiredAt = NULL, noResponseDueAt = ${local(4, 14, 30)}
       WHERE id = 'd1'`;
     expect((await scan(local(4, 14, 33))).sends).toMatchObject({ R1: 1 });
     expect((await notices()).map((n) => n.dedupeKey)).toEqual(expect.arrayContaining(["ca:d1:R1:v2:u-lead", "ca:d1:R1:v2:u-primary"]));
+  });
+
+  it("isolates a failing case, skips it for one round, and leaves rules with no recipient due (P2-6, P2-7)", async () => {
+    const long = `x${"y".repeat(180)}`; // its dedupe keys exceed the column: every insert for it fails
+    await dispatched(long, "critical", local(4, 10));
+    await dispatched("ok1", "critical", local(4, 10));
+    const first = await scan(local(4, 12, 3));
+    expect(first.failedCaseIds).toEqual([long]);
+    expect(first.sends).toEqual({ R1: 1, R4: 1 });
+    expect((await caseRow(long)).r1FiredAt).toBeNull(); // rolled back as a whole
+    const next = await runCaioAttentionReminderScan({ client: web, now: local(4, 12, 8), policy: P, skipCaseIds: [long] });
+    expect(next).toMatchObject({ casesScanned: 0, failedCaseIds: [] });
+    await retire();
+
+    // The only OWNER is an external-scope member: not an active member for attention, so R0a has nobody to tell.
+    await admin.$executeRaw`UPDATE Membership SET accessScope = 'external' WHERE workspaceId = ${WS} AND userId = 'u-owner'`;
+    await insertCase({ id: "s9", status: "SUGGESTED", severity: "critical", fields: caioAttentionSuggestFields("critical", local(5, 9)) });
+    const blind = await scan(local(5, 9, 3));
+    expect(blind.sends).toEqual({});
+    expect(blind.skippedNoRecipient).toEqual({ R0a: 1 });
+    expect((await caseRow("s9")).r0aSentAt).toBeNull();
+    await admin.$executeRaw`UPDATE Membership SET accessScope = NULL WHERE workspaceId = ${WS} AND userId = 'u-owner'`;
+    expect((await scan(local(5, 9, 8))).sends).toEqual({ R0a: 1 });
+  });
+
+  it("holds a warning R2 for the daytime window, while a critical one goes out at night", async () => {
+    await dispatched("wr", "warning", local(4, 9), { respondedAt: local(4, 9, 5),
+      fields: { unresolvedEscalateAt: local(6, 21), nextPeriodicAt: local(9, 10) } });
+    await dispatched("cr", "critical", local(4, 19), { respondedAt: local(4, 19, 5),
+      fields: { unresolvedEscalateAt: local(6, 21), nextPeriodicAt: local(9, 10) } });
+    expect((await scan(local(6, 21, 3))).sends).toEqual({ R2: 1 });
+    expect((await caseRow("cr")).r2FiredSeverity).toBe("critical");
+    expect((await caseRow("wr")).r2FiredSeverity).toBeNull();
+    expect((await scan(local(7, 2))).sends).toEqual({});
+    expect((await scan(local(7, 8, 1))).sends).toEqual({ R2: 1 });
+    expect((await notices()).filter((n) => n.dedupeKey.includes(":R2:")).map((n) => n.dedupeKey))
+      .toEqual(["ca:cr:R2:v1:critical:u-lead", "ca:wr:R2:v1:warning:u-lead"]);
   });
 
   it("escalates to the OWNER when the escalation holder is the primary (owner ruling §6.10)", async () => {
@@ -206,11 +270,13 @@ describeMysql("CAIO attention reminder scanner on MySQL as the web identity", ()
     expect(r1).toEqual(["ca:e1:R1:v1:u-lead", "ca:e1:R1:v1:u-owner", "ca:e2:R1:v1:u-lead", "ca:e2:R1:v1:u-owner"]);
   });
 
-  it("sends recurrence notices to primary and cc in daytime only, and the warning digest once a day (T-N3, T-N16)", async () => {
+  it("sends recurrence notices to primary and cc in daytime only, across a reissue, and the warning digest once a day (T-N3, T-N16)", async () => {
     await dispatched("r1", "warning", local(4, 9), { respondedAt: local(4, 9, 30), fields: { nextPeriodicAt: local(9, 10) } });
     await admin.$executeRaw`INSERT INTO CaioAttentionCaseEvent (id, caseId, kind, candidateId, payloadJson, createdAt)
-      VALUES ('ev-before', 'r1', 'RECURRED', 'cand-old', '{}', ${local(4, 8)}), ('ev-r1', 'r1', 'RECURRED', 'cand-2', '{}', ${local(4, 21)})`;
+      VALUES ('ev-r1', 'r1', 'RECURRED', 'cand-2', '{}', ${local(4, 21)})`;
     expect((await scan(local(4, 21, 5))).sends).toEqual({});
+    // Reissued at 07:00, after the night recurrence: the notice is still owed (not cut at the new dispatchedAt).
+    await admin.$executeRaw`UPDATE CaioAttentionCase SET commandVersion = 2, dispatchedAt = ${local(5, 7)} WHERE id = 'r1'`;
     expect((await scan(local(5, 8, 1))).sends).toEqual({ R3: 1 });
     expect((await scan(local(5, 8, 6))).sends).toEqual({});
     const r3 = (await notices()).filter((n) => n.dedupeKey.includes(":R3:")).map((n) => n.dedupeKey);

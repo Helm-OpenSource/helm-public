@@ -34,6 +34,8 @@ export type CaioAttentionReminderScanResult = {
   notificationsCreated: number;
   notificationsDeduplicated: number;
   failedCaseIds: string[];
+  /** Rules that fell due with nobody to notify (e.g. no active OWNER): left unconsumed and logged. */
+  skippedNoRecipient: Partial<Record<CaioAttentionScanRule, number>>;
 };
 
 const MAX_CASES_PER_SCAN = 500;
@@ -72,10 +74,11 @@ function parseIds(json: string): string[] {
   }
 }
 
-/** Active OWNERs of the workspace, oldest membership first. */
+/** Active OWNERs of the workspace (same membership rule as the lifecycle service), oldest membership first. */
 async function activeOwnerIds(client: Tx | PrismaClient, workspaceId: string): Promise<string[]> {
   const rows = await client.$queryRaw<Array<{ userId: string }>>`
     SELECT userId FROM Membership WHERE workspaceId = ${workspaceId} AND role = 'OWNER' AND status = 'ACTIVE'
+      AND accessScope IS NULL
     ORDER BY joinedAt, userId`;
   return rows.map((row) => row.userId);
 }
@@ -111,25 +114,39 @@ async function appendEvent(tx: Tx, input: {
         OR (${input.dedupeKey ?? null} IS NOT NULL AND dedupeKey = ${input.dedupeKey ?? null})))`;
 }
 
-/** Ids of cases with at least one rule possibly due; each subquery is a range scan on one (status, due column) index. */
-async function dueCaseIds(client: PrismaClient, now: Date, includeRecurrence: boolean, limit: number): Promise<string[]> {
+/**
+ * Ids of cases with at least one rule due; each branch is a range scan on one (status, due column) index and mirrors
+ * the pure function's own preconditions, so a case with nothing to do is not locked every tick. R0a also covers
+ * DEFERRED (a case raised to critical while deferred notifies the OWNER once); R0b is SUGGESTED only.
+ */
+async function dueCaseIds(client: PrismaClient, now: Date, includeRecurrence: boolean, limit: number,
+  skip: readonly string[]): Promise<string[]> {
   const recurrence = includeRecurrence
     ? Prisma.sql`UNION SELECT e.caseId AS id FROM CaioAttentionCaseEvent e JOIN CaioAttentionCase c ON c.id = e.caseId
-        WHERE e.kind = 'RECURRED' AND c.status IN ${WORKING} AND c.dispatchedAt IS NOT NULL AND e.createdAt >= c.dispatchedAt
+        WHERE e.kind = 'RECURRED' AND c.status IN ${WORKING}
           AND NOT EXISTS (SELECT 1 FROM CaioAttentionCaseEvent s WHERE s.caseId = e.caseId AND s.kind = 'R3_SENT'
             AND s.candidateId = e.candidateId)`
     : Prisma.empty;
+  const skipped = skip.length > 0 ? Prisma.sql`WHERE due.id NOT IN (${Prisma.join([...skip])})` : Prisma.empty;
   const rows = await client.$queryRaw<Array<{ id: string }>>`
-    SELECT id FROM CaioAttentionCase WHERE status IN ${PENDING} AND r0aDueAt <= ${now} AND r0aSentAt IS NULL
-    UNION SELECT id FROM CaioAttentionCase WHERE status IN ${PENDING} AND r0bDueAt <= ${now} AND r0bSentAt IS NULL
-    UNION SELECT id FROM CaioAttentionCase WHERE status = 'DISPATCHED' AND noResponseDueAt <= ${now} AND r1FiredAt IS NULL
-    UNION SELECT id FROM CaioAttentionCase WHERE status IN ${WORKING} AND unresolvedEscalateAt <= ${now}
-      AND (r2FiredSeverity IS NULL OR r2FiredSeverity <> effectiveSeverity)
-    UNION SELECT id FROM CaioAttentionCase WHERE status IN ${WORKING} AND nextPeriodicAt <= ${now}
-    ${recurrence}
-    ORDER BY id LIMIT ${limit}`;
+    SELECT due.id FROM (
+      SELECT id FROM CaioAttentionCase WHERE status IN ${PENDING} AND r0aDueAt <= ${now} AND r0aSentAt IS NULL
+      UNION SELECT id FROM CaioAttentionCase WHERE status = 'SUGGESTED' AND r0bDueAt <= ${now} AND r0bSentAt IS NULL
+      UNION SELECT id FROM CaioAttentionCase WHERE status = 'DISPATCHED' AND noResponseDueAt <= ${now} AND r1FiredAt IS NULL
+        AND respondedAt IS NULL
+      UNION SELECT id FROM CaioAttentionCase WHERE status IN ${WORKING} AND unresolvedEscalateAt <= ${now}
+        AND (r2FiredSeverity IS NULL OR r2FiredSeverity <> effectiveSeverity)
+      UNION SELECT id FROM CaioAttentionCase WHERE status IN ${WORKING} AND nextPeriodicAt <= ${now}
+      ${recurrence}
+    ) due ${skipped}
+    ORDER BY due.id LIMIT ${limit}`;
   return rows.map((row) => row.id);
 }
+
+/** The reminder columns each rule consumes; left untouched when the rule had nobody to notify. */
+const RULE_FIELDS: Record<CaioAttentionReminderRule, readonly (keyof CaioAttentionReminderFields)[]> = {
+  R1: ["r1FiredAt"], R2: ["r2FiredSeverity"], R0a: ["r0aSentAt", "r0bDueAt"], R0b: ["r0bSentAt"], R4: ["nextPeriodicAt"],
+};
 
 const FIELD_COLUMNS: Record<keyof CaioAttentionReminderFields, string> = {
   r0aDueAt: "r0aDueAt", r0aSentAt: "r0aSentAt", r0bDueAt: "r0bDueAt", r0bSentAt: "r0bSentAt",
@@ -138,7 +155,7 @@ const FIELD_COLUMNS: Record<keyof CaioAttentionReminderFields, string> = {
 };
 
 function emptyResult(): CaioAttentionReminderScanResult {
-  return { casesScanned: 0, sends: {}, notificationsCreated: 0, notificationsDeduplicated: 0, failedCaseIds: [] };
+  return { casesScanned: 0, sends: {}, notificationsCreated: 0, notificationsDeduplicated: 0, failedCaseIds: [], skippedNoRecipient: {} };
 }
 
 /** Counts are merged only after the case transaction commits, so a retried attempt is never counted twice. */
@@ -189,6 +206,13 @@ async function scanOneCase(client: PrismaClient, caseId: string, now: Date, poli
       R4: () => `R4:v${row.commandVersion}:${status}:${fields.nextPeriodicAt?.toISOString()}`,
     };
     for (const send of sends) {
+      if (send.notifications.length === 0) {
+        // Nobody to tell (e.g. no active OWNER): keep the rule due so it fires once someone exists, and say so.
+        for (const key of RULE_FIELDS[send.rule]) delete updates[key];
+        result.skippedNoRecipient[send.rule] = (result.skippedNoRecipient[send.rule] ?? 0) + 1;
+        console.warn(`[caio-attention-reminders] case ${row.id} ${send.rule} due but has no recipient; left due`);
+        continue;
+      }
       await deliver(send.rule, send.notifications);
       await appendEvent(tx, {
         caseId: row.id, kind: send.rule === "R1" || send.rule === "R2" ? "ESCALATED" : "REMINDED",
@@ -197,16 +221,21 @@ async function scanOneCase(client: PrismaClient, caseId: string, now: Date, poli
       });
     }
 
-    // R3: each RECURRED event since dispatch notifies the primary and cc once; never the escalation holder.
-    if (isCaioAttentionRecurrenceSendable(status, now, policy) && row.dispatchedAt) {
+    // R3: each RECURRED event not yet followed by an R3_SENT notifies the primary and cc once; never the escalation
+    // holder. Not cut at dispatchedAt, so a recurrence recorded at night survives a reissue before 08:00.
+    if (isCaioAttentionRecurrenceSendable(status, now, policy)) {
       const recurrences = await tx.$queryRaw<Array<{ candidateId: string }>>`
         SELECT e.candidateId FROM CaioAttentionCaseEvent e
-        WHERE e.caseId = ${row.id} AND e.kind = 'RECURRED' AND e.candidateId IS NOT NULL AND e.createdAt >= ${row.dispatchedAt}
+        WHERE e.caseId = ${row.id} AND e.kind = 'RECURRED' AND e.candidateId IS NOT NULL
           AND NOT EXISTS (SELECT 1 FROM CaioAttentionCaseEvent s WHERE s.caseId = e.caseId AND s.kind = 'R3_SENT'
             AND s.candidateId = e.candidateId)
         ORDER BY e.createdAt`;
       const recipients = [...new Set([row.primaryUserId, ...parseIds(row.ccUserIdsJson)].filter((id): id is string => Boolean(id)))];
-      for (const { candidateId } of recurrences) {
+      if (recurrences.length > 0 && recipients.length === 0) {
+        result.skippedNoRecipient.R3 = (result.skippedNoRecipient.R3 ?? 0) + recurrences.length;
+        console.warn(`[caio-attention-reminders] case ${row.id} R3 due but has no recipient; left due`);
+      }
+      for (const { candidateId } of recipients.length > 0 ? recurrences : []) {
         await deliver("R3", recipients.map((userId) => ({ userId, dedupeKey: `ca:${row.id}:R3:${candidateId}:${userId}` })));
         await appendEvent(tx, {
           caseId: row.id, kind: "R3_SENT", commandVersion: row.commandVersion, candidateId,
@@ -223,7 +252,12 @@ async function scanOneCase(client: PrismaClient, caseId: string, now: Date, poli
       UPDATE CaioAttentionCase SET ${Prisma.join(assignments, ", ")}, updatedAt = ${now}
       WHERE id = ${row.id} AND status = ${row.status} AND commandVersion = ${row.commandVersion}`;
     if (written !== 1) throw new Error("caio_attention_reminder_cas_lost");
-  }, { timeout: 20_000 });
+    // READ COMMITTED, as the lifecycle service: the NOT EXISTS probes then take no gap locks on Notification, so two
+    // nodes scanning different cases do not deadlock on neighbouring dedupe keys. The Case row lock still serialises.
+  }, { timeout: 20_000, isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+  for (const [rule, count] of Object.entries(result.skippedNoRecipient) as Array<[CaioAttentionScanRule, number]>) {
+    total.skippedNoRecipient[rule] = (total.skippedNoRecipient[rule] ?? 0) + count;
+  }
   total.casesScanned += 1;
   total.notificationsCreated += result.notificationsCreated;
   total.notificationsDeduplicated += result.notificationsDeduplicated;
@@ -261,11 +295,14 @@ export async function runCaioAttentionReminderScan(input: {
   now: Date;
   policy: CaioAttentionPolicy;
   maxCases?: number;
+  /** Cases that failed in the previous round; skipped for one round so they cannot hold the head of the batch. */
+  skipCaseIds?: readonly string[];
 }): Promise<CaioAttentionReminderScanResult> {
   const result = emptyResult();
   // Recurrence notices are daytime-only; outside the window those cases are not even locked.
   const includeRecurrence = isCaioAttentionRecurrenceSendable("DISPATCHED", input.now, input.policy);
-  const ids = await dueCaseIds(input.client, input.now, includeRecurrence, input.maxCases ?? MAX_CASES_PER_SCAN);
+  const ids = await dueCaseIds(input.client, input.now, includeRecurrence, input.maxCases ?? MAX_CASES_PER_SCAN,
+    input.skipCaseIds ?? []);
   for (const caseId of ids) {
     // Failure isolation: one case's error must not starve the others of their escalations. Deadlocks and lock
     // waits (another node scanning, a lifecycle write) are retried a bounded number of times; the transaction
