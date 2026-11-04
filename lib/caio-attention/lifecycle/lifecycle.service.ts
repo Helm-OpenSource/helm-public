@@ -11,7 +11,7 @@ import {
   type CaioAttentionOwnerCommandInput,
 } from "./core";
 import { diffCaioAttentionPrefill, validateCaioAttentionOwnerCommand, type CaioAttentionOwnerCommandPeople } from "../routing";
-import { caioAttentionDispatchFields, caioAttentionSeverityRaiseFields, caioAttentionSuggestFields } from "../schedule";
+import { caioAttentionDispatchFields, caioAttentionResumeDeferredFields, caioAttentionSeverityRaiseFields } from "../schedule";
 import { authorizeCaioAttentionOperation, isCaioAttentionTerminal, type CaioAttentionStatus } from "../state-machine";
 
 /**
@@ -201,7 +201,7 @@ export function resumeDeferredCaioAttentionCase(
     const rearm = row.effectiveSeverity === "critical";
     await casCaioAttentionCase(tx, row, {
       status: "SUGGESTED", deferredUntil: null,
-      ...(rearm ? { ...caioAttentionSuggestFields("critical", now), r0aSentAt: null, r0bSentAt: null } : {}),
+      ...caioAttentionResumeDeferredFields(row.effectiveSeverity as CaioAttentionSeverity, now),
     });
     await appendCaioAttentionEvent(tx, {
       caseId: row.id, kind: "RESUMED", commandVersion: row.commandVersion, dedupeKey: `resume:${row.deferredUntil.toISOString()}`,
@@ -228,7 +228,7 @@ export function applyCaioAttentionSeverityRaise(
     if (row.effectiveSeverity === "critical") return { ok: true, caseId: row.id, status, commandVersion: row.commandVersion, replayed: true };
     const raised = await tx.caioAttentionCaseEvent.findFirst({ where: { caseId: row.id, kind: "SEVERITY_RAISED", dedupeKey: "critical" } });
     if (!raised) return rejectCaioAttention("not_due");
-    const fields = caioAttentionSeverityRaiseFields(status, { ...row, r2FiredSeverity: row.r2FiredSeverity as CaioAttentionSeverity | null }, row.respondedAt, raised.createdAt, deps.policy);
+    const fields = caioAttentionSeverityRaiseFields(status, row.effectiveSeverity as CaioAttentionSeverity, { ...row, r2FiredSeverity: row.r2FiredSeverity as CaioAttentionSeverity | null }, row.respondedAt, raised.createdAt, deps.policy);
     await casCaioAttentionCase(tx, row, { effectiveSeverity: "critical", reminderPolicy: "critical", ...fields });
     await appendCaioAttentionEvent(tx, {
       caseId: row.id, kind: "SEVERITY_APPLIED", commandVersion: row.commandVersion, dedupeKey: "critical",
