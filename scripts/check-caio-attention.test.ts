@@ -41,7 +41,8 @@ describe("check:caio-attention", () => {
 
   it("never references the generic governed-task tables", () => {
     const forbidden = /\b(ActionItem|ApprovalTask|ExecutionReceipt|actionItem|approvalTask|executionReceipt)\b/u;
-    const hits = MODULE_DIRS.flatMap(sourceFiles).filter((file) => forbidden.test(read(file)));
+    // Guard tests (e.g. lib/caio-attention/reminder-cron.test.ts) name these tables to assert their absence.
+    const hits = MODULE_DIRS.flatMap(sourceFiles).filter((file) => !/\.test\.tsx?$/u.test(file) && forbidden.test(read(file)));
     expect(hits).toEqual([]);
   });
 
