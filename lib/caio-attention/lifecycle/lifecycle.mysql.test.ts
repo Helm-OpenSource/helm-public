@@ -8,7 +8,9 @@ import {
   assignCaioAttentionReviewers, cancelCaioAttentionCase, confirmCaioAttentionCase, deferCaioAttentionCase,
   dismissCaioAttentionCase, reissueCaioAttentionCase, resumeDeferredCaioAttentionCase,
 } from "./lifecycle.service";
-import { CAIO_ATTENTION_TEST_DEFAULT_POLICY } from "../schedule";
+import type { CaioAttentionSeverity } from "../contracts";
+import { CAIO_ATTENTION_TEST_DEFAULT_POLICY, collectDueCaioAttentionReminders } from "../schedule";
+import type { CaioAttentionStatus } from "../state-machine";
 
 /**
  * OWNER lifecycle operations on an isolated MySQL database, written through the least-privilege web identity.
@@ -59,6 +61,25 @@ describeMysql("CAIO attention OWNER lifecycle on MySQL (web identity)", () => {
     confirmCaioAttentionCase(deps, { workspaceId, caseId, actorUserId, clientRequestId: rid(), expectedCommandVersion: 0, command: command(), ...extra });
   const caseRow = (id: string) => admin.caioAttentionCase.findUniqueOrThrow({ where: { id } });
   const events = (caseId: string) => admin.caioAttentionCaseEvent.findMany({ where: { caseId }, orderBy: { createdAt: "asc" } });
+  /**
+   * Stands in for the S6 scanner's R0a branch: S1's due rule decides and the Notification unique (workspaceId,
+   * dedupeKey) deduplicates, exactly as the scanner's insert does. Admin client: S5a's web identity writes no notices.
+   */
+  async function scanR0a(caseId: string, at: Date) {
+    const row = await caseRow(caseId);
+    const { sends, updates } = collectDueCaioAttentionReminders({
+      caseId, status: row.status as CaioAttentionStatus, effectiveSeverity: row.effectiveSeverity as CaioAttentionSeverity,
+      commandVersion: row.commandVersion, respondedAt: row.respondedAt, ownerUserIds: [people.owner], primaryUserId: row.primaryUserId,
+      escalationUserId: row.escalationUserId, reviewerUserIds: [],
+    }, { ...row, r2FiredSeverity: row.r2FiredSeverity as CaioAttentionSeverity | null }, at, CAIO_ATTENTION_TEST_DEFAULT_POLICY);
+    for (const notice of sends.filter((send) => send.rule === "R0a").flatMap((send) => send.notifications)) {
+      await admin.notification.createMany({ skipDuplicates: true, data: [{ workspaceId, userId: notice.userId, type: "REMINDER",
+        title: "R0a", body: "", dedupeKey: notice.dedupeKey }] });
+    }
+    if (updates.r0aSentAt) await admin.caioAttentionCase.update({ where: { id: caseId }, data: { r0aSentAt: updates.r0aSentAt, r0bDueAt: updates.r0bDueAt } });
+  }
+  const r0aNotices = async () => (await admin.notification.findMany({ where: { workspaceId }, select: { dedupeKey: true } }))
+    .map((n) => n.dedupeKey).sort();
   const setGate = (state: "OPEN" | "PAUSED") => ops.$executeRaw`UPDATE CaioAttentionControl SET intakeState = ${state},
     rowVersion = rowVersion + 1, updatedByRef = 'test' WHERE id = 'global'`;
 
@@ -135,6 +156,8 @@ describeMysql("CAIO attention OWNER lifecycle on MySQL (web identity)", () => {
     expect(await confirmCaioAttentionCase(deps, request)).toMatchObject({ ok: true, replayed: false });
     expect(await confirmCaioAttentionCase(deps, request)).toMatchObject({ ok: true, replayed: true, commandVersion: 1 });
     expect(await cancelCaioAttentionCase(deps, { ...request, expectedCommandVersion: 1 })).toEqual({ ok: false, reason: "client_request_conflict" });
+    // Someone who cannot read the case learns nothing from a colliding request id: readability is checked first.
+    expect(await cancelCaioAttentionCase(deps, { ...request, actorUserId: people.outsider, expectedCommandVersion: 1 })).toEqual({ ok: false, reason: "not_found" });
     expect((await events(caseId)).map((e) => e.kind)).toEqual(["SUGGESTED", "CONFIRMED"]);
   });
 
@@ -206,12 +229,15 @@ describeMysql("CAIO attention OWNER lifecycle on MySQL (web identity)", () => {
 
   it("defers, resumes only when due and behind the gate, and re-arms the pending reminder of a critical case", async () => {
     const caseId = await seedCase("critical");
-    await admin.$executeRaw`UPDATE CaioAttentionCase SET r0aDueAt = ${now}, r0aSentAt = ${now} WHERE id = ${caseId}`;
+    await admin.$executeRaw`UPDATE CaioAttentionCase SET r0aDueAt = ${now} WHERE id = ${caseId}`;
+    await scanR0a(caseId, now);
+    expect(await r0aNotices()).toEqual([`ca:${caseId}:R0a:${now.toISOString()}:${people.owner}`]);
     const until = new Date(now.getTime() + 60 * 60_000);
     const defer = (deferredUntil: Date) => deferCaioAttentionCase(deps, { workspaceId, caseId, actorUserId: people.owner,
       clientRequestId: rid(), expectedCommandVersion: 0, deferredUntil });
     expect(await defer(new Date(now.getTime() - 1))).toEqual({ ok: false, reason: "input_invalid", details: ["deferred_until_invalid"] });
     expect(await defer(until)).toMatchObject({ ok: true, status: "DEFERRED" });
+    expect(await caseRow(caseId)).toMatchObject({ r0aDueAt: null, r0aSentAt: null, r0bDueAt: null, r0bSentAt: null });
     expect(await dismissCaioAttentionCase(deps, { workspaceId, caseId, actorUserId: people.owner, clientRequestId: rid(), expectedCommandVersion: 0 }))
       .toEqual({ ok: false, reason: "invalid_status" });
     expect(await resumeDeferredCaioAttentionCase(deps, { workspaceId, caseId })).toEqual({ ok: false, reason: "not_due" });
@@ -222,6 +248,35 @@ describeMysql("CAIO attention OWNER lifecycle on MySQL (web identity)", () => {
     expect(await resumeDeferredCaioAttentionCase(later, { workspaceId, caseId })).toMatchObject({ ok: true, status: "SUGGESTED" });
     expect(await caseRow(caseId)).toMatchObject({ status: "SUGGESTED", deferredUntil: null, r0aDueAt: until, r0aSentAt: null, r0bDueAt: null });
     expect(await resumeDeferredCaioAttentionCase(later, { workspaceId, caseId })).toEqual({ ok: false, reason: "invalid_status" });
+    // The re-armed R0a really lands: its key carries the new due time, so the first round's row cannot swallow it.
+    await scanR0a(caseId, until);
+    expect(await r0aNotices()).toEqual([
+      `ca:${caseId}:R0a:${now.toISOString()}:${people.owner}`, `ca:${caseId}:R0a:${until.toISOString()}:${people.owner}`,
+    ].sort());
+  });
+
+  it("disarms an unsent pending reminder on defer, so a deferred case is not announced as pending", async () => {
+    const caseId = await seedCase("critical");
+    await admin.$executeRaw`UPDATE CaioAttentionCase SET r0aDueAt = ${now} WHERE id = ${caseId}`;
+    expect(await deferCaioAttentionCase(deps, { workspaceId, caseId, actorUserId: people.owner, clientRequestId: rid(), expectedCommandVersion: 0,
+      deferredUntil: new Date(now.getTime() + 60_000) })).toMatchObject({ ok: true, status: "DEFERRED" });
+    await scanR0a(caseId, new Date(now.getTime() + 30_000));
+    expect(await r0aNotices()).toEqual([]);
+  });
+
+  it("records one RESUMED event per defer cycle", async () => {
+    const caseId = await seedCase();
+    let at = now;
+    for (let cycle = 1; cycle <= 2; cycle += 1) {
+      const until = new Date(at.getTime() + 60_000);
+      const deferAt = at;
+      expect(await deferCaioAttentionCase({ ...deps, now: () => deferAt }, { workspaceId, caseId, actorUserId: people.owner,
+        clientRequestId: rid(), expectedCommandVersion: 0, deferredUntil: until })).toMatchObject({ ok: true });
+      expect(await resumeDeferredCaioAttentionCase({ ...deps, now: () => until }, { workspaceId, caseId })).toMatchObject({ ok: true, status: "SUGGESTED" });
+      at = until;
+    }
+    const resumed = (await events(caseId)).filter((e) => e.kind === "RESUMED").map((e) => e.dedupeKey).sort();
+    expect(resumed).toEqual([`resume:1:${new Date(now.getTime() + 60_000).toISOString()}`, `resume:2:${new Date(now.getTime() + 120_000).toISOString()}`]);
   });
 
   it("assigns reviewers by reviewer version without touching the command, and keeps separation of duties", async () => {
