@@ -106,7 +106,10 @@ describeMysql("CAIO attention tables on MySQL with least-privilege identities", 
     ({ admin, attention_generator: generator, attention_web: web, attention_ops: ops } = clients);
   });
 
-  beforeEach(async () => {
+  beforeEach(() => reset(false));
+
+  /** Empties every attention table; `pristine` also restores the seeded Control row, so the rollback scripts run after. */
+  async function reset(pristine: boolean) {
     await admin.$executeRaw`DELETE FROM CaioAttentionControlEvent`;
     await admin.$executeRaw`DELETE FROM CaioAttentionPauseRequest`;
     await admin.$executeRaw`DELETE FROM CaioAttentionNodeReadiness`;
@@ -118,9 +121,14 @@ describeMysql("CAIO attention tables on MySQL with least-privilege identities", 
     await admin.$executeRaw`UPDATE CaioAttentionControl SET intakeState = 'PAUSED', epoch = 0, openEpoch = 0, leaseToken = NULL,
       leaseNodeId = NULL, leaseTargetDeploymentId = NULL, leaseAcquiredAt = NULL, leaseExpiresAt = NULL, updatedAt = NOW(3)
       WHERE id = 'global'`;
-  });
+    if (pristine) {
+      await admin.$executeRaw`UPDATE CaioAttentionControl SET rowVersion = 0, expectedNodesJson = '[]',
+        updatedByRef = 'migration:20261104120000_caio_attention_control_plane', updatedAt = NOW(3) WHERE id = 'global'`;
+    }
+  }
 
   afterAll(async () => {
+    await reset(true);
     await Promise.all(Object.values(clients).map((client) => client.$disconnect()));
   });
 
