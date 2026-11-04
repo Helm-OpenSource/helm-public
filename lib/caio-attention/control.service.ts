@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 
 import { Prisma, type PrismaClient } from "@prisma/client";
 
+import { evaluateCaioAttentionCapability, type CaioAttentionCapabilityReport } from "./capability";
 import {
   caioAttentionDeployBegin,
   caioAttentionRevokeInPlace,
@@ -34,6 +35,12 @@ export const CAIO_ATTENTION_HEARTBEAT_FRESH_MS = 3 * 60_000;
 /** Interactive transactions wait for lock holders; a hold barrier spans one link() on the deploy host. */
 export const CAIO_ATTENTION_CONTROL_TX = { maxWait: 10_000, timeout: 60_000 } as const;
 export const CAIO_ATTENTION_HOLD_TX = { maxWait: 10_000, timeout: 120_000 } as const;
+/**
+ * attest-node runs after the CLI's 10 s capability fetch; 10 + 5 + 40 = 55 s stays under the deploy script's 60 s call
+ * budget, so a slow attest ends as this CLI's own failure (rolled back, no proof) rather than the caller's kill.
+ */
+export const CAIO_ATTENTION_ATTEST_FETCH_MS = 10_000;
+export const CAIO_ATTENTION_ATTEST_TX = { maxWait: 5_000, timeout: 40_000 } as const;
 export const CAIO_ATTENTION_NODE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/u;
 const DEPLOYMENT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 const LEASE_PATTERN = /^[a-f0-9]{48}$/u;
@@ -278,6 +285,44 @@ export async function holdCaioAttentionLease(
     onReady();
     await released;
   }, CAIO_ATTENTION_HOLD_TX);
+}
+
+/**
+ * attest-node (design v5 §1.2, v6 §2.3–2.4): the lease tuple must still be current (else fenced); the deploy guard
+ * version must meet minGuardVersion; the node's own loopback capability report (fetched by the caller before this
+ * transaction, so no network call runs under the lock) must show this node, the lease target, capability at the
+ * floor, the page service and lifecycle routes bound, and the schema ready. Writes one proof at the lease epoch.
+ */
+export async function attestCaioAttentionNode(
+  client: PrismaClient,
+  input: Readonly<{ lease: unknown; nodeId: unknown; targetDeploymentId: unknown; epoch: unknown; guardVersion: unknown }>,
+  report: CaioAttentionCapabilityReport,
+) {
+  const request = {
+    token: requireMatch(input.lease, LEASE_PATTERN, "lease_invalid"),
+    nodeId: requireMatch(input.nodeId, CAIO_ATTENTION_NODE_ID_PATTERN, "node_id_invalid"),
+    targetDeploymentId: requireMatch(input.targetDeploymentId, DEPLOYMENT_ID_PATTERN, "deployment_id_invalid"),
+    epoch: requireCount(input.epoch, "epoch_invalid"),
+  };
+  const guardVersion = requireCount(input.guardVersion, "guard_version_invalid");
+  return client.$transaction(async (tx) => {
+    const control = await lockControl(tx, "UPDATE");
+    const verdict = evaluateCaioAttentionLeaseHold(control, request);
+    if (!verdict.ok) fence(verdict.reason);
+    if (guardVersion < control.minGuardVersion) refuse("guard_too_low");
+    const blocks = evaluateCaioAttentionCapability(report, {
+      nodeId: request.nodeId, deploymentId: request.targetDeploymentId, requiredCloseCapability: control.requiredCloseCapability,
+    });
+    if (blocks.length > 0) refuse(`attest_blocked:${blocks.join(",")}`);
+    const readinessId = `nr_${randomBytes(12).toString("hex")}`;
+    await tx.$executeRaw`INSERT INTO CaioAttentionNodeReadiness (id, nodeId, deploymentId, closeCapabilityVersion, guardVersion, epoch,
+      verifiedAt, verifiedByRef) VALUES (${readinessId}, ${request.nodeId}, ${request.targetDeploymentId},
+      ${report.closeCapabilityVersion}, ${guardVersion}, ${request.epoch}, NOW(3), ${auditRef(`host_deploy:${request.nodeId}`, "attest-node")})`;
+    await appendCaioAttentionControlEvent(tx, { op: "attest-node", actorRef: `host_deploy:${request.nodeId}`, epoch: request.epoch,
+      openEpoch: control.openEpoch, payload: { nodeId: request.nodeId, deploymentId: request.targetDeploymentId, readinessId,
+        closeCapabilityVersion: report.closeCapabilityVersion, guardVersion } });
+    return { attested: true, epoch: request.epoch };
+  }, CAIO_ATTENTION_ATTEST_TX);
 }
 
 /** deploy-end: only the lease holder ends its lease; intake always returns to PAUSED, never OPEN. */

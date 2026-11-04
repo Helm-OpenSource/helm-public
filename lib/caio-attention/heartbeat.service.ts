@@ -6,7 +6,13 @@ import type { PrismaClient } from "@prisma/client";
 
 import { resolveRuntimeHealthAttestation } from "@/lib/production-health/runtime-deployment-identity";
 
-import { CAIO_ATTENTION_CAPABILITY_FILE, parseCaioAttentionCapabilityFile, resolveCaioAttentionNodeId } from "./capability";
+import {
+  CAIO_ATTENTION_CAPABILITY_FILE,
+  parseCaioAttentionCapabilityFile,
+  resolveCaioAttentionNodeId,
+  resolveCaioAttentionNodeRole,
+  resolveCaioAttentionReportedCloseCapability,
+} from "./capability";
 import { getRegisteredCaioAttentionPack } from "./registry";
 
 /**
@@ -22,21 +28,22 @@ export type CaioAttentionHeartbeat = Readonly<{
 }>;
 
 /**
- * The reported close capability is the release file's value (capability.json, which check:caio-attention pins to
- * the page-service binding: 1 only when bound) and only while the overlay's attention pack with its policy is
- * registered in this process; otherwise 0. The file alone never lets attest pass.
+ * closeChainBound: whether the close chain is bound at runtime; unbound reports close capability 0 (file ignored). The
+ * heartbeat passes whether the attention pack policy is registered in this process; capability.json itself is pinned
+ * to the build-time page-service binding by check:caio-attention, so together they follow the runtime rule.
  */
 export function resolveCaioAttentionHeartbeat(
-  env: Readonly<Record<string, string | undefined>>, capabilityFileText: string | null, policyRegistered: boolean,
+  env: Readonly<Record<string, string | undefined>>, capabilityFileText: string | null, closeChainBound: boolean,
 ): CaioAttentionHeartbeat | null {
   const nodeId = resolveCaioAttentionNodeId(env);
+  const role = resolveCaioAttentionNodeRole(env);
   const attestation = resolveRuntimeHealthAttestation(env);
-  if (!nodeId || attestation.mode !== "artifact-bound") return null;
+  if (!nodeId || !role || attestation.mode !== "artifact-bound") return null;
   return {
     nodeId,
-    role: "http",
+    role,
     deploymentId: attestation.runtimeDeploymentId,
-    closeCapabilityVersion: policyRegistered ? parseCaioAttentionCapabilityFile(capabilityFileText) ?? 0 : 0,
+    closeCapabilityVersion: resolveCaioAttentionReportedCloseCapability(parseCaioAttentionCapabilityFile(capabilityFileText), closeChainBound),
     remindersEnabled: ["true", "1"].includes(env.HELM_CAIO_ATTENTION_REMINDERS_ENABLED?.trim().toLowerCase() ?? ""),
   };
 }
@@ -58,9 +65,9 @@ export async function startCaioAttentionHeartbeat(client: Pick<PrismaClient, "$e
   } catch {
     text = null;
   }
+  // Re-resolved every tick: the overlay may register its pack after the heartbeat started.
   const current = () => resolveCaioAttentionHeartbeat(process.env, text, getRegisteredCaioAttentionPack()?.policy != null);
   if (!current()) return () => undefined;
-  // Re-resolved every tick: the overlay may register its pack after the heartbeat started.
   const tick = () => recordCaioAttentionHeartbeat(client, current()!).catch((error: unknown) => {
     log(`caio attention heartbeat failed: ${error instanceof Error ? error.name : "error"}`);
   });

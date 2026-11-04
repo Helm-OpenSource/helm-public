@@ -207,6 +207,8 @@ DingTalk · WeCom · HubSpot · Salesforce · Stripe · 支付宝 · 微信支�
 |---|---|
 | `HELM_HEALTH_ATTESTATION_MODE` | 缺失、空值或 `reachability` 时保持既有公开可达性检查；只有精确为 `artifact-bound` 才启用源码发布绑定 |
 | `HELM_RUNTIME_DEPLOYMENT_ID` | 私有发布流程注入的 non-secret opaque ID；仅允许 1–128 个 ASCII 字符，并匹配 `[A-Za-z0-9][A-Za-z0-9._:-]*` |
+| `HELM_RUNTIME_NODE_ID` | CAIO 运营关注事项的本机节点标识（每台主机一个，non-secret，匹配 `[A-Za-z0-9][A-Za-z0-9._-]{0,95}`）；与 `artifact-bound` 部署标识同时存在时才写 RuntimeNode 心跳，本机能力探针才报告该节点，就绪证明才可能签发；缺失或非法时不心跳，入口保持暂停 |
+| `HELM_RUNTIME_NODE_ROLE` | 心跳上报的进程角色，匹配 `[a-z][a-z0-9_-]{0,31}`；缺失或空值为 `http`，非法值不心跳 |
 
 `artifact-bound` 是显式选择：ID 缺失、超长、含空白、控制字符或其他非法字符时，
 `GET /api/health` 固定返回 `503`，且不会回显非法原值。合法时，该端点在

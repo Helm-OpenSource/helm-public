@@ -10,12 +10,18 @@
  *   exit:   0 ok; 3 lease fenced (the lease is no longer the caller's); 4 refused; anything else failed.
  *
  * Deploy ops: deploy-begin, hold, deploy-end, deploy-recover (host-locked recovery entry only), guard-downgrade.
- * attest-node is refused until readiness proofs land (fail closed: no proof, so resume stays blocked).
- * Operator ops: pause, resume (acks every pause request of the current open epoch by id), expected-nodes.
+ * attest-node reads this node's loopback capability probe (http://127.0.0.1:$PORT, default 3000) before its transaction;
+ * probe 10 s + transaction (5 s connection wait, 40 s) stays within the deploy script's 60 s call budget.
+ * Every state-changing op appends a CaioAttentionControlEvent in its own transaction; stdout keys are unchanged.
+ * Operator ops: pause, resume (acks every pause request of the current open epoch by id), expected-nodes,
+ * routes-publish (append a validated people-binding version) and routes-activate (CAS on the workspace head).
  */
 import { PrismaClient } from "@prisma/client";
 
+import type { CaioAttentionCapabilityReport } from "@/lib/caio-attention/capability";
 import {
+  attestCaioAttentionNode,
+  CAIO_ATTENTION_ATTEST_FETCH_MS,
   CaioAttentionControlRefusal,
   beginCaioAttentionDeployment,
   downgradeCaioAttentionGuard,
@@ -26,6 +32,7 @@ import {
   resumeCaioAttentionIntake,
   setCaioAttentionExpectedNodes,
 } from "@/lib/caio-attention/control.service";
+import { activateCaioAttentionRouteConfig, publishCaioAttentionRouteConfig } from "@/lib/caio-attention/route-config.service";
 
 export const CAIO_ATTENTION_CONTROL_OPS = {
   "deploy-begin": ["nodeId", "targetDeploymentId"],
@@ -37,6 +44,8 @@ export const CAIO_ATTENTION_CONTROL_OPS = {
   pause: ["actorRef"],
   resume: ["actorRef", "ackPauseRequestIds"],
   "expected-nodes": ["actorRef", "nodeIds"],
+  "routes-publish": ["workspaceId", "actorRef", "config"],
+  "routes-activate": ["workspaceId", "actorRef", "version", "expectedRowVersion"],
 } as const satisfies Record<string, readonly string[]>;
 type Op = keyof typeof CAIO_ATTENTION_CONTROL_OPS;
 
@@ -76,6 +85,20 @@ function readStdin(): { firstLine: Promise<string | null>; ended: Promise<void> 
   return { firstLine, ended };
 }
 
+/** The running server's own report; any failure is a refusal (no proof is written). */
+async function fetchCapabilityReport(): Promise<CaioAttentionCapabilityReport> {
+  const port = /^\d{1,5}$/u.test(process.env.PORT ?? "") ? process.env.PORT : "3000";
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/caio-attention/capability`, {
+      signal: AbortSignal.timeout(CAIO_ATTENTION_ATTEST_FETCH_MS), redirect: "error",
+    });
+    if (response.ok) return await response.json() as CaioAttentionCapabilityReport;
+  } catch {
+    // fall through
+  }
+  throw new CaioAttentionControlRefusal("capability_probe_unavailable");
+}
+
 async function run(op: Op, request: Record<string, unknown>, prisma: PrismaClient, stdinEnded: Promise<void>): Promise<object | null> {
   switch (op) {
     case "deploy-begin": return beginCaioAttentionDeployment(prisma, request as never);
@@ -85,7 +108,9 @@ async function run(op: Op, request: Record<string, unknown>, prisma: PrismaClien
     case "pause": return pauseCaioAttentionIntake(prisma, request as never);
     case "resume": return resumeCaioAttentionIntake(prisma, request as never);
     case "expected-nodes": return setCaioAttentionExpectedNodes(prisma, request as never);
-    case "attest-node": throw new CaioAttentionControlRefusal("attest_not_available");
+    case "routes-publish": return publishCaioAttentionRouteConfig(prisma, request as never);
+    case "routes-activate": return activateCaioAttentionRouteConfig(prisma, request as never);
+    case "attest-node": return attestCaioAttentionNode(prisma, request as never, await fetchCapabilityReport());
     case "hold": {
       let ready = false;
       let endedEarly = false;

@@ -215,6 +215,8 @@ directory and child paths are not exempted.
 |---|---|
 | `HELM_HEALTH_ATTESTATION_MODE` | Missing, empty, or exact `reachability` preserves the existing public reachability check; only exact `artifact-bound` enables source-release binding |
 | `HELM_RUNTIME_DEPLOYMENT_ID` | Non-secret opaque ID injected by the private release process; 1–128 ASCII characters matching `[A-Za-z0-9][A-Za-z0-9._:-]*` |
+| `HELM_RUNTIME_NODE_ID` | CAIO attention node identity of this host (one per host, non-secret, matching `[A-Za-z0-9][A-Za-z0-9._-]{0,95}`). Only together with an `artifact-bound` deployment ID does the process write its RuntimeNode heartbeat and does the local capability probe report this node, so a readiness proof can pass; missing or invalid means no heartbeat and intake stays paused |
+| `HELM_RUNTIME_NODE_ROLE` | Process role reported by the heartbeat, matching `[a-z][a-z0-9_-]{0,31}`; missing or empty means `http`, an invalid value disables the heartbeat |
 
 `artifact-bound` is explicit opt-in. A missing, oversized, whitespace-bearing,
 control-character-bearing, or otherwise invalid ID makes `GET /api/health`

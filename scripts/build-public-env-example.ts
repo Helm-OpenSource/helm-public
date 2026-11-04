@@ -61,6 +61,11 @@ HELM_ORGANIZATION_CREATION_MODE="self-service"
 # 1-128 ASCII characters: [A-Za-z0-9][A-Za-z0-9._:-]*.
 HELM_HEALTH_ATTESTATION_MODE="reachability"
 HELM_RUNTIME_DEPLOYMENT_ID=""
+# CAIO attention node identity (per host, non-secret). Unset: no RuntimeNode
+# heartbeat and no readiness proof, so attention intake stays paused. Role is
+# the heartbeat's process role, [a-z][a-z0-9_-]{0,31}; empty means http.
+HELM_RUNTIME_NODE_ID=""
+HELM_RUNTIME_NODE_ROLE=""
 
 # Optional public deployment identity for /terms and /privacy. The display name
 # may be configured independently. The legal name is rendered only when the
