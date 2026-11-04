@@ -86,7 +86,7 @@
     "test:caio-audit-state:mysql": "vitest run lib/caio-audit-state/audit-state.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
     "test:caio-operator:mysql": "vitest run features/caio-operator/actions.mysql.test.ts lib/caio-operator/governance-operator.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
     "caio:governance-operator": "node --import tsx --import ./scripts/node-hooks/allow-server-only.mjs scripts/caio-governance-operator.ts",
-    "test:caio-attention:mysql": "CAIO_ATTENTION_MYSQL_REQUIRED=1 vitest run lib/caio-attention/schema.mysql.test.ts lib/caio-attention/reminder-scanner.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
+    "test:caio-attention:mysql": "CAIO_ATTENTION_MYSQL_REQUIRED=1 vitest run lib/caio-attention/schema.mysql.test.ts lib/caio-attention/reminder-scanner.mysql.test.ts lib/caio-attention/watchdog.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
     "test:caio-operating-context:mysql": "vitest run lib/caio-operating-context/schema.mysql.test.ts lib/caio-operating-context/quick-check.mysql.test.ts lib/caio-operating-context/g0-preparation.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
     "caio:g0-prepare": "node --import tsx --import ./scripts/node-hooks/allow-server-only.mjs scripts/caio-g0-prepare.ts",
     "caio:inference-token": "node --import tsx --import ./scripts/node-hooks/allow-server-only.mjs scripts/caio-inference-token.ts",

@@ -19,7 +19,7 @@ export type CaioAttentionTableGrant = Readonly<{
 }>;
 
 /** Existing Core tables (not attention tables) in the matrix; the readiness probe never lists them. */
-export const CAIO_ATTENTION_FIXTURE_CORE_TABLES = ["Notification", "Membership", "CaioQuickCheckTick"] as const;
+export const CAIO_ATTENTION_FIXTURE_CORE_TABLES = ["Notification", "Membership", "CaioQuickCheckTick", "CaioAnomalyCandidate"] as const;
 
 const S = ["SELECT"] as const;
 const SI = ["SELECT", "INSERT"] as const;
@@ -46,6 +46,7 @@ export const CAIO_ATTENTION_GRANT_MATRIX: Readonly<Record<string, Readonly<Parti
   Notification: { attention_web: { privileges: SI } },
   Membership: { attention_web: { privileges: S } },
   CaioQuickCheckTick: { attention_web: { privileges: S } },
+  CaioAnomalyCandidate: { attention_web: { privileges: S } },
 };
 
 export function caioAttentionTableGrant(identity: CaioAttentionFixtureIdentity, table: string): CaioAttentionTableGrant | null {

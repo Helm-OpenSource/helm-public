@@ -110,6 +110,9 @@ HELM_FINANCIAL_ACTIONS_ENABLED="false"
 
 SIGNAL_COLLECTION_SCHEDULER_ENABLED="false"
 LIGHT_CHAIN_FOLLOW_THROUGH_CRON_ENABLED="false"
+# CAIO attention reminders + evaluation watchdog (5-minute in-app scan). Inert
+# until an overlay registers the tenant policy.
+HELM_CAIO_ATTENTION_REMINDERS_ENABLED="false"
 
 # QoderWork external-agent MCP stays fail-closed unless both this deployment
 # flag and the owner-authorized workspace feature flag are enabled. Origins are

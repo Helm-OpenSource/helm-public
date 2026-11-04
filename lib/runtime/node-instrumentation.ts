@@ -38,6 +38,15 @@ export async function registerNodeInstrumentation() {
 
   startLightChainFollowThroughCron();
 
+  // CAIO attention reminders and evaluation watchdog: five-minute scan, in-app
+  // notices only. Opt-in via HELM_CAIO_ATTENTION_REMINDERS_ENABLED and inert until
+  // an overlay registers the tenant policy. It never reads light-chain items.
+  const { startCaioAttentionReminderCron } = await import(
+    "@/lib/caio-attention/reminder-cron"
+  );
+
+  startCaioAttentionReminderCron();
+
   // T019.code P0 #2b — wire DB-derived spend provider so the LLM
   // spend-tracker can use max(in-memory, DB) on multi-instance
   // deployments. The provider is cached with 60s TTL inside spend-tracker;

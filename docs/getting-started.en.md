@@ -171,8 +171,9 @@ Leave them all blank on a first run.
 |---|---|
 | `SIGNAL_COLLECTION_SCHEDULER_ENABLED` | Signal collection scheduler; only starts when `true` |
 | `LIGHT_CHAIN_FOLLOW_THROUGH_CRON_ENABLED` | Daily follow-through sweep for the light task chain: produces **internal reminders and audit entries** for overdue / stalled action items and commitments — no external sends, no task-state mutation. Deployment-level switch that sweeps every workspace in the database; validate the cadence on an internal workspace first, see [the self-tenant operating runbook §5](./product/HELM_SELF_TENANT_OPERATING_RUNBOOK.md) |
+| `HELM_CAIO_ATTENTION_REMINDERS_ENABLED` | CAIO attention reminders, escalations and evaluation watchdog (every 5 minutes): targeted in-app notices only, no external send, no case-state change; starts only on `true` or `1`, and scans only after an overlay registers the tenant reminder policy |
 
-Neither scheduler affects a first run; leave them blank / `false`.
+None of these schedulers affects a first run; leave them blank / `false`.
 
 ### DEPLOYMENT_ENTRY (optional deployment entry)
 
