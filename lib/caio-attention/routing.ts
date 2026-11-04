@@ -66,9 +66,13 @@ export function resolveCaioAttentionPrefill(input: CaioAttentionRouteInput): Cai
     for (const id of people) if (!ccUserIds.includes(id)) ccUserIds.push(id);
   }
 
-  const notPrimary = (id: string) => id !== primaryUserId;
-  const escalationUserId = candidates(rule.escalationRoleKey).find(notPrimary)
-    ?? candidates(rule.escalationFallbackRoleKey).find(notPrimary) ?? null;
+  // When the escalation holder is the primary (or cc), escalation goes to the fallback (owner) role,
+  // never to another holder of the same role.
+  const canEscalate = (id: string) => id !== primaryUserId && !ccUserIds.includes(id);
+  const firstEscalation = candidates(rule.escalationRoleKey)[0];
+  const escalationUserId = firstEscalation !== undefined && canEscalate(firstEscalation)
+    ? firstEscalation
+    : candidates(rule.escalationFallbackRoleKey).find(canEscalate) ?? null;
   if (!escalationUserId) blocks.push("escalation_unavailable");
 
   const eligibleReviewer = (id: string) => id !== primaryUserId && !ccUserIds.includes(id);
@@ -88,7 +92,9 @@ export type CaioAttentionOwnerCommandPeople = Readonly<{
 }>;
 
 export type CaioAttentionCommandError = "enterprise_unverified" | "primary_missing" | "primary_inactive"
-  | "primary_is_confirmer" | "cc_inactive" | "escalation_missing" | "escalation_inactive" | "escalation_is_primary" | "reviewer_missing"
+  | "primary_is_confirmer" | "cc_inactive" | "escalation_missing" | "escalation_inactive" | "escalation_is_primary" | "escalation_in_cc"
+  | "primary_in_cc"
+  | "reviewer_missing"
   | "reviewer_inactive" | "reviewer_not_capable" | "reviewer_conflict" | "committed_due_missing";
 
 /** Confirm / reissue check on the final (possibly edited) command. Empty result means dispatchable. */
@@ -106,9 +112,12 @@ export function validateCaioAttentionOwnerCommand(input: Readonly<{
   else if (!isActive(command.primaryUserId)) errors.add("primary_inactive");
   if (command.primaryUserId && command.primaryUserId === input.confirmerUserId) errors.add("primary_is_confirmer");
   if (command.ccUserIds.some((id) => !isActive(id))) errors.add("cc_inactive");
+  // cc is "for information": the primary (and, below, the escalation person) never doubles as a cc recipient.
+  if (command.primaryUserId && command.ccUserIds.includes(command.primaryUserId)) errors.add("primary_in_cc");
   if (!command.escalationUserId) errors.add("escalation_missing");
   else if (!isActive(command.escalationUserId)) errors.add("escalation_inactive");
   if (command.escalationUserId && command.escalationUserId === command.primaryUserId) errors.add("escalation_is_primary");
+  if (command.escalationUserId && command.ccUserIds.includes(command.escalationUserId)) errors.add("escalation_in_cc");
   if (command.reviewerUserIds.length === 0) errors.add("reviewer_missing");
   for (const id of command.reviewerUserIds) {
     if (!isActive(id)) errors.add("reviewer_inactive");

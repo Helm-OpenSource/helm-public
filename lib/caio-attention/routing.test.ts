@@ -11,6 +11,7 @@ const rule: CaioAttentionRouteRule = {
 const config: CaioAttentionRouteConfig = {
   roleBindings: {
     primary_role: ["u_primary"], cc_role: ["u_cc"], outcome_role: ["u_outcome"], owner_role: ["u_owner"],
+    multi_role: ["u_outcome", "u_outcome2"],
   },
   enterpriseOverrides: {
     "ent-a": { primary_role: ["u_ent_primary"] },
@@ -42,6 +43,12 @@ describe("resolveCaioAttentionPrefill", () => {
     const exhausted = resolve({ isActive: activeExcept("u_primary", "u_outcome") });
     expect(exhausted.primaryUserId).toBeNull();
     expect(exhausted.blocks).toContain("primary_unavailable");
+  });
+
+  it("escalation never passes to another holder of the same role when its first holder is primary", () => {
+    const multi = { ...rule, escalationRoleKey: "multi_role", primaryFallbackRoleKeys: ["multi_role"] };
+    expect(resolve({ rule: multi, isActive: activeExcept("u_primary") })).toMatchObject({ primaryUserId: "u_outcome", escalationUserId: "u_owner" });
+    expect(resolve({ rule: multi })).toMatchObject({ primaryUserId: "u_primary", escalationUserId: "u_outcome" });
   });
 
   it("T-F2: a fallback primary who is also the confirmer blocks routing", () => {
@@ -84,6 +91,8 @@ describe("validateCaioAttentionOwnerCommand", () => {
     expect(validate()).toEqual([]);
     expect(validate({ primaryUserId: "u_owner" })).toEqual(["primary_is_confirmer"]);
     expect(validate({ escalationUserId: "u_primary" })).toEqual(["escalation_is_primary"]);
+    expect(validate({ escalationUserId: "u_cc" })).toEqual(["escalation_in_cc"]);
+    expect(validate({ ccUserIds: ["u_cc", "u_primary"] })).toEqual(["primary_in_cc"]);
     expect(validate({}, activeExcept("u_primary", "u_cc"))).toEqual(["cc_inactive", "primary_inactive"]);
     expect(validate({ reviewerUserIds: ["u_cc"] })).toEqual(["reviewer_conflict", "reviewer_not_capable"]);
     expect(validate({ reviewerUserIds: [], escalationUserId: null, committedDueAt: null as unknown as Date }))

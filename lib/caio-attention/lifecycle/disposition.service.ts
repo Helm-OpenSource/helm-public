@@ -4,6 +4,7 @@ import type { CaioAttentionCase } from "@prisma/client";
 
 import { resolveCaioAttentionSystemEvidence as resolveSystemEvidence } from "@/lib/caio-attention-runtime/evidence-resolver";
 
+import { CAIO_ATTENTION_DISPOSITION_OUTCOMES } from "../contracts";
 import { evaluateCaioAttentionReviewEvidence, parseCaioAttentionEvidenceRefs } from "../evidence";
 import {
   accepted, appendCaioAttentionEvent, casCaioAttentionCase, rejectCaioAttention, runCaioAttentionActorOperation,
@@ -17,7 +18,6 @@ import { authorizeCaioAttentionOperation, isCaioAttentionResponse } from "../sta
  * transaction at submission and again at review; the review row is written in the same transaction as the close.
  */
 
-const OUTCOME = /^[a-z][a-z0-9_]{0,39}$/u;
 type Request = CaioAttentionActorRequest & Readonly<{ expectedCommandVersion: number }>;
 const text = (value: unknown, max: number) => (typeof value === "string" && value.trim().length > 0 && value.length <= max ? value.trim() : null);
 
@@ -58,7 +58,7 @@ export function submitCaioAttentionDisposition(
   const actionTaken = text(input.actionTaken, 4000);
   const note = input.note === undefined ? null : text(input.note, 2000);
   const parsed = parseCaioAttentionEvidenceRefs(input.evidenceRefs);
-  if (!actionTaken || !OUTCOME.test(input.outcome) || !(input.disposedAt instanceof Date) || Number.isNaN(input.disposedAt.getTime())
+  if (!actionTaken || !(CAIO_ATTENTION_DISPOSITION_OUTCOMES as readonly string[]).includes(input.outcome) || !(input.disposedAt instanceof Date) || Number.isNaN(input.disposedAt.getTime())
     || (input.note !== undefined && !note) || !parsed.ok) {
     return Promise.resolve(rejectCaioAttention("input_invalid", parsed.ok ? undefined : [parsed.errorCode]));
   }

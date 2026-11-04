@@ -39,7 +39,7 @@ describeMysql("CAIO attention disposition, review and read access on MySQL (web 
     ({ workspaceId, caseId, actorUserId, clientRequestId: rid(), expectedCommandVersion });
 
   /** A case confirmed by the OWNER at `dispatchedAt` (prefill = command). */
-  async function dispatchedCase() {
+  async function dispatchedCase(overrides: Partial<Record<"primaryUserId" | "reviewer", string>> = {}) {
     seq += 1;
     const id = `case-${seq}-${randomUUID().slice(0, 8)}`;
     await admin.$executeRaw`INSERT INTO CaioAttentionCase (id, workspaceId, shortNo, detectorId, mergeKey, objectKey, category,
@@ -47,7 +47,8 @@ describeMysql("CAIO attention disposition, review and read access on MySQL (web 
       VALUES (${id}, ${workspaceId}, ${seq}, 'det', ${`mk-${seq}`}, 'obj', 'business', ${`cand-${id}`}, ${`det:mk-${seq}`}, 'SUGGESTED',
         '[]', '[]', 'warning', 'warning', 'warning')`;
     const confirmed = await confirmCaioAttentionCase({ ...deps, now: () => dispatchedAt }, { ...base(id, people.owner, 0), command: {
-      primaryUserId: people.primary, ccUserIds: [people.cc], escalationUserId: people.escalation, reviewerUserIds: [people.reviewer],
+      primaryUserId: overrides.primaryUserId ?? people.primary, ccUserIds: [people.cc], escalationUserId: people.escalation,
+      reviewerUserIds: [overrides.reviewer ?? people.reviewer],
       committedDueAt: new Date("2026-11-05T02:00:00.000Z") } });
     expect(confirmed.ok).toBe(true);
     return id;
@@ -60,7 +61,7 @@ describeMysql("CAIO attention disposition, review and read access on MySQL (web 
     return { audit: `audit-log:${audit.id}`, foreign: `audit-log:${foreign.id}` };
   }
   const submit = (caseId: string, evidenceRefs: string[], actorUserId = people.primary) => submitCaioAttentionDisposition(deps,
-    { ...base(caseId, actorUserId), disposition: { disposedAt, outcome: "resolved", actionTaken: "restarted the job", evidenceRefs } });
+    { ...base(caseId, actorUserId), disposition: { disposedAt, outcome: "handled", actionTaken: "restarted the job", evidenceRefs } });
   const review = (caseId: string, actorUserId: string, extra: Partial<Parameters<typeof reviewCaioAttentionDisposition>[1]> = {}) =>
     admin.caioAttentionDisposition.findFirstOrThrow({ where: { caseId }, orderBy: { sequence: "desc" } }).then((d) =>
       reviewCaioAttentionDisposition(deps, { ...base(caseId, actorUserId), decision: "ACCEPT", dispositionId: d.id, reviewerVersion: 1,
@@ -134,6 +135,8 @@ describeMysql("CAIO attention disposition, review and read access on MySQL (web 
     expect(await submit(caseId, [foreign])).toMatchObject({ ok: false, reason: "evidence_invalid", details: expect.arrayContaining([`evidence_invalid:${foreign}`]) });
     expect(await submit(caseId, ["audit-log:missing"])).toMatchObject({ ok: false, reason: "evidence_invalid" });
     expect(await submit(caseId, ["caio-anomaly-candidate:x"])).toMatchObject({ ok: false, reason: "evidence_invalid" });
+    expect(await submitCaioAttentionDisposition(deps, { ...base(caseId, people.primary), disposition: { disposedAt, outcome: "resolved",
+      actionTaken: "x", evidenceRefs: [audit] } })).toEqual({ ok: false, reason: "input_invalid" }); // outside the closed outcome set
     expect(await submit(caseId, [audit, "ticket:OPS-1"])).toMatchObject({ ok: true, status: "DISPOSITION_SUBMITTED" });
     expect(await admin.caioAttentionDisposition.findFirstOrThrow({ where: { caseId } })).toMatchObject({ sequence: 1, commandVersion: 1, submittedByUserId: people.primary });
   });
@@ -157,6 +160,17 @@ describeMysql("CAIO attention disposition, review and read access on MySQL (web 
     expect(await review(caseId, people.reviewer, { attestedExternalRefs: ["ticket:OPS-2"] })).toMatchObject({ ok: true, status: "CLOSED" });
     expect(await caseRow(caseId)).toMatchObject({ status: "CLOSED", activeKey: null, closedAt: now });
     expect(await admin.caioAttentionReview.findMany({ where: { caseId } })).toMatchObject([{ decision: "ACCEPT", reviewerUserId: people.reviewer }]);
+  });
+
+  it("T-V6b / T-V6c: an ADMIN named as primary submits, and an ADMIN named as reviewer reviews under separation of duties", async () => {
+    const asPrimary = await dispatchedCase({ primaryUserId: people.admin });
+    const { audit } = await evidence();
+    expect(await submit(asPrimary, [audit], people.admin)).toMatchObject({ ok: true, status: "DISPOSITION_SUBMITTED" });
+    expect(await review(asPrimary, people.admin)).toEqual({ ok: false, reason: "forbidden" }); // not in the reviewer set
+    const asReviewer = await dispatchedCase({ reviewer: people.admin });
+    await submit(asReviewer, [audit]);
+    expect(await review(asReviewer, people.admin)).toMatchObject({ ok: true, status: "CLOSED" });
+    expect(await admin.caioAttentionReview.findMany({ where: { caseId: asReviewer } })).toMatchObject([{ reviewerUserId: people.admin }]);
   });
 
   it("returns to the primary and only the newest disposition can be reviewed afterwards", async () => {

@@ -16,6 +16,10 @@ export type CaioAttentionCategory = (typeof CAIO_ATTENTION_CATEGORIES)[number];
 export const CAIO_ATTENTION_SEVERITIES = ["warning", "critical"] as const;
 export type CaioAttentionSeverity = (typeof CAIO_ATTENTION_SEVERITIES)[number];
 
+/** Closed set of disposition outcomes; the lifecycle service refuses anything else (the page form offers the same). */
+export const CAIO_ATTENTION_DISPOSITION_OUTCOMES = ["handled", "mitigated", "not_actionable"] as const;
+export type CaioAttentionDispositionOutcome = (typeof CAIO_ATTENTION_DISPOSITION_OUTCOMES)[number];
+
 const USER_REF_PATTERN = /^user:([A-Za-z0-9_-]{1,191})$/u;
 const ROLE_KEY_PATTERN = /^[a-z][a-z0-9_]{0,63}$/u;
 const ENTERPRISE_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/u;
@@ -81,8 +85,9 @@ const routeRuleSchema = z.object({
   // "owner_required": no due date is suggested and the OWNER must enter one (e.g. next release window).
   committedDue: z.enum(["suggest", "owner_required"]),
 }).strict().superRefine((rule, ctx) => {
-  // A cc role is never promoted to primary and never reviews, so it may not appear in either chain.
-  const chains = [rule.primaryRoleKey, ...rule.primaryFallbackRoleKeys, rule.reviewerRoleKey, rule.reviewerFallbackRoleKey];
+  // A cc role is never promoted to primary, never reviews and never escalates, so it stays out of every chain.
+  const chains = [rule.primaryRoleKey, ...rule.primaryFallbackRoleKeys, rule.reviewerRoleKey, rule.reviewerFallbackRoleKey,
+    rule.escalationRoleKey, rule.escalationFallbackRoleKey];
   if (rule.ccRoleKeys.some((key) => chains.includes(key))) ctx.addIssue({ code: "custom", message: "cc_role_in_chain" });
 });
 
