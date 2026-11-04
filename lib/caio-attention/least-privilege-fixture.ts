@@ -43,10 +43,12 @@ export const CAIO_ATTENTION_GRANT_MATRIX: Readonly<Record<string, Readonly<Parti
 
 /**
  * Existing tables outside the attention set that a fixture identity touches, mirroring the deployed ACLs: the web
- * identity re-reads membership and role (FOR SHARE) inside every lifecycle transaction.
+ * identity re-reads membership and role (FOR SHARE) inside every lifecycle transaction and writes the dispatch notice. The evidence-source reads
+ * are granted by lib/caio-attention-runtime/evidence-resolver.ts, which owns those lookups.
  */
 export const CAIO_ATTENTION_NEIGHBOUR_GRANTS: typeof CAIO_ATTENTION_GRANT_MATRIX = {
   Membership: { attention_web: { privileges: S } },
+  Notification: { attention_web: { privileges: SI } },
 };
 
 export function caioAttentionTableGrant(identity: CaioAttentionFixtureIdentity, table: string): CaioAttentionTableGrant | null {

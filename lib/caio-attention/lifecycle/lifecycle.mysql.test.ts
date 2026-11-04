@@ -80,6 +80,7 @@ describeMysql("CAIO attention OWNER lifecycle on MySQL (web identity)", () => {
     await admin.$executeRaw`DELETE FROM CaioAttentionDisposition`;
     await admin.$executeRaw`DELETE FROM CaioAttentionCase`;
     await admin.$executeRaw`DELETE FROM CaioAttentionPauseRequest`;
+    await admin.notification.deleteMany({ where: { workspaceId } });
     await admin.membership.updateMany({ where: { workspaceId }, data: { status: "ACTIVE" } });
     await setGate("OPEN");
   });
@@ -109,8 +110,23 @@ describeMysql("CAIO attention OWNER lifecycle on MySQL (web identity)", () => {
     expect(row.noResponseDueAt).toEqual(new Date(now.getTime() + 120 * 60_000));
     const [, confirmed] = await events(caseId);
     expect(confirmed).toMatchObject({ kind: "CONFIRMED", commandVersion: 1, actorUserId: people.owner });
-    expect(JSON.parse(confirmed.payloadJson)).toMatchObject({ changedFields: ["ccUserIds"], previous: { ccUserIds: [people.cc] },
+    // Critical dispatch notice goes to the primary only (cc was removed), in the confirming transaction.
+    expect(await admin.notification.findMany({ where: { workspaceId }, select: { userId: true, dedupeKey: true } }))
+      .toEqual([{ userId: people.primary, dedupeKey: `ca:${caseId}:D:v1:${people.primary}` }]);
+    expect(JSON.parse(confirmed.payloadJson)).toMatchObject({ dispatchNoticeSent: true, changedFields: ["ccUserIds"], previous: { ccUserIds: [people.cc] },
       command: { ccUserIds: [] }, note: "cc not needed", dispatchNoticeAt: now.toISOString() });
+  });
+
+  it("sends a warning dispatch notice only inside the daytime window", async () => {
+    const day = await seedCase();
+    await confirm(day);
+    const night = await seedCase();
+    await confirmCaioAttentionCase({ ...deps, now: () => new Date("2026-11-04T13:30:00.000Z") }, { workspaceId, caseId: night,
+      actorUserId: people.owner, clientRequestId: rid(), expectedCommandVersion: 0, command: { ...command(), committedDueAt: new Date("2026-11-06T00:00:00.000Z") } });
+    const notices = await admin.notification.findMany({ where: { workspaceId }, select: { dedupeKey: true } });
+    expect(notices.map((n) => n.dedupeKey).sort()).toEqual([`ca:${day}:D:v1:${people.cc}`, `ca:${day}:D:v1:${people.primary}`].sort());
+    const [, nightEvent] = await events(night);
+    expect(JSON.parse(nightEvent.payloadJson)).toMatchObject({ dispatchNoticeSent: false, dispatchNoticeAt: "2026-11-05T00:00:00.000Z" });
   });
 
   it("replays a repeated clientRequestId without a second write and refuses a reused id for another operation", async () => {
