@@ -167,8 +167,9 @@ DingTalk · WeCom · HubSpot · Salesforce · Stripe · 支付宝 · 微信支�
 |---|---|
 | `SIGNAL_COLLECTION_SCHEDULER_ENABLED` | 信号采集调度器；`true` 才启动 |
 | `LIGHT_CHAIN_FOLLOW_THROUGH_CRON_ENABLED` | 轻量任务链催办扫描（每日一次）：对逾期 / 停留的任务与承诺产出**内部提醒与审计**，不外发、不改任何任务状态。部署级开关，会扫描库内所有工作区；建议先在内部自用工作区验证节奏，参考[自身租户运营 runbook §5](./product/HELM_SELF_TENANT_OPERATING_RUNBOOK.md) |
+| `HELM_CAIO_ATTENTION_REMINDERS_ENABLED` | CAIO 运营关注事项的提醒、升级与评估看门狗（每 5 分钟）：只发站内定向通知，不外发、不改事项状态；`true` 或 `1` 才启动，且须由 overlay 注册租户提醒策略后才会实际扫描 |
 
-两个调度器都不影响首次启动，留空 / `false` 即可。
+三个调度器都不影响首次启动，留空 / `false` 即可。
 
 ### DEPLOYMENT_ENTRY（可选，部署入口）
 
