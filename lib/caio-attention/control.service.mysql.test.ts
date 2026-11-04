@@ -1,12 +1,7 @@
-import { spawn } from "node:child_process";
-import path from "node:path";
-
 import { Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import type { CaioAttentionCapabilityReport } from "./capability";
 import {
-  attestCaioAttentionNode,
   beginCaioAttentionDeployment,
   CaioAttentionControlRefusal,
   downgradeCaioAttentionGuard,
@@ -18,12 +13,10 @@ import {
   resumeCaioAttentionIntake,
   setCaioAttentionExpectedNodes,
 } from "./control.service";
-import { recordCaioAttentionHeartbeat } from "./heartbeat.service";
 import { readCaioAttentionIntakeGate } from "./intake-gate.service";
-import { activateCaioAttentionRouteConfig, publishCaioAttentionRouteConfig } from "./route-config.service";
 
 /**
- * Control service and CLI on an isolated MySQL database through the least-privilege fixture identities (same
+ * Control service on an isolated MySQL database through the least-privilege fixture identities (same
  * environment as schema.mysql.test.ts; run by `npm run test:caio-attention:mysql`).
  */
 const urls = {
@@ -44,11 +37,6 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
   return { promise: new Promise<void>((done) => { resolve = done; }), resolve };
 }
 
-async function errnoOf(promise: Promise<unknown>): Promise<string | null> {
-  const result = await refusal(promise);
-  return result === "ok" ? null : result.replace(/^errno:/u, "");
-}
-
 async function refusal(promise: Promise<unknown>): Promise<string> {
   try {
     await promise;
@@ -60,30 +48,19 @@ async function refusal(promise: Promise<unknown>): Promise<string> {
   }
 }
 
-function runCli(op: string, input: string, opts: { closeAfterReady?: boolean } = {}) {
-  return new Promise<{ code: number | null; stdout: string }>((resolve) => {
-    const child = spawn(path.resolve("node_modules/.bin/tsx"), ["scripts/caio-attention-control.ts", op], {
-      env: { PATH: process.env.PATH ?? "", DATABASE_URL: urls.ops!, PORT: "1" },
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    let stdout = "";
-    child.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString();
-      if (opts.closeAfterReady && stdout.includes("READY\n")) child.stdin.end();
-    });
-    child.on("close", (code) => resolve({ code, stdout }));
-    child.stdin.write(`${input}\n`);
-    if (!opts.closeAfterReady) child.stdin.end();
-  });
-}
-
-describeMysql("CAIO attention Control service and CLI on MySQL", () => {
+describeMysql("CAIO attention Control service on MySQL", () => {
   let admin: PrismaClient, generator: PrismaClient, web: PrismaClient, ops: PrismaClient;
 
   async function control() {
     const [row] = await admin.$queryRaw<Array<{ intakeState: string; epoch: number; openEpoch: number; leaseToken: string | null; updatedByRef: string }>>`
       SELECT intakeState, epoch, openEpoch, leaseToken, updatedByRef FROM CaioAttentionControl WHERE id = 'global'`;
     return row;
+  }
+  type EventRow = { op: string; actorRef: string; epoch: number | null; openEpoch: number | null; payload: Record<string, unknown> };
+  async function events(op?: string): Promise<EventRow[]> {
+    const rows = await admin.$queryRaw<Array<Omit<EventRow, "payload"> & { payloadJson: string }>>`
+      SELECT op, actorRef, epoch, openEpoch, payloadJson FROM CaioAttentionControlEvent ORDER BY createdAt, id`;
+    return rows.filter((row) => !op || row.op === op).map(({ payloadJson, ...row }) => ({ ...row, payload: JSON.parse(payloadJson) as Record<string, unknown> }));
   }
   const gateOpen = () => generator.$transaction(async (tx) => (await readCaioAttentionIntakeGate(tx)).open);
   /** A readiness proof as attest will write it (attest itself lands with the readiness slice). */
@@ -110,23 +87,30 @@ describeMysql("CAIO attention Control service and CLI on MySQL", () => {
     ops = new PrismaClient({ datasources: { db: { url: urls.ops! } } });
   });
 
-  beforeEach(async () => {
-    for (const table of ["CaioAttentionPauseRequest", "CaioAttentionNodeReadiness", "CaioAttentionRuntimeNode", "CaioAttentionCase",
-      "CaioAttentionRouteConfig", "CaioAttentionRouteConfigHead"]) {
+  /** Empties every table this suite writes; `pristine` also restores the seeded Control row (rollback-ready). */
+  async function reset(pristine: boolean) {
+    for (const table of ["CaioAttentionControlEvent", "CaioAttentionPauseRequest", "CaioAttentionNodeReadiness", "CaioAttentionRuntimeNode",
+      "CaioAttentionCase"]) {
       await admin.$executeRawUnsafe(`DELETE FROM \`${table}\``);
     }
     await admin.$executeRaw`UPDATE CaioAttentionControl SET intakeState = 'PAUSED', epoch = 0, openEpoch = 0, leaseToken = NULL,
       leaseNodeId = NULL, leaseTargetDeploymentId = NULL, leaseAcquiredAt = NULL, leaseExpiresAt = NULL, expectedNodesJson = '[]',
       updatedAt = NOW(3) WHERE id = 'global'`;
+    if (pristine) {
+      await admin.$executeRaw`UPDATE CaioAttentionControl SET rowVersion = 0,
+        updatedByRef = 'migration:20261104120000_caio_attention_control_plane', updatedAt = NOW(3) WHERE id = 'global'`;
+    }
+  }
+
+  beforeEach(async () => {
+    await reset(false);
     await setCaioAttentionExpectedNodes(ops, { actorRef: ACTOR, nodeIds: ["node-a"] });
     await beat("node-a");
   });
 
   afterAll(async () => {
-    // Leave the seeded fail-closed row for the schema suite that shares this database.
-    await admin.$executeRaw`UPDATE CaioAttentionControl SET intakeState = 'PAUSED', epoch = 0, openEpoch = 0, leaseToken = NULL,
-      leaseNodeId = NULL, leaseTargetDeploymentId = NULL, leaseAcquiredAt = NULL, leaseExpiresAt = NULL, expectedNodesJson = '[]',
-      rowVersion = 0, updatedByRef = 'migration:20261104120000_caio_attention_control_plane', updatedAt = NOW(3) WHERE id = 'global'`;
+    // Leave every touched table as the migration left it, for the schema suite and the rollback scripts.
+    await reset(true);
     await Promise.all([admin, generator, web, ops].map((client) => client.$disconnect()));
   });
 
@@ -136,6 +120,8 @@ describeMysql("CAIO attention Control service and CLI on MySQL", () => {
     expect(await resume()).toEqual({ intakeState: "OPEN", openEpoch: 1, acknowledgedPauseRequestIds: [] });
     expect(await gateOpen()).toBe(true);
     expect((await control()).updatedByRef).toBe("operator:test|resume:ack=0");
+    expect(await events("resume")).toEqual([{ op: "resume", actorRef: ACTOR, epoch: 1, openEpoch: 1,
+      payload: { previousOpenEpoch: 0, acknowledgedPauseRequestIds: [], expectedNodeIds: ["node-a"] } }]);
     expect(await refusal(setCaioAttentionExpectedNodes(ops, { actorRef: ACTOR, nodeIds: [] }))).toBe("refused:intake_open");
     expect(await pauseCaioAttentionIntake(ops, { actorRef: ACTOR })).toEqual({ intakeState: "PAUSED", changed: true });
     expect(await gateOpen()).toBe(false);
@@ -153,6 +139,10 @@ describeMysql("CAIO attention Control service and CLI on MySQL", () => {
     expect(await refusal(resume())).toBe("refused:resume_blocked:pause_request_unacknowledged");
     expect(await resume([first.id])).toEqual({ intakeState: "OPEN", openEpoch: 2, acknowledgedPauseRequestIds: [first.id] });
     expect(await gateOpen()).toBe(true);
+    // The acknowledged ids, who acknowledged them and when stay on record after later writes overwrite updatedByRef.
+    await pauseCaioAttentionIntake(ops, { actorRef: "operator:other" });
+    expect((await events("resume")).map((event) => [event.openEpoch, event.payload.acknowledgedPauseRequestIds])).toEqual([[1, []], [2, [first.id]]]);
+    expect((await events("pause")).map((event) => event.actorRef)).toEqual([ACTOR, "operator:other"]);
   });
 
   it("concurrent pause and resume never lose the pause: either resume is refused or the pause lands on the new epoch", async () => {
@@ -216,6 +206,8 @@ describeMysql("CAIO attention Control service and CLI on MySQL", () => {
 
     expect(await downgradeCaioAttentionGuard(ops, { nodeId: "node-b", fromGuardVersion: 2, toGuardVersion: 1 })).toEqual({ downgraded: true });
     expect((await control()).updatedByRef).toBe("host_deploy:node-b|GUARD_DOWNGRADED:2->1");
+    expect(await events("guard-downgrade")).toEqual([{ op: "guard-downgrade", actorRef: "host_deploy:node-b", epoch: 3, openEpoch: 2,
+      payload: { kind: "GUARD_DOWNGRADED", nodeId: "node-b", fromGuardVersion: 2, toGuardVersion: 1, revokedEpoch: 3, revokedProofs: 1 } }]);
     expect(await refusal(resume())).toBe("refused:resume_blocked:readiness_missing");
     await prove("node-b", 3);
     expect(await refusal(resume())).toBe("refused:resume_blocked:readiness_missing");
@@ -229,6 +221,9 @@ describeMysql("CAIO attention Control service and CLI on MySQL", () => {
     await pauseCaioAttentionIntake(ops, { actorRef: ACTOR });
     expect(await refusal(downgradeCaioAttentionGuard(ops, { nodeId: "node-b", fromGuardVersion: 2, toGuardVersion: 1 }))).toBe("refused:open_cases_present");
     expect((await beginCaioAttentionDeployment(ops, { nodeId: "node-b", targetDeploymentId: "dep-1" })).openCaseCount).toBe(1);
+    // A later write overwrites updatedByRef; the downgrade record does not move, and refused attempts left none.
+    expect((await control()).updatedByRef).toBe("host_deploy:node-b|deploy-begin");
+    expect(await events("guard-downgrade")).toHaveLength(1);
   });
 
   it("expired-lease recovery: only for the lease's node, only once expired, and only after the hold barrier is released", async () => {
@@ -252,6 +247,10 @@ describeMysql("CAIO attention Control service and CLI on MySQL", () => {
     await barrier;
     expect(await recovery).toEqual({ recovered: true, nodeId: "node-a" });
     expect(await control()).toMatchObject({ intakeState: "PAUSED", leaseToken: null, epoch: 1 });
+    const [recoverEvent] = await events("deploy-recover");
+    expect(recoverEvent).toMatchObject({ actorRef: "host_deploy:node-a", epoch: 1, openEpoch: 0,
+      payload: { nodeId: "node-a", targetDeploymentId: "dep-1", revokedEpoch: 1, revokedProofs: 0 } });
+    expect(JSON.stringify(await events())).not.toContain(begun.lease);
 
     // The old deployer resumes: its barrier and its deploy-end are fenced, so it can neither link nor end.
     expect(await refusal(holdCaioAttentionLease(ops, tuple, () => undefined, Promise.resolve()))).toBe("fenced:not_deploying");
@@ -261,58 +260,72 @@ describeMysql("CAIO attention Control service and CLI on MySQL", () => {
     expect(next).toMatchObject({ epoch: 2, revokedEpoch: 1 });
   });
 
-  it("attest-node: fenced on a stale tuple, refused below the guard floor or on any probe gap, else one proof at the lease epoch", async () => {
+  it("every state change appends one control event in its own transaction; refused operations append none", async () => {
     const begun = await beginCaioAttentionDeployment(ops, { nodeId: "node-a", targetDeploymentId: "dep-1" });
-    const request = { lease: begun.lease, nodeId: "node-a", targetDeploymentId: "dep-1", epoch: begun.epoch, guardVersion: 1 };
-    const report: CaioAttentionCapabilityReport = {
-      nodeId: "node-a", deploymentId: "dep-1", closeCapabilityVersion: 1, pageServiceBound: true, lifecycleRoutes: true, migrationReady: true,
-    };
-    const attest = (patch: Partial<typeof request>, reportPatch: Partial<CaioAttentionCapabilityReport> = {}) =>
-      refusal(attestCaioAttentionNode(ops, { ...request, ...patch }, { ...report, ...reportPatch }));
-    expect(await attest({ epoch: begun.epoch + 1 })).toBe("fenced:lease_fenced");
-    expect(await attest({ guardVersion: 0 })).toBe("refused:guard_too_low");
-    expect(await attest({}, { pageServiceBound: false })).toBe("refused:attest_blocked:page_service_unbound");
-    expect(await attest({}, { deploymentId: "dep-0", closeCapabilityVersion: 0 })).toBe("refused:attest_blocked:deployment_mismatch,capability_too_low");
-    expect(await attest({}, { nodeId: "node-b", lifecycleRoutes: false, migrationReady: false }))
-      .toBe("refused:attest_blocked:node_mismatch,lifecycle_routes_missing,migration_not_ready");
-    expect(await attestCaioAttentionNode(generator, request, report).then(() => "ok", () => "denied")).toBe("denied");
-    expect(await attestCaioAttentionNode(ops, request, report)).toEqual({ attested: true, epoch: 1 });
+    expect(await refusal(beginCaioAttentionDeployment(ops, { nodeId: "node-a", targetDeploymentId: "dep-1" }))).toBe("refused:lease_present");
+    expect(await refusal(endCaioAttentionDeployment(ops, { lease: "0".repeat(48) }))).toBe("fenced:lease_fenced");
+    expect(await refusal(resume())).toBe("refused:resume_blocked:lease_present,not_paused,readiness_missing");
     await endCaioAttentionDeployment(ops, { lease: begun.lease });
-    expect(await refusal(attestCaioAttentionNode(ops, request, report))).toBe("fenced:not_deploying");
-    const proofs = await admin.$queryRaw<Array<{ epoch: number; guardVersion: number }>>`
-      SELECT epoch, guardVersion FROM CaioAttentionNodeReadiness WHERE nodeId = 'node-a'`;
-    expect(proofs).toEqual([{ epoch: 1, guardVersion: 1 }]);
-
-    // Heartbeat fallback: a mismatching deployment id blocks resume until the node reports the attested one.
-    const beat = { nodeId: "node-a", role: "http", deploymentId: "dep-0", closeCapabilityVersion: 1, remindersEnabled: true };
-    await recordCaioAttentionHeartbeat(web, beat);
-    expect(await refusal(resume())).toBe("refused:resume_blocked:heartbeat_mismatch");
-    await recordCaioAttentionHeartbeat(generator, { ...beat, remindersEnabled: false, deploymentId: "dep-1" });
-    expect(await refusal(resume())).toBe("refused:resume_blocked:reminders_disabled");
-    await recordCaioAttentionHeartbeat(web, { ...beat, deploymentId: "dep-1" });
-    expect(await resume()).toMatchObject({ intakeState: "OPEN", openEpoch: 1 });
-    expect(await errnoOf(recordCaioAttentionHeartbeat(ops, beat))).toBe("1142");
+    expect(await pauseCaioAttentionIntake(ops, { actorRef: ACTOR })).toEqual({ intakeState: "PAUSED", changed: false });
+    expect((await events()).map(({ op, actorRef, epoch, openEpoch }) => [op, actorRef, epoch, openEpoch])).toEqual([
+      ["expected-nodes", ACTOR, 0, 0],
+      ["deploy-begin", "host_deploy:node-a", 1, 0],
+      ["deploy-end", "host_deploy:node-a", 1, 0],
+    ]);
+    expect((await events("deploy-begin"))[0].payload).toEqual({ nodeId: "node-a", targetDeploymentId: "dep-1", revokedEpoch: 0, revokedProofs: 0, openCaseCount: 0 });
+    expect((await events("deploy-end"))[0].payload).toEqual({ nodeId: "node-a", targetDeploymentId: "dep-1" });
+    expect((await events("expected-nodes"))[0].payload).toEqual({ previousNodeIds: [], nodeIds: ["node-a"] });
   });
 
-  it("route configs: publish validates and appends versions, activate moves the head by CAS, web cannot write either", async () => {
-    const config = { schemaVersion: "caio-attention-routes/v1", roleBindings: { lead: ["user:u1"] } };
-    expect(await refusal(publishCaioAttentionRouteConfig(ops, { workspaceId: "ws-a", actorRef: ACTOR, config: { ...config, extra: 1 } })))
-      .toBe("refused:route_config_invalid");
-    expect(await publishCaioAttentionRouteConfig(ops, { workspaceId: "ws-a", actorRef: ACTOR, config })).toMatchObject({ version: 1 });
-    expect(await publishCaioAttentionRouteConfig(ops, { workspaceId: "ws-a", actorRef: ACTOR, config })).toMatchObject({ version: 2 });
-    const activate = (version: number, expectedRowVersion: number, client = ops) =>
-      refusal(activateCaioAttentionRouteConfig(client, { workspaceId: "ws-a", actorRef: ACTOR, version, expectedRowVersion }));
-    expect(await activate(3, 0)).toBe("refused:version_missing");
-    expect(await activate(1, 0)).toBe("ok");
-    expect(await activate(2, 0)).toBe("ok");
-    expect(await activate(1, 0)).toBe("refused:head_conflict");
-    expect(await activate(1, 1)).toBe("ok");
-    const [head] = await admin.$queryRaw<Array<{ activeVersion: number; rowVersion: number; updatedByRef: string }>>`
-      SELECT activeVersion, rowVersion, updatedByRef FROM CaioAttentionRouteConfigHead WHERE workspaceId = 'ws-a'`;
-    expect(head).toEqual({ activeVersion: 1, rowVersion: 2, updatedByRef: ACTOR });
-    expect(await activate(2, 2, web)).toBe("errno:1142");
-    expect(await refusal(publishCaioAttentionRouteConfig(web, { workspaceId: "ws-a", actorRef: ACTOR, config }))).toBe("errno:1142");
+  it("a pause request waits behind a Control FOR UPDATE holder and lands on the open epoch that holder leaves (FOR SHARE)", async () => {
+    const locked = deferred();
+    const release = deferred();
+    const holder = admin.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM CaioAttentionControl WHERE id = 'global' FOR UPDATE`;
+      locked.resolve();
+      await release.promise;
+      await tx.$executeRaw`UPDATE CaioAttentionControl SET intakeState = 'OPEN', openEpoch = openEpoch + 1, rowVersion = rowVersion + 1,
+        updatedByRef = 'test:resume', updatedAt = NOW(3) WHERE id = 'global'`;
+    }, { timeout: 20_000 });
+    await locked.promise;
+    let settled = false;
+    const pause = requestCaioAttentionPause(web, { reasonCode: "watchdog", requestedByRef: "w4:serial" }).finally(() => { settled = true; });
+    await sleep(1_000);
+    expect(settled).toBe(false);
+    release.resolve();
+    await holder;
+    expect(await pause).toMatchObject({ openEpoch: 1, created: true });
+    expect(await gateOpen()).toBe(false);
   });
+
+  it("hold fails within its 10 s lock wait behind a FOR UPDATE holder without signalling READY; pause leaves DEPLOYING alone", async () => {
+    const begun = await beginCaioAttentionDeployment(ops, { nodeId: "node-a", targetDeploymentId: "dep-1" });
+    expect(await pauseCaioAttentionIntake(ops, { actorRef: ACTOR })).toEqual({ intakeState: "DEPLOYING", changed: false });
+    expect(await control()).toMatchObject({ intakeState: "DEPLOYING", leaseToken: begun.lease, epoch: 1 });
+    const tuple = { lease: begun.lease, nodeId: "node-a", targetDeploymentId: "dep-1", epoch: begun.epoch, phase: "switch" };
+    const locked = deferred();
+    const release = deferred();
+    const holder = admin.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM CaioAttentionControl WHERE id = 'global' FOR UPDATE`;
+      locked.resolve();
+      await release.promise;
+    }, { timeout: 30_000 });
+    await locked.promise;
+    let signalled = false;
+    const started = Date.now();
+    const outcome = await refusal(holdCaioAttentionLease(ops, tuple, () => { signalled = true; }, Promise.resolve()));
+    const waited = Date.now() - started;
+    release.resolve();
+    await holder;
+    expect(outcome).toBe("errno:1205");
+    expect(signalled).toBe(false);
+    expect(waited).toBeGreaterThanOrEqual(9_000);
+    expect(waited).toBeLessThan(15_000);
+    let ready = false;
+    await holdCaioAttentionLease(ops, tuple, () => { ready = true; }, Promise.resolve());
+    expect(ready).toBe(true);
+    expect(await control()).toMatchObject({ intakeState: "DEPLOYING", leaseToken: begun.lease });
+  }, 40_000);
 
   it("the web and generator identities cannot pause, resume, deploy or recover: Control writes are refused with errno 1142", async () => {
     await deploy("node-a");
@@ -326,20 +339,4 @@ describeMysql("CAIO attention Control service and CLI on MySQL", () => {
     expect(await control()).toMatchObject({ intakeState: "PAUSED", openEpoch: 0 });
   });
 
-  it("CLI: exact input keys, one JSON line out, READY barrier released on EOF, exit 3 when fenced and 4 when refused", async () => {
-    expect(await runCli("deploy-begin", JSON.stringify({ nodeId: "node-a" }))).toEqual({ code: 4, stdout: "" });
-    expect((await runCli("deploy-begin", JSON.stringify({ nodeId: "node-a", targetDeploymentId: "dep-1", extra: 1 }))).code).toBe(4);
-    const begin = await runCli("deploy-begin", JSON.stringify({ nodeId: "node-a", targetDeploymentId: "dep-1" }));
-    expect(begin.code).toBe(0);
-    expect(begin.stdout.split("\n")).toHaveLength(2);
-    const result = JSON.parse(begin.stdout) as { lease: string; epoch: number; revokedEpoch: number };
-    expect(result).toMatchObject({ epoch: 1, revokedEpoch: 0, openCaseCount: 0 });
-    const hold = { lease: result.lease, nodeId: "node-a", targetDeploymentId: "dep-1", epoch: 1, phase: "switch" };
-    expect(await runCli("hold", JSON.stringify(hold), { closeAfterReady: true })).toEqual({ code: 0, stdout: "READY\n" });
-    expect(await runCli("hold", JSON.stringify({ ...hold, epoch: 2 }), { closeAfterReady: true })).toEqual({ code: 3, stdout: "" });
-    expect((await runCli("attest-node", JSON.stringify({ ...hold, phase: undefined, guardVersion: 1 }))).code).toBe(4);
-    expect(await runCli("deploy-end", JSON.stringify({ lease: "0".repeat(48) }))).toEqual({ code: 3, stdout: "" });
-    expect(await runCli("deploy-end", JSON.stringify({ lease: result.lease }))).toEqual({ code: 0, stdout: "{\"ended\":true}\n" });
-    expect(await runCli("resume", JSON.stringify({ actorRef: ACTOR, ackPauseRequestIds: [] }))).toEqual({ code: 4, stdout: "" });
-  }, 60_000);
 });

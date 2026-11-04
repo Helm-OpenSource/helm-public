@@ -2,7 +2,6 @@ import { randomBytes } from "node:crypto";
 
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import { evaluateCaioAttentionCapability, type CaioAttentionCapabilityReport } from "./capability";
 import {
   caioAttentionDeployBegin,
   caioAttentionRevokeInPlace,
@@ -13,6 +12,7 @@ import {
   type CaioAttentionLease,
   type CaioAttentionReadiness,
 } from "./control-epoch";
+import { appendCaioAttentionControlEvent } from "./control-event.service";
 
 /**
  * Intake-control service of the CAIO attention control plane (design v5 §1, v6 §1–2, REREVIEW5 P2-2).
@@ -23,7 +23,9 @@ import {
  * resume drain them. The web identity can only append a pause request, never write Control.
  *
  * Times come from the database clock (NOW(3)). Every raw UPDATE of Control sets updatedAt = NOW(3) and bumps
- * rowVersion; updatedByRef records the last actor and op. The host lock and local node identity for recovery are the
+ * rowVersion; updatedByRef records the last actor and op, and every state-changing operation also appends one
+ * CaioAttentionControlEvent in the same transaction (control-event.service.ts), so the full trail survives the next
+ * write. The read-only hold barrier writes nothing. The host lock and local node identity for recovery are the
  * caller's (overlay deploy script) obligation; this service enforces lease node, expiry and the hold barrier.
  */
 
@@ -134,6 +136,8 @@ export async function pauseCaioAttentionIntake(client: PrismaClient, input: Read
     if (control.intakeState !== "OPEN") return { intakeState: control.intakeState, changed: false };
     await tx.$executeRaw`UPDATE CaioAttentionControl SET intakeState = 'PAUSED', rowVersion = rowVersion + 1,
       updatedByRef = ${auditRef(actor, "pause")}, updatedAt = NOW(3) WHERE id = 'global'`;
+    await appendCaioAttentionControlEvent(tx, { op: "pause", actorRef: actor, epoch: control.epoch, openEpoch: control.openEpoch,
+      payload: { fromState: "OPEN" } });
     return { intakeState: "PAUSED", changed: true };
   }, CAIO_ATTENTION_CONTROL_TX);
 }
@@ -151,7 +155,10 @@ export async function setCaioAttentionExpectedNodes(client: PrismaClient, input:
     if (control.intakeState === "OPEN") refuse("intake_open");
     await tx.$executeRaw`UPDATE CaioAttentionControl SET expectedNodesJson = ${json}, rowVersion = rowVersion + 1,
       updatedByRef = ${auditRef(actor, "expected-nodes")}, updatedAt = NOW(3) WHERE id = 'global'`;
-    return { expectedNodes: JSON.parse(json) as string[] };
+    const expectedNodes = JSON.parse(json) as string[];
+    await appendCaioAttentionControlEvent(tx, { op: "expected-nodes", actorRef: actor, epoch: control.epoch, openEpoch: control.openEpoch,
+      payload: { previousNodeIds: parseExpectedNodes(control.expectedNodesJson), nodeIds: expectedNodes } });
+    return { expectedNodes };
   }, CAIO_ATTENTION_CONTROL_TX);
 }
 
@@ -203,6 +210,8 @@ export async function resumeCaioAttentionIntake(
     await tx.$executeRaw`UPDATE CaioAttentionControl SET intakeState = 'OPEN', openEpoch = ${openEpoch}, rowVersion = rowVersion + 1,
       updatedByRef = ${auditRef(actor, `resume:ack=${acknowledged.length}`)}, updatedAt = NOW(3)
       WHERE id = 'global' AND rowVersion = ${control.rowVersion}`;
+    await appendCaioAttentionControlEvent(tx, { op: "resume", actorRef: actor, epoch: control.epoch, openEpoch,
+      payload: { previousOpenEpoch: control.openEpoch, acknowledgedPauseRequestIds: acknowledged, expectedNodeIds } });
     return { intakeState: "OPEN", openEpoch, acknowledgedPauseRequestIds: acknowledged };
   }, CAIO_ATTENTION_CONTROL_TX);
 }
@@ -221,17 +230,20 @@ export async function beginCaioAttentionDeployment(client: PrismaClient, input: 
       refuse(control.leaseExpiresAt && control.leaseExpiresAt.getTime() <= control.now.getTime() ? "lease_expired_recover_on_host" : "lease_present");
     }
     const { revokedEpoch, nextEpoch } = caioAttentionDeployBegin(control.epoch);
-    await revokeNodeReadiness(tx, nodeId, revokedEpoch, ref);
+    const revokedProofs = await revokeNodeReadiness(tx, nodeId, revokedEpoch, ref);
     const lease = randomBytes(24).toString("hex");
     await tx.$executeRaw`UPDATE CaioAttentionControl SET intakeState = 'DEPLOYING', epoch = ${nextEpoch}, leaseToken = ${lease},
       leaseNodeId = ${nodeId}, leaseTargetDeploymentId = ${target}, leaseAcquiredAt = NOW(3),
       leaseExpiresAt = NOW(3) + INTERVAL ${CAIO_ATTENTION_LEASE_MINUTES} MINUTE, rowVersion = rowVersion + 1,
       updatedByRef = ${ref}, updatedAt = NOW(3) WHERE id = 'global'`;
+    const openCaseCount = await countOpenCases(tx);
+    await appendCaioAttentionControlEvent(tx, { op: "deploy-begin", actorRef: `host_deploy:${nodeId}`, epoch: nextEpoch,
+      openEpoch: control.openEpoch, payload: { nodeId, targetDeploymentId: target, revokedEpoch, revokedProofs, openCaseCount } });
     return {
       lease,
       epoch: nextEpoch,
       revokedEpoch,
-      openCaseCount: await countOpenCases(tx),
+      openCaseCount,
       requiredCloseCapability: control.requiredCloseCapability,
       minGuardVersion: control.minGuardVersion,
     };
@@ -268,40 +280,6 @@ export async function holdCaioAttentionLease(
   }, CAIO_ATTENTION_HOLD_TX);
 }
 
-/**
- * attest-node (design v5 §1.2, v6 §2.3–2.4): the lease tuple must still be current (else fenced); the deploy guard
- * version must meet minGuardVersion; the node's own loopback capability report (fetched by the caller before this
- * transaction, so no network call runs under the lock) must show this node, the lease target, capability at the
- * floor, the page service and lifecycle routes bound, and the schema ready. Writes one proof at the lease epoch.
- */
-export async function attestCaioAttentionNode(
-  client: PrismaClient,
-  input: Readonly<{ lease: unknown; nodeId: unknown; targetDeploymentId: unknown; epoch: unknown; guardVersion: unknown }>,
-  report: CaioAttentionCapabilityReport,
-) {
-  const request = {
-    token: requireMatch(input.lease, LEASE_PATTERN, "lease_invalid"),
-    nodeId: requireMatch(input.nodeId, CAIO_ATTENTION_NODE_ID_PATTERN, "node_id_invalid"),
-    targetDeploymentId: requireMatch(input.targetDeploymentId, DEPLOYMENT_ID_PATTERN, "deployment_id_invalid"),
-    epoch: requireCount(input.epoch, "epoch_invalid"),
-  };
-  const guardVersion = requireCount(input.guardVersion, "guard_version_invalid");
-  return client.$transaction(async (tx) => {
-    const control = await lockControl(tx, "UPDATE");
-    const verdict = evaluateCaioAttentionLeaseHold(control, request);
-    if (!verdict.ok) fence(verdict.reason);
-    if (guardVersion < control.minGuardVersion) refuse("guard_too_low");
-    const blocks = evaluateCaioAttentionCapability(report, {
-      nodeId: request.nodeId, deploymentId: request.targetDeploymentId, requiredCloseCapability: control.requiredCloseCapability,
-    });
-    if (blocks.length > 0) refuse(`attest_blocked:${blocks.join(",")}`);
-    await tx.$executeRaw`INSERT INTO CaioAttentionNodeReadiness (id, nodeId, deploymentId, closeCapabilityVersion, guardVersion, epoch,
-      verifiedAt, verifiedByRef) VALUES (${`nr_${randomBytes(12).toString("hex")}`}, ${request.nodeId}, ${request.targetDeploymentId},
-      ${report.closeCapabilityVersion}, ${guardVersion}, ${request.epoch}, NOW(3), ${auditRef(`host_deploy:${request.nodeId}`, "attest-node")})`;
-    return { attested: true, epoch: request.epoch };
-  }, CAIO_ATTENTION_CONTROL_TX);
-}
-
 /** deploy-end: only the lease holder ends its lease; intake always returns to PAUSED, never OPEN. */
 export async function endCaioAttentionDeployment(client: PrismaClient, input: Readonly<{ lease: unknown }>) {
   const lease = requireMatch(input.lease, LEASE_PATTERN, "lease_invalid");
@@ -312,6 +290,9 @@ export async function endCaioAttentionDeployment(client: PrismaClient, input: Re
       leaseTargetDeploymentId = NULL, leaseAcquiredAt = NULL, leaseExpiresAt = NULL, rowVersion = rowVersion + 1,
       updatedByRef = ${auditRef(`host_deploy:${control.leaseNodeId ?? "unknown"}`, "deploy-end")}, updatedAt = NOW(3)
       WHERE id = 'global'`;
+    await appendCaioAttentionControlEvent(tx, { op: "deploy-end", actorRef: `host_deploy:${control.leaseNodeId ?? "unknown"}`,
+      epoch: control.epoch, openEpoch: control.openEpoch,
+      payload: { nodeId: control.leaseNodeId, targetDeploymentId: control.leaseTargetDeploymentId } });
     return { ended: true };
   }, CAIO_ATTENTION_CONTROL_TX);
 }
@@ -329,17 +310,22 @@ export async function recoverCaioAttentionDeployment(client: PrismaClient, input
     const control = await lockControl(tx, "UPDATE");
     const verdict = evaluateCaioAttentionRecover({ lease: control, requestNodeId: nodeId, localNodeId: nodeId, hostLockAcquired: true, now: control.now });
     if (!verdict.ok) refuse(verdict.reason);
-    await revokeNodeReadiness(tx, nodeId, caioAttentionRevokeInPlace(control.epoch).revokedEpoch, ref);
+    const { revokedEpoch } = caioAttentionRevokeInPlace(control.epoch);
+    const revokedProofs = await revokeNodeReadiness(tx, nodeId, revokedEpoch, ref);
     await tx.$executeRaw`UPDATE CaioAttentionControl SET intakeState = 'PAUSED', leaseToken = NULL, leaseNodeId = NULL,
       leaseTargetDeploymentId = NULL, leaseAcquiredAt = NULL, leaseExpiresAt = NULL, rowVersion = rowVersion + 1,
       updatedByRef = ${ref}, updatedAt = NOW(3) WHERE id = 'global'`;
+    await appendCaioAttentionControlEvent(tx, { op: "deploy-recover", actorRef: `host_deploy:${nodeId}`, epoch: control.epoch,
+      openEpoch: control.openEpoch, payload: { nodeId, targetDeploymentId: control.leaseTargetDeploymentId,
+        leaseExpiresAt: control.leaseExpiresAt?.toISOString() ?? null, revokedEpoch, revokedProofs } });
     return { recovered: true, nodeId };
   }, CAIO_ATTENTION_CONTROL_TX);
 }
 
 /**
  * guard-downgrade (v6 §2.4): PAUSED, no lease, no open case; revokes the node's proofs in place so resume stays
- * blocked until the guard is restored and the node re-attests. updatedByRef records GUARD_DOWNGRADED.
+ * blocked until the guard is restored and the node re-attests. The appended guard-downgrade event is the
+ * GUARD_DOWNGRADED record (it survives later writes; updatedByRef only mirrors the last one).
  */
 export async function downgradeCaioAttentionGuard(
   client: PrismaClient,
@@ -355,9 +341,13 @@ export async function downgradeCaioAttentionGuard(
     if (control.intakeState !== "PAUSED") refuse("not_paused");
     if (control.leaseToken) refuse("lease_present");
     if (await countOpenCases(tx) > 0) refuse("open_cases_present");
-    await revokeNodeReadiness(tx, nodeId, caioAttentionRevokeInPlace(control.epoch).revokedEpoch, ref);
+    const { revokedEpoch } = caioAttentionRevokeInPlace(control.epoch);
+    const revokedProofs = await revokeNodeReadiness(tx, nodeId, revokedEpoch, ref);
     await tx.$executeRaw`UPDATE CaioAttentionControl SET rowVersion = rowVersion + 1, updatedByRef = ${ref}, updatedAt = NOW(3)
       WHERE id = 'global'`;
+    await appendCaioAttentionControlEvent(tx, { op: "guard-downgrade", actorRef: `host_deploy:${nodeId}`, epoch: control.epoch,
+      openEpoch: control.openEpoch, payload: { kind: "GUARD_DOWNGRADED", nodeId, fromGuardVersion: from, toGuardVersion: to,
+        revokedEpoch, revokedProofs } });
     return { downgraded: true };
   }, CAIO_ATTENTION_CONTROL_TX);
 }
