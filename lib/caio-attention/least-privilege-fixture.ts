@@ -32,6 +32,13 @@ export const CAIO_ATTENTION_GRANT_MATRIX: Readonly<Record<string, Readonly<Parti
     attention_ops: { privileges: SIU, updateColumns: ["revokedAt", "revokedByRef", "revokedEpoch"] },
   },
   CaioAttentionPauseRequest: { attention_generator: { privileges: S }, attention_web: { privileges: SI }, attention_ops: { privileges: S } },
+  CaioAttentionCase: { attention_generator: { privileges: SI }, attention_web: { privileges: SIU }, attention_ops: { privileges: S } },
+  CaioAttentionCaseEvent: { attention_generator: { privileges: SI }, attention_web: { privileges: SI } },
+  CaioAttentionDisposition: { attention_web: { privileges: SI } },
+  CaioAttentionReview: { attention_web: { privileges: SI } },
+  CaioAttentionRouteConfig: { attention_generator: { privileges: S }, attention_web: { privileges: S }, attention_ops: { privileges: SI } },
+  CaioAttentionRouteConfigHead: { attention_generator: { privileges: S }, attention_web: { privileges: S }, attention_ops: { privileges: SIU } },
+  CaioDetectorEvaluation: { attention_generator: { privileges: SI }, attention_web: { privileges: S } },
 };
 
 export function caioAttentionTableGrant(identity: CaioAttentionFixtureIdentity, table: string): CaioAttentionTableGrant | null {

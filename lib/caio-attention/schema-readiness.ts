@@ -16,6 +16,23 @@ export const CAIO_ATTENTION_SCHEMA_MANIFEST = {
     "revokedAt", "revokedByRef", "revokedEpoch",
   ],
   CaioAttentionPauseRequest: ["id", "openEpoch", "reasonCode", "requestedByRef", "createdAt"],
+  CaioAttentionCase: [
+    "id", "workspaceId", "shortNo", "detectorId", "mergeKey", "objectKey", "enterpriseSlug", "category", "originCandidateId",
+    "activeKey", "previousCaseId", "routeConfigVersion", "routingBlocked", "routingBlockedReasonsJson", "status", "commandVersion",
+    "ownerCommandJson", "ownerCommandHash", "primaryUserId", "ccUserIdsJson", "escalationUserId", "reviewerSuggestedUserId",
+    "reviewerUserIdsJson", "reviewerVersion", "confirmedByUserId", "committedDueAt", "severityAtSuggest", "effectiveSeverity",
+    "reminderPolicy", "dispatchedAt", "respondedAt", "deferredUntil", "r0aDueAt", "r0aSentAt", "r0bDueAt", "r0bSentAt",
+    "noResponseDueAt", "r1FiredAt", "unresolvedEscalateAt", "r2FiredSeverity", "nextPeriodicAt", "createdAt", "updatedAt", "closedAt",
+  ],
+  CaioAttentionCaseEvent: ["id", "caseId", "kind", "commandVersion", "candidateId", "dedupeKey", "clientRequestId", "actorUserId", "payloadJson", "createdAt"],
+  CaioAttentionDisposition: [
+    "id", "workspaceId", "caseId", "commandVersion", "sequence", "submittedByUserId", "disposedAt", "outcome", "actionTaken", "note",
+    "evidenceRefsJson", "contentHash", "createdAt",
+  ],
+  CaioAttentionReview: ["id", "caseId", "dispositionId", "reviewerUserId", "reviewerVersion", "decision", "attestedExternalRefsJson", "note", "createdAt"],
+  CaioAttentionRouteConfig: ["id", "workspaceId", "version", "schemaVersion", "configJson", "contentHash", "createdByRef", "createdAt"],
+  CaioAttentionRouteConfigHead: ["id", "workspaceId", "activeVersion", "rowVersion", "updatedByRef", "updatedAt"],
+  CaioDetectorEvaluation: ["id", "workspaceId", "tickId", "bucketStart", "detectorId", "ruleVersion", "outcome", "hitMergeKeysJson", "createdAt"],
 } as const satisfies Record<string, readonly string[]>;
 
 export type CaioAttentionTable = keyof typeof CAIO_ATTENTION_SCHEMA_MANIFEST;
