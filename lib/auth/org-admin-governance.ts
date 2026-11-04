@@ -419,13 +419,30 @@ function countAuditActions(workspaceId: string, actionTypes: readonly string[], 
   });
 }
 
-function findLatestAuditMarker(workspaceId: string, actionTypes: readonly string[]) {
-  return db.auditLog.findFirst({
+// `actionType IN (...) ORDER BY createdAt DESC LIMIT 1` cannot walk (workspaceId, actionType, createdAt)
+// in createdAt order across several types, so it sorts every matching row (or walks the whole workspace on
+// (workspaceId, createdAt)). Take MAX(createdAt) per type from that index instead, then seek the one row.
+async function findLatestAuditMarker(workspaceId: string, actionTypes: readonly string[]) {
+  const latestByType = await db.auditLog.groupBy({
+    by: ["actionType"],
     where: {
       workspaceId,
       actionType: { in: [...actionTypes] },
     },
-    orderBy: { createdAt: "desc" },
+    _max: { createdAt: true },
+  });
+  let latest: { actionType: string; createdAt: Date } | null = null;
+  for (const row of latestByType) {
+    const createdAt = row._max.createdAt;
+    if (createdAt && (!latest || createdAt > latest.createdAt)) latest = { actionType: row.actionType, createdAt };
+  }
+  if (!latest) return null;
+  return db.auditLog.findFirst({
+    where: {
+      workspaceId,
+      actionType: latest.actionType,
+      createdAt: latest.createdAt,
+    },
     select: {
       createdAt: true,
       actionType: true,

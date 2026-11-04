@@ -6,8 +6,10 @@ import { WorkspaceRole } from "@prisma/client";
 // the policy rows and nothing else, admins keep every load. Every db call is
 // recorded through a proxy so a new ungated load shows up here.
 
-const { dbCalls, serviceMocks } = vi.hoisted(() => ({
+const { dbCalls, auditFindManyArgs, auditRowsByType, serviceMocks } = vi.hoisted(() => ({
   dbCalls: [] as string[],
+  auditFindManyArgs: [] as unknown[],
+  auditRowsByType: {} as Record<string, unknown[]>,
   serviceMocks: {
     getWorkspaceBillingSnapshot: vi.fn(),
     getOpenSkillSuggestions: vi.fn(),
@@ -27,8 +29,13 @@ vi.mock("@/lib/db", () => {
     new Proxy(
       {},
       {
-        get: (_target, method: string) => async () => {
+        get: (_target, method: string) => async (args?: { where?: { actionType?: unknown } }) => {
           dbCalls.push(`${name}.${method}`);
+          if (name === "auditLog" && method === "findMany") {
+            auditFindManyArgs.push(args);
+            const actionType = args?.where?.actionType;
+            return typeof actionType === "string" ? (auditRowsByType[actionType] ?? []) : [];
+          }
           if (name === "workspace" && method === "findUnique") {
             return {
               id: "workspace-1",
@@ -119,6 +126,8 @@ async function loadAs(role: WorkspaceRole) {
 describe("settings data loads by viewer", () => {
   beforeEach(() => {
     dbCalls.length = 0;
+    auditFindManyArgs.length = 0;
+    for (const key of Object.keys(auditRowsByType)) delete auditRowsByType[key];
     vi.clearAllMocks();
     serviceMocks.getWorkspaceBillingSnapshot.mockResolvedValue({
       accessState: "ACTIVE",
@@ -222,6 +231,43 @@ describe("settings data loads by viewer", () => {
       expect(serviceMocks[name], name).toHaveBeenCalled();
     }
     expect(data.organizationSummary.settingsAdminView).toBe(true);
+  });
+
+  it("reads DingTalk directory-invite audits newest-first per type and merges them", async () => {
+    const dryRunAudit = (actionType: string, createdAt: string, processed: number) => ({
+      id: `${actionType}-${createdAt}`,
+      actionType,
+      createdAt: new Date(createdAt),
+      payload: JSON.stringify({ dryRun: true, processed }),
+    });
+    auditRowsByType.DINGTALK_DIRECTORY_INVITE_SYNC_SUCCEEDED = [
+      dryRunAudit("DINGTALK_DIRECTORY_INVITE_SYNC_SUCCEEDED", "2026-11-01T08:00:00Z", 1),
+    ];
+    auditRowsByType.DINGTALK_DIRECTORY_INVITE_SYNC_PARTIAL = [
+      dryRunAudit("DINGTALK_DIRECTORY_INVITE_SYNC_PARTIAL", "2026-11-02T08:00:00Z", 2),
+    ];
+
+    const data = await loadAs(WorkspaceRole.ADMIN);
+
+    const dingTalkReads = auditFindManyArgs.filter((args) =>
+      String((args as { where?: { actionType?: unknown } })?.where?.actionType ?? "").startsWith(
+        "DINGTALK_DIRECTORY_INVITE_SYNC_",
+      ),
+    );
+    expect(dingTalkReads).toEqual([
+      {
+        where: { workspaceId: "workspace-1", actionType: "DINGTALK_DIRECTORY_INVITE_SYNC_SUCCEEDED" },
+        orderBy: { createdAt: "desc" },
+        take: 12,
+      },
+      {
+        where: { workspaceId: "workspace-1", actionType: "DINGTALK_DIRECTORY_INVITE_SYNC_PARTIAL" },
+        orderBy: { createdAt: "desc" },
+        take: 12,
+      },
+    ]);
+    expect(data.dingtalkDirectoryInviteDryRun?.recordedAt).toEqual(new Date("2026-11-02T08:00:00Z"));
+    expect(data.dingtalkDirectoryInviteDryRun?.processed).toBe(2);
   });
 
   it("never returns the full User row to the client", async () => {
