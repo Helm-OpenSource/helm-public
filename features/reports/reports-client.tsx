@@ -33,6 +33,7 @@ import { generateWeeklyReportAction } from "@/features/reports/actions";
 import { formatReportDateLabel, formatReportDateRange } from "@/features/reports/date-labels";
 import { formatReportDisplayText } from "@/features/reports/display-copy";
 import { EngineeringDeliveryReviewPanel } from "@/features/reports/engineering-delivery-review-panel";
+import { formatCappedAuditCount } from "@/lib/audit/capped-count";
 
 type ReportsClientProps = {
   reports: Array<{
@@ -210,6 +211,7 @@ export function ReportsClient({
         };
         governanceMetrics?: {
           auditEventsCount: number;
+          auditEventsCountCapped?: boolean;
           llmFallbackCount: number;
           averageApprovalTurnaroundHours: number;
           acceptedStrategyCount: number;
@@ -620,7 +622,11 @@ export function ReportsClient({
                   <div className="grid gap-3 md:grid-cols-2">
                     <InfoCell
                       label={english ? "Recorded actions" : "有记录的操作"}
-                      value={String(payload.governanceMetrics?.auditEventsCount ?? 0)}
+                      value={formatCappedAuditCount(
+                        payload.governanceMetrics?.auditEventsCount ?? 0,
+                        payload.governanceMetrics?.auditEventsCountCapped,
+                        english,
+                      )}
                     />
                     <InfoCell
                       label={english ? "Conservative handling" : "保守处理次数"}
