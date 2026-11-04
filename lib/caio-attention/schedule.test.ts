@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   CAIO_ATTENTION_TEST_DEFAULT_POLICY as P,
   caioAttentionDispatchFields,
+  caioAttentionResumeDeferredFields,
   caioAttentionSeverityRaiseFields,
   caioAttentionSuggestFields,
   caioAttentionUnresolvedEscalateAt,
@@ -48,6 +49,9 @@ describe("policy and window", () => {
     expect(parseCaioAttentionPolicy(P).ok).toBe(true);
     expect(parseCaioAttentionPolicy({ ...P, daytimeStartMinute: 1300 })).toEqual({ ok: false, errorCode: "policy_invalid" });
     expect(parseCaioAttentionPolicy({ ...P, extra: 1 }).ok).toBe(false);
+    for (const key of ["criticalSameDayDueMinute", "criticalNextDayDueMinute", "warningPeriodicMinute", "warningDigestMinute"]) {
+      expect(parseCaioAttentionPolicy({ ...P, [key]: 21 * 60 }).ok, key).toBe(false);
+    }
   });
 
   it("is inclusive at 08:00 and 20:00 and moves night times to the next 08:00", () => {
@@ -69,6 +73,14 @@ describe("deadlines", () => {
     expect(caioAttentionUnresolvedEscalateAt("critical", t("5 17:59"), P)).toEqual(t("5 20:00"));
     expect(caioAttentionUnresolvedEscalateAt("critical", t("5 18:00"), P)).toEqual(t("6 12:00"));
     expect(caioAttentionUnresolvedEscalateAt("critical", t("6 02:00"), P)).toEqual(t("6 20:00"));
+  });
+
+  it("crosses month and year boundaries", () => {
+    const at = (s: string) => new Date(`${s}+08:00`);
+    expect(caioAttentionUnresolvedEscalateAt("critical", at("2026-01-31T23:00:00"), P)).toEqual(at("2026-02-01T12:00:00"));
+    expect(caioAttentionUnresolvedEscalateAt("critical", at("2026-12-31T18:00:00"), P)).toEqual(at("2027-01-01T12:00:00"));
+    expect(caioAttentionUnresolvedEscalateAt("warning", at("2026-12-30T21:00:00"), P)).toEqual(at("2027-01-03T08:00:00"));
+    expect(clampToCaioAttentionDaytime(at("2026-02-28T22:00:00"), P)).toEqual(at("2026-03-01T08:00:00"));
   });
 
   it("T-N25: warning escalates after 72 hours, daytime only", () => {
@@ -136,11 +148,23 @@ describe("reminder pass", () => {
     expect(first).toBe("ca:c1:R1:v1:u_escalation");
   });
 
-  it("T-N8: terminal and deferred cases get nothing", () => {
+  it("T-N8: terminal cases get nothing; a deferred case gets only R0", () => {
     const everythingDue = { ...emptyFields, r0aDueAt: t("5 09:00"), noResponseDueAt: t("5 09:00"), unresolvedEscalateAt: t("5 09:00"), nextPeriodicAt: t("5 09:00") };
-    for (const status of ["DISMISSED", "CANCELLED", "CLOSED", "DEFERRED"] as const) {
+    for (const status of ["DISMISSED", "CANCELLED", "CLOSED"] as const) {
       expect(collectDueCaioAttentionReminders(kase({ status }), everythingDue, t("5 10:00"), P).sends).toEqual([]);
     }
+    expect(collectDueCaioAttentionReminders(kase({ status: "DEFERRED" }), everythingDue, t("5 10:00"), P).sends.map((s) => s.rule)).toEqual(["R0a"]);
+    expect(collectDueCaioAttentionReminders(kase({ status: "DEFERRED", effectiveSeverity: "warning" }), everythingDue, t("5 10:00"), P).sends).toEqual([]);
+  });
+
+  it("P2-1: a reminder due just before 20:00 still goes out on a 20:03 scan, not the next morning", () => {
+    const late = collectDueCaioAttentionReminders(kase({ respondedAt: t("5 10:00") }), { ...emptyFields, nextPeriodicAt: t("5 19:58") }, t("5 20:03"), P);
+    expect(late.sends.map((s) => s.rule)).toEqual(["R4"]);
+    expect(late.updates.nextPeriodicAt).toEqual(t("6 08:00"));
+    const warningR2 = collectDueCaioAttentionReminders(kase({ effectiveSeverity: "warning", respondedAt: t("5 10:00") }), { ...emptyFields, unresolvedEscalateAt: t("5 20:00") }, t("5 20:03"), P);
+    expect(warningR2.sends.map((s) => s.rule)).toEqual(["R2"]);
+    // Past the grace, daytime-only reminders wait for the next window.
+    expect(collectDueCaioAttentionReminders(kase({ respondedAt: t("5 10:00") }), { ...emptyFields, nextPeriodicAt: t("5 19:58") }, t("5 20:11"), P).sends).toEqual([]);
   });
 
   it("T-N22a: critical suggested at 02:00 and not confirmed: R0a at 02:00, R0b once at 02:30, no dispatch notice", () => {
@@ -178,14 +202,14 @@ describe("severity raise", () => {
   const warning = { ...emptyFields, ...caioAttentionDispatchFields("warning", t("5 09:00"), P), nextPeriodicAt: t("6 10:00") };
 
   it("T-N24/T-N17: unanswered raise restarts R1 from the raise and tightens R2 by the raise-time rule", () => {
-    expect(caioAttentionSeverityRaiseFields("DISPATCHED", warning, null, t("5 17:59"), P))
+    expect(caioAttentionSeverityRaiseFields("DISPATCHED", "warning", warning, null, t("5 17:59"), P))
       .toEqual({ noResponseDueAt: t("5 19:59"), unresolvedEscalateAt: t("5 20:00"), nextPeriodicAt: t("5 17:59") });
-    expect(caioAttentionSeverityRaiseFields("DISPATCHED", warning, null, t("5 18:00"), P))
+    expect(caioAttentionSeverityRaiseFields("DISPATCHED", "warning", warning, null, t("5 18:00"), P))
       .toMatchObject({ unresolvedEscalateAt: t("6 12:00") });
   });
 
   it("T-N23/T-N4: an already answered raise sets no R1; a later critical rule never loosens R2", () => {
-    const raised = caioAttentionSeverityRaiseFields("DISPATCHED", { ...warning, nextPeriodicAt: t("8 10:00") }, t("5 09:30"), t("7 21:00"), P);
+    const raised = caioAttentionSeverityRaiseFields("DISPATCHED", "warning", { ...warning, nextPeriodicAt: t("8 10:00") }, t("5 09:30"), t("7 21:00"), P);
     expect(raised.noResponseDueAt).toBeNull();
     expect(raised.unresolvedEscalateAt).toEqual(warning.unresolvedEscalateAt); // 72h rule (8 09:00) is earlier than 8 12:00
     expect(raised.nextPeriodicAt).toEqual(t("8 08:00"));
@@ -195,14 +219,36 @@ describe("severity raise", () => {
   });
 
   it("a pending suggestion raised to critical notifies the OWNER at once and again 30 minutes later, night included", () => {
-    const raised = caioAttentionSeverityRaiseFields("SUGGESTED", emptyFields, null, t("5 03:00"), P);
-    expect(raised).toEqual({ r0aDueAt: t("5 03:00") });
+    const raised = caioAttentionSeverityRaiseFields("SUGGESTED", "warning", emptyFields, null, t("5 03:00"), P);
+    expect(raised).toEqual({ r0aDueAt: t("5 03:00"), r0aSentAt: null, r0bDueAt: null, r0bSentAt: null });
     const log = simulate(kase({ status: "SUGGESTED", commandVersion: 0 }), { ...emptyFields, ...raised }, t("5 03:00"), t("5 06:00"));
     expect(log).toEqual([
       { at: iso("5 03:00"), rule: "R0a", users: ["u_owner"] },
       { at: iso("5 03:30"), rule: "R0b", users: ["u_owner"] },
     ]);
-    expect(caioAttentionSeverityRaiseFields("SUGGESTED", { ...emptyFields, r0aSentAt: t("5 01:00") }, null, t("5 03:00"), P)).toEqual({});
-    expect(caioAttentionSeverityRaiseFields("CLOSED", warning, null, t("5 03:00"), P)).toEqual({});
+    expect(caioAttentionSeverityRaiseFields("CLOSED", "warning", warning, null, t("5 03:00"), P)).toEqual({});
+  });
+
+  it("P2-6: replaying a raise on a case that is already critical changes nothing", () => {
+    for (const status of ["SUGGESTED", "DEFERRED", "DISPATCHED", "DISPOSITION_SUBMITTED"] as const) {
+      expect(caioAttentionSeverityRaiseFields(status, "critical", warning, null, t("5 12:00"), P)).toEqual({});
+    }
+  });
+
+  it("P1-1: a deferred case raised to critical notifies the OWNER once; resuming re-arms R0a and R0b", () => {
+    const deferred = kase({ status: "DEFERRED", commandVersion: 0 });
+    let fields = { ...emptyFields, ...caioAttentionSeverityRaiseFields("DEFERRED", "warning", emptyFields, null, t("5 03:00"), P) };
+    const whileDeferred = simulate(deferred, fields, t("5 03:00"), t("5 08:55"));
+    expect(whileDeferred).toEqual([{ at: iso("5 03:00"), rule: "R0a", users: ["u_owner"] }]);
+    fields = { ...fields, r0aSentAt: t("5 03:00"), r0bDueAt: t("5 03:30"), ...caioAttentionResumeDeferredFields("critical", t("5 09:00")) };
+    const suggested = kase({ status: "SUGGESTED", commandVersion: 0 });
+    expect(simulate(suggested, fields, t("5 09:00"), t("5 11:00"))).toEqual([
+      { at: iso("5 09:00"), rule: "R0a", users: ["u_owner"] },
+      { at: iso("5 09:30"), rule: "R0b", users: ["u_owner"] },
+    ]);
+    // Each R0a carries its due time, so the re-armed notice is not swallowed by the first one's dedupe key.
+    const keyAt = (at: Date) => collectDueCaioAttentionReminders(suggested, { ...emptyFields, r0aDueAt: at }, at, P).sends[0].notifications[0].dedupeKey;
+    expect(keyAt(t("5 03:00"))).not.toBe(keyAt(t("5 09:00")));
+    expect(caioAttentionResumeDeferredFields("warning", t("5 09:00"))).toEqual({});
   });
 });
