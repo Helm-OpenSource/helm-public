@@ -563,6 +563,8 @@ export type SettingsClientProps = {
         payload: unknown;
         sourcePage: string | null;
       }>;
+      /** The two lists above hold at most `limit` events created on or after `since`. */
+      recentAuditWindow: { days: number; since: Date; limit: number };
       boundaryNotes: string[];
     } | null;
     lifecycleBoundarySummary: {

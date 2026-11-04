@@ -168,7 +168,7 @@ describe("settings display copy", () => {
         false,
       ),
       formatSettingsBoundaryNote(
-        "Recent org-admin and data-governance audit lists hold at most 8 events from the last 90 days (recentAuditWindow); older events stay in the audit log and are not part of these lists.",
+        "Recent org-admin and data-governance audit lists hold at most 8 events from the last 90 days; older events stay in the audit log and are not part of these lists.",
         false,
       ),
     ].join(" ");

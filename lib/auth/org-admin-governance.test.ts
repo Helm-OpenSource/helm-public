@@ -1258,9 +1258,12 @@ describe("org admin governance support pack", () => {
     expect(Date.now() - pack.summary.recentAuditWindow.since.getTime()).toBeGreaterThanOrEqual(
       (RECENT_AUDIT_LOOKBACK_DAYS - 1) * 86_400_000,
     );
-    expect(pack.summary.boundaryNotes).toContain(
-      `Recent org-admin and data-governance audit lists hold at most 8 events from the last ${RECENT_AUDIT_LOOKBACK_DAYS} days (recentAuditWindow); older events stay in the audit log and are not part of these lists.`,
+    // Appended last: the settings boundary card renders only boundaryNotes[0], which stays the tenant-scope note.
+    expect(pack.summary.boundaryNotes[0]).toBe("Support pack is tenant-scoped to the active workspace only.");
+    expect(pack.summary.boundaryNotes.at(-1)).toBe(
+      `Recent org-admin and data-governance audit lists hold at most 8 events from the last ${RECENT_AUDIT_LOOKBACK_DAYS} days; older events stay in the audit log and are not part of these lists.`,
     );
+    expect(pack.summary.boundaryNotes.join(" ")).not.toContain("recentAuditWindow");
     expect(pack.summary.boundaryNotes).toContain(
       "Webhook tenancy governance only records callbacks once tenant mapping is asserted; unresolved external callbacks remain outside workspace-scoped support-pack truth.",
     );
