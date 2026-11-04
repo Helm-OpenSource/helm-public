@@ -7567,3 +7567,65 @@ model LLMTrustedUsageEvidence {
   @@unique([workspaceId, providerIdempotencyKey], map: "LLMTrustedUsageEvidence_attempt_key")
   @@unique([workspaceId, decisionId], map: "LLMTrustedUsageEvidence_decision_key")
 }
+
+// CAIO attention (operating attention items) — control plane. Standalone tables, no relation to the generic task
+// tables and no database foreign keys (relationMode = "prisma"). Append-only tables are kept immutable by grants
+// (SELECT/INSERT only), not triggers; closed sets are CHECK-constrained in the migration.
+// Single row, id fixed to 'global'; seeded PAUSED by the migration. Only the controlled operator identity writes it.
+model CaioAttentionControl {
+  id                      String    @id @default("global")
+  intakeState             String    @default("PAUSED") // OPEN | PAUSED | DEPLOYING
+  epoch                   Int       @default(0)
+  openEpoch               Int       @default(0)
+  leaseToken              String?
+  leaseNodeId             String?
+  leaseTargetDeploymentId String?
+  leaseAcquiredAt         DateTime?
+  leaseExpiresAt          DateTime?
+  requiredCloseCapability Int       @default(1)
+  minGuardVersion         Int       @default(1)
+  expectedNodesJson       String    @db.Text
+  rowVersion              Int       @default(0)
+  updatedByRef            String
+  updatedAt               DateTime  @default(now()) @updatedAt
+}
+
+model CaioAttentionRuntimeNode {
+  id                     String   @id @default(cuid())
+  nodeId                 String   @unique
+  role                   String
+  deploymentId           String
+  closeCapabilityVersion Int
+  remindersEnabled       Boolean  @default(false)
+  lastSeenAt             DateTime
+}
+
+// Append-only except the revocation columns (revokedAt, revokedByRef, revokedEpoch), which only the operator identity
+// may update. A proof is valid while unrevoked and its epoch exceeds the node's highest revokedEpoch.
+model CaioAttentionNodeReadiness {
+  id                     String    @id @default(cuid())
+  nodeId                 String
+  deploymentId           String
+  closeCapabilityVersion Int
+  guardVersion           Int
+  epoch                  Int
+  verifiedAt             DateTime
+  verifiedByRef          String
+  revokedAt              DateTime?
+  revokedByRef           String?
+  revokedEpoch           Int?
+
+  @@index([nodeId, revokedAt])
+}
+
+// Append-only. The web identity may only add rows, so it can close the current open epoch but never reopen intake.
+model CaioAttentionPauseRequest {
+  id             String   @id @default(cuid())
+  openEpoch      Int
+  reasonCode     String // node_heartbeat_stale | deployment_mismatch | watchdog | operator
+  requestedByRef String
+  createdAt      DateTime @default(now())
+
+  @@unique([openEpoch, requestedByRef])
+  @@index([openEpoch])
+}
