@@ -292,8 +292,9 @@ async function scanOneCase(client: PrismaClient, caseId: string, now: Date, poli
 /**
  * D for a warning confirmed (or reissued) outside the daytime window: the lifecycle records `dispatchNoticeAt` and
  * `dispatchNoticeSent: false` on the CONFIRMED / REISSUED event instead of notifying at night. The first scan inside
- * the send window delivers it to the primary only, key `ca:<id>:D:v<n>:<primary>`, and records a REMINDED event with
- * dedupe key `D:v<n>`; a later command version gets its own notice. Cases no longer DISPATCHED are skipped.
+ * the send window delivers it to the same people as a daytime D, the primary and every cc (informed) person, one
+ * notice each under `ca:<id>:D:v<n>:<user>`, and records a REMINDED event with dedupe key `D:v<n>`; a later command
+ * version gets its own notice. Cases no longer DISPATCHED are skipped.
  */
 async function sendDeferredDispatchNotices(client: PrismaClient, now: Date, policy: CaioAttentionPolicy, limit: number,
   result: CaioAttentionReminderScanResult): Promise<void> {
@@ -312,19 +313,25 @@ async function sendDeferredDispatchNotices(client: PrismaClient, now: Date, poli
       let created = 0;
       let deduplicated = 0;
       await client.$transaction(async (tx) => {
-        const [row] = await tx.$queryRaw<Array<{ workspaceId: string; shortNo: number; status: string; commandVersion: number; primaryUserId: string | null }>>`
-          SELECT workspaceId, shortNo, status, commandVersion, primaryUserId FROM CaioAttentionCase WHERE id = ${id} FOR UPDATE`;
+        const [row] = await tx.$queryRaw<Array<{
+          workspaceId: string; shortNo: number; status: string; commandVersion: number; primaryUserId: string | null; ccUserIdsJson: string;
+        }>>`
+          SELECT workspaceId, shortNo, status, commandVersion, primaryUserId, ccUserIdsJson FROM CaioAttentionCase WHERE id = ${id} FOR UPDATE`;
         if (!row || row.status !== "DISPATCHED" || Number(row.commandVersion) !== Number(commandVersion) || !row.primaryUserId) return;
         const version = Number(row.commandVersion);
-        const sent = await notifyOnce(tx, {
-          workspaceId: row.workspaceId, userId: row.primaryUserId, dedupeKey: `ca:${id}:D:v${version}:${row.primaryUserId}`,
-          title: `CAIO 关注事项 #${row.shortNo} · ${STAGE_LABEL.D}`, body: "待你处理",
-        });
-        if (sent) created += 1;
-        else deduplicated += 1;
+        // Same recipients as the daytime D written in the confirm transaction: the primary and the cc people.
+        const recipients = [...new Set([row.primaryUserId, ...parseIds(row.ccUserIdsJson)])];
+        for (const userId of recipients) {
+          const sent = await notifyOnce(tx, {
+            workspaceId: row.workspaceId, userId, dedupeKey: `ca:${id}:D:v${version}:${userId}`,
+            title: `CAIO 关注事项 #${row.shortNo} · ${STAGE_LABEL.D}`, body: "待你处理",
+          });
+          if (sent) created += 1;
+          else deduplicated += 1;
+        }
         await appendEvent(tx, {
           caseId: id, kind: "REMINDED", commandVersion: version, dedupeKey: `D:v${version}`,
-          payload: { rule: "D", recipients: 1, scannedAt: now.toISOString() },
+          payload: { rule: "D", recipients: recipients.length, scannedAt: now.toISOString() },
         });
       }, { timeout: 20_000 });
       result.notificationsCreated += created;

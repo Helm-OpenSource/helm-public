@@ -238,7 +238,7 @@ describeMysql("CAIO attention end to end on MySQL with the three least-privilege
     expect(second[1]).not.toBe(first[0]);
   });
 
-  it("a warning confirmed at night gets its dispatch notice D at the next window opening, primary only, once", async () => {
+  it("a warning confirmed at night gets its dispatch notice D at the next window opening, primary and cc, once each", async () => {
     const caseId = await suggest(NIGHT, "warning");
     clock = at(NIGHT, 5);
     expect(await run({ viewer: viewer("owner"), caseId, expectedCommandVersion: 0, op: "confirm",
@@ -247,10 +247,14 @@ describeMysql("CAIO attention end to end on MySQL with the three least-privilege
     expect((await scan(at(NIGHT, 30))).sends.D).toBeUndefined(); // still night
     const morning = new Date("2026-11-05T00:01:00.000Z"); // 08:01 at UTC+8
     expect((await scan(morning)).sends.D).toBe(1);
+    // Same recipients as a daytime D: the primary and every cc person, one notice each under its own per-user key.
     expect(await notices("primary", "D")).toEqual([`ca:${caseId}:D:v1:${people.primary}`]);
-    expect([...await notices("cc", "D"), ...await notices("cc2", "D")]).toEqual([]);
+    expect(await notices("cc", "D")).toEqual([`ca:${caseId}:D:v1:${people.cc}`]);
+    expect(await notices("cc2", "D")).toEqual([`ca:${caseId}:D:v1:${people.cc2}`]);
+    expect(await notices("escalation", "D")).toEqual([]);
+    expect(await notices("reviewer", "D")).toEqual([]);
     expect((await scan(at(morning, 5))).sends.D).toBeUndefined();
-    expect(await notices("primary", "D")).toHaveLength(1);
+    for (const key of ["primary", "cc", "cc2"] as const) expect(await notices(key, "D")).toHaveLength(1);
   });
 
   it("after the operator pauses intake the gate refuses generation, confirmation and resume; nothing changes", async () => {
