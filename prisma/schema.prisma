@@ -7686,6 +7686,8 @@ model CaioAttentionCase {
   @@index([status, noResponseDueAt])
   @@index([status, unresolvedEscalateAt])
   @@index([status, nextPeriodicAt])
+  // System step: resume deferred cases whose deferral ended (20261104180000_caio_attention_deferred_until_index).
+  @@index([status, deferredUntil])
 }
 
 model CaioAttentionCaseEvent {

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import type { CaioAttentionSeverity } from "./contracts";
+import { applyCaioAttentionSeverityRaise, resumeDeferredCaioAttentionCase } from "./lifecycle/lifecycle.service";
 import {
   caioAttentionWarningDigest,
   collectDueCaioAttentionReminders,
@@ -38,6 +39,8 @@ export type CaioAttentionReminderScanResult = {
   failedCaseIds: string[];
   /** Rules newly found due with nobody to notify (e.g. no active OWNER): left unconsumed, logged once per due value. */
   skippedNoRecipient: Partial<Record<CaioAttentionScanRule, number>>;
+  /** System steps run before the due scan: severity raises applied, deferrals resumed, resumes the gate refused. */
+  systemSteps: { severityApplied: number; resumed: number; resumeGateClosed: number };
 };
 
 const MAX_CASES_PER_SCAN = 500;
@@ -168,7 +171,10 @@ const FIELD_COLUMNS: Record<keyof CaioAttentionReminderFields, string> = {
 };
 
 function emptyResult(): CaioAttentionReminderScanResult {
-  return { casesScanned: 0, sends: {}, notificationsCreated: 0, notificationsDeduplicated: 0, failedCaseIds: [], skippedNoRecipient: {} };
+  return {
+    casesScanned: 0, sends: {}, notificationsCreated: 0, notificationsDeduplicated: 0, failedCaseIds: [], skippedNoRecipient: {},
+    systemSteps: { severityApplied: 0, resumed: 0, resumeGateClosed: 0 },
+  };
 }
 
 /** Counts are merged only after the case transaction commits, so a retried attempt is never counted twice. */
@@ -368,6 +374,49 @@ async function sendWarningDigests(client: PrismaClient, now: Date, policy: CaioA
   }
 }
 
+const NON_TERMINAL = Prisma.sql`('SUGGESTED', 'DEFERRED', 'DISPATCHED', 'DISPOSITION_SUBMITTED')`;
+
+/**
+ * System steps of the lifecycle (S5 review P1-2), run before the due scan so reminders they re-arm go out in the same
+ * tick. Each goes through the lifecycle service, i.e. its own transaction with the lifecycle lock order (Control FOR
+ * SHARE when gated -> Case FOR UPDATE -> CAS -> event); nothing here writes the case directly.
+ *   1. A warning case with the generator's SEVERITY_RAISED (dedupe key `critical`) event not yet consumed: apply the
+ *      raise (the CAS on effectiveSeverity is the consumption mark, so a replay is a no-op).
+ *   2. A DEFERRED case whose deferredUntil has passed: resume it behind the intake gate (refused while paused; the
+ *      case stays DEFERRED and is retried next tick).
+ */
+async function runCaioAttentionSystemSteps(client: PrismaClient, now: Date, policy: CaioAttentionPolicy, limit: number,
+  result: CaioAttentionReminderScanResult): Promise<void> {
+  const deps = { db: client, policy, now: () => now };
+  const raised = await client.$queryRaw<Array<{ id: string; workspaceId: string }>>`
+    SELECT c.id, c.workspaceId FROM CaioAttentionCase c
+    WHERE c.status IN ${NON_TERMINAL} AND c.effectiveSeverity = 'warning'
+      AND EXISTS (SELECT 1 FROM CaioAttentionCaseEvent e WHERE e.caseId = c.id AND e.kind = 'SEVERITY_RAISED' AND e.dedupeKey = 'critical')
+    ORDER BY c.id LIMIT ${limit}`;
+  for (const row of raised) {
+    try {
+      const applied = await applyCaioAttentionSeverityRaise(deps, { workspaceId: row.workspaceId, caseId: row.id });
+      if (applied.ok && !applied.replayed) result.systemSteps.severityApplied += 1;
+    } catch (error) {
+      result.failedCaseIds.push(row.id);
+      console.error(`[caio-attention-reminders] severity raise ${row.id} failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  const deferred = await client.$queryRaw<Array<{ id: string; workspaceId: string }>>`
+    SELECT id, workspaceId FROM CaioAttentionCase WHERE status = 'DEFERRED' AND deferredUntil <= ${now}
+    ORDER BY deferredUntil, id LIMIT ${limit}`;
+  for (const row of deferred) {
+    try {
+      const resumed = await resumeDeferredCaioAttentionCase(deps, { workspaceId: row.workspaceId, caseId: row.id });
+      if (resumed.ok) result.systemSteps.resumed += 1;
+      else if (resumed.reason === "intake_closed") result.systemSteps.resumeGateClosed += 1;
+    } catch (error) {
+      result.failedCaseIds.push(row.id);
+      console.error(`[caio-attention-reminders] resume ${row.id} failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+}
+
 export async function runCaioAttentionReminderScan(input: {
   client: PrismaClient;
   now: Date;
@@ -377,6 +426,7 @@ export async function runCaioAttentionReminderScan(input: {
   skipCaseIds?: readonly string[];
 }): Promise<CaioAttentionReminderScanResult> {
   const result = emptyResult();
+  await runCaioAttentionSystemSteps(input.client, input.now, input.policy, input.maxCases ?? MAX_CASES_PER_SCAN, result);
   // Recurrence notices are daytime-only; outside the window those cases are not even locked.
   const includeRecurrence = isCaioAttentionRecurrenceSendable("DISPATCHED", input.now, input.policy)
     && strictDaytime(input.now, input.policy);

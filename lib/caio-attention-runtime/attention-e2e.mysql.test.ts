@@ -7,7 +7,6 @@ import type { CaioAttentionCommandFields, CaioAttentionCommandInput, CaioAttenti
 import type { CaioAttentionRouteRule } from "@/lib/caio-attention/contracts";
 import { pauseCaioAttentionIntake } from "@/lib/caio-attention/control.service";
 import { runCaioAttentionGenerator } from "@/lib/caio-attention/generator.service";
-import { resumeDeferredCaioAttentionCase } from "@/lib/caio-attention/lifecycle/lifecycle.service";
 import { registerCaioAttentionPack, resetCaioAttentionPackForTests } from "@/lib/caio-attention/registry";
 import { runCaioAttentionReminderScan } from "@/lib/caio-attention/reminder-scanner.service";
 import { CAIO_ATTENTION_TEST_DEFAULT_POLICY as policy } from "@/lib/caio-attention/schedule";
@@ -18,7 +17,7 @@ import { createCaioAttentionPackPageService } from "./bound-page-service";
  * End-to-end attention chain on an isolated MySQL database with the three least-privilege identities only
  * (`npm run test:caio-attention:mysql`): the generator identity turns a quick-check hit into a SUGGESTED case; the web
  * identity runs every human step through the pack-bound page service (policy and enterprise hook from the one
- * registered pack), the reminder scan and the system resume; the operator identity pauses intake. The migration
+ * registered pack) and the reminder scan, which also drives the system steps (resume after deferral, severity raise); the operator identity pauses intake. The migration
  * identity only seeds the Core rows the quick check and the overlay would have written (users, memberships, route
  * config, candidates, the evidence audit row) and reads results.
  */
@@ -227,15 +226,44 @@ describeMysql("CAIO attention end to end on MySQL with the three least-privilege
       .toEqual({ ok: false, reason: "validation_failed" }); // deferredUntil must be after now
     expect(await run({ viewer: viewer("owner"), caseId, expectedCommandVersion: 0, op: "defer", deferredUntil: until, reason: "after the window" }))
       .toEqual({ ok: true, status: "DEFERRED" });
-    const deps = { db: web, policy, now: () => at(DAY, 61) };
-    expect(await resumeDeferredCaioAttentionCase({ ...deps, now: () => at(DAY, 30) }, { workspaceId, caseId })).toEqual({ ok: false, reason: "not_due" });
-    expect(await resumeDeferredCaioAttentionCase(deps, { workspaceId, caseId })).toMatchObject({ ok: true, status: "SUGGESTED" });
-    expect(await caseRow(caseId)).toMatchObject({ status: "SUGGESTED", r0aDueAt: at(DAY, 61), r0aSentAt: null });
-    await scan(at(DAY, 62));
+    // The scanner drives the resume: not yet due at +30; at +61 behind a paused gate it stays DEFERRED.
+    expect((await scan(at(DAY, 30))).systemSteps).toMatchObject({ resumed: 0, resumeGateClosed: 0 });
+    expect(await caseRow(caseId)).toMatchObject({ status: "DEFERRED" });
+    await pauseCaioAttentionIntake(ops, { actorRef: "operator:e2e" });
+    expect((await scan(at(DAY, 61))).systemSteps).toMatchObject({ resumed: 0, resumeGateClosed: 1 });
+    expect(await caseRow(caseId)).toMatchObject({ status: "DEFERRED" });
+    expect(await notices("owner", "R0a")).toHaveLength(1);
+    await admin.$executeRaw`UPDATE CaioAttentionControl SET intakeState = 'OPEN' WHERE id = 'global'`;
+    // Gate open again: the same tick resumes the case, re-arms R0a and sends it under a new key.
+    const tick = await scan(at(DAY, 62));
+    expect(tick.systemSteps).toMatchObject({ resumed: 1 });
+    expect(tick.sends.R0a).toBe(1);
+    expect(await caseRow(caseId)).toMatchObject({ status: "SUGGESTED", r0aDueAt: at(DAY, 62) });
     const second = await notices("owner", "R0a");
     expect(second).toHaveLength(2);
-    expect(second[1]).toBe(`ca:${caseId}:R0a:${at(DAY, 61).toISOString()}:${people.owner}`);
+    expect(second[1]).toBe(`ca:${caseId}:R0a:${at(DAY, 62).toISOString()}:${people.owner}`);
     expect(second[1]).not.toBe(first[0]);
+  });
+
+  it("the scanner applies the generator's severity raise and reminds the OWNER in the same tick", async () => {
+    const caseId = await suggest(DAY, "warning");
+    expect(await notices("owner", "R0a")).toEqual([]);
+    // The quick check now sees the same candidate as critical: the generator records SEVERITY_RAISED only.
+    await admin.caioAnomalyCandidate.updateMany({ where: { workspaceId, status: "OPEN" }, data: { severity: "critical" } });
+    expect(await runCaioAttentionGenerator({ workspaceId, tickId: "tick-raise", latestBucketStart: bucketOf(DAY), bucketMinutes: 10, now: at(DAY, 1), client: generator }))
+      .toMatchObject({ status: "completed", severityRaised: 1 });
+    expect(await caseRow(caseId)).toMatchObject({ effectiveSeverity: "warning" });
+    // The event's createdAt is the database clock; pin it to the generator's simulated run time (+1 min).
+    await admin.caioAttentionCaseEvent.updateMany({ where: { caseId, kind: "SEVERITY_RAISED" }, data: { createdAt: at(DAY, 1) } });
+    const tick = await scan(at(DAY, 2));
+    expect(tick.systemSteps).toMatchObject({ severityApplied: 1 });
+    expect(tick.sends.R0a).toBe(1);
+    expect(await caseRow(caseId)).toMatchObject({ effectiveSeverity: "critical", reminderPolicy: "critical" });
+    expect(await notices("owner", "R0a")).toHaveLength(1);
+    expect(await admin.caioAttentionCaseEvent.count({ where: { caseId, kind: "SEVERITY_APPLIED" } })).toBe(1);
+    // Consumed: a later tick changes nothing and sends nothing new.
+    expect((await scan(at(DAY, 3))).systemSteps).toMatchObject({ severityApplied: 0 });
+    expect(await admin.caioAttentionCaseEvent.count({ where: { caseId, kind: "SEVERITY_APPLIED" } })).toBe(1);
   });
 
   it("a warning confirmed at night gets its dispatch notice D at the next window opening, primary and cc, once each", async () => {
