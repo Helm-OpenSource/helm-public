@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/shared/page-header";
-import { CaioAttentionConfirmForm, CaioAttentionOperationForm } from "@/features/caio-attention/case-forms.client";
+import { CaioAttentionConfirmForm, CaioAttentionOperationForm, CaioAttentionOwnerForm } from "@/features/caio-attention/case-forms.client";
 import {
   caioAttentionCategoryLabel,
   caioAttentionCopy,
@@ -17,6 +17,7 @@ import { getCaioAttentionPageService } from "@/features/caio-attention/service";
 import type { CaioAttentionCommandFields } from "@/features/caio-attention/service-contract";
 import { diffCaioAttentionCommand } from "@/features/caio-attention/view-model";
 import { parseCaioAttentionEvidenceRefs } from "@/lib/caio-attention/evidence";
+import type { CaioAttentionOperation } from "@/lib/caio-attention/state-machine";
 import { formatLocalizedDateLabel } from "@/lib/i18n/date-labels";
 
 // Case detail: object, then the confirmed command and its changes from the prefill, then receipts, reviews and
@@ -47,7 +48,10 @@ export default async function CaioAttentionCasePage({ params }: { params: Promis
   const parsedEvidence = current ? parseCaioAttentionEvidenceRefs(current.evidenceRefs) : null;
   const externalRefs = parsedEvidence?.ok ? parsedEvidence.refs.filter((item) => item.role === "external").map((item) => item.ref) : [];
   const canReview = current !== null && (allowed.has("reviewAccept") || allowed.has("reviewReturn"));
-  const hasNextStep = allowed.has("confirm") || allowed.has("ack") || allowed.has("note") || allowed.has("submitDisposition") || canReview;
+  const formOps: readonly CaioAttentionOperation[] = ["confirm", "ack", "note", "submitDisposition", "dismiss", "defer", "cancel", "reissue", "assignReviewers"];
+  const hasNextStep = formOps.some((op) => allowed.has(op)) || canReview;
+  const members = view.assignableUserIds.map((id) => ({ id, label: person(id) }));
+  const asProps = (fields: CaioAttentionCommandFields) => ({ ...fields, committedDueAt: fields.committedDueAt?.toISOString() ?? null });
 
   return (
     <div className="space-y-6" data-source-page="/caio/attention/[caseId]" data-case-status={view.status}>
@@ -118,12 +122,22 @@ export default async function CaioAttentionCasePage({ params }: { params: Promis
         <section className="space-y-3" data-testid="caio-attention-next-steps">
           <h2 className="font-semibold">{copy.nextStepsTitle}</h2>
           {allowed.has("confirm") ? (
-            <CaioAttentionConfirmForm
+            <CaioAttentionConfirmForm common={common} prefill={asProps(view.prefill)} members={members} />
+          ) : null}
+          {allowed.has("dismiss") ? <CaioAttentionOwnerForm common={common} kind="dismiss" /> : null}
+          {allowed.has("defer") ? <CaioAttentionOwnerForm common={common} kind="defer" /> : null}
+          {allowed.has("reissue") && view.command ? (
+            <CaioAttentionConfirmForm common={common} op="reissue" prefill={asProps(view.command)} members={members} />
+          ) : null}
+          {allowed.has("assignReviewers") && view.command ? (
+            <CaioAttentionOwnerForm
               common={common}
-              prefill={{ ...view.prefill, committedDueAt: view.prefill.committedDueAt?.toISOString() ?? null }}
-              members={view.assignableUserIds.map((id) => ({ id, label: person(id) }))}
+              kind="assignReviewers"
+              members={members}
+              reviewers={{ reviewerVersion: view.reviewerVersion, reviewerUserIds: view.command.reviewerUserIds }}
             />
           ) : null}
+          {allowed.has("cancel") ? <CaioAttentionOwnerForm common={common} kind="cancel" /> : null}
           {allowed.has("ack") ? <CaioAttentionOperationForm common={common} kind="ack" /> : null}
           {allowed.has("note") ? <CaioAttentionOperationForm common={common} kind="note" /> : null}
           {allowed.has("submitDisposition") ? <CaioAttentionOperationForm common={common} kind="disposition" /> : null}

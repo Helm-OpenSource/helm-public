@@ -26,7 +26,7 @@ Status: pages and guards are formed. Until the lifecycle service and its authori
 | `/caio/attention/mine` | My cases: where the member is the primary, informed, escalation person or a reviewer of the current confirmed command |
 | `/caio/attention/[caseId]` | Detail: object → confirmed command and its changes from the prefill (prefill before confirmation) → receipts, reviews, events → next-step forms |
 
-Forms follow the loader's `allowedOperations`: confirm (prefill editable, live diff against the prefill), ack, note, disposition receipt, review accept/return. The review form asks the reviewer to tick each external evidence item and requires a conclusion.
+Forms follow the loader's `allowedOperations`: confirm (prefill editable, live diff against the prefill), ack, note, disposition receipt, review accept/return; for the OWNER also dismiss (awaiting confirmation only), defer (pick an end time), cancel (in progress or awaiting review), reissue a new command version (diff against the current command) and change reviewers. Dismiss and cancel require a reason. The review form asks the reviewer to tick each external evidence item and requires a conclusion.
 
 ## Visibility
 
@@ -38,7 +38,7 @@ Defined in `features/caio-attention/service-contract.ts` and implemented by the 
 
 - `listCases({ viewer, scope: "queue" | "mine", page, pageSize })` — ordering and paging inside the loader.
 - `loadCase({ viewer, caseId, sourcePage })` — case view or `not_found`; ADMIN supervisory audit is written in the loader.
-- `runCommand(input)` — `confirm`, `ack`, `note`, `submitDisposition`, `reviewAccept`, `reviewReturn`. Each carries `expectedCommandVersion` and `clientRequestId` (idempotency); reviews also carry `reviewerVersion`. The service re-checks membership, the intake gate and the CAS in its transaction.
+- `runCommand(input)` — `confirm`, `reissue`, `defer`, `dismiss`, `cancel`, `assignReviewers`, `ack`, `note`, `submitDisposition`, `reviewAccept`, `reviewReturn`. Each carries `expectedCommandVersion` and `clientRequestId` (idempotency); reviews and reviewer changes also carry `reviewerVersion`. `resumeDeferred` stays system-driven and has no page form. The service re-checks membership, the intake gate and the CAS in its transaction.
 
 Until wired, `features/caio-attention/service.ts` serves a fail-closed stub (empty lists, `not_found`, `service_unavailable`) and exports `CAIO_ATTENTION_PAGE_SERVICE_BOUND = false`, which the capability probe should require before reporting close capability.
 
@@ -47,6 +47,6 @@ Until wired, `features/caio-attention/service.ts` serves a fail-closed stub (emp
 - `lib/caio-attention/capability.json` declares `closeCapabilityVersion: 1`: this release carries the close-chain pages. The intake gate opens only when `requiredCloseCapability` is 1 and every expected node reports capability 1.
 - `npm run check:caio-attention` (CI repo-guards): no generic governed-task tables; no direct database access from the page layer; pages read through the page service only; the capability declaration ships with the close-chain forms; the stub stays closed while unbound.
 
-## Not included
+## Navigation entry
 
-Forms for defer, dismiss, cancel, reissue and reviewer reassignment, and a workspace navigation entry, are outside this page slice.
+The workspace sidebar and mobile navigation show "Attention cases" as presentation only: hidden while the service is unbound or the member is inactive; shown to OWNER and ADMIN; shown to other members only when they take part in at least one current confirmed command. A failing loader hides the entry and never breaks the shell.

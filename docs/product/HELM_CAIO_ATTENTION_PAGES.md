@@ -26,7 +26,7 @@ public_safety: Describes page routes, the page-service contract and guards of a 
 | `/caio/attention/mine` | 我的关注事项：当前已确认命令中作为主责、知悉、升级人或复核人参与的事项 |
 | `/caio/attention/[caseId]` | 详情：对象 → 已确认命令及与预填的差异（未确认时显示预填）→ 回执、复核、事件 → 下一步表单 |
 
-下一步表单只按 loader 返回的 `allowedOperations` 显示：确认（可改预填，实时显示与预填的差异）、ack、note、提交处置回执、复核通过/退回。复核表单要求逐条勾选外部证据，复核结论必填。
+下一步表单只按 loader 返回的 `allowedOperations` 显示：确认（可改预填，实时显示与预填的差异）、ack、note、提交处置回执、复核通过/退回；OWNER 另有驳回（仅待确认）、延期（选择延期到的时间）、撤销（处置中、待复核）、重新下达新命令版本（显示与当前命令的差异）、调整复核人。驳回与撤销必须填写原因。复核表单要求逐条勾选外部证据，复核结论必填。
 
 ## 可见性
 
@@ -38,7 +38,7 @@ public_safety: Describes page routes, the page-service contract and guards of a 
 
 - `listCases({ viewer, scope: "queue" | "mine", page, pageSize })`：排序与分页在 loader 内完成。
 - `loadCase({ viewer, caseId, sourcePage })`：返回事项视图或 `not_found`；ADMIN 监督读取的审计在 loader 内写入。
-- `runCommand(input)`：`confirm`、`ack`、`note`、`submitDisposition`、`reviewAccept`、`reviewReturn`。每个命令携带 `expectedCommandVersion` 与 `clientRequestId`（幂等），复核另带 `reviewerVersion`；服务在事务内重新校验成员、闸门与 CAS。
+- `runCommand(input)`：`confirm`、`reissue`、`defer`、`dismiss`、`cancel`、`assignReviewers`、`ack`、`note`、`submitDisposition`、`reviewAccept`、`reviewReturn`。每个命令携带 `expectedCommandVersion` 与 `clientRequestId`（幂等），复核与调整复核人另带 `reviewerVersion`；`resumeDeferred` 只由系统按延期时间执行，页面不提供；服务在事务内重新校验成员、闸门与 CAS。
 
 接入前 `features/caio-attention/service.ts` 提供默认关闭的桩：列表为空、详情 `not_found`、命令 `service_unavailable`，并导出 `CAIO_ATTENTION_PAGE_SERVICE_BOUND = false`，能力探针应据此拒绝报告关闭能力。
 
@@ -47,6 +47,6 @@ public_safety: Describes page routes, the page-service contract and guards of a 
 - `lib/caio-attention/capability.json` 声明 `closeCapabilityVersion: 1`，表示本发布包含关闭链页面。入口闸门只有在 `requiredCloseCapability` 为 1 且所有预期节点都上报能力 1 时才放行。
 - `npm run check:caio-attention`（接入 CI repo-guards）：模块不引用通用治理任务表；页面层不直接访问数据库；页面只经页面服务读取；能力声明与关闭链表单同在；未接入时桩保持关闭。
 
-## 未完成
+## 导航入口
 
-延期、驳回、撤销、重新下达命令、调整复核人的表单，以及工作区导航入口，不在本页面片范围内。
+工作区侧栏与移动端导航显示“运营关注事项”，只是展示，不授权：服务未接入或成员非 ACTIVE 时隐藏；OWNER、ADMIN 可见；其他成员只有在至少一条当前已确认命令中参与时才可见。loader 出错时入口隐藏，不影响工作区外壳。

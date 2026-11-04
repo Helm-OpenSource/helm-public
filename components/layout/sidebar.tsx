@@ -1,5 +1,6 @@
 "use client";
 
+import { CAIO_ATTENTION_DESTINATION } from "@/features/caio-attention/copy";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -189,6 +190,7 @@ export function Sidebar({
   navExtensionClusters = [],
   basePresetKey = null,
   showCaioPrimaryNavigation,
+  showCaioAttentionNavigation = false,
   canReviewGovernedActions,
   workstationHomeEntry = null,
 }: {
@@ -199,6 +201,8 @@ export function Sidebar({
   navExtensionClusters?: ReadonlyArray<WorkspaceNavExtensionCluster>;
   basePresetKey?: string | null;
   showCaioPrimaryNavigation: boolean;
+  /** Attention entry: presentation only, resolved by the layout; the pages re-authorize. */
+  showCaioAttentionNavigation?: boolean;
   canReviewGovernedActions: boolean;
   workstationHomeEntry?: MemberRoleHomeWorkstation | null;
 }) {
@@ -391,6 +395,17 @@ export function Sidebar({
     });
   const renderedSections: SidebarNavSection[] = [
     ...(showCaioPrimaryNavigation ? [caioPrimarySection] : []),
+    ...(showCaioAttentionNavigation
+      ? [{
+          key: "caio-attention",
+          label: english ? CAIO_ATTENTION_DESTINATION.labelEn : CAIO_ATTENTION_DESTINATION.labelZh,
+          items: [{
+            href: CAIO_ATTENTION_DESTINATION.href,
+            icon: <BrainCircuit className="h-4 w-4" />,
+            label: english ? CAIO_ATTENTION_DESTINATION.labelEn : CAIO_ATTENTION_DESTINATION.labelZh,
+          }],
+        }]
+      : []),
     ...(catalog
       ? [
           {
