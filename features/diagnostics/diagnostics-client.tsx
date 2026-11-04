@@ -27,6 +27,7 @@ import { buildBusinessLoopGapReadout } from "@/lib/presentation/business-loop-ga
 import { formatDateLabel } from "@/lib/utils";
 import { formatDiagnosticsDateLabel } from "@/features/diagnostics/diagnostics-date-labels";
 import { buildFirstLoopAdoptionReadout } from "@/features/diagnostics/first-loop-adoption";
+import { formatCappedAuditCount } from "@/lib/audit/capped-count";
 import {
   buildDiagnosticsFirstLoopDisplayModel,
   formatDiagnosticsFeatureFlagLabel,
@@ -529,6 +530,8 @@ type DiagnosticsClientProps = {
     identityReviewCount: number;
     pendingApprovals: number;
     recentAuditCount: number;
+    /** True when recentAuditCount stopped at AUDIT_COUNT_CAP; render it through formatCappedAuditCount. */
+    recentAuditCountCapped?: boolean;
     firstLoopAdoption: {
       handoffEnteredCount: number;
       primaryActionOpenedCount: number;
@@ -710,8 +713,8 @@ export function DiagnosticsClient({
             ? `${data.pendingApprovals} pending approvals keep the trust boundary explicit, so the meeting loop is not drifting into silent execution.`
             : `当前有 ${data.pendingApprovals} 条动作等待人工确认。`
           : english
-            ? `${data.recentAuditCount} recent audit events still keep the loop reviewable, even though there is no pending approval pressure right now.`
-            : `最近仍有 ${data.recentAuditCount} 条审计事件可回放。`,
+            ? `${formatCappedAuditCount(data.recentAuditCount, data.recentAuditCountCapped, true)} recent audit events still keep the loop reviewable, even though there is no pending approval pressure right now.`
+            : `最近仍有 ${formatCappedAuditCount(data.recentAuditCount, data.recentAuditCountCapped, false)} 条审计事件可回放。`,
       blocker:
         meetingBoundaryStatus === "ready"
           ? null
@@ -1168,8 +1171,8 @@ export function DiagnosticsClient({
             ? `${data.pendingApprovals} pending approvals are still keeping stronger moves inside review-first posture.`
             : `当前有 ${data.pendingApprovals} 条待复核动作，说明更强动作仍保持在先复核姿态内。`
           : english
-            ? `${data.recentAuditCount} recent audit events keep the loop reviewable even without pending approval pressure.`
-            : `当前虽没有待复核压力，但最近的 ${data.recentAuditCount} 条审计事件仍让这条回路保持可复盘。`,
+            ? `${formatCappedAuditCount(data.recentAuditCount, data.recentAuditCountCapped, true)} recent audit events keep the loop reviewable even without pending approval pressure.`
+            : `当前虽没有待复核压力，但最近的 ${formatCappedAuditCount(data.recentAuditCount, data.recentAuditCountCapped, false)} 条审计事件仍让这条回路保持可复盘。`,
       meta: english ? "Controlled trial" : "受控试点",
     },
   ];
@@ -2538,7 +2541,7 @@ export function DiagnosticsClient({
           />
           <Metric
             label={copy.auditEvents}
-            value={String(data.recentAuditCount)}
+            value={formatCappedAuditCount(data.recentAuditCount, data.recentAuditCountCapped, english)}
           />
           {Object.entries(data.workspace.featureFlags).map(([key, value]) => (
             <Metric
