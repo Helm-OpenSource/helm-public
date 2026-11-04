@@ -209,12 +209,12 @@ export function collectDueCaioAttentionReminders(
   if (pending && c.effectiveSeverity === "critical") {
     if (!f.r0aSentAt && due(f.r0aDueAt)) {
       const slot = f.r0aDueAt.toISOString(); // re-armed after resume, so the key carries the due time
-      send("R0a", [...c.ownerUserIds], (u) => `${base}:R0a:${u}:${slot}`);
+      send("R0a", [...c.ownerUserIds], (u) => `${base}:R0a:${slot}:${u}`);
       updates.r0aSentAt = now;
       updates.r0bDueAt = plus(now, p.pendingRepeatMinutes);
     } else if (c.status === "SUGGESTED" && f.r0aSentAt && !f.r0bSentAt && due(f.r0bDueAt)) {
       const slot = f.r0bDueAt.toISOString();
-      send("R0b", [...c.ownerUserIds], (u) => `${base}:R0b:${u}:${slot}`);
+      send("R0b", [...c.ownerUserIds], (u) => `${base}:R0b:${slot}:${u}`);
       updates.r0bSentAt = now;
     }
   }

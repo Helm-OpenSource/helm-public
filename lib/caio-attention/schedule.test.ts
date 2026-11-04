@@ -249,6 +249,25 @@ describe("severity raise", () => {
     // Each R0a carries its due time, so the re-armed notice is not swallowed by the first one's dedupe key.
     const keyAt = (at: Date) => collectDueCaioAttentionReminders(suggested, { ...emptyFields, r0aDueAt: at }, at, P).sends[0].notifications[0].dedupeKey;
     expect(keyAt(t("5 03:00"))).not.toBe(keyAt(t("5 09:00")));
+    expect(keyAt(t("5 09:00"))).toBe(`ca:c1:R0a:${iso("5 09:00")}:u_owner`);
+  });
+
+  it("R0a/R0b dedupe keys: same arming gives the same key on retry, a new arming a new key", () => {
+    const suggested = kase({ status: "SUGGESTED", commandVersion: 0 });
+    const round = (armedAt: Date) => {
+      const fields = { ...emptyFields, ...caioAttentionResumeDeferredFields("critical", armedAt) };
+      const r0a = collectDueCaioAttentionReminders(suggested, fields, armedAt, P);
+      const afterA = { ...fields, ...r0a.updates };
+      const r0bAt = afterA.r0bDueAt!;
+      const r0b = collectDueCaioAttentionReminders(suggested, afterA, r0bAt, P);
+      return [r0a.sends[0].notifications[0].dedupeKey, r0b.sends[0].notifications[0].dedupeKey];
+    };
+    const first = round(t("5 03:00"));
+    expect(round(t("5 03:00"))).toEqual(first); // a retried scan of the same arming dedupes
+    expect(first).toEqual([`ca:c1:R0a:${iso("5 03:00")}:u_owner`, `ca:c1:R0b:${iso("5 03:30")}:u_owner`]);
+    const second = round(t("5 09:00"));
+    expect(second[0]).not.toBe(first[0]);
+    expect(second[1]).not.toBe(first[1]);
     expect(caioAttentionResumeDeferredFields("warning", t("5 09:00"))).toEqual({});
   });
 });
