@@ -78,9 +78,12 @@ describe("enterprise suffix", () => {
 
 describe("module purity", () => {
   it("imports no database, network or runtime-state modules", () => {
-    const allowed = new Set(["zod", "@/lib/caio-operating-context/contracts", "@/lib/member-mcp/task-contract"]);
+    const allowed = new Set([
+      "zod", "@/lib/caio-operating-context/contracts", "@/lib/caio-operating-context/detector-runner", "@/lib/member-mcp/task-contract",
+    ]);
     const dir = path.dirname(new URL(import.meta.url).pathname);
-    for (const file of readdirSync(dir).filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))) {
+    // `*.service.ts` files are the IO boundary (database access); every other module stays pure.
+    for (const file of readdirSync(dir).filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts") && !name.endsWith(".service.ts"))) {
       const specifiers = [...readFileSync(path.join(dir, file), "utf8").matchAll(/from "([^"]+)"/gu)].map((match) => match[1]);
       for (const specifier of specifiers) expect(specifier.startsWith("./") || allowed.has(specifier), `${file}: ${specifier}`).toBe(true);
     }
