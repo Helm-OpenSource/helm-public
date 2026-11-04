@@ -29,7 +29,7 @@ describe("probeCaioAttentionSchemaReadiness", () => {
 
   it("names each missing column", async () => {
     const result = await probeCaioAttentionSchemaReadiness(fakeClient(allColumns.filter(([, column]) => column !== "openEpoch")));
-    expect(result).toEqual({ ready: false, reason: "schema_incomplete", missing: ["CaioAttentionControl.openEpoch", "CaioAttentionPauseRequest.openEpoch"] });
+    expect(result).toEqual({ ready: false, reason: "schema_incomplete", missing: ["CaioAttentionControl.openEpoch", "CaioAttentionPauseRequest.openEpoch", "CaioAttentionControlEvent.openEpoch"] });
   });
 
   it("fails closed without the seeded Control row, on query errors and on an unknown or empty table set", async () => {
