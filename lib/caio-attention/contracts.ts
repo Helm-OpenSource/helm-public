@@ -72,6 +72,9 @@ const routeRuleSchema = z.object({
   primaryFallbackRoleKeys: z.array(roleKey).max(5),
   ccRoleKeys: z.array(roleKey).max(5),
   escalationRoleKey: roleKey,
+  // Used when the escalation holder is also the primary (e.g. after a fallback); typically the
+  // workspace owner role, so nobody escalates to themselves.
+  escalationFallbackRoleKey: roleKey,
   reviewerRoleKey: roleKey,
   reviewerFallbackRoleKey: roleKey,
   compatibleRuleVersions: z.array(ref).min(1).max(10),
