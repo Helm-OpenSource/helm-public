@@ -4,15 +4,8 @@
  * only proves this node can close cases; it never replaces business acceptance after go-live.
  */
 
-/**
- * Whether the close chain is wired into this build. Default closed. The integration with the page service sets
- * pageServiceBound from CAIO_ATTENTION_PAGE_SERVICE_BOUND and lifecycleRoutes once submit, review, reissue and
- * assignReviewers are registered; until then no node can attest, so resume stays blocked.
- */
-export const CAIO_ATTENTION_CLOSE_CHAIN_BINDING: Readonly<{ pageServiceBound: boolean; lifecycleRoutes: boolean }> = {
-  pageServiceBound: false,
-  lifecycleRoutes: false,
-};
+// The close-chain binding (page service bound, lifecycle routes registered) is runtime state and lives in
+// lib/caio-attention-runtime/close-chain-binding.ts; this module stays pure.
 
 export const CAIO_ATTENTION_CAPABILITY_FILE = "lib/caio-attention/capability.json";
 const NODE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/u;

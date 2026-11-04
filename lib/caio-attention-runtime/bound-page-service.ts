@@ -1,14 +1,28 @@
 import "server-only";
 
+import type { PrismaClient } from "@prisma/client";
+
+import { getRegisteredCaioAttentionPack, resolveCaioAttentionEnterpriseScope } from "@/lib/caio-attention/registry";
 import { db } from "@/lib/db";
 
 import { createCaioAttentionLifecyclePageService } from "./page-service";
 
 /**
- * The page service the attention pages use in a running node. Commands need the tenant cadence policy, which the
- * overlay registers through the attention pack registry of the generator slice; this chain does not carry that
- * registry yet, so `getPolicy` answers null and every command fails closed with `service_unavailable` while reads
- * work through the authorized loader. Integration wires it to `getRegisteredCaioAttentionPack()?.policy` and the
- * pack's enterprise-scope hook.
+ * Page service whose policy and enterprise-scope hook come from the one attention pack the overlay registers
+ * (lib/caio-attention/registry.ts), read at every command: without a registered pack every command is refused with
+ * `service_unavailable` (fail closed) while reads still work through the authorized loader.
  */
-export const caioAttentionBoundPageService = createCaioAttentionLifecyclePageService({ db, getPolicy: () => null });
+export function createCaioAttentionPackPageService(client: PrismaClient, now?: () => Date) {
+  return createCaioAttentionLifecyclePageService({
+    db: client,
+    now,
+    getPolicy: () => getRegisteredCaioAttentionPack()?.policy ?? null,
+    resolveEnterpriseScope: ({ workspaceId, enterpriseSlug }) => {
+      const pack = getRegisteredCaioAttentionPack();
+      return pack ? resolveCaioAttentionEnterpriseScope(pack, workspaceId, enterpriseSlug) : Promise.resolve("unverified");
+    },
+  });
+}
+
+/** The page service the attention pages use in a running node (the web identity's client). */
+export const caioAttentionBoundPageService = createCaioAttentionPackPageService(db);

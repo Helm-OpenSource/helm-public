@@ -30,9 +30,12 @@ export type CaioAttentionPageServiceDeps = Readonly<{
   db: PrismaClient;
   getPolicy: () => CaioAttentionPolicy | null;
   resolveEnterpriseScope?: CaioAttentionLifecycleDeps["resolveEnterpriseScope"];
+  /** Clock for the lifecycle operations; tests inject it, a running node uses the wall clock. */
+  now?: () => Date;
 }>;
 
-const PAGE_OPERATIONS: readonly CaioAttentionOperation[] = [
+/** Every operation runCommand routes to the lifecycle service; the close-chain probe reads it. */
+export const CAIO_ATTENTION_PAGE_OPERATIONS: readonly CaioAttentionOperation[] = [
   "confirm", "defer", "dismiss", "cancel", "reissue", "assignReviewers", "ack", "note", "submitDisposition", "reviewAccept", "reviewReturn",
 ];
 
@@ -123,7 +126,7 @@ export function createCaioAttentionLifecyclePageService(deps: CaioAttentionPageS
         ...dispositions.map((d) => d.submittedByUserId), ...reviews.map((r) => r.reviewerUserId), ...events.map((e) => e.actorUserId)]);
       named.delete(null);
       const users = await db.user.findMany({ where: { id: { in: [...named] as string[] } }, select: { id: true, name: true } });
-      const allowedOperations = PAGE_OPERATIONS.filter((op) => authorizeCaioAttentionOperation({
+      const allowedOperations = CAIO_ATTENTION_PAGE_OPERATIONS.filter((op) => authorizeCaioAttentionOperation({
         op: op as Exclude<CaioAttentionOperation, "resumeDeferred">, actor, parties, expectedCommandVersion: row.commandVersion, reviewerVersion: row.reviewerVersion,
         disposition: currentDisposition ? { commandVersion: currentDisposition.commandVersion, superseded: false, isLatestInVersion: true, submittedByUserId: currentDisposition.submittedByUserId } : undefined,
       }).ok);
@@ -147,7 +150,7 @@ export function createCaioAttentionLifecyclePageService(deps: CaioAttentionPageS
     async runCommand(input: CaioAttentionCommandInput) {
       const policy = deps.getPolicy();
       if (!policy) return { ok: false, reason: "service_unavailable" };
-      const lifecycle: CaioAttentionLifecycleDeps = { db, policy, resolveEnterpriseScope: deps.resolveEnterpriseScope };
+      const lifecycle: CaioAttentionLifecycleDeps = { db, policy, resolveEnterpriseScope: deps.resolveEnterpriseScope, now: deps.now };
       const base = {
         workspaceId: input.viewer.workspaceId, caseId: input.caseId, actorUserId: input.viewer.actor.userId,
         clientRequestId: input.clientRequestId, expectedCommandVersion: input.expectedCommandVersion,

@@ -4,12 +4,12 @@ import path from "node:path";
 import { db } from "@/lib/db";
 import {
   CAIO_ATTENTION_CAPABILITY_FILE,
-  CAIO_ATTENTION_CLOSE_CHAIN_BINDING,
   parseCaioAttentionCapabilityFile,
   resolveCaioAttentionNodeId,
   type CaioAttentionCapabilityReport,
 } from "@/lib/caio-attention/capability";
 import { probeCaioAttentionSchemaReadiness } from "@/lib/caio-attention/schema-readiness";
+import { CAIO_ATTENTION_CLOSE_CHAIN_BINDING } from "@/lib/caio-attention-runtime/close-chain-binding";
 import { resolveRuntimeHealthAttestation } from "@/lib/production-health/runtime-deployment-identity";
 
 export const dynamic = "force-dynamic";

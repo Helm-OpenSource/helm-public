@@ -44,7 +44,7 @@ public_safety: Describes page routes, the page-service contract and guards of a 
 
 ## 能力版本与守卫
 
-- `lib/caio-attention/capability.json` 当前为 `closeCapabilityVersion: 0`；接入生命周期服务的同一变更把它改为 1，表示本发布具备关闭链。入口闸门只有在 `requiredCloseCapability` 为 1 且所有预期节点都上报能力 1 时才放行。
+- 生命周期服务已接入（`lib/caio-attention-runtime/bound-page-service.ts`），`lib/caio-attention/capability.json` 随之为 `closeCapabilityVersion: 1`，表示本发布具备关闭链。探针上报的 `pageServiceBound` 在运行时判定：页面已绑定且 overlay 已注册关注事项 pack（有提醒策略）才为真；未注册时命令一律 `service_unavailable`，就绪证明被 `page_service_unbound` 阻断。入口闸门只有在 `requiredCloseCapability` 为 1 且所有预期节点都上报能力 1 时才放行。
 - `npm run check:caio-attention`（接入 CI repo-guards）：模块不引用通用治理任务表；页面层不直接访问数据库；页面只经页面服务读取；能力声明等于绑定状态推出的值且关闭链表单同在；未接入时桩保持关闭。
 
 ## 导航入口
