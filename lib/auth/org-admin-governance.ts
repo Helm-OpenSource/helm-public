@@ -27,6 +27,7 @@ import {
   isAuthSessionStale,
   type AuthSessionAnomalyScope,
 } from "@/lib/auth/session-governance";
+import { RECENT_AUDIT_LOOKBACK_DAYS } from "@/lib/audit/capped-count";
 import { db } from "@/lib/db";
 export {
   canExportWorkspaceAdminSupportPack as canExportAdminSupportPack,
@@ -1177,6 +1178,7 @@ export async function getOrgAdminGovernanceSummary(
 ) {
   const now = new Date();
   const thirtyDaysAgo = subDays(now, 30);
+  const recentAuditSince = subDays(now, RECENT_AUDIT_LOOKBACK_DAYS);
 
   const workspace = await db.workspace.findUnique({
     where: { id: workspaceId },
@@ -1292,6 +1294,7 @@ export async function getOrgAdminGovernanceSummary(
       where: {
         workspaceId,
         actionType: { in: [...ORG_ADMIN_AUDIT_ACTION_TYPES] },
+        createdAt: { gte: recentAuditSince },
       },
       orderBy: { createdAt: "desc" },
       take: 8,
@@ -1300,6 +1303,7 @@ export async function getOrgAdminGovernanceSummary(
       where: {
         workspaceId,
         actionType: { in: [...DATA_GOVERNANCE_AUDIT_ACTION_TYPES] },
+        createdAt: { gte: recentAuditSince },
       },
       orderBy: { createdAt: "desc" },
       take: 8,
@@ -1862,6 +1866,8 @@ export async function getOrgAdminGovernanceSummary(
     workspaceIsolationAssertions,
     recentOrgAdminAudit: recentOrgAdminAudit.map(mapAuditRecord),
     recentDataGovernanceAudit: recentDataGovernanceAudit.map(mapAuditRecord),
+    // The two lists above hold at most 8 events created on or after `since`; they are not the full history.
+    recentAuditWindow: { days: RECENT_AUDIT_LOOKBACK_DAYS, since: recentAuditSince, limit: 8 },
     boundaryNotes: [
       "Support pack is tenant-scoped to the active workspace only.",
       "This export is audit-oriented and does not expand execution authority.",
@@ -1881,6 +1887,7 @@ export async function getOrgAdminGovernanceSummary(
       "Connector and import ingress remain tenant-scoped and review-first; they do not imply workflow or execution authority.",
       "Identity-match records remain tenant-scoped import follow-through truth and do not broaden execution or tenant-admin authority.",
       "Capability coverage still follows fixed roles and does not imply full tenant-admin platform breadth.",
+      `Recent org-admin and data-governance audit lists hold at most 8 events from the last ${RECENT_AUDIT_LOOKBACK_DAYS} days; older events stay in the audit log and are not part of these lists.`,
     ],
   };
 }

@@ -147,7 +147,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [type-check, lint, repo-guards, model-egress-mysql,
             caio-access-gateway-mysql, caio-inference-mysql, caio-context-memory-mysql,
-            caio-audit-state-mysql]
+            caio-audit-state-mysql, caio-attention-mysql]
     steps:
       - uses: actions/checkout@v5
 
@@ -181,7 +181,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [type-check, lint, repo-guards, model-egress-mysql,
             caio-access-gateway-mysql, caio-inference-mysql, caio-context-memory-mysql,
-            caio-audit-state-mysql]
+            caio-audit-state-mysql, caio-attention-mysql]
     steps:
       - uses: actions/checkout@v5
 
@@ -1015,6 +1015,150 @@ jobs:
 
       - name: Verify the CAIO audit receipt store and gate against MySQL
         run: npm run test:caio-audit-state:mysql
+
+  # CAIO attention tables under the three least-privilege fixture identities
+  # (generator / web / operator, lib/caio-attention/least-privilege-fixture.ts).
+  # The migration identity replays, rolls back and re-applies the migrations;
+  # the tests then connect only as the fixture identities (plus the migration
+  # identity for fixture setup) and assert every unlisted privilege is 1142.
+  caio-attention-mysql:
+    name: CAIO Attention MySQL
+    runs-on: ubuntu-latest
+    needs: [type-check, repo-guards]
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: helm_caio_attention_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      HELM_CI_MYSQL_DATABASE: helm_caio_attention_ci
+      HELM_CI_MYSQL_USER: helm_ci
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Mint isolated migration and fixture MySQL credentials
+        env:
+          HELM_CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          app_password="$(openssl rand -hex 24)"
+          generator_password="$(openssl rand -hex 24)"
+          web_password="$(openssl rand -hex 24)"
+          ops_password="$(openssl rand -hex 24)"
+          root_password="$(openssl rand -hex 24)"
+          echo "::add-mask::${app_password}"
+          echo "::add-mask::${generator_password}"
+          echo "::add-mask::${web_password}"
+          echo "::add-mask::${ops_password}"
+          echo "::add-mask::${root_password}"
+          bootstrap_sql="$(mktemp)"
+          chmod 600 "${bootstrap_sql}"
+          {
+            printf "CREATE USER IF NOT EXISTS '%s'@'%%' IDENTIFIED BY '%s';\n" \
+              "${HELM_CI_MYSQL_USER}" "${app_password}"
+            printf "GRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
+              "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
+            # Fixture identities start with no privilege; the grant step below
+            # applies exactly the fixture matrix after the migrations exist.
+            printf "CREATE USER 'attention_generator'@'%%' IDENTIFIED BY '%s';\n" "${generator_password}"
+            printf "CREATE USER 'attention_web'@'%%' IDENTIFIED BY '%s';\n" "${web_password}"
+            printf "CREATE USER 'attention_ops'@'%%' IDENTIFIED BY '%s';\n" "${ops_password}"
+            # Same ephemeral-container-only exception as the jobs above: older
+            # migrations create triggers under binary logging (error 1419).
+            printf "SET GLOBAL log_bin_trust_function_creators = 1;\n"
+            printf "ALTER USER IF EXISTS 'root'@'%%' IDENTIFIED BY '%s';\n" \
+              "${root_password}"
+            printf "ALTER USER IF EXISTS 'root'@'localhost' IDENTIFIED BY '%s';\n" \
+              "${root_password}"
+            printf "FLUSH PRIVILEGES;\n"
+          } >"${bootstrap_sql}"
+          docker exec -i "${HELM_CI_MYSQL_CONTAINER}" \
+            mysql --host=127.0.0.1 --protocol=tcp --user=root --batch \
+            <"${bootstrap_sql}"
+          rm -f "${bootstrap_sql}"
+          (umask 077; printf '%s\n' "${root_password}" >"${RUNNER_TEMP}/helm-attention-root-password")
+          credential="${HELM_CI_MYSQL_USER}:${app_password}"
+          url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
+          [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
+          {
+            printf 'DATABASE_URL=%s\n' "${url}"
+            printf 'CAIO_ATTENTION_DATABASE_URL=%s\n' "${url}"
+          } >>"${GITHUB_ENV}"
+          credential="attention_generator:${generator_password}"
+          url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
+          [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
+          {
+            printf 'CAIO_ATTENTION_GENERATOR_DATABASE_URL=%s\n' "${url}"
+          } >>"${GITHUB_ENV}"
+          credential="attention_web:${web_password}"
+          url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
+          [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
+          {
+            printf 'CAIO_ATTENTION_WEB_DATABASE_URL=%s\n' "${url}"
+          } >>"${GITHUB_ENV}"
+          credential="attention_ops:${ops_password}"
+          url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
+          [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
+          {
+            printf 'CAIO_ATTENTION_OPS_DATABASE_URL=%s\n' "${url}"
+          } >>"${GITHUB_ENV}"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npm run db:generate
+
+      - name: Replay migrations on an empty database
+        run: npx tsx prisma/setup-db.ts prepare
+
+      - name: Roll back, re-apply and replay the attention migrations
+        env:
+          HELM_CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          MYSQL_PWD="$(node -e 'process.stdout.write(decodeURIComponent(new URL(process.env.DATABASE_URL).password))')"
+          export MYSQL_PWD
+          for file in prisma/rollback/20261104_rollback_caio_attention_control_plane.sql; do
+            docker exec -e MYSQL_PWD -i "${HELM_CI_MYSQL_CONTAINER}" mysql --host=127.0.0.1 --protocol=tcp \
+              --user="${HELM_CI_MYSQL_USER}" --batch "${HELM_CI_MYSQL_DATABASE}" <"${file}"
+          done
+          unset MYSQL_PWD
+          npx tsx prisma/setup-db.ts migrate
+          npx tsx prisma/setup-db.ts migrate
+
+      - name: Grant the least-privilege fixture identities
+        env:
+          HELM_CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          IFS= read -r root_password <"${RUNNER_TEMP}/helm-attention-root-password"
+          npx tsx scripts/caio-attention-grant-fixture.ts "${HELM_CI_MYSQL_DATABASE}" |
+            MYSQL_PWD="${root_password}" docker exec -e MYSQL_PWD -i "${HELM_CI_MYSQL_CONTAINER}" \
+              mysql --host=127.0.0.1 --protocol=tcp --user=root --batch
+          unset root_password
+
+      - name: Verify the attention tables against MySQL as the fixture identities
+        run: npm run test:caio-attention:mysql
+
+      - name: Remove isolated bootstrap credential on all outcomes
+        if: always()
+        run: rm -f "${RUNNER_TEMP}/helm-attention-root-password"
 
   member-gateway-signal-mysql:
     name: Member Gateway MySQL
