@@ -299,20 +299,37 @@ async function finalizeLoginForUser(
       ? "invited"
       : "workspace";
 
-  if (
-    activeMembership.status === MembershipStatus.INVITED &&
-    !requiresWorkspaceSelection
-  ) {
-    await activateMembershipIfInvited({
-      workspaceId: activeMembership.workspaceId,
-      userId: user.id,
-    });
+  let loginWorkspaceId: string | null = activeMembership.workspaceId;
+  let loginMembership = activeMembership;
+  if (activeMembership.status === MembershipStatus.INVITED) {
+    if (requiresWorkspaceSelection) {
+      // Do not bind a multi-workspace login to a preferred INVITED workspace.
+      // The member will choose it explicitly in the selector.
+      loginWorkspaceId = null;
+    } else {
+      const resultingMembership = await activateMembershipIfInvited({
+        workspaceId: activeMembership.workspaceId,
+        userId: user.id,
+      });
+      if (resultingMembership?.status !== MembershipStatus.ACTIVE) {
+        await clearSession();
+        return {
+          ok: true as const,
+          redirectTo: "/invite-pending",
+          workspaceName: activeMembership.workspace.name ?? (english ? "your workspace" : "\u5f53\u524d\u5de5\u4f5c\u533a"),
+          entryKind: "invited",
+          requiresWorkspaceSelection: false,
+          invitationPending: true,
+        };
+      }
+      loginMembership = { ...activeMembership, status: MembershipStatus.ACTIVE };
+    }
   }
 
   await createSession({
     userId: user.id,
     email: user.email,
-    workspaceId: activeMembership.workspaceId,
+    workspaceId: loginWorkspaceId,
     sourcePage,
     providerType,
   });
@@ -334,7 +351,7 @@ async function finalizeLoginForUser(
     : requiresIdentityCompletion
       ? FIRST_LOGIN_IDENTITY_SETUP_PATH
       : resolveDeploymentPostLoginPath(
-          resolvePostLoginRedirectPath(activeMembership),
+          resolvePostLoginRedirectPath(loginMembership),
         );
 
   await logEvent({
@@ -1367,7 +1384,12 @@ export async function completeTrialSignupVerificationAction(
     workspaceIdForSession = workspace.id;
   }
 
-  if (!invitationHandled || workspaceIdForSession) {
+  if (invitationHandled && !workspaceIdForSession) {
+    // Signup is a public verified-identity flow and can be started from a
+    // browser that already has a session. When the invite remains pending, do
+    // not leave that prior session available to resolve workspace access.
+    await clearSession();
+  } else {
     await createSession({
       userId: savedUser.id,
       email: savedUser.email,

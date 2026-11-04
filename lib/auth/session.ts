@@ -850,11 +850,17 @@ export async function getCurrentWorkspaceSessionOrNull() {
     return null;
   }
 
+  if (membership.status === MembershipStatus.INVITED) {
+    const resultingMembership = await activateMembershipIfInvited({
+      workspaceId: membership.workspaceId,
+      userId: authSession.user.id,
+    });
+    if (!resultingMembership || resultingMembership.status !== MembershipStatus.ACTIVE) {
+      return null;
+    }
+  }
+
   await ensureWorkspaceCommercialFoundation(membership.workspaceId);
-  await activateMembershipIfInvited({
-    workspaceId: membership.workspaceId,
-    userId: authSession.user.id,
-  });
 
   if (membership.workspaceId !== authSession.activeWorkspaceId) {
     const realignedAt = new Date();
@@ -921,13 +927,12 @@ export async function getCurrentWorkspaceSessionOrNull() {
   // by the null check; one REVOKED in the same window was not, because an
   // INACTIVE row is still a row, and the session was seated on it.
   //
-  // Only ACTIVE and INVITED may seat a session. Anything else is refused rather
-  // than enumerated, so a status added to the enum later has to be admitted
-  // here deliberately instead of inheriting a session by default.
+  // INVITED is never authorization. The activation helper must have changed
+  // the member's own row to ACTIVE before this resolver returns a workspace
+  // session; this live reread also fails closed on a concurrent revoke.
   if (
     !currentMembership ||
-    (currentMembership.status !== MembershipStatus.ACTIVE &&
-      currentMembership.status !== MembershipStatus.INVITED) ||
+    currentMembership.status !== MembershipStatus.ACTIVE ||
     externalScopeOf(currentMembership) !== null
   ) {
     return null;

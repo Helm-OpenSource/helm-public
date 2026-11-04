@@ -253,6 +253,17 @@ describe("getCurrentWorkspaceSessionOrNull", () => {
     await expect(getCurrentWorkspaceSessionOrNull()).resolves.toBeNull();
   });
 
+  it("refuses an opted-out invited workspace without realigning the auth session", async () => {
+    seatOn(MembershipStatus.INVITED);
+    dbMock.workspace.findUnique.mockResolvedValue({ featureFlagsJson: JSON.stringify({ membershipAutoActivation: false }) });
+    dbMock.membership.findUnique.mockResolvedValue(membershipRow(MembershipStatus.INVITED));
+
+    await expect(getCurrentWorkspaceSessionOrNull()).resolves.toBeNull();
+
+    expect(dbMock.authSession.update).not.toHaveBeenCalled();
+    expect(ensureWorkspaceCommercialFoundationMock).not.toHaveBeenCalled();
+  });
+
   it("still seats the session when activation genuinely succeeds", async () => {
     // The invited-to-active path must keep working: this is the case the
     // discarded return value was there to serve.
@@ -412,6 +423,21 @@ describe("auth session substrate", () => {
     expect(membership).toEqual(
       expect.objectContaining({ status: MembershipStatus.ACTIVE }),
     );
+  });
+
+  it("keeps legacy workspaces with a missing key on the enabled activation behavior", async () => {
+    dbMock.workspace.findUnique.mockResolvedValue({ featureFlagsJson: null });
+    dbMock.$executeRaw.mockResolvedValue(1);
+    dbMock.membership.findUnique.mockResolvedValue({ status: MembershipStatus.ACTIVE });
+
+    const membership = await activateMembershipIfInvited({ workspaceId: "workspace-1", userId: "user-1" });
+
+    expect(membership?.status).toBe(MembershipStatus.ACTIVE);
+    expect(dbMock.$transaction).toHaveBeenCalledTimes(1);
+    expect(writeAuditLogMock).toHaveBeenCalledWith(expect.objectContaining({
+      actionType: MEMBERSHIP_AUTO_ACTIVATED_AUDIT_ACTION,
+      actorType: "USER",
+    }), { client: dbMock });
   });
 
   it("keeps invited memberships inactive when the workspace explicitly opts out", async () => {
@@ -865,6 +891,25 @@ describe("auth session substrate", () => {
         targetId: "auth-session-1",
       }),
     );
+  });
+
+  it("cannot authorize through a stale workspace cookie after its auth session is cleared", async () => {
+    const cookieStore = createCookieStore({
+      [SESSION_ID_COOKIE]: "current-session",
+      [ACTIVE_WORKSPACE_COOKIE]: "workspace-1",
+    });
+    cookiesMock.mockResolvedValue(cookieStore);
+    dbMock.authSession.findUnique.mockResolvedValue(buildAuthSessionRecord());
+    dbMock.authSession.update.mockResolvedValue({});
+
+    await clearSession();
+
+    await expect(getCurrentWorkspaceSessionOrNull()).resolves.toBeNull();
+    expect(cookieStore.get(SESSION_ID_COOKIE)).toBeUndefined();
+    expect(dbMock.authSession.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "auth-session-1" },
+      data: expect.objectContaining({ revokedAt: expect.any(Date) }),
+    }));
   });
 
   it("still clears auth cookies when sqlite revocation write hits readonly mode", async () => {
