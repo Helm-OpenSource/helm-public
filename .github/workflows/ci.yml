@@ -83,6 +83,9 @@ jobs:
       - name: Boundary checks
         run: npm run check:boundaries
 
+      - name: CAIO attention guard
+        run: npm run check:caio-attention
+
       - name: Doc frontmatter guard
         run: npx tsx scripts/check-doc-frontmatter.ts
 

@@ -50,6 +50,7 @@
     "check:ai-shelf-trust-center-contract": "node --import tsx scripts/check-ai-shelf-trust-center-contract.ts",
     "check:stage1-owner-loop": "node --import tsx scripts/check-stage1-owner-loop.ts && vitest run lib/stage1-owner-loop features/dashboard/stage1-owner-loop-readout.test.ts features/dashboard/stage1-owner-loop-console-accessibility.test.ts --config vitest.public.config.ts",
     "check:object-first-workspace": "vitest run lib/presentation/object-first-workspace-guard.test.ts --config vitest.config.ts",
+    "check:caio-attention": "vitest run scripts/check-caio-attention.test.ts --config vitest.public.config.ts",
     "check:caio-terminology": "node --import tsx scripts/check-caio-terminology.ts && vitest run scripts/check-caio-terminology.test.ts --config vitest.public.config.ts",
     "check:model-egress-governance": "node --import tsx scripts/check-model-egress-governance.ts && vitest run lib/llm/model-route-contracts.test.ts lib/llm/model-egress-contracts.test.ts lib/llm/governed-model-gateway.service.test.ts lib/llm/ordinary-paid-post-dispatch.test.ts lib/llm/ordinary-paid-composition.test.ts features/dashboard/model-egress-readout.test.ts features/dashboard/model-egress-query.test.ts scripts/check-model-egress-governance.test.ts --config vitest.public.config.ts",
     "check:caio-pro-v1": "node --import tsx scripts/check-caio-pro-v1.ts && vitest run scripts/check-caio-pro-v1.test.ts --config vitest.public.config.ts",
