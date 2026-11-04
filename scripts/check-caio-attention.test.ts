@@ -86,6 +86,9 @@ describe("check:caio-attention", () => {
     expect(route).not.toMatch(/closeCapabilityVersion:\s*parseCaioAttentionCapabilityFile/u);
     expect(read("lib/caio-attention/heartbeat.service.ts")).toContain("getRegisteredCaioAttentionPack()?.policy != null");
     expect(read("lib/runtime/node-instrumentation.ts")).toContain("CAIO_ATTENTION_CLOSE_CHAIN_BINDING.pageServiceBound");
+    // The resolver must actually be handed to the heartbeat (lib/runtime/node-instrumentation.caio-heartbeat.test.ts
+    // proves the call at runtime).
+    expect(read("lib/runtime/node-instrumentation.ts")).toMatch(/startCaioAttentionHeartbeat\([^;]*,\s*closeChainBound\)/u);
     const detail = read("app/(workspace)/caio/attention/[caseId]/page.tsx");
     for (const marker of ['kind="disposition"', 'kind="review"', "CaioAttentionConfirmForm"]) expect(detail, marker).toContain(marker);
     expect(read("features/caio-attention/actions.ts")).toMatch(/getCaioAttentionPageService\(\)\.runCommand\(/u);
@@ -101,6 +104,10 @@ describe("check:caio-attention", () => {
     // Pages and navigation read the runtime rule, never the build-time constant.
     for (const file of ["app/(workspace)/caio/attention/page.tsx", "app/(workspace)/caio/attention/mine/page.tsx", "features/caio-attention/navigation.ts"]) {
       expect(read(file), file).toContain("isCaioAttentionPageServiceAvailable()");
+      expect(read(file), file).not.toContain("CAIO_ATTENTION_PAGE_SERVICE_BOUND");
+    }
+    // The detail page and the command action go through getCaioAttentionPageService(), never the build-time constant.
+    for (const file of ["app/(workspace)/caio/attention/[caseId]/page.tsx", "features/caio-attention/actions.ts"]) {
       expect(read(file), file).not.toContain("CAIO_ATTENTION_PAGE_SERVICE_BOUND");
     }
     const untouchable = new Proxy({}, { get: () => { throw new Error("database touched"); } }) as never;
