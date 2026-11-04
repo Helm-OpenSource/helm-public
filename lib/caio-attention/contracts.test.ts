@@ -78,7 +78,9 @@ describe("module purity", () => {
   it("imports no database, network or runtime-state modules", () => {
     const allowed = new Set(["zod", "@/lib/caio-operating-context/contracts", "@/lib/member-mcp/task-contract"]);
     const dir = path.dirname(new URL(import.meta.url).pathname);
-    for (const file of readdirSync(dir).filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))) {
+    // The scanner services do IO by design (S6); every other module here stays pure.
+    const ioModules = new Set(["reminder-scanner.service.ts"]);
+    for (const file of readdirSync(dir).filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts") && !ioModules.has(name))) {
       const specifiers = [...readFileSync(path.join(dir, file), "utf8").matchAll(/from "([^"]+)"/gu)].map((match) => match[1]);
       for (const specifier of specifiers) expect(specifier.startsWith("./") || allowed.has(specifier), `${file}: ${specifier}`).toBe(true);
     }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { CAIO_ATTENTION_GRANT_MATRIX, renderCaioAttentionGrantSql } from "./least-privilege-fixture";
+import { CAIO_ATTENTION_FIXTURE_CORE_TABLES, CAIO_ATTENTION_GRANT_MATRIX, renderCaioAttentionGrantSql } from "./least-privilege-fixture";
 import {
   CAIO_ATTENTION_SCHEMA_MANIFEST,
   CAIO_ATTENTION_TABLES,
@@ -47,7 +47,11 @@ describe("probeCaioAttentionSchemaReadiness", () => {
 
 describe("CAIO attention least-privilege fixture", () => {
   it("covers exactly the probed tables and never grants DELETE", () => {
-    expect(Object.keys(CAIO_ATTENTION_GRANT_MATRIX).sort()).toEqual([...CAIO_ATTENTION_TABLES].sort());
+    expect(Object.keys(CAIO_ATTENTION_GRANT_MATRIX).sort()).toEqual([...CAIO_ATTENTION_TABLES, ...CAIO_ATTENTION_FIXTURE_CORE_TABLES].sort());
+    for (const table of CAIO_ATTENTION_FIXTURE_CORE_TABLES) {
+      expect(Object.keys(CAIO_ATTENTION_GRANT_MATRIX[table]), table).toEqual(["attention_web"]);
+      expect(CAIO_ATTENTION_GRANT_MATRIX[table].attention_web?.privileges).not.toContain("UPDATE");
+    }
     const sql = renderCaioAttentionGrantSql("helm_caio_attention_ci");
     expect(sql).not.toMatch(/DELETE|ALL PRIVILEGES|GRANT OPTION|\*\./u);
     expect(sql).toContain("GRANT SELECT ON `helm_caio_attention_ci`.`CaioAttentionControl` TO 'attention_web'@'%';");

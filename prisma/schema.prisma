@@ -7680,6 +7680,12 @@ model CaioAttentionCase {
   @@unique([workspaceId, activeKey])
   @@unique([workspaceId, shortNo])
   @@index([workspaceId, status, createdAt])
+  // Reminder scanner: one range branch per rule (20261104160000_caio_attention_reminder_due_indexes).
+  @@index([status, r0aDueAt])
+  @@index([status, r0bDueAt])
+  @@index([status, noResponseDueAt])
+  @@index([status, unresolvedEscalateAt])
+  @@index([status, nextPeriodicAt])
 }
 
 model CaioAttentionCaseEvent {
