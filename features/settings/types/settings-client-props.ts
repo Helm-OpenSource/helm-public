@@ -563,6 +563,8 @@ export type SettingsClientProps = {
         payload: unknown;
         sourcePage: string | null;
       }>;
+      /** The two lists above hold at most `limit` events created on or after `since`. */
+      recentAuditWindow: { days: number; since: Date; limit: number };
       boundaryNotes: string[];
     } | null;
     lifecycleBoundarySummary: {
@@ -1364,6 +1366,8 @@ export type SettingsClientProps = {
     }>;
     governanceSummary: {
       auditEvents7d: number;
+      /** True when auditEvents7d stopped at AUDIT_COUNT_CAP. */
+      auditEvents7dCapped?: boolean;
       pendingApprovals: number;
       llmFallbacks7d: number;
       approvalProtectedActions: number;
