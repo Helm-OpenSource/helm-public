@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CAIO_ATTENTION_CLOSE_CHAIN_BINDING,
   evaluateCaioAttentionCapability,
   isCaioAttentionLoopbackRequest,
   parseCaioAttentionCapabilityFile,
   resolveCaioAttentionNodeId,
+  resolveCaioAttentionReportedCloseCapability,
 } from "./capability";
 import { resolveCaioAttentionHeartbeat } from "./heartbeat.service";
 
@@ -32,19 +34,29 @@ describe("close-capability probe", () => {
   it("heartbeat is off without a node id or an artifact-bound deployment id", () => {
     const env = { HELM_RUNTIME_NODE_ID: "web-1", HELM_HEALTH_ATTESTATION_MODE: "artifact-bound", HELM_RUNTIME_DEPLOYMENT_ID: "dep-1" };
     expect(resolveCaioAttentionNodeId({ HELM_RUNTIME_NODE_ID: "bad id" })).toBeNull();
-    expect(resolveCaioAttentionHeartbeat({ ...env, HELM_RUNTIME_NODE_ID: undefined }, null)).toBeNull();
-    expect(resolveCaioAttentionHeartbeat({ ...env, HELM_HEALTH_ATTESTATION_MODE: undefined }, null)).toBeNull();
-    expect(resolveCaioAttentionHeartbeat({ ...env, HELM_CAIO_ATTENTION_REMINDERS_ENABLED: "true" }, "{\"closeCapabilityVersion\":1}"))
+    expect(resolveCaioAttentionHeartbeat({ ...env, HELM_RUNTIME_NODE_ID: undefined }, null, true)).toBeNull();
+    expect(resolveCaioAttentionHeartbeat({ ...env, HELM_HEALTH_ATTESTATION_MODE: undefined }, null, true)).toBeNull();
+    expect(resolveCaioAttentionHeartbeat({ ...env, HELM_CAIO_ATTENTION_REMINDERS_ENABLED: "true" }, "{\"closeCapabilityVersion\":1}", true))
       .toEqual({ nodeId: "web-1", role: "http", deploymentId: "dep-1", closeCapabilityVersion: 1, remindersEnabled: true });
-    expect(resolveCaioAttentionHeartbeat(env, "{")).toMatchObject({ closeCapabilityVersion: 0, remindersEnabled: false });
+    expect(resolveCaioAttentionHeartbeat(env, "{", true)).toMatchObject({ closeCapabilityVersion: 0, remindersEnabled: false });
+  });
+
+  it("reports close capability 0 unless the close chain is bound at runtime, whatever the release file says", () => {
+    const env = { HELM_RUNTIME_NODE_ID: "web-1", HELM_HEALTH_ATTESTATION_MODE: "artifact-bound", HELM_RUNTIME_DEPLOYMENT_ID: "dep-1" };
+    expect(resolveCaioAttentionHeartbeat(env, "{\"closeCapabilityVersion\":1}", false)).toMatchObject({ closeCapabilityVersion: 0 });
+    expect(resolveCaioAttentionReportedCloseCapability(1, false)).toBe(0);
+    expect(resolveCaioAttentionReportedCloseCapability(1, true)).toBe(1);
+    expect(resolveCaioAttentionReportedCloseCapability(null, true)).toBe(0);
+    // This slice ships the binding unbound, so no node can report capability 1 and attest stays closed.
+    expect(CAIO_ATTENTION_CLOSE_CHAIN_BINDING).toEqual({ pageServiceBound: false, lifecycleRoutes: false });
   });
 
   it("heartbeat role comes from HELM_RUNTIME_NODE_ROLE: empty is http, malformed turns the heartbeat off", () => {
     const env = { HELM_RUNTIME_NODE_ID: "caio-1", HELM_HEALTH_ATTESTATION_MODE: "artifact-bound", HELM_RUNTIME_DEPLOYMENT_ID: "dep-1" };
-    expect(resolveCaioAttentionHeartbeat({ ...env, HELM_RUNTIME_NODE_ROLE: " caio " }, null)).toMatchObject({ role: "caio" });
-    expect(resolveCaioAttentionHeartbeat({ ...env, HELM_RUNTIME_NODE_ROLE: "" }, null)).toMatchObject({ role: "http" });
+    expect(resolveCaioAttentionHeartbeat({ ...env, HELM_RUNTIME_NODE_ROLE: " caio " }, null, true)).toMatchObject({ role: "caio" });
+    expect(resolveCaioAttentionHeartbeat({ ...env, HELM_RUNTIME_NODE_ROLE: "" }, null, true)).toMatchObject({ role: "http" });
     for (const role of ["Caio", "caio worker", "-x", "a".repeat(33)]) {
-      expect(resolveCaioAttentionHeartbeat({ ...env, HELM_RUNTIME_NODE_ROLE: role }, null), role).toBeNull();
+      expect(resolveCaioAttentionHeartbeat({ ...env, HELM_RUNTIME_NODE_ROLE: role }, null, true), role).toBeNull();
     }
   });
 });

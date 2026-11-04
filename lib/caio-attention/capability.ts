@@ -15,6 +15,15 @@ export const CAIO_ATTENTION_CLOSE_CHAIN_BINDING: Readonly<{ pageServiceBound: bo
 };
 
 export const CAIO_ATTENTION_CAPABILITY_FILE = "lib/caio-attention/capability.json";
+
+/**
+ * Close capability a node reports (probe and heartbeat): the release file's value only while the close chain is bound
+ * at runtime, else 0, so capability.json = 1 alone never lets attest pass. In this slice the binding is the constant
+ * above (false), so every node reports 0; the page-service glue replaces it with the runtime decision.
+ */
+export function resolveCaioAttentionReportedCloseCapability(fileVersion: number | null, closeChainBound: boolean): number {
+  return closeChainBound ? fileVersion ?? 0 : 0;
+}
 const NODE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/u;
 
 export type CaioAttentionCapabilityReport = Readonly<{

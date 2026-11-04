@@ -8,9 +8,11 @@ import { resolveRuntimeHealthAttestation } from "@/lib/production-health/runtime
 
 import {
   CAIO_ATTENTION_CAPABILITY_FILE,
+  CAIO_ATTENTION_CLOSE_CHAIN_BINDING,
   parseCaioAttentionCapabilityFile,
   resolveCaioAttentionNodeId,
   resolveCaioAttentionNodeRole,
+  resolveCaioAttentionReportedCloseCapability,
 } from "./capability";
 
 /**
@@ -25,8 +27,10 @@ export type CaioAttentionHeartbeat = Readonly<{
   nodeId: string; role: string; deploymentId: string; closeCapabilityVersion: number; remindersEnabled: boolean;
 }>;
 
-export function resolveCaioAttentionHeartbeat(env: Readonly<Record<string, string | undefined>>, capabilityFileText: string | null):
-  CaioAttentionHeartbeat | null {
+/** closeChainBound: whether the close chain is bound at runtime; unbound reports close capability 0 (file ignored). */
+export function resolveCaioAttentionHeartbeat(
+  env: Readonly<Record<string, string | undefined>>, capabilityFileText: string | null, closeChainBound: boolean,
+): CaioAttentionHeartbeat | null {
   const nodeId = resolveCaioAttentionNodeId(env);
   const role = resolveCaioAttentionNodeRole(env);
   const attestation = resolveRuntimeHealthAttestation(env);
@@ -35,7 +39,7 @@ export function resolveCaioAttentionHeartbeat(env: Readonly<Record<string, strin
     nodeId,
     role,
     deploymentId: attestation.runtimeDeploymentId,
-    closeCapabilityVersion: parseCaioAttentionCapabilityFile(capabilityFileText) ?? 0,
+    closeCapabilityVersion: resolveCaioAttentionReportedCloseCapability(parseCaioAttentionCapabilityFile(capabilityFileText), closeChainBound),
     remindersEnabled: ["true", "1"].includes(env.HELM_CAIO_ATTENTION_REMINDERS_ENABLED?.trim().toLowerCase() ?? ""),
   };
 }
@@ -57,7 +61,7 @@ export async function startCaioAttentionHeartbeat(client: Pick<PrismaClient, "$e
   } catch {
     text = null;
   }
-  const beat = resolveCaioAttentionHeartbeat(process.env, text);
+  const beat = resolveCaioAttentionHeartbeat(process.env, text, CAIO_ATTENTION_CLOSE_CHAIN_BINDING.pageServiceBound);
   if (!beat) return () => undefined;
   const tick = () => recordCaioAttentionHeartbeat(client, beat).catch((error: unknown) => {
     log(`caio attention heartbeat failed: ${error instanceof Error ? error.name : "error"}`);
