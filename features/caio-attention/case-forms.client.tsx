@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 
 import { runCaioAttentionCommandAction } from "./actions";
 import type { CaioAttentionActionState } from "./command-form";
@@ -8,7 +8,7 @@ import { caioAttentionCopy, caioAttentionFailureLabel, caioAttentionFieldLabel, 
 import { CAIO_ATTENTION_DISPOSITION_OUTCOMES } from "./service-contract";
 import { diffCaioAttentionCommand } from "./view-model";
 
-export type CaioAttentionFormCommon = Readonly<{ caseId: string; commandVersion: number; clientRequestId: string; english: boolean }>;
+export type CaioAttentionFormCommon = Readonly<{ caseId: string; commandVersion: number; english: boolean }>;
 type Member = Readonly<{ id: string; label: string }>;
 type PrefillProps = Readonly<{
   primaryUserId: string | null;
@@ -30,12 +30,26 @@ const toLocalInput = (iso: string | null) => {
 const toIso = (local: string) => (local && !Number.isNaN(new Date(local).getTime()) ? new Date(local).toISOString() : "");
 const toggle = (list: readonly string[], id: string) => (list.includes(id) ? list.filter((item) => item !== id) : [...list, id]);
 
+/**
+ * Each form instance owns its request id, created in the browser before its first submission and kept across
+ * retries of a failed one (so the service can treat a retry as the same request), then replaced after a success.
+ */
+export function useCaioAttentionCommandAction() {
+  const requestId = useRef<string | null>(null);
+  return useActionState(async (previous: CaioAttentionActionState, formData: FormData) => {
+    requestId.current ??= crypto.randomUUID();
+    formData.set("clientRequestId", requestId.current);
+    const next = await runCaioAttentionCommandAction(previous, formData);
+    if (next.status === "ok") requestId.current = null;
+    return next;
+  }, IDLE);
+}
+
 function Identity({ common, op }: { common: CaioAttentionFormCommon; op?: string }) {
   return (
     <>
       <input type="hidden" name="caseId" value={common.caseId} />
       <input type="hidden" name="expectedCommandVersion" value={common.commandVersion} />
-      <input type="hidden" name="clientRequestId" value={common.clientRequestId} />
       {op ? <input type="hidden" name="op" value={op} /> : null}
     </>
   );
@@ -49,13 +63,13 @@ function Outcome({ state, english }: { state: CaioAttentionActionState; english:
 
 export function CaioAttentionConfirmForm({ common, prefill, members }: { common: CaioAttentionFormCommon; prefill: PrefillProps; members: readonly Member[] }) {
   const copy = caioAttentionCopy(common.english);
-  const [state, action, pending] = useActionState(runCaioAttentionCommandAction, IDLE);
+  const [state, action, pending] = useCaioAttentionCommandAction();
   const [primary, setPrimary] = useState(prefill.primaryUserId ?? "");
   const [cc, setCc] = useState<readonly string[]>(prefill.ccUserIds);
   const [escalation, setEscalation] = useState(prefill.escalationUserId ?? "");
   const [reviewers, setReviewers] = useState<readonly string[]>(prefill.reviewerUserIds);
-  const [dueLocal, setDueLocal] = useState("");
-  useEffect(() => setDueLocal(toLocalInput(prefill.committedDueAt)), [prefill.committedDueAt]);
+  const [dueLocal, setDueLocal] = useState(() => toLocalInput(prefill.committedDueAt));
+  const joiner = common.english ? ", " : "、";
   const label = (id: string) => members.find((member) => member.id === id)?.label ?? id;
   const changes = diffCaioAttentionCommand(
     { ...prefill, committedDueAt: prefill.committedDueAt ? new Date(prefill.committedDueAt) : null },
@@ -88,9 +102,10 @@ export function CaioAttentionConfirmForm({ common, prefill, members }: { common:
       <fieldset className="text-sm"><legend>{caioAttentionFieldLabel(common.english, "reviewerUserIds")}</legend>{checks("reviewerUserIds", reviewers, setReviewers)}</fieldset>
       <label className="block text-sm">
         {caioAttentionFieldLabel(common.english, "committedDueAt")}
-        <input type="datetime-local" value={dueLocal} onChange={(event) => setDueLocal(event.target.value)} className={field} />
+        {/* Local wall time can differ between server render and browser; the hidden field carries the instant. */}
+        <input type="datetime-local" value={dueLocal} onChange={(event) => setDueLocal(event.target.value)} className={field} suppressHydrationWarning />
       </label>
-      <input type="hidden" name="committedDueAt" value={toIso(dueLocal)} />
+      <input type="hidden" name="committedDueAt" value={toIso(dueLocal)} suppressHydrationWarning />
       <div className="text-sm" data-testid="caio-attention-confirm-diff">
         <p className="font-medium">{copy.diffTitle}</p>
         {changes.length === 0 ? <p>{copy.noDiff}</p> : (
@@ -100,7 +115,7 @@ export function CaioAttentionConfirmForm({ common, prefill, members }: { common:
                 {caioAttentionFieldLabel(common.english, change.field)}:{" "}
                 {change.field === "committedDueAt"
                   ? `${toLocalInput(change.before[0] ?? null) || copy.none} → ${dueLocal || copy.none}`
-                  : `${change.before.map(label).join("、") || copy.none} → ${change.after.map(label).join("、") || copy.none}`}
+                  : `${change.before.map(label).join(joiner) || copy.none} → ${change.after.map(label).join(joiner) || copy.none}`}
               </li>
             ))}
           </ul>
@@ -122,7 +137,7 @@ export function CaioAttentionOperationForm({
   review?: Readonly<{ dispositionId: string; reviewerVersion: number; externalRefs: readonly string[] }>;
 }) {
   const copy = caioAttentionCopy(common.english);
-  const [state, action, pending] = useActionState(runCaioAttentionCommandAction, IDLE);
+  const [state, action, pending] = useCaioAttentionCommandAction();
   const [disposedLocal, setDisposedLocal] = useState("");
   const submit = (text: string, op?: string) => (
     <button type="submit" name={op ? "op" : undefined} value={op} disabled={pending} className="border px-3 py-1 text-sm">{pending ? copy.submitting : text}</button>

@@ -5,14 +5,19 @@
 //   2. Pages and page components never reach the database directly; case content is read only through the
 //      authorized loader behind getCaioAttentionPageService().
 //   3. Until the lifecycle service is bound, the page service is fail closed: no rows, no case, no command.
-//   4. lib/caio-attention/capability.json declares close capability >= 1 only while the close chain's pages
-//      (disposition and review forms through the single command action) are present in the same release.
+//   4. lib/caio-attention/capability.json equals the binding-derived close capability (1 bound, 0 unbound), and
+//      the close chain's forms ship with it.
 // Passing it is a structural statement, not a readiness or activation claim.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { CAIO_ATTENTION_PAGE_SERVICE_BOUND, getCaioAttentionPageService } from "@/features/caio-attention/service";
+import {
+  CAIO_ATTENTION_CLOSE_CAPABILITY_VERSION,
+  CAIO_ATTENTION_PAGE_SERVICE_BOUND,
+  CAIO_ATTENTION_UNAVAILABLE_SERVICE,
+  getCaioAttentionPageService,
+} from "@/features/caio-attention/service";
 
 const root = path.resolve(__dirname, "..");
 const MODULE_DIRS = ["lib/caio-attention", "features/caio-attention", "app/(workspace)/caio/attention"];
@@ -52,18 +57,19 @@ describe("check:caio-attention", () => {
     for (const page of pages) expect(read(page), page).toMatch(/getCaioAttentionPageService\(\)/u);
   });
 
-  it("declares close capability only together with the close-chain forms", () => {
+  it("declares close capability exactly as the service binding allows, with the close-chain forms present", () => {
     const capability = JSON.parse(read("lib/caio-attention/capability.json")) as { schemaVersion?: unknown; closeCapabilityVersion?: unknown };
     expect(capability.schemaVersion).toBe("caio-attention-capability/v1");
-    expect(Number.isInteger(capability.closeCapabilityVersion) && (capability.closeCapabilityVersion as number) >= 1).toBe(true);
+    expect(CAIO_ATTENTION_CLOSE_CAPABILITY_VERSION).toBe(CAIO_ATTENTION_PAGE_SERVICE_BOUND ? 1 : 0);
+    expect(capability.closeCapabilityVersion).toBe(CAIO_ATTENTION_CLOSE_CAPABILITY_VERSION);
     const detail = read("app/(workspace)/caio/attention/[caseId]/page.tsx");
     for (const marker of ['kind="disposition"', 'kind="review"', "CaioAttentionConfirmForm"]) expect(detail, marker).toContain(marker);
     expect(read("features/caio-attention/actions.ts")).toMatch(/getCaioAttentionPageService\(\)\.runCommand\(/u);
   });
 
-  it("serves nothing while the lifecycle service is unbound", async () => {
-    if (CAIO_ATTENTION_PAGE_SERVICE_BOUND) return;
-    const service = getCaioAttentionPageService();
+  it("keeps the fallback stub closed, and uses it whenever the service is unbound", async () => {
+    if (!CAIO_ATTENTION_PAGE_SERVICE_BOUND) expect(getCaioAttentionPageService()).toBe(CAIO_ATTENTION_UNAVAILABLE_SERVICE);
+    const service = CAIO_ATTENTION_UNAVAILABLE_SERVICE;
     const viewer = { workspaceId: "w1", actor: { userId: "u1", sameWorkspace: true, active: true, role: "OWNER" as const, canReviewGovernedActions: true } };
     await expect(service.listCases({ viewer, scope: "queue", page: 1, pageSize: 20 })).resolves.toMatchObject({ items: [], total: 0 });
     await expect(service.loadCase({ viewer, caseId: "c1", sourcePage: "/test" })).resolves.toEqual({ ok: false, reason: "not_found" });

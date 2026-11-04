@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/shared/page-header";
@@ -28,7 +26,7 @@ export default async function CaioAttentionCasePage({ params }: { params: Promis
   const view = loaded.view;
   const copy = caioAttentionCopy(english);
   const person = (id: string | null) => (id ? (view.people[id] ?? id) : copy.none);
-  const people = (ids: readonly string[]) => (ids.length > 0 ? ids.map((id) => person(id)).join("、") : copy.none);
+  const people = (ids: readonly string[]) => (ids.length > 0 ? ids.map((id) => person(id)).join(english ? ", " : "、") : copy.none);
   const date = (value: Date | null) => (value ? formatLocalizedDateLabel(value, english) : copy.none);
   const commandRows = (fields: CaioAttentionCommandFields) => (
     <dl className="grid grid-cols-[8rem_1fr] gap-x-4 gap-y-1 text-sm">
@@ -42,7 +40,7 @@ export default async function CaioAttentionCasePage({ params }: { params: Promis
   const changes = view.command ? diffCaioAttentionCommand(view.prefill, view.command) : [];
   // Forms follow the loader's allowedOperations; each command is re-authorized in its own transaction.
   const allowed = new Set(view.allowedOperations);
-  const common = { caseId: view.caseId, commandVersion: view.commandVersion, clientRequestId: randomUUID(), english };
+  const common = { caseId: view.caseId, commandVersion: view.commandVersion, english };
   const current = view.currentDisposition;
   const parsedEvidence = current ? parseCaioAttentionEvidenceRefs(current.evidenceRefs) : null;
   const externalRefs = parsedEvidence?.ok ? parsedEvidence.refs.filter((item) => item.role === "external").map((item) => item.ref) : [];

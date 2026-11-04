@@ -40,12 +40,12 @@ public_safety: Describes page routes, the page-service contract and guards of a 
 - `loadCase({ viewer, caseId, sourcePage })`：返回事项视图或 `not_found`；ADMIN 监督读取的审计在 loader 内写入。
 - `runCommand(input)`：`confirm`、`ack`、`note`、`submitDisposition`、`reviewAccept`、`reviewReturn`。每个命令携带 `expectedCommandVersion` 与 `clientRequestId`（幂等），复核另带 `reviewerVersion`；服务在事务内重新校验成员、闸门与 CAS。
 
-接入前 `features/caio-attention/service.ts` 提供默认关闭的桩：列表为空、详情 `not_found`、命令 `service_unavailable`，并导出 `CAIO_ATTENTION_PAGE_SERVICE_BOUND = false`，能力探针应据此拒绝报告关闭能力。
+接入前 `features/caio-attention/service.ts` 提供默认关闭的桩：列表为空、详情 `not_found`、命令 `service_unavailable`，并导出 `CAIO_ATTENTION_PAGE_SERVICE_BOUND = false`。关闭能力由绑定状态推出：`CAIO_ATTENTION_CLOSE_CAPABILITY_VERSION = BOUND ? 1 : 0`，`capability.json` 必须与之相等（守卫断言），所以未接入时节点心跳上报 0，就绪证明签发另有 `page_service_unbound` 阻断。
 
 ## 能力版本与守卫
 
-- `lib/caio-attention/capability.json` 声明 `closeCapabilityVersion: 1`，表示本发布包含关闭链页面。入口闸门只有在 `requiredCloseCapability` 为 1 且所有预期节点都上报能力 1 时才放行。
-- `npm run check:caio-attention`（接入 CI repo-guards）：模块不引用通用治理任务表；页面层不直接访问数据库；页面只经页面服务读取；能力声明与关闭链表单同在；未接入时桩保持关闭。
+- `lib/caio-attention/capability.json` 当前为 `closeCapabilityVersion: 0`；接入生命周期服务的同一变更把它改为 1，表示本发布具备关闭链。入口闸门只有在 `requiredCloseCapability` 为 1 且所有预期节点都上报能力 1 时才放行。
+- `npm run check:caio-attention`（接入 CI repo-guards）：模块不引用通用治理任务表；页面层不直接访问数据库；页面只经页面服务读取；能力声明等于绑定状态推出的值且关闭链表单同在；未接入时桩保持关闭。
 
 ## 未完成
 

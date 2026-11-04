@@ -40,12 +40,12 @@ Defined in `features/caio-attention/service-contract.ts` and implemented by the 
 - `loadCase({ viewer, caseId, sourcePage })` — case view or `not_found`; ADMIN supervisory audit is written in the loader.
 - `runCommand(input)` — `confirm`, `ack`, `note`, `submitDisposition`, `reviewAccept`, `reviewReturn`. Each carries `expectedCommandVersion` and `clientRequestId` (idempotency); reviews also carry `reviewerVersion`. The service re-checks membership, the intake gate and the CAS in its transaction.
 
-Until wired, `features/caio-attention/service.ts` serves a fail-closed stub (empty lists, `not_found`, `service_unavailable`) and exports `CAIO_ATTENTION_PAGE_SERVICE_BOUND = false`, which the capability probe should require before reporting close capability.
+Until wired, `features/caio-attention/service.ts` serves a fail-closed stub (empty lists, `not_found`, `service_unavailable`) and exports `CAIO_ATTENTION_PAGE_SERVICE_BOUND = false`. Close capability is derived from the binding: `CAIO_ATTENTION_CLOSE_CAPABILITY_VERSION = BOUND ? 1 : 0`, and `capability.json` must equal it (guard-asserted), so an unbound node heartbeats 0 and attestation is separately blocked by `page_service_unbound`.
 
 ## Capability and guard
 
-- `lib/caio-attention/capability.json` declares `closeCapabilityVersion: 1`: this release carries the close-chain pages. The intake gate opens only when `requiredCloseCapability` is 1 and every expected node reports capability 1.
-- `npm run check:caio-attention` (CI repo-guards): no generic governed-task tables; no direct database access from the page layer; pages read through the page service only; the capability declaration ships with the close-chain forms; the stub stays closed while unbound.
+- `lib/caio-attention/capability.json` is `closeCapabilityVersion: 0` for now; the change that binds the lifecycle service raises it to 1, meaning the release can close cases. The intake gate opens only when `requiredCloseCapability` is 1 and every expected node reports capability 1.
+- `npm run check:caio-attention` (CI repo-guards): no generic governed-task tables; no direct database access from the page layer; pages read through the page service only; the capability declaration equals the binding-derived value and ships with the close-chain forms; the stub stays closed while unbound.
 
 ## Not included
 
