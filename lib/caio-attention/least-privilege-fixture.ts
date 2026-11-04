@@ -18,6 +18,9 @@ export type CaioAttentionTableGrant = Readonly<{
   updateColumns?: readonly string[];
 }>;
 
+/** Existing Core tables (not attention tables) in the matrix; the readiness probe never lists them. */
+export const CAIO_ATTENTION_FIXTURE_CORE_TABLES = ["Notification", "Membership", "CaioQuickCheckTick"] as const;
+
 const S = ["SELECT"] as const;
 const SI = ["SELECT", "INSERT"] as const;
 const SIU = ["SELECT", "INSERT", "UPDATE"] as const;
@@ -39,6 +42,10 @@ export const CAIO_ATTENTION_GRANT_MATRIX: Readonly<Record<string, Readonly<Parti
   CaioAttentionRouteConfig: { attention_generator: { privileges: S }, attention_web: { privileges: S }, attention_ops: { privileges: SI } },
   CaioAttentionRouteConfigHead: { attention_generator: { privileges: S }, attention_web: { privileges: S }, attention_ops: { privileges: SIU } },
   CaioDetectorEvaluation: { attention_generator: { privileges: SI }, attention_web: { privileges: S } },
+  // Core tables the web identity's reminder scanner and watchdog need (design v4 §9.1: deployments already grant them).
+  Notification: { attention_web: { privileges: SI } },
+  Membership: { attention_web: { privileges: S } },
+  CaioQuickCheckTick: { attention_web: { privileges: S } },
 };
 
 /**

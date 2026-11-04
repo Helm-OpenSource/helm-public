@@ -1134,7 +1134,8 @@ jobs:
           set -euo pipefail
           MYSQL_PWD="$(node -e 'process.stdout.write(decodeURIComponent(new URL(process.env.DATABASE_URL).password))')"
           export MYSQL_PWD
-          for file in prisma/rollback/20261104_rollback_caio_attention_cases.sql \
+          for file in prisma/rollback/20261104_rollback_caio_attention_reminder_due_indexes.sql \
+            prisma/rollback/20261104_rollback_caio_attention_cases.sql \
             prisma/rollback/20261104_rollback_caio_attention_control_plane.sql; do
             docker exec -e MYSQL_PWD -i "${HELM_CI_MYSQL_CONTAINER}" mysql --host=127.0.0.1 --protocol=tcp \
               --user="${HELM_CI_MYSQL_USER}" --batch "${HELM_CI_MYSQL_DATABASE}" <"${file}"
