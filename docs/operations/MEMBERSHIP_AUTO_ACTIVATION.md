@@ -1,3 +1,11 @@
+---
+status: active
+owner: helm-core
+created: 2026-11-04
+review_after: 2026-12-04
+public_safety: Generic workspace membership lifecycle behavior and settings only; no customer, credential or production data.
+---
+
 # Membership auto-activation
 
 `Workspace.featureFlagsJson.membershipAutoActivation` controls whether a member's own authenticated first workspace use automatically changes their `INVITED` membership to `ACTIVE`.

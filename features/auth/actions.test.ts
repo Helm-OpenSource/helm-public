@@ -1156,7 +1156,7 @@ describe("auth verification code attempt cap", () => {
     );
   });
 
-  it("runs workspace selection activation only for the authenticated member's own membership", async () => {
+  it("fails closed on own workspace selection when auto-activation is off", async () => {
     mocks.session.requireCurrentUser.mockResolvedValue({
       id: "user-1", email: "member@example.com", phone: "+8613800000000",
       passwordHash: "hash", lastLoginAt: new Date(), memberships: [],
@@ -1170,8 +1170,27 @@ describe("auth verification code attempt cap", () => {
 
     const result = await selectLoginWorkspaceAction({ workspaceId: "workspace-1", locale: "en-US" });
 
-    expect(result).toMatchObject({ ok: true, redirectTo: "/dashboard" });
+    expect(result).toMatchObject({ ok: true, redirectTo: "/invite-pending", invitationPending: true });
     expect(mocks.session.activateMembershipIfInvited).toHaveBeenCalledWith({ workspaceId: "workspace-1", userId: "user-1" });
+    expect(mocks.session.setActiveWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("switches to the member's workspace after opted-in activation succeeds", async () => {
+    mocks.session.requireCurrentUser.mockResolvedValue({
+      id: "user-1", email: "member@example.com", phone: "+8613800000000",
+      passwordHash: "hash", lastLoginAt: new Date(), memberships: [],
+    });
+    mocks.db.membership.findUnique.mockResolvedValue({
+      workspaceId: "workspace-1", userId: "user-1", role: WorkspaceRole.MEMBER,
+      status: MembershipStatus.INVITED,
+      workspace: { id: "workspace-1", slug: "workspace-1", status: "ACTIVE", profileType: "startup" },
+    });
+    mocks.session.activateMembershipIfInvited.mockResolvedValue({ status: MembershipStatus.ACTIVE });
+
+    const result = await selectLoginWorkspaceAction({ workspaceId: "workspace-1", locale: "en-US" });
+
+    expect(result).toMatchObject({ ok: true, redirectTo: "/dashboard", invitationPending: false });
+    expect(mocks.session.setActiveWorkspace).toHaveBeenCalledWith("workspace-1");
   });
 
   it("does not turn an admin's workspace selection into acceptance for a different member", async () => {

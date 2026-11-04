@@ -38,7 +38,11 @@ export function WorkspaceSelectorPanel({
         return;
       }
 
-      toast.success(english ? "Organization selected" : "组织已选择");
+      toast.success(result.invitationPending
+        ? english
+          ? "Your invitation is still pending."
+          : "你的邀请仍待处理。"
+        : english ? "Organization selected" : "组织已选择");
       router.push(result.redirectTo);
       router.refresh();
     });

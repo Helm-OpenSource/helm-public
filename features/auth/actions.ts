@@ -1955,18 +1955,31 @@ export async function selectLoginWorkspaceAction(
     };
   }
 
-  await setActiveWorkspace(parsed.data.workspaceId);
-
   let selectedMembership = membership;
   if (membership.status === MembershipStatus.INVITED) {
     const resultingMembership = await activateMembershipIfInvited({
       workspaceId: parsed.data.workspaceId,
       userId: user.id,
     });
-    if (resultingMembership) {
-      selectedMembership = { ...membership, status: resultingMembership.status };
+    if (!resultingMembership) {
+      return {
+        ok: false,
+        error: english ? "The selected organization is unavailable." : "选择的组织当前不可用。",
+      };
     }
+    if (resultingMembership.status === MembershipStatus.INVITED) {
+      return { ok: true, redirectTo: "/invite-pending", invitationPending: true };
+    }
+    if (resultingMembership.status !== MembershipStatus.ACTIVE) {
+      return {
+        ok: false,
+        error: english ? "The selected organization is unavailable." : "选择的组织当前不可用。",
+      };
+    }
+    selectedMembership = { ...membership, status: resultingMembership.status };
   }
+
+  await setActiveWorkspace(parsed.data.workspaceId);
 
   const requiresIdentityCompletion = shouldRequireFirstLoginIdentityCompletion(user);
   const redirectTo = requiresIdentityCompletion
@@ -1980,6 +1993,7 @@ export async function selectLoginWorkspaceAction(
   return {
     ok: true,
     redirectTo,
+    invitationPending: false,
   };
 }
 
