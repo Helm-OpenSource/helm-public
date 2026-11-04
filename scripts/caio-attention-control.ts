@@ -10,12 +10,14 @@
  *   exit:   0 ok; 3 lease fenced (the lease is no longer the caller's); 4 refused; anything else failed.
  *
  * Deploy ops: deploy-begin, hold, deploy-end, deploy-recover (host-locked recovery entry only), guard-downgrade.
- * attest-node is refused until readiness proofs land (fail closed: no proof, so resume stays blocked).
+ * attest-node reads this node's loopback capability probe (http://127.0.0.1:$PORT, default 3000) before its transaction.
  * Operator ops: pause, resume (acks every pause request of the current open epoch by id), expected-nodes.
  */
 import { PrismaClient } from "@prisma/client";
 
+import type { CaioAttentionCapabilityReport } from "@/lib/caio-attention/capability";
 import {
+  attestCaioAttentionNode,
   CaioAttentionControlRefusal,
   beginCaioAttentionDeployment,
   downgradeCaioAttentionGuard,
@@ -76,6 +78,18 @@ function readStdin(): { firstLine: Promise<string | null>; ended: Promise<void> 
   return { firstLine, ended };
 }
 
+/** The running server's own report; any failure is a refusal (no proof is written). */
+async function fetchCapabilityReport(): Promise<CaioAttentionCapabilityReport> {
+  const port = /^\d{1,5}$/u.test(process.env.PORT ?? "") ? process.env.PORT : "3000";
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/caio-attention/capability`, { signal: AbortSignal.timeout(10_000), redirect: "error" });
+    if (response.ok) return await response.json() as CaioAttentionCapabilityReport;
+  } catch {
+    // fall through
+  }
+  throw new CaioAttentionControlRefusal("capability_probe_unavailable");
+}
+
 async function run(op: Op, request: Record<string, unknown>, prisma: PrismaClient, stdinEnded: Promise<void>): Promise<object | null> {
   switch (op) {
     case "deploy-begin": return beginCaioAttentionDeployment(prisma, request as never);
@@ -85,7 +99,7 @@ async function run(op: Op, request: Record<string, unknown>, prisma: PrismaClien
     case "pause": return pauseCaioAttentionIntake(prisma, request as never);
     case "resume": return resumeCaioAttentionIntake(prisma, request as never);
     case "expected-nodes": return setCaioAttentionExpectedNodes(prisma, request as never);
-    case "attest-node": throw new CaioAttentionControlRefusal("attest_not_available");
+    case "attest-node": return attestCaioAttentionNode(prisma, request as never, await fetchCapabilityReport());
     case "hold": {
       let ready = false;
       let endedEarly = false;

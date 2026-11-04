@@ -63,6 +63,18 @@ export async function registerNodeInstrumentation() {
     });
   }
 
+  // CAIO attention RuntimeNode heartbeat: a no-op unless the host sets HELM_RUNTIME_NODE_ID and an artifact-bound
+  // deployment id; failures are logged and never block startup.
+  try {
+    const [{ startCaioAttentionHeartbeat }, { db }] = await Promise.all([
+      import("@/lib/caio-attention/heartbeat.service"),
+      import("@/lib/db"),
+    ]);
+    await startCaioAttentionHeartbeat(db, (message) => logInstrumentationInfo(message));
+  } catch (err) {
+    logInstrumentationInfo("caio attention heartbeat not started", { error: err instanceof Error ? err.message : String(err) });
+  }
+
   if (
     process.env.SIGNAL_COLLECTION_SCHEDULER_ENABLED?.trim().toLowerCase() === "true" &&
     isDeploymentCapabilityEnabled("signal_runtime_write")
