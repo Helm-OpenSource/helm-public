@@ -42,12 +42,15 @@ export const CAIO_ATTENTION_GRANT_MATRIX: Readonly<Record<string, Readonly<Parti
 };
 
 /**
- * Existing tables the generator touches on the quick-check host, mirroring that host identity's current ACL: it locks the
- * candidate it suggests from (FOR UPDATE needs UPDATE) and reads memberships to skip inactive people in the prefill.
+ * Existing tables outside the attention set that a fixture identity touches, mirroring the deployed ACLs. Each table
+ * holds one entry per identity:
+ *   generator — locks the candidate it suggests from (FOR UPDATE needs UPDATE) and reads memberships to skip inactive
+ *               people in the prefill.
+ *   web       — re-reads membership and role (FOR SHARE) inside every lifecycle transaction.
  */
 export const CAIO_ATTENTION_NEIGHBOUR_GRANTS: typeof CAIO_ATTENTION_GRANT_MATRIX = {
   CaioAnomalyCandidate: { attention_generator: { privileges: ["SELECT", "UPDATE"] } },
-  Membership: { attention_generator: { privileges: S } },
+  Membership: { attention_generator: { privileges: S }, attention_web: { privileges: S } },
 };
 
 export function caioAttentionTableGrant(identity: CaioAttentionFixtureIdentity, table: string): CaioAttentionTableGrant | null {
