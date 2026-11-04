@@ -107,7 +107,7 @@ export type CaioAttentionCaseView = Readonly<{
   command: CaioAttentionCommandFields | null;
   /** Display labels for every user id on this case and in `assignableUserIds`. */
   people: Readonly<Record<string, string>>;
-  /** Active members the OWNER may pick on the confirm form; empty for everyone else. */
+  /** Active members the OWNER may pick on the confirm, reissue and reviewer forms; empty for everyone else. */
   assignableUserIds: readonly string[];
   /** Computed by the loader with `authorizeCaioAttentionOperation`; the command re-checks in its transaction. */
   allowedOperations: readonly CaioAttentionOperation[];
@@ -125,7 +125,14 @@ export type CaioAttentionLoadResult = { ok: true; view: CaioAttentionCaseView } 
 type CommandBase = Readonly<{ viewer: CaioAttentionViewer; caseId: string; expectedCommandVersion: number; clientRequestId: string }>;
 
 export type CaioAttentionCommandInput =
-  | (CommandBase & { op: "confirm"; command: CaioAttentionCommandFields })
+  // OWNER only: confirm a suggestion, or issue a new command version (commandVersion + 1) while in progress.
+  | (CommandBase & { op: "confirm" | "reissue"; command: CaioAttentionCommandFields })
+  // OWNER only, SUGGESTED only. The deferral ends on its own; resumeDeferred stays system-driven.
+  | (CommandBase & { op: "defer"; deferredUntil: Date; reason: string | null })
+  // OWNER only: dismiss on SUGGESTED; cancel on DISPATCHED / DISPOSITION_SUBMITTED. The reason goes on the event.
+  | (CommandBase & { op: "dismiss" | "cancel"; reason: string })
+  // OWNER only: replaces the reviewer set, bumps reviewerVersion, keeps commandVersion and the current receipt.
+  | (CommandBase & { op: "assignReviewers"; reviewerVersion: number; reviewerUserIds: readonly string[] })
   | (CommandBase & { op: "ack" })
   | (CommandBase & { op: "note"; text: string })
   | (CommandBase & {

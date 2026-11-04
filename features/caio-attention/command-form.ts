@@ -41,7 +41,7 @@ export function parseCaioAttentionCommandForm(fields: CaioAttentionFormFields): 
     const note = text("text");
     return note && note.length <= MAX_TEXT ? { ok: true, input: { ...base, op, text: note } } : { ok: false };
   }
-  if (op === "confirm") {
+  if (op === "confirm" || op === "reissue") {
     const ids = [one("primaryUserId"), one("escalationUserId"), ...many("ccUserIds"), ...many("reviewerUserIds")];
     if (ids.some((id) => id && !ID.test(id))) return { ok: false };
     const command = {
@@ -52,6 +52,22 @@ export function parseCaioAttentionCommandForm(fields: CaioAttentionFormFields): 
       committedDueAt: date("committedDueAt"),
     };
     return { ok: true, input: { ...base, op, command } };
+  }
+  if (op === "defer") {
+    const deferredUntil = date("deferredUntil");
+    const reason = text("reason");
+    if (!deferredUntil || reason.length > MAX_TEXT) return { ok: false };
+    return { ok: true, input: { ...base, op, deferredUntil, reason: reason || null } };
+  }
+  if (op === "dismiss" || op === "cancel") {
+    const reason = text("reason");
+    return reason && reason.length <= MAX_TEXT ? { ok: true, input: { ...base, op, reason } } : { ok: false };
+  }
+  if (op === "assignReviewers") {
+    const reviewerVersion = one("reviewerVersion");
+    const reviewerUserIds = many("reviewerUserIds");
+    if (!/^[0-9]{1,9}$/u.test(reviewerVersion) || reviewerUserIds.length === 0 || reviewerUserIds.some((id) => !ID.test(id))) return { ok: false };
+    return { ok: true, input: { ...base, op, reviewerVersion: Number(reviewerVersion), reviewerUserIds } };
   }
   if (op === "submitDisposition") {
     const evidence = parseCaioAttentionEvidenceRefs(many("evidenceRefs"));

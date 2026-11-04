@@ -10,6 +10,7 @@ describe("parseCaioAttentionCommandForm", () => {
     expect(parseCaioAttentionCommandForm({ ...base, op: ["ack"], clientRequestId: ["short"] })).toEqual({ ok: false });
     expect(parseCaioAttentionCommandForm({ ...base, op: ["resumeDeferred"] })).toEqual({ ok: false });
     expect(parseCaioAttentionCommandForm({ ...base, op: ["dismiss"] })).toEqual({ ok: false });
+    expect(parseCaioAttentionCommandForm({ ...base, op: ["cancel"], reason: [" "] })).toEqual({ ok: false });
   });
 
   it("parses ack and a non-empty note", () => {
@@ -61,5 +62,18 @@ describe("parseCaioAttentionCommandForm", () => {
     expect(parseCaioAttentionCommandForm(review)).toMatchObject({ ok: true, input: { op: "reviewReturn", reviewerVersion: 1, attestedExternalRefs: ["ticket:T-9"] } });
     expect(parseCaioAttentionCommandForm({ ...review, note: [""] })).toEqual({ ok: false });
     expect(parseCaioAttentionCommandForm({ ...review, reviewerVersion: [""] })).toEqual({ ok: false });
+  });
+
+  it("parses the OWNER operations", () => {
+    expect(parseCaioAttentionCommandForm({ ...base, op: ["dismiss"], reason: ["duplicate signal"] })).toMatchObject({ ok: true, input: { op: "dismiss", reason: "duplicate signal" } });
+    expect(parseCaioAttentionCommandForm({ ...base, op: ["cancel"], reason: ["handled elsewhere"] })).toMatchObject({ ok: true, input: { op: "cancel" } });
+    expect(parseCaioAttentionCommandForm({ ...base, op: ["defer"], deferredUntil: ["2026-11-05T01:00:00.000Z"], reason: [""] }))
+      .toMatchObject({ ok: true, input: { op: "defer", deferredUntil: new Date("2026-11-05T01:00:00.000Z"), reason: null } });
+    expect(parseCaioAttentionCommandForm({ ...base, op: ["defer"], deferredUntil: [""] })).toEqual({ ok: false });
+    expect(parseCaioAttentionCommandForm({ ...base, op: ["reissue"], primaryUserId: ["u6"], reviewerUserIds: ["u4"] }))
+      .toMatchObject({ ok: true, input: { op: "reissue", command: { primaryUserId: "u6", reviewerUserIds: ["u4"], committedDueAt: null } } });
+    expect(parseCaioAttentionCommandForm({ ...base, op: ["assignReviewers"], reviewerVersion: ["3"], reviewerUserIds: ["u4", "u7"] }))
+      .toMatchObject({ ok: true, input: { op: "assignReviewers", reviewerVersion: 3, reviewerUserIds: ["u4", "u7"] } });
+    expect(parseCaioAttentionCommandForm({ ...base, op: ["assignReviewers"], reviewerVersion: ["3"] })).toEqual({ ok: false });
   });
 });

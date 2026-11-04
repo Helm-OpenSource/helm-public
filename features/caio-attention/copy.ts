@@ -66,6 +66,9 @@ const FAILURE: Record<CaioAttentionCommandFailure, Pair> = {
 export const caioAttentionOutcomeLabel = (english: boolean, outcome: CaioAttentionDispositionOutcome) => pick(english, OUTCOME[outcome]);
 export const caioAttentionFailureLabel = (english: boolean, reason: CaioAttentionCommandFailure) => pick(english, FAILURE[reason]);
 
+/** Shell entry for the attention queue; shown only when `resolveCaioAttentionNavigation` allows it. */
+export const CAIO_ATTENTION_DESTINATION = { href: "/caio/attention", labelZh: "运营关注事项", labelEn: "Attention cases" } as const;
+
 export function caioAttentionCopy(english: boolean) {
   const t = (zh: string, en: string) => (english ? en : zh);
   return {
@@ -121,6 +124,20 @@ export function caioAttentionCopy(english: boolean) {
       "Nothing is dispatched or notified until you confirm; the system never confirms for you.",
     ),
     confirmSubmit: t("确认派发", "Confirm and dispatch"),
+    reissueTitle: t("重新下达命令（新版本）", "Issue a new command version"),
+    reissueHint: t(
+      "新版本生效后，旧版本的主责不能再提交回执，未复核的回执标记为已取代。",
+      "Once issued, the previous primary can no longer submit, and an unreviewed receipt is marked superseded.",
+    ),
+    reissueSubmit: t("下达新版本", "Issue new version"),
+    diffFromCurrentTitle: t("与当前命令的差异", "Changes from the current command"),
+    dismissTitle: t("驳回建议", "Dismiss the suggestion"),
+    deferTitle: t("延期", "Defer"),
+    deferUntil: t("延期到", "Defer until"),
+    cancelTitle: t("撤销事项", "Cancel the case"),
+    assignReviewersTitle: t("调整复核人", "Change reviewers"),
+    reasonRequired: t("原因（必填）", "Reason (required)"),
+    reasonOptional: t("原因（可选）", "Reason (optional)"),
     ackSubmit: t("我已收到，正在处理", "Acknowledge"),
     noteTitle: t("补充说明", "Add a note"),
     noteSubmit: t("提交说明", "Submit note"),

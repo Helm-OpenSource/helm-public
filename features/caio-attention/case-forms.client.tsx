@@ -47,8 +47,23 @@ function Outcome({ state, english }: { state: CaioAttentionActionState; english:
   return <p role="status" className="text-sm" data-action-status={state.status}>{message}</p>;
 }
 
-export function CaioAttentionConfirmForm({ common, prefill, members }: { common: CaioAttentionFormCommon; prefill: PrefillProps; members: readonly Member[] }) {
+/**
+ * Command editor. `confirm` starts from the system prefill; `reissue` starts from the current command and
+ * issues a new command version. Either way the diff shown is against the starting point.
+ */
+export function CaioAttentionConfirmForm({
+  common,
+  prefill,
+  members,
+  op = "confirm",
+}: {
+  common: CaioAttentionFormCommon;
+  prefill: PrefillProps;
+  members: readonly Member[];
+  op?: "confirm" | "reissue";
+}) {
   const copy = caioAttentionCopy(common.english);
+  const reissue = op === "reissue";
   const [state, action, pending] = useActionState(runCaioAttentionCommandAction, IDLE);
   const [primary, setPrimary] = useState(prefill.primaryUserId ?? "");
   const [cc, setCc] = useState<readonly string[]>(prefill.ccUserIds);
@@ -78,10 +93,10 @@ export function CaioAttentionConfirmForm({ common, prefill, members }: { common:
     </div>
   );
   return (
-    <form action={action} className="space-y-3 border border-[color:var(--border)] px-4 py-3" data-testid="caio-attention-confirm-form">
-      <h3 className="font-medium">{copy.confirmTitle}</h3>
-      <p className="text-xs text-[color:var(--text-muted)]">{copy.confirmHint}</p>
-      <Identity common={common} op="confirm" />
+    <form action={action} className="space-y-3 border border-[color:var(--border)] px-4 py-3" data-testid={`caio-attention-${op}-form`}>
+      <h3 className="font-medium">{reissue ? copy.reissueTitle : copy.confirmTitle}</h3>
+      <p className="text-xs text-[color:var(--text-muted)]">{reissue ? copy.reissueHint : copy.confirmHint}</p>
+      <Identity common={common} op={op} />
       <label className="block text-sm">{caioAttentionFieldLabel(common.english, "primaryUserId")}{select("primaryUserId", primary, setPrimary)}</label>
       <fieldset className="text-sm"><legend>{caioAttentionFieldLabel(common.english, "ccUserIds")}</legend>{checks("ccUserIds", cc, setCc)}</fieldset>
       <label className="block text-sm">{caioAttentionFieldLabel(common.english, "escalationUserId")}{select("escalationUserId", escalation, setEscalation)}</label>
@@ -92,7 +107,7 @@ export function CaioAttentionConfirmForm({ common, prefill, members }: { common:
       </label>
       <input type="hidden" name="committedDueAt" value={toIso(dueLocal)} />
       <div className="text-sm" data-testid="caio-attention-confirm-diff">
-        <p className="font-medium">{copy.diffTitle}</p>
+        <p className="font-medium">{reissue ? copy.diffFromCurrentTitle : copy.diffTitle}</p>
         {changes.length === 0 ? <p>{copy.noDiff}</p> : (
           <ul className="list-disc pl-5">
             {changes.map((change) => (
@@ -106,7 +121,7 @@ export function CaioAttentionConfirmForm({ common, prefill, members }: { common:
           </ul>
         )}
       </div>
-      <button type="submit" disabled={pending} className="border px-3 py-1 text-sm">{pending ? copy.submitting : copy.confirmSubmit}</button>
+      <button type="submit" disabled={pending} className="border px-3 py-1 text-sm">{pending ? copy.submitting : reissue ? copy.reissueSubmit : copy.confirmSubmit}</button>
       <Outcome state={state} english={common.english} />
     </form>
   );
@@ -171,6 +186,60 @@ export function CaioAttentionOperationForm({
           <div className="flex gap-3">{submit(copy.reviewAccept, "reviewAccept")}{submit(copy.reviewReturn, "reviewReturn")}</div>
         </>
       ) : null}
+      <Outcome state={state} english={common.english} />
+    </form>
+  );
+}
+
+/** OWNER-only forms: dismiss and defer before confirmation, cancel and reviewer reassignment afterwards. */
+export function CaioAttentionOwnerForm({
+  common,
+  kind,
+  members = [],
+  reviewers,
+}: {
+  common: CaioAttentionFormCommon;
+  kind: "dismiss" | "defer" | "cancel" | "assignReviewers";
+  members?: readonly Member[];
+  reviewers?: Readonly<{ reviewerVersion: number; reviewerUserIds: readonly string[] }>;
+}) {
+  const copy = caioAttentionCopy(common.english);
+  const [state, action, pending] = useActionState(runCaioAttentionCommandAction, IDLE);
+  const [untilLocal, setUntilLocal] = useState("");
+  const [selected, setSelected] = useState<readonly string[]>(reviewers?.reviewerUserIds ?? []);
+  const titles = { dismiss: copy.dismissTitle, defer: copy.deferTitle, cancel: copy.cancelTitle, assignReviewers: copy.assignReviewersTitle };
+  return (
+    <form action={action} className="space-y-2 border border-[color:var(--border)] px-4 py-3" data-testid={`caio-attention-${kind}-form`}>
+      <h3 className="font-medium">{titles[kind]}</h3>
+      <Identity common={common} op={kind} />
+      {kind === "defer" ? (
+        <>
+          <label className="block text-sm">{copy.deferUntil}
+            <input type="datetime-local" required value={untilLocal} onChange={(event) => setUntilLocal(event.target.value)} className={field} />
+          </label>
+          <input type="hidden" name="deferredUntil" value={toIso(untilLocal)} />
+        </>
+      ) : null}
+      {kind === "assignReviewers" && reviewers ? (
+        <fieldset className="text-sm">
+          <legend>{caioAttentionFieldLabel(common.english, "reviewerUserIds")}</legend>
+          <input type="hidden" name="reviewerVersion" value={reviewers.reviewerVersion} />
+          <div className="flex flex-wrap gap-3">
+            {members.map((member) => (
+              <label key={member.id} className="flex items-center gap-1">
+                <input type="checkbox" name="reviewerUserIds" value={member.id} checked={selected.includes(member.id)}
+                  onChange={() => setSelected(toggle(selected, member.id))} />
+                {member.label}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      ) : (
+        <label className="block text-sm">{kind === "defer" ? copy.reasonOptional : copy.reasonRequired}
+          <textarea name="reason" required={kind !== "defer"} maxLength={2000} className={field} />
+        </label>
+      )}
+      <button type="submit" disabled={pending} className="border px-3 py-1 text-sm">{pending ? copy.submitting : titles[kind]}</button>
       <Outcome state={state} english={common.english} />
     </form>
   );

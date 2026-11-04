@@ -1,3 +1,4 @@
+import { MembershipStatus, WorkspaceRole } from "@prisma/client";
 import { AppShell } from "@/components/layout/app-shell";
 import { getWorkspaceLayoutData } from "@/features/workspace/queries";
 import { getCurrentExternalMemberScope, getCurrentWorkspaceSessionOrNull } from "@/lib/auth/session";
@@ -28,6 +29,7 @@ import {
   type MemberRoleHomeWorkstation,
 } from "@/lib/shell/member-role-home";
 import { shouldShowCaioPrimaryNavigation } from "@/lib/shell/role-home";
+import { resolveCaioAttentionNavigation } from "@/features/caio-attention/navigation";
 
 export default async function WorkspaceLayout({
   children,
@@ -63,6 +65,7 @@ export default async function WorkspaceLayout({
     shellChromeProfiles: ReadonlyArray<ShellChromeProfile>;
     basePresetKey: string | null;
     showCaioPrimaryNavigation: boolean;
+    showCaioAttentionNavigation: boolean;
     canReviewGovernedActions: boolean;
     workstationHomeEntry: MemberRoleHomeWorkstation | null;
   } | null = null;
@@ -157,6 +160,16 @@ export default async function WorkspaceLayout({
       showCaioPrimaryNavigation: shouldShowCaioPrimaryNavigation({
         basePresetKey,
         workspaceRole: membership.role,
+      }),
+      showCaioAttentionNavigation: await resolveCaioAttentionNavigation({
+        workspaceId: workspace.id,
+        actor: {
+          userId: user.id,
+          sameWorkspace: true,
+          active: membership.status === MembershipStatus.ACTIVE,
+          role: membership.role === WorkspaceRole.OWNER ? "OWNER" : membership.role === WorkspaceRole.ADMIN ? "ADMIN" : "OTHER",
+          canReviewGovernedActions: canReviewWorkspaceGovernedActions(membership.role),
+        },
       }),
       canReviewGovernedActions: canReviewWorkspaceGovernedActions(
         membership.role,
