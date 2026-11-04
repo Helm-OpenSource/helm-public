@@ -47,6 +47,6 @@ public_safety: Describes page routes, the page-service contract and guards of a 
 - `lib/caio-attention/capability.json` 当前为 `closeCapabilityVersion: 0`；接入生命周期服务的同一变更把它改为 1，表示本发布具备关闭链。入口闸门只有在 `requiredCloseCapability` 为 1 且所有预期节点都上报能力 1 时才放行。
 - `npm run check:caio-attention`（接入 CI repo-guards）：模块不引用通用治理任务表；页面层不直接访问数据库；页面只经页面服务读取；能力声明等于绑定状态推出的值且关闭链表单同在；未接入时桩保持关闭。
 
-## 未完成
+## 导航入口
 
-工作区导航入口不在本页面片范围内。
+工作区侧栏与移动端导航显示“运营关注事项”，只是展示，不授权：服务未接入或成员非 ACTIVE 时隐藏；工作区 OWNER、ADMIN 可见；其他成员只有在至少一条当前已确认命令中参与时才可见。loader 出错时入口隐藏并记一条告警（只记错误名），不影响工作区外壳。
