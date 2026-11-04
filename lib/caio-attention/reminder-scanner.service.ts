@@ -7,6 +7,7 @@ import {
   caioAttentionWarningDigest,
   collectDueCaioAttentionReminders,
   isCaioAttentionRecurrenceSendable,
+  isWithinCaioAttentionSendWindow,
   type CaioAttentionPolicy,
   type CaioAttentionReminderFields,
   type CaioAttentionReminderRule,
@@ -26,7 +27,7 @@ import type { CaioAttentionStatus } from "./state-machine";
  * only: no SMS, email or IM. `now` and the policy are injected; the scanner never reads the wall clock.
  */
 
-export type CaioAttentionScanRule = CaioAttentionReminderRule | "R3" | "R0w";
+export type CaioAttentionScanRule = CaioAttentionReminderRule | "R3" | "R0w" | "D";
 
 export type CaioAttentionReminderScanResult = {
   casesScanned: number;
@@ -52,6 +53,7 @@ const PENDING = Prisma.sql`('SUGGESTED', 'DEFERRED')`;
 
 const STAGE_LABEL: Record<CaioAttentionScanRule, string> = {
   R0a: "待确认", R0b: "待确认", R0w: "待确认汇总", R1: "无人响应升级", R2: "未处理完升级", R3: "复发", R4: "待处理",
+  D: "已派发",
 };
 
 type CaseRow = {
@@ -266,6 +268,54 @@ async function scanOneCase(client: PrismaClient, caseId: string, now: Date, poli
   }
 }
 
+/**
+ * D for a warning confirmed (or reissued) outside the daytime window: the lifecycle records `dispatchNoticeAt` and
+ * `dispatchNoticeSent: false` on the CONFIRMED / REISSUED event instead of notifying at night. The first scan inside
+ * the send window delivers it to the primary only, key `ca:<id>:D:v<n>:<primary>`, and records a REMINDED event with
+ * dedupe key `D:v<n>`; a later command version gets its own notice. Cases no longer DISPATCHED are skipped.
+ */
+async function sendDeferredDispatchNotices(client: PrismaClient, now: Date, policy: CaioAttentionPolicy, limit: number,
+  result: CaioAttentionReminderScanResult): Promise<void> {
+  if (!isWithinCaioAttentionSendWindow(now, policy)) return;
+  const due = await client.$queryRaw<Array<{ id: string; commandVersion: number }>>`
+    SELECT c.id, c.commandVersion FROM CaioAttentionCase c
+    JOIN CaioAttentionCaseEvent e ON e.caseId = c.id AND e.commandVersion = c.commandVersion AND e.kind IN ('CONFIRMED', 'REISSUED')
+    WHERE c.status = 'DISPATCHED' AND c.primaryUserId IS NOT NULL
+      AND JSON_UNQUOTE(JSON_EXTRACT(e.payloadJson, '$.dispatchNoticeSent')) = 'false'
+      AND JSON_UNQUOTE(JSON_EXTRACT(e.payloadJson, '$.dispatchNoticeAt')) <= ${now.toISOString()}
+      AND NOT EXISTS (SELECT 1 FROM CaioAttentionCaseEvent d WHERE d.caseId = c.id AND d.kind = 'REMINDED'
+        AND d.dedupeKey = CONCAT('D:v', c.commandVersion))
+    ORDER BY c.id LIMIT ${limit}`;
+  for (const { id, commandVersion } of due) {
+    try {
+      let created = 0;
+      let deduplicated = 0;
+      await client.$transaction(async (tx) => {
+        const [row] = await tx.$queryRaw<Array<{ workspaceId: string; shortNo: number; status: string; commandVersion: number; primaryUserId: string | null }>>`
+          SELECT workspaceId, shortNo, status, commandVersion, primaryUserId FROM CaioAttentionCase WHERE id = ${id} FOR UPDATE`;
+        if (!row || row.status !== "DISPATCHED" || Number(row.commandVersion) !== Number(commandVersion) || !row.primaryUserId) return;
+        const version = Number(row.commandVersion);
+        const sent = await notifyOnce(tx, {
+          workspaceId: row.workspaceId, userId: row.primaryUserId, dedupeKey: `ca:${id}:D:v${version}:${row.primaryUserId}`,
+          title: `CAIO 关注事项 #${row.shortNo} · ${STAGE_LABEL.D}`, body: "待你处理",
+        });
+        if (sent) created += 1;
+        else deduplicated += 1;
+        await appendEvent(tx, {
+          caseId: id, kind: "REMINDED", commandVersion: version, dedupeKey: `D:v${version}`,
+          payload: { rule: "D", recipients: 1, scannedAt: now.toISOString() },
+        });
+      }, { timeout: 20_000 });
+      result.notificationsCreated += created;
+      result.notificationsDeduplicated += deduplicated;
+      if (created + deduplicated > 0) result.sends.D = (result.sends.D ?? 0) + 1;
+    } catch (error) {
+      result.failedCaseIds.push(id);
+      console.error(`[caio-attention-reminders] dispatch notice ${id} failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+}
+
 /** R0w: one digest per OWNER per local date while the workspace has warning suggestions awaiting confirmation. */
 async function sendWarningDigests(client: PrismaClient, now: Date, policy: CaioAttentionPolicy,
   result: CaioAttentionReminderScanResult): Promise<void> {
@@ -319,6 +369,7 @@ export async function runCaioAttentionReminderScan(input: {
       }
     }
   }
+  await sendDeferredDispatchNotices(input.client, input.now, input.policy, input.maxCases ?? MAX_CASES_PER_SCAN, result);
   await sendWarningDigests(input.client, input.now, input.policy, result);
   return result;
 }
