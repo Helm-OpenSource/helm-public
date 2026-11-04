@@ -5,7 +5,7 @@ import { diffCaioAttentionPrefill, resolveCaioAttentionPrefill, validateCaioAtte
 
 const rule: CaioAttentionRouteRule = {
   detectorId: "detector-a", category: "business", primaryRoleKey: "primary_role", primaryFallbackRoleKeys: ["outcome_role"],
-  ccRoleKeys: ["cc_role"], escalationRoleKey: "outcome_role", reviewerRoleKey: "outcome_role",
+  ccRoleKeys: ["cc_role"], escalationRoleKey: "outcome_role", escalationFallbackRoleKey: "owner_role", reviewerRoleKey: "outcome_role",
   reviewerFallbackRoleKey: "owner_role", compatibleRuleVersions: ["v1"], committedDue: "suggest",
 };
 const config: CaioAttentionRouteConfig = {
@@ -34,8 +34,10 @@ describe("resolveCaioAttentionPrefill", () => {
     expect(prefill.primaryUserId).toBe("u_outcome");
     expect(prefill.ccUserIds).toEqual(["u_cc"]);
     expect(prefill.notes).toEqual([{ kind: "primary_fallback", roleKey: "outcome_role" }]);
-    // The fallback holder is now primary, so the reviewer moves to the reviewer fallback role.
+    // The fallback holder is now primary, so the reviewer and the escalation both move to the owner role.
     expect(prefill.reviewerUserIds).toEqual(["u_owner"]);
+    expect(prefill.escalationUserId).toBe("u_owner");
+    expect(prefill.blocks).toEqual([]);
 
     const exhausted = resolve({ isActive: activeExcept("u_primary", "u_outcome") });
     expect(exhausted.primaryUserId).toBeNull();
@@ -68,6 +70,8 @@ describe("resolveCaioAttentionPrefill", () => {
     expect(resolve({ isActive: activeExcept("u_cc") })).toMatchObject({ ccUserIds: [], notes: [{ kind: "cc_absent", roleKey: "cc_role" }] });
     expect(resolve({ rule: null }).blocks).toEqual(["route_missing"]);
     expect(resolve({ isActive: activeExcept("u_outcome", "u_owner") }).blocks).toEqual(["escalation_unavailable", "reviewer_unavailable"]);
+    // Escalation holder equals primary and the owner role is empty: blocked rather than self-escalating.
+    expect(resolve({ isActive: activeExcept("u_primary", "u_owner") })).toMatchObject({ primaryUserId: "u_outcome", escalationUserId: null });
   });
 });
 
@@ -79,6 +83,7 @@ describe("validateCaioAttentionOwnerCommand", () => {
   it("accepts a complete command and rejects each broken field", () => {
     expect(validate()).toEqual([]);
     expect(validate({ primaryUserId: "u_owner" })).toEqual(["primary_is_confirmer"]);
+    expect(validate({ escalationUserId: "u_primary" })).toEqual(["escalation_is_primary"]);
     expect(validate({}, activeExcept("u_primary", "u_cc"))).toEqual(["cc_inactive", "primary_inactive"]);
     expect(validate({ reviewerUserIds: ["u_cc"] })).toEqual(["reviewer_conflict", "reviewer_not_capable"]);
     expect(validate({ reviewerUserIds: [], escalationUserId: null, committedDueAt: null as unknown as Date }))

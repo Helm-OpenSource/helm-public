@@ -16,6 +16,7 @@ const rule = {
   primaryFallbackRoleKeys: ["outcome_role"],
   ccRoleKeys: ["cc_role"],
   escalationRoleKey: "outcome_role",
+  escalationFallbackRoleKey: "owner_role",
   reviewerRoleKey: "outcome_role",
   reviewerFallbackRoleKey: "owner_role",
   compatibleRuleVersions: ["v1"],
