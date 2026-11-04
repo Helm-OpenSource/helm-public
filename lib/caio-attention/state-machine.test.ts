@@ -34,6 +34,11 @@ describe("transitions", () => {
     expect(nextCaioAttentionStatus("DISPOSITION_SUBMITTED", "reviewAccept")).toBe("CLOSED");
     expect(nextCaioAttentionStatus("DISPATCHED", "reviewAccept")).toBeNull();
     expect(nextCaioAttentionStatus("SUGGESTED", "submitDisposition")).toBeNull();
+    expect(nextCaioAttentionStatus("DEFERRED", "confirm")).toBeNull();
+    expect(nextCaioAttentionStatus("DEFERRED", "dismiss")).toBeNull();
+    expect(nextCaioAttentionStatus("DISPATCHED", "defer")).toBeNull();
+    expect(nextCaioAttentionStatus("DISPATCHED", "dismiss")).toBeNull();
+    expect(nextCaioAttentionStatus("DISPOSITION_SUBMITTED", "ack")).toBeNull();
   });
 
   it("terminal statuses accept no operation", () => {
@@ -76,6 +81,17 @@ describe("authorizeCaioAttentionOperation", () => {
     expect(review(actor("u_new"), { parties: reassigned, reviewerVersion: 4 })).toEqual({ ok: true });
     expect(review(actor("u_reviewer"), { disposition: { ...disposition, superseded: true } })).toEqual({ ok: false, reason: "disposition_not_current" });
     expect(review(actor("u_reviewer"), { disposition: { ...disposition, isLatestInVersion: false } })).toEqual({ ok: false, reason: "disposition_not_current" });
+  });
+
+  it("note: primary, cc, escalation and OWNER; ack: primary only", () => {
+    const dispatched = { ...parties, status: "DISPATCHED" as const };
+    const run = (op: "note" | "ack", who: CaioAttentionActor) =>
+      authorizeCaioAttentionOperation({ op, actor: who, parties: dispatched, expectedCommandVersion: 2 });
+    for (const who of [actor("u_primary"), actor("u_cc"), actor("u_outcome"), actor("u_owner", "OWNER")]) expect(run("note", who)).toEqual({ ok: true });
+    expect(run("note", actor("u_admin9", "ADMIN"))).toEqual({ ok: false, reason: "forbidden" });
+    expect(run("note", actor("u_reviewer"))).toEqual({ ok: false, reason: "forbidden" });
+    expect(run("ack", actor("u_primary"))).toEqual({ ok: true });
+    for (const who of [actor("u_cc"), actor("u_outcome"), actor("u_owner", "OWNER")]) expect(run("ack", who)).toEqual({ ok: false, reason: "forbidden" });
   });
 
   it("T-V6a: an unassigned ADMIN can read with audit but cannot submit or review", () => {
@@ -122,6 +138,8 @@ describe("visibility and response", () => {
     expect(canReadCaioAttentionCase(actor("u_old"), parties, ["u_old"]).ok).toBe(false);
     expect(canReadCaioAttentionCase(actor("u_old"), { ...parties, status: "CLOSED" }, ["u_old"]).ok).toBe(true);
     expect(canReadCaioAttentionCase(actor("u_cc"), parties)).toEqual({ ok: true, auditRead: false });
+    // Every ADMIN read is audited, also when the ADMIN is a participant (here a listed reviewer).
+    expect(canReadCaioAttentionCase(actor("u_admin", "ADMIN"), parties)).toEqual({ ok: true, auditRead: true });
   });
 
   it("T-N2: only the current primary's ack, note or submit is a response", () => {
