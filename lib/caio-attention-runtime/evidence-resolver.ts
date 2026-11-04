@@ -36,9 +36,10 @@ export async function resolveCaioAttentionSystemEvidence(tx: Prisma.TransactionC
 /** Tables the evidence lookups read; the web identity needs SELECT on each (deployments already grant it). */
 export const CAIO_ATTENTION_EVIDENCE_SOURCE_TABLES = ["AuditLog", "ExecutionReceipt", "CaioQuickCheckTick", "CaioAnomalyCandidate"] as const;
 
-/** SELECT grants for the least-privilege fixture's web identity (printed by scripts/caio-attention-grant-fixture.ts). */
-export function renderCaioAttentionEvidenceGrantSql(database: string, host = "%"): string {
-  if (!/^[A-Za-z0-9_]+$/u.test(database) || !/^[A-Za-z0-9_.%-]+$/u.test(host)) throw new Error("unsafe MySQL identifier");
-  return CAIO_ATTENTION_EVIDENCE_SOURCE_TABLES
-    .map((table) => `GRANT SELECT ON \`${database}\`.\`${table}\` TO 'attention_web'@'${host}';\n`).join("");
-}
+/**
+ * The web identity's SELECT on every evidence source, for the least-privilege fixture. scripts/caio-attention-grant-fixture.ts
+ * passes it to renderCaioAttentionGrantSql as `extra`, which merges it per table with the fixture's own grants.
+ */
+export const CAIO_ATTENTION_EVIDENCE_GRANTS = Object.fromEntries(
+  CAIO_ATTENTION_EVIDENCE_SOURCE_TABLES.map((table) => [table, { attention_web: { privileges: ["SELECT"] as const } }]),
+);

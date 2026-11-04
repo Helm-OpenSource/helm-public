@@ -18,9 +18,6 @@ export type CaioAttentionTableGrant = Readonly<{
   updateColumns?: readonly string[];
 }>;
 
-/** Existing Core tables (not attention tables) in the matrix; the readiness probe never lists them. */
-export const CAIO_ATTENTION_FIXTURE_CORE_TABLES = ["Notification", "Membership", "CaioQuickCheckTick", "CaioAnomalyCandidate"] as const;
-
 const S = ["SELECT"] as const;
 const SI = ["SELECT", "INSERT"] as const;
 const SIU = ["SELECT", "INSERT", "UPDATE"] as const;
@@ -42,30 +39,32 @@ export const CAIO_ATTENTION_GRANT_MATRIX: Readonly<Record<string, Readonly<Parti
   CaioAttentionRouteConfig: { attention_generator: { privileges: S }, attention_web: { privileges: S }, attention_ops: { privileges: SI } },
   CaioAttentionRouteConfigHead: { attention_generator: { privileges: S }, attention_web: { privileges: S }, attention_ops: { privileges: SIU } },
   CaioDetectorEvaluation: { attention_generator: { privileges: SI }, attention_web: { privileges: S } },
-  // Core tables the web identity's reminder scanner and watchdog need (design v4 §9.1: deployments already grant them).
-  Notification: { attention_web: { privileges: SI } },
-  Membership: { attention_web: { privileges: S } },
-  CaioQuickCheckTick: { attention_web: { privileges: S } },
-  CaioAnomalyCandidate: { attention_web: { privileges: S } },
 };
 
 /**
- * Existing tables outside the attention set that a fixture identity touches, mirroring the deployed ACLs. Each table
- * holds one entry per identity:
+ * Existing Core tables (not attention tables) that a fixture identity touches, mirroring the deployed ACLs (design
+ * v4 §9.1: deployments already grant them). One entry per table holding every identity's grant, so no slice's grant
+ * can overwrite another's:
  *   generator — locks the candidate it suggests from (FOR UPDATE needs UPDATE) and reads memberships to skip inactive
  *               people in the prefill.
- *   web       — re-reads membership and role (FOR SHARE) inside every lifecycle transaction and writes the dispatch
- *               notice. The evidence-source reads are granted by lib/caio-attention-runtime/evidence-resolver.ts.
+ *   web       — re-reads membership and role (FOR SHARE) in every lifecycle transaction, writes in-app notices,
+ *               reads display names, and reads the quick-check ticks and candidates the watchdogs inspect. The
+ *               evidence-source reads belong to lib/caio-attention-runtime/evidence-resolver.ts, which passes its
+ *               grants to renderCaioAttentionGrantSql as `extra`; they are merged per table, never spread over.
+ * The readiness probe never lists these tables.
  */
-export const CAIO_ATTENTION_NEIGHBOUR_GRANTS: typeof CAIO_ATTENTION_GRANT_MATRIX = {
-  CaioAnomalyCandidate: { attention_generator: { privileges: ["SELECT", "UPDATE"] } },
+export const CAIO_ATTENTION_CORE_TABLE_GRANTS: typeof CAIO_ATTENTION_GRANT_MATRIX = {
+  CaioAnomalyCandidate: { attention_generator: { privileges: ["SELECT", "UPDATE"] }, attention_web: { privileges: S } },
+  CaioQuickCheckTick: { attention_web: { privileges: S } },
   Membership: { attention_generator: { privileges: S }, attention_web: { privileges: S } },
   Notification: { attention_web: { privileges: SI } },
-  User: { attention_web: { privileges: S } }, // display names on the case page
+  User: { attention_web: { privileges: S } },
 };
 
+export const CAIO_ATTENTION_FIXTURE_CORE_TABLES = Object.keys(CAIO_ATTENTION_CORE_TABLE_GRANTS);
+
 export function caioAttentionTableGrant(identity: CaioAttentionFixtureIdentity, table: string): CaioAttentionTableGrant | null {
-  return CAIO_ATTENTION_GRANT_MATRIX[table]?.[identity] ?? null;
+  return (CAIO_ATTENTION_GRANT_MATRIX[table] ?? CAIO_ATTENTION_CORE_TABLE_GRANTS[table])?.[identity] ?? null;
 }
 
 function identifier(value: string): string {
@@ -73,11 +72,40 @@ function identifier(value: string): string {
   return `\`${value}\``;
 }
 
-/** GRANT statements for an existing database whose fixture users already exist (created with random passwords). */
-export function renderCaioAttentionGrantSql(database: string, host = "%"): string {
+type CaioAttentionGrantMap = typeof CAIO_ATTENTION_GRANT_MATRIX;
+
+/**
+ * Per table and identity union of several grant maps. Two maps naming the same table and identity are merged into
+ * one grant (privileges unioned); column-scoped UPDATE lists must agree, otherwise the merge refuses.
+ */
+export function mergeCaioAttentionGrantMaps(...maps: readonly CaioAttentionGrantMap[]): CaioAttentionGrantMap {
+  const merged: Record<string, Partial<Record<CaioAttentionFixtureIdentity, CaioAttentionTableGrant>>> = {};
+  for (const map of maps) {
+    for (const [table, byIdentity] of Object.entries(map)) {
+      const target = (merged[table] ??= {});
+      for (const identity of CAIO_ATTENTION_FIXTURE_IDENTITIES) {
+        const grant = byIdentity[identity];
+        if (!grant) continue;
+        const previous = target[identity];
+        if (previous && JSON.stringify(previous.updateColumns ?? null) !== JSON.stringify(grant.updateColumns ?? null)) {
+          throw new Error(`caio_attention_fixture_update_columns_conflict:${table}:${identity}`);
+        }
+        const privileges = [...new Set([...(previous?.privileges ?? []), ...grant.privileges])];
+        target[identity] = grant.updateColumns ? { privileges, updateColumns: grant.updateColumns } : { privileges };
+      }
+    }
+  }
+  return merged;
+}
+
+/**
+ * GRANT statements for an existing database whose fixture users already exist (created with random passwords).
+ * `extra` carries grants owned by modules outside this one (the evidence lookups); they are merged per table.
+ */
+export function renderCaioAttentionGrantSql(database: string, host = "%", extra: CaioAttentionGrantMap = {}): string {
   if (!/^[A-Za-z0-9_.%-]+$/u.test(host)) throw new Error(`unsafe MySQL host: ${host}`);
   const lines: string[] = [];
-  for (const [table, byIdentity] of Object.entries({ ...CAIO_ATTENTION_GRANT_MATRIX, ...CAIO_ATTENTION_NEIGHBOUR_GRANTS })) {
+  for (const [table, byIdentity] of Object.entries(mergeCaioAttentionGrantMaps(CAIO_ATTENTION_GRANT_MATRIX, CAIO_ATTENTION_CORE_TABLE_GRANTS, extra))) {
     for (const identity of CAIO_ATTENTION_FIXTURE_IDENTITIES) {
       const grant = byIdentity[identity];
       if (!grant) continue;
