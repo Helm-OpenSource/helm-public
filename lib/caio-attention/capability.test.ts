@@ -27,10 +27,15 @@ describe("close-capability probe", () => {
   it("heartbeat is off without a node id or an artifact-bound deployment id", () => {
     const env = { HELM_RUNTIME_NODE_ID: "web-1", HELM_HEALTH_ATTESTATION_MODE: "artifact-bound", HELM_RUNTIME_DEPLOYMENT_ID: "dep-1" };
     expect(resolveCaioAttentionNodeId({ HELM_RUNTIME_NODE_ID: "bad id" })).toBeNull();
-    expect(resolveCaioAttentionHeartbeat({ ...env, HELM_RUNTIME_NODE_ID: undefined }, null)).toBeNull();
-    expect(resolveCaioAttentionHeartbeat({ ...env, HELM_HEALTH_ATTESTATION_MODE: undefined }, null)).toBeNull();
-    expect(resolveCaioAttentionHeartbeat({ ...env, HELM_CAIO_ATTENTION_REMINDERS_ENABLED: "true" }, "{\"closeCapabilityVersion\":1}"))
+    expect(resolveCaioAttentionHeartbeat({ ...env, HELM_RUNTIME_NODE_ID: undefined }, null, true)).toBeNull();
+    expect(resolveCaioAttentionHeartbeat({ ...env, HELM_HEALTH_ATTESTATION_MODE: undefined }, null, true)).toBeNull();
+    expect(resolveCaioAttentionHeartbeat({ ...env, HELM_CAIO_ATTENTION_REMINDERS_ENABLED: "true" }, "{\"closeCapabilityVersion\":1}", true))
       .toEqual({ nodeId: "web-1", role: "http", deploymentId: "dep-1", closeCapabilityVersion: 1, remindersEnabled: true });
-    expect(resolveCaioAttentionHeartbeat(env, "{")).toMatchObject({ closeCapabilityVersion: 0, remindersEnabled: false });
+    expect(resolveCaioAttentionHeartbeat(env, "{", true)).toMatchObject({ closeCapabilityVersion: 0, remindersEnabled: false });
+  });
+
+  it("heartbeat reports close capability 0 while no attention pack policy is registered, whatever the release file says", () => {
+    const env = { HELM_RUNTIME_NODE_ID: "web-1", HELM_HEALTH_ATTESTATION_MODE: "artifact-bound", HELM_RUNTIME_DEPLOYMENT_ID: "dep-1" };
+    expect(resolveCaioAttentionHeartbeat(env, "{\"closeCapabilityVersion\":1}", false)).toMatchObject({ closeCapabilityVersion: 0 });
   });
 });

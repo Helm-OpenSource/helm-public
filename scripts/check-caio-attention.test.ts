@@ -63,6 +63,11 @@ describe("check:caio-attention", () => {
     expect(capability.schemaVersion).toBe("caio-attention-capability/v1");
     expect(CAIO_ATTENTION_CLOSE_CAPABILITY_VERSION).toBe(CAIO_ATTENTION_PAGE_SERVICE_BOUND ? 1 : 0);
     expect(capability.closeCapabilityVersion).toBe(CAIO_ATTENTION_CLOSE_CAPABILITY_VERSION);
+    // What a node reports is decided at runtime: never more than the file, and 0 until the pack policy is registered.
+    const route = read("app/api/caio-attention/capability/route.ts");
+    expect(route).toContain("resolveCaioAttentionReportedCloseCapability(");
+    expect(route).not.toMatch(/closeCapabilityVersion:\s*parseCaioAttentionCapabilityFile/u);
+    expect(read("lib/caio-attention/heartbeat.service.ts")).toContain("getRegisteredCaioAttentionPack()?.policy != null");
     const detail = read("app/(workspace)/caio/attention/[caseId]/page.tsx");
     for (const marker of ['kind="disposition"', 'kind="review"', "CaioAttentionConfirmForm"]) expect(detail, marker).toContain(marker);
     expect(read("features/caio-attention/actions.ts")).toMatch(/getCaioAttentionPageService\(\)\.runCommand\(/u);

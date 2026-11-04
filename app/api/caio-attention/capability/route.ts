@@ -9,7 +9,9 @@ import {
   type CaioAttentionCapabilityReport,
 } from "@/lib/caio-attention/capability";
 import { probeCaioAttentionSchemaReadiness } from "@/lib/caio-attention/schema-readiness";
-import { CAIO_ATTENTION_CLOSE_CHAIN_BINDING } from "@/lib/caio-attention-runtime/close-chain-binding";
+import {
+  CAIO_ATTENTION_CLOSE_CHAIN_BINDING, resolveCaioAttentionReportedCloseCapability,
+} from "@/lib/caio-attention-runtime/close-chain-binding";
 import { resolveRuntimeHealthAttestation } from "@/lib/production-health/runtime-deployment-identity";
 
 export const dynamic = "force-dynamic";
@@ -45,7 +47,7 @@ export async function GET(request: Request) {
   const report: CaioAttentionCapabilityReport = {
     nodeId: resolveCaioAttentionNodeId(process.env),
     deploymentId: attestation.mode === "artifact-bound" ? attestation.runtimeDeploymentId : null,
-    closeCapabilityVersion: parseCaioAttentionCapabilityFile(await readCapabilityFile()) ?? 0,
+    closeCapabilityVersion: resolveCaioAttentionReportedCloseCapability(parseCaioAttentionCapabilityFile(await readCapabilityFile())),
     pageServiceBound: CAIO_ATTENTION_CLOSE_CHAIN_BINDING.pageServiceBound,
     lifecycleRoutes: CAIO_ATTENTION_CLOSE_CHAIN_BINDING.lifecycleRoutes,
     migrationReady: migration.ready,

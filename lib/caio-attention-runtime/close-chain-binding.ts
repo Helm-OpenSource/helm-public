@@ -1,6 +1,6 @@
 import "server-only";
 
-import { CAIO_ATTENTION_PAGE_SERVICE_BOUND } from "@/features/caio-attention/service";
+import { CAIO_ATTENTION_CLOSE_CAPABILITY_VERSION, CAIO_ATTENTION_PAGE_SERVICE_BOUND } from "@/features/caio-attention/service";
 import { getRegisteredCaioAttentionPack } from "@/lib/caio-attention/registry";
 
 import { CAIO_ATTENTION_PAGE_OPERATIONS } from "./page-service";
@@ -24,3 +24,13 @@ export const CAIO_ATTENTION_CLOSE_CHAIN_BINDING: Readonly<{ pageServiceBound: bo
       && CAIO_ATTENTION_CLOSE_CHAIN_OPERATIONS.every((op) => (CAIO_ATTENTION_PAGE_OPERATIONS as readonly string[]).includes(op));
   },
 };
+
+/**
+ * Close capability the loopback probe reports: the release file's value (capability.json), capped by the
+ * binding-derived CAIO_ATTENTION_CLOSE_CAPABILITY_VERSION, and 0 unless pageServiceBound holds at runtime (bound AND
+ * a registered pack policy). capability.json = 1 alone never lets attest pass.
+ */
+export function resolveCaioAttentionReportedCloseCapability(fileVersion: number | null): number {
+  if (!CAIO_ATTENTION_CLOSE_CHAIN_BINDING.pageServiceBound) return 0;
+  return Math.min(fileVersion ?? 0, CAIO_ATTENTION_CLOSE_CAPABILITY_VERSION);
+}
