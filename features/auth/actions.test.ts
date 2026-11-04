@@ -1276,7 +1276,7 @@ describe("auth verification code attempt cap", () => {
     }
   });
 
-  it("fills membership title from invite prefill when signup form title is empty", async () => {
+  it("keeps a matching invite pending when auto-activation is explicitly disabled", async () => {
     installAuthCodeStore([]);
     const prefillCookie = issuePrefillCookie({
       name: "Owner",
@@ -1321,13 +1321,14 @@ describe("auth verification code attempt cap", () => {
     });
     mocks.db.workspace.findUnique.mockResolvedValue({
       id: "workspace-invite-1",
+      featureFlagsJson: JSON.stringify({ membershipAutoActivation: false }),
     });
     mocks.db.membership.findUnique.mockResolvedValue(null);
     mocks.db.membership.upsert.mockResolvedValue({
       workspaceId: "workspace-invite-1",
       userId: "user-1",
       role: WorkspaceRole.MEMBER,
-      status: MembershipStatus.ACTIVE,
+      status: MembershipStatus.INVITED,
       title: "高级JAVA开发工程师",
       persona: "高级JAVA开发工程师",
     });
@@ -1341,6 +1342,8 @@ describe("auth verification code attempt cap", () => {
     });
 
     expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected successful signup with pending invite");
+    expect(result).toMatchObject({ invitationPending: true, workspaceId: null, redirectTo: "/invite-pending" });
     expect(mocks.db.membership.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         create: expect.objectContaining({
@@ -1352,7 +1355,7 @@ describe("auth verification code attempt cap", () => {
     );
     expect(mocks.session.activateMembershipIfInvited).toHaveBeenCalledWith({ workspaceId: "workspace-invite-1", userId: "user-1" });
     expect(mocks.trialOnboarding.createSelfServeTrialOrganization).not.toHaveBeenCalled();
-    expect(mocks.session.createSession).toHaveBeenCalledWith(expect.objectContaining({ workspaceId: null }));
+    expect(mocks.session.createSession).not.toHaveBeenCalled();
   });
 });
 

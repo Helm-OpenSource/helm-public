@@ -1367,13 +1367,15 @@ export async function completeTrialSignupVerificationAction(
     workspaceIdForSession = workspace.id;
   }
 
-  await createSession({
-    userId: savedUser.id,
-    email: savedUser.email,
-    workspaceId: workspaceIdForSession,
-    sourcePage: "/login",
-    providerType: AUTH_SESSION_PROVIDER_TYPES.VERIFIED_SIGNUP,
-  });
+  if (!invitationHandled || workspaceIdForSession) {
+    await createSession({
+      userId: savedUser.id,
+      email: savedUser.email,
+      workspaceId: workspaceIdForSession,
+      sourcePage: "/login",
+      providerType: AUTH_SESSION_PROVIDER_TYPES.VERIFIED_SIGNUP,
+    });
+  }
 
   cookieStore.set(UI_LOCALE_COOKIE, enrollmentLocale, {
     httpOnly: false,
@@ -1389,7 +1391,8 @@ export async function completeTrialSignupVerificationAction(
   return {
     ok: true,
     workspaceId: workspaceIdForSession,
-    redirectTo,
+    redirectTo: invitationHandled && !workspaceIdForSession ? "/invite-pending" : redirectTo,
+    invitationPending: invitationHandled && !workspaceIdForSession,
   };
 }
 

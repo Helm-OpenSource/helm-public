@@ -69,6 +69,13 @@ export function serializeWorkspaceFeatureFlags(flags: WorkspaceFeatureFlags) {
   return JSON.stringify(flags);
 }
 
+export function mergeWorkspaceFeatureFlags(
+  current: string | null | undefined,
+  updates: Partial<WorkspaceFeatureFlags>,
+) {
+  return { ...parseWorkspaceFeatureFlags(current), ...updates };
+}
+
 export function getEnabledFeatureFlagCount(flags: WorkspaceFeatureFlags) {
   return Object.values(flags).filter(Boolean).length;
 }
