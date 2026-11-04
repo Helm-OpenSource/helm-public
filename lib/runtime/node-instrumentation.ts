@@ -79,7 +79,18 @@ export async function registerNodeInstrumentation() {
       import("@/lib/caio-attention/heartbeat.service"),
       import("@/lib/db"),
     ]);
-    await startCaioAttentionHeartbeat(db, (message) => logInstrumentationInfo(message));
+    // The heartbeat reports close capability from the same runtime binding as the loopback probe. If that module
+    // cannot load here, the heartbeat falls back to the policy check alone (still 0 without a registered pack).
+    let closeChainBound: (() => boolean) | undefined;
+    try {
+      const { CAIO_ATTENTION_CLOSE_CHAIN_BINDING } = await import("@/lib/caio-attention-runtime/close-chain-binding");
+      closeChainBound = () => CAIO_ATTENTION_CLOSE_CHAIN_BINDING.pageServiceBound;
+    } catch (err) {
+      logInstrumentationInfo("caio attention close-chain binding not loaded; heartbeat uses the policy check", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    await startCaioAttentionHeartbeat(db, (message) => logInstrumentationInfo(message), closeChainBound);
   } catch (err) {
     logInstrumentationInfo("caio attention heartbeat not started", { error: err instanceof Error ? err.message : String(err) });
   }

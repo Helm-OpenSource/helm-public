@@ -57,8 +57,20 @@ export async function recordCaioAttentionHeartbeat(client: Pick<PrismaClient, "$
       closeCapabilityVersion = VALUES(closeCapabilityVersion), remindersEnabled = VALUES(remindersEnabled), lastSeenAt = NOW(3)`;
 }
 
+/**
+ * Whether this tick may report the release close capability: the runtime close-chain binding when the caller supplies
+ * it (CAIO_ATTENTION_CLOSE_CHAIN_BINDING.pageServiceBound, i.e. page service bound AND pack policy registered), and in
+ * every case a registered pack policy. Without a resolver only the policy check applies; capability.json itself is
+ * pinned to the build-time binding by check:caio-attention.
+ */
+export function resolveCaioAttentionHeartbeatCloseChainBound(closeChainBound?: () => boolean): boolean {
+  return (closeChainBound ? closeChainBound() : true) && getRegisteredCaioAttentionPack()?.policy != null;
+}
+
 /** Starts the 60 s heartbeat when this host is configured for it; returns a stop function (no-op when off). */
-export async function startCaioAttentionHeartbeat(client: Pick<PrismaClient, "$executeRaw">, log: (message: string) => void): Promise<() => void> {
+export async function startCaioAttentionHeartbeat(
+  client: Pick<PrismaClient, "$executeRaw">, log: (message: string) => void, closeChainBound?: () => boolean,
+): Promise<() => void> {
   let text: string | null = null;
   try {
     text = await readFile(path.join(process.cwd(), CAIO_ATTENTION_CAPABILITY_FILE), "utf8");
@@ -66,7 +78,7 @@ export async function startCaioAttentionHeartbeat(client: Pick<PrismaClient, "$e
     text = null;
   }
   // Re-resolved every tick: the overlay may register its pack after the heartbeat started.
-  const current = () => resolveCaioAttentionHeartbeat(process.env, text, getRegisteredCaioAttentionPack()?.policy != null);
+  const current = () => resolveCaioAttentionHeartbeat(process.env, text, resolveCaioAttentionHeartbeatCloseChainBound(closeChainBound));
   if (!current()) return () => undefined;
   const tick = () => recordCaioAttentionHeartbeat(client, current()!).catch((error: unknown) => {
     log(`caio attention heartbeat failed: ${error instanceof Error ? error.name : "error"}`);

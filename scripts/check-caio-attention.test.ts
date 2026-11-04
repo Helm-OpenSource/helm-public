@@ -85,6 +85,7 @@ describe("check:caio-attention", () => {
     expect(route).toContain("resolveCaioAttentionNodeCloseCapability(");
     expect(route).not.toMatch(/closeCapabilityVersion:\s*parseCaioAttentionCapabilityFile/u);
     expect(read("lib/caio-attention/heartbeat.service.ts")).toContain("getRegisteredCaioAttentionPack()?.policy != null");
+    expect(read("lib/runtime/node-instrumentation.ts")).toContain("CAIO_ATTENTION_CLOSE_CHAIN_BINDING.pageServiceBound");
     const detail = read("app/(workspace)/caio/attention/[caseId]/page.tsx");
     for (const marker of ['kind="disposition"', 'kind="review"', "CaioAttentionConfirmForm"]) expect(detail, marker).toContain(marker);
     expect(read("features/caio-attention/actions.ts")).toMatch(/getCaioAttentionPageService\(\)\.runCommand\(/u);

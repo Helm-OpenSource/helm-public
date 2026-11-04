@@ -42,3 +42,16 @@ describe("CAIO attention close-chain binding and the single pack registration", 
     expect(getRegisteredCaioAttentionScanConfig()).toBeNull();
   });
 });
+
+describe("CAIO attention heartbeat follows the runtime close-chain binding", () => {
+  it("reports capable only when the binding resolver and the registered pack policy both hold", async () => {
+    const { resolveCaioAttentionHeartbeatCloseChainBound } = await import("@/lib/caio-attention/heartbeat.service");
+    const binding = () => CAIO_ATTENTION_CLOSE_CHAIN_BINDING.pageServiceBound;
+    expect(resolveCaioAttentionHeartbeatCloseChainBound(binding)).toBe(false); // no pack
+    expect(resolveCaioAttentionHeartbeatCloseChainBound()).toBe(false);
+    registerCaioAttentionPack({ packId: "p", policy, rules: [rule] });
+    expect(resolveCaioAttentionHeartbeatCloseChainBound(binding)).toBe(true);
+    expect(resolveCaioAttentionHeartbeatCloseChainBound(() => false)).toBe(false); // e.g. an unbound build
+    expect(resolveCaioAttentionHeartbeatCloseChainBound()).toBe(true);
+  });
+});
