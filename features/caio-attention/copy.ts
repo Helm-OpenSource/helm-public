@@ -23,7 +23,7 @@ const CATEGORY: Record<CaioAttentionCategory, Pair> = {
   compliance: ["合规", "Compliance"],
 };
 const ROLE: Record<CaioAttentionViewerRole, Pair> = {
-  owner: ["确认人", "Owner"],
+  owner: ["工作区 OWNER", "Workspace OWNER"],
   primary: ["主责", "Primary"],
   cc: ["知悉", "Informed"],
   escalation: ["升级人", "Escalation"],
@@ -65,9 +65,6 @@ const FAILURE: Record<CaioAttentionCommandFailure, Pair> = {
 
 export const caioAttentionOutcomeLabel = (english: boolean, outcome: CaioAttentionDispositionOutcome) => pick(english, OUTCOME[outcome]);
 export const caioAttentionFailureLabel = (english: boolean, reason: CaioAttentionCommandFailure) => pick(english, FAILURE[reason]);
-
-/** Shell entry for the attention queue; shown only when `resolveCaioAttentionNavigation` allows it. */
-export const CAIO_ATTENTION_DESTINATION = { href: "/caio/attention", labelZh: "运营关注事项", labelEn: "Attention cases" } as const;
 
 export function caioAttentionCopy(english: boolean) {
   const t = (zh: string, en: string) => (english ? en : zh);

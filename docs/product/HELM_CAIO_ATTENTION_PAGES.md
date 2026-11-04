@@ -26,7 +26,7 @@ public_safety: Describes page routes, the page-service contract and guards of a 
 | `/caio/attention/mine` | 我的关注事项：当前已确认命令中作为主责、知悉、升级人或复核人参与的事项 |
 | `/caio/attention/[caseId]` | 详情：对象 → 已确认命令及与预填的差异（未确认时显示预填）→ 回执、复核、事件 → 下一步表单 |
 
-下一步表单只按 loader 返回的 `allowedOperations` 显示：确认（可改预填，实时显示与预填的差异）、ack、note、提交处置回执、复核通过/退回；OWNER 另有驳回（仅待确认）、延期（选择延期到的时间）、撤销（处置中、待复核）、重新下达新命令版本（显示与当前命令的差异）、调整复核人。驳回与撤销必须填写原因。复核表单要求逐条勾选外部证据，复核结论必填。
+下一步表单只按 loader 返回的 `allowedOperations` 显示：确认（可改预填，实时显示与预填的差异）、ack、note、提交处置回执、复核通过/退回；OWNER 另有驳回（仅待确认）、延期（选择延期到的时间）、撤销（处置中、待复核）、重新下达新命令版本（显示与当前命令的差异）、调整复核人。驳回与撤销必须填写原因。这里的 OWNER 指工作区 OWNER 角色，不是“确认这条事项的人”；任一工作区 OWNER 都可执行上述 OWNER 操作。复核表单要求逐条勾选外部证据，复核结论必填。
 
 ## 可见性
 
@@ -47,6 +47,6 @@ public_safety: Describes page routes, the page-service contract and guards of a 
 - 生命周期服务已接入（`lib/caio-attention-runtime/bound-page-service.ts`），`lib/caio-attention/capability.json` 随之为 `closeCapabilityVersion: 1`，表示本发布具备关闭链。探针上报的 `pageServiceBound` 在运行时判定：页面已绑定且 overlay 已注册关注事项 pack（有提醒策略）才为真；未注册时命令一律 `service_unavailable`，就绪证明被 `page_service_unbound` 阻断。入口闸门只有在 `requiredCloseCapability` 为 1 且所有预期节点都上报能力 1 时才放行。
 - `npm run check:caio-attention`（接入 CI repo-guards）：模块不引用通用治理任务表；页面层不直接访问数据库；页面只经页面服务读取；能力声明等于绑定状态推出的值且关闭链表单同在；未接入时桩保持关闭。
 
-## 导航入口
+## 未完成
 
-工作区侧栏与移动端导航显示“运营关注事项”，只是展示，不授权：服务未接入或成员非 ACTIVE 时隐藏；OWNER、ADMIN 可见；其他成员只有在至少一条当前已确认命令中参与时才可见。loader 出错时入口隐藏，不影响工作区外壳。
+工作区导航入口不在本页面片范围内。
