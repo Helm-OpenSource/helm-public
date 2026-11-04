@@ -342,7 +342,7 @@ const SURFACE_PATH = /^\/[A-Za-z0-9._~-]+(?:\/[A-Za-z0-9._~-]+)*$/;
  * member landing there would be sent straight back). An API prefix must sit at least two segments under /api.
  */
 const RESERVED_SURFACE_SEGMENTS = new Set([
-  "", "_next", "activate-member", "admin", "assets", "caio", "dashboard", "getting-started", "health", "login", "portal", "settings", "setup", "trial",
+  "", "_next", "activate-member", "admin", "assets", "caio", "dashboard", "getting-started", "health", "invite-pending", "login", "portal", "settings", "setup", "trial",
   // Every Core workspace and public page prefix the route guard knows (review P3: a landing under a Core page would loop).
   ...[...WORKSPACE_PAGE_PREFIXES, ...PUBLIC_PAGE_PREFIXES].map((prefix) => prefix.split("/")[1] ?? ""),
 ]);

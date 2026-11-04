@@ -21,6 +21,7 @@ const workspaceFeatureFlagLabels = {
   evolutionSignals: { en: "Evolution signals", zh: "演进信号" },
   swarmReadOnlyWorkers: { en: "Swarm read-only workers", zh: "只读协作者" },
   controlTowerHome: { en: "Control tower home", zh: "控制塔首页" },
+  membershipAutoActivation: { en: "Automatic invite activation", zh: "自动激活受邀成员" },
 } as const;
 
 type PilotDraft = {
@@ -178,8 +179,12 @@ export function PilotSettingsTab({
                       </p>
                       <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
                         {english
-                          ? "Control whether this trial-facing surface is visible."
-                          : "控制该试点能力是否对当前工作区可见。"}
+                          ? key === "membershipAutoActivation"
+                            ? "When enabled, the member's own first authenticated workspace use activates their invite. The member must act; this does not let an admin accept an invite for them."
+                            : "Control whether this trial-facing surface is visible."
+                          : key === "membershipAutoActivation"
+                            ? "开启后，成员本人首次通过认证使用工作区时才会激活邀请。仍须由成员本人操作；此开关不允许管理员代替成员接受邀请。"
+                            : "控制该试点能力是否对当前工作区可见。"}
                       </p>
                     </div>
                     <Switch

@@ -12,6 +12,8 @@ export type WorkspaceFeatureFlags = {
   swarmReadOnlyWorkers: boolean;
   /** 控制塔 home：/dashboard 内容开关（默认关 = 旧版视图即回滚态）。 */
   controlTowerHome: boolean;
+  /** First authenticated use may activate the member's own invited membership. */
+  membershipAutoActivation: boolean;
 };
 
 export const defaultWorkspaceFeatureFlags: WorkspaceFeatureFlags = {
@@ -23,6 +25,7 @@ export const defaultWorkspaceFeatureFlags: WorkspaceFeatureFlags = {
   evolutionSignals: true,
   swarmReadOnlyWorkers: false,
   controlTowerHome: false,
+  membershipAutoActivation: true,
 };
 
 export function parseWorkspaceFeatureFlags(raw: string | null | undefined): WorkspaceFeatureFlags {
@@ -38,6 +41,8 @@ export function parseWorkspaceFeatureFlags(raw: string | null | undefined): Work
       parsed?.swarmReadOnlyWorkers ?? defaultWorkspaceFeatureFlags.swarmReadOnlyWorkers,
     // 回滚不变量：仅字面 true 开启控制塔；"true"/1 等非法 truthy 值一律回旧版视图。
     controlTowerHome: parsed?.controlTowerHome === true,
+    // Compatibility opt-out: only an explicit boolean false disables the legacy behavior.
+    membershipAutoActivation: parsed?.membershipAutoActivation !== false,
   };
 }
 
@@ -62,6 +67,13 @@ export function resolveWorkspaceDefaultLandingPath(
 
 export function serializeWorkspaceFeatureFlags(flags: WorkspaceFeatureFlags) {
   return JSON.stringify(flags);
+}
+
+export function mergeWorkspaceFeatureFlags(
+  current: string | null | undefined,
+  updates: Partial<WorkspaceFeatureFlags>,
+) {
+  return { ...parseWorkspaceFeatureFlags(current), ...updates };
 }
 
 export function getEnabledFeatureFlagCount(flags: WorkspaceFeatureFlags) {

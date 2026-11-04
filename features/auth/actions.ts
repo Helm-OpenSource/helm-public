@@ -299,20 +299,37 @@ async function finalizeLoginForUser(
       ? "invited"
       : "workspace";
 
-  if (
-    activeMembership.status === MembershipStatus.INVITED &&
-    !requiresWorkspaceSelection
-  ) {
-    await activateMembershipIfInvited({
-      workspaceId: activeMembership.workspaceId,
-      userId: user.id,
-    });
+  let loginWorkspaceId: string | null = activeMembership.workspaceId;
+  let loginMembership = activeMembership;
+  if (activeMembership.status === MembershipStatus.INVITED) {
+    if (requiresWorkspaceSelection) {
+      // Do not bind a multi-workspace login to a preferred INVITED workspace.
+      // The member will choose it explicitly in the selector.
+      loginWorkspaceId = null;
+    } else {
+      const resultingMembership = await activateMembershipIfInvited({
+        workspaceId: activeMembership.workspaceId,
+        userId: user.id,
+      });
+      if (resultingMembership?.status !== MembershipStatus.ACTIVE) {
+        await clearSession();
+        return {
+          ok: true as const,
+          redirectTo: "/invite-pending",
+          workspaceName: activeMembership.workspace.name ?? (english ? "your workspace" : "\u5f53\u524d\u5de5\u4f5c\u533a"),
+          entryKind: "invited",
+          requiresWorkspaceSelection: false,
+          invitationPending: true,
+        };
+      }
+      loginMembership = { ...activeMembership, status: MembershipStatus.ACTIVE };
+    }
   }
 
   await createSession({
     userId: user.id,
     email: user.email,
-    workspaceId: activeMembership.workspaceId,
+    workspaceId: loginWorkspaceId,
     sourcePage,
     providerType,
   });
@@ -334,7 +351,7 @@ async function finalizeLoginForUser(
     : requiresIdentityCompletion
       ? FIRST_LOGIN_IDENTITY_SETUP_PATH
       : resolveDeploymentPostLoginPath(
-          resolvePostLoginRedirectPath(activeMembership),
+          resolvePostLoginRedirectPath(loginMembership),
         );
 
   await logEvent({
@@ -1242,6 +1259,7 @@ export async function completeTrialSignupVerificationAction(
   // revoked is not an invite — and a separate flag could disagree with the value
   // it is supposed to describe.
   let workspaceIdForSession: string | null = null;
+  let invitationHandled = false;
   let redirectTo = "/setup?onboarding=trial";
 
   if (invitedWorkspaceId) {
@@ -1300,6 +1318,7 @@ export async function completeTrialSignupVerificationAction(
     // it declines the join and falls through to the self-serve path below,
     // exactly as it does for a user who was never invited.
     if (existingMembership?.status !== MembershipStatus.INACTIVE) {
+      invitationHandled = true;
       await db.membership.upsert({
         where: {
           workspaceId_userId: {
@@ -1311,7 +1330,7 @@ export async function completeTrialSignupVerificationAction(
           workspaceId: invitedWorkspace.id,
           userId: savedUser.id,
           role: existingMembership?.role ?? WorkspaceRole.MEMBER,
-          status: MembershipStatus.ACTIVE,
+          status: MembershipStatus.INVITED,
           ...(invitedMembershipTitle ? { title: invitedMembershipTitle } : {}),
           ...(invitedMembershipPersona ? { persona: invitedMembershipPersona } : {}),
         },
@@ -1333,30 +1352,18 @@ export async function completeTrialSignupVerificationAction(
         },
       });
 
-      // The INVITED -> ACTIVE transition, with the pre-state inside the UPDATE.
-      // Same shape and same reason as markInvitedMembershipActive in
-      // lib/auth/session.ts: Prisma's updateMany can select ids and then update
-      // by id, so its count is not a sound compare-and-swap under concurrency.
-      // A row revoked in the meantime does not match, and stays revoked.
-      await db.$executeRaw`
-        UPDATE \`Membership\`
-           SET \`status\` = ${MembershipStatus.ACTIVE},
-               \`joinedAt\` = UTC_TIMESTAMP(3),
-               \`updatedAt\` = UTC_TIMESTAMP(3)
-         WHERE \`workspaceId\` = ${invitedWorkspace.id}
-           AND \`userId\` = ${savedUser.id}
-           AND \`status\` = ${MembershipStatus.INVITED}
-      `;
-
-      workspaceIdForSession = invitedWorkspace.id;
-      redirectTo = resolveDeploymentPostLoginPath(
-        "/dashboard",
-        deploymentConfig,
-      );
+      const resultingMembership = await activateMembershipIfInvited({
+        workspaceId: invitedWorkspace.id,
+        userId: savedUser.id,
+      });
+      if (resultingMembership?.status === MembershipStatus.ACTIVE) {
+        workspaceIdForSession = invitedWorkspace.id;
+        redirectTo = resolveDeploymentPostLoginPath("/dashboard", deploymentConfig);
+      }
     }
   }
 
-  if (!workspaceIdForSession) {
+  if (!workspaceIdForSession && !invitationHandled) {
     // Recheck after invite resolution: an invitation may have been revoked since
     // the entry check. It must never turn into permission to create a workspace.
     if (!canSelfCreateOrganization() || !deploymentConfig.selfServeSignupEnabled) {
@@ -1377,13 +1384,20 @@ export async function completeTrialSignupVerificationAction(
     workspaceIdForSession = workspace.id;
   }
 
-  await createSession({
-    userId: savedUser.id,
-    email: savedUser.email,
-    workspaceId: workspaceIdForSession,
-    sourcePage: "/login",
-    providerType: AUTH_SESSION_PROVIDER_TYPES.VERIFIED_SIGNUP,
-  });
+  if (invitationHandled && !workspaceIdForSession) {
+    // Signup is a public verified-identity flow and can be started from a
+    // browser that already has a session. When the invite remains pending, do
+    // not leave that prior session available to resolve workspace access.
+    await clearSession();
+  } else {
+    await createSession({
+      userId: savedUser.id,
+      email: savedUser.email,
+      workspaceId: workspaceIdForSession,
+      sourcePage: "/login",
+      providerType: AUTH_SESSION_PROVIDER_TYPES.VERIFIED_SIGNUP,
+    });
+  }
 
   cookieStore.set(UI_LOCALE_COOKIE, enrollmentLocale, {
     httpOnly: false,
@@ -1399,7 +1413,8 @@ export async function completeTrialSignupVerificationAction(
   return {
     ok: true,
     workspaceId: workspaceIdForSession,
-    redirectTo,
+    redirectTo: invitationHandled && !workspaceIdForSession ? "/invite-pending" : redirectTo,
+    invitationPending: invitationHandled && !workspaceIdForSession,
   };
 }
 
@@ -1962,29 +1977,45 @@ export async function selectLoginWorkspaceAction(
     };
   }
 
-  await setActiveWorkspace(parsed.data.workspaceId);
-
+  let selectedMembership = membership;
   if (membership.status === MembershipStatus.INVITED) {
-    await activateMembershipIfInvited({
+    const resultingMembership = await activateMembershipIfInvited({
       workspaceId: parsed.data.workspaceId,
       userId: user.id,
     });
+    if (!resultingMembership) {
+      return {
+        ok: false,
+        error: english ? "The selected organization is unavailable." : "选择的组织当前不可用。",
+      };
+    }
+    if (resultingMembership.status === MembershipStatus.INVITED) {
+      return { ok: true, redirectTo: "/invite-pending", invitationPending: true };
+    }
+    if (resultingMembership.status !== MembershipStatus.ACTIVE) {
+      return {
+        ok: false,
+        error: english ? "The selected organization is unavailable." : "选择的组织当前不可用。",
+      };
+    }
+    selectedMembership = { ...membership, status: resultingMembership.status };
   }
+
+  await setActiveWorkspace(parsed.data.workspaceId);
 
   const requiresIdentityCompletion = shouldRequireFirstLoginIdentityCompletion(user);
   const redirectTo = requiresIdentityCompletion
     ? FIRST_LOGIN_IDENTITY_SETUP_PATH
     : resolveDeploymentPostLoginPath(
         resolvePostLoginRedirectPath(
-          membership.status === MembershipStatus.INVITED
-            ? { ...membership, status: MembershipStatus.ACTIVE }
-            : membership,
+          selectedMembership,
         ),
       );
 
   return {
     ok: true,
     redirectTo,
+    invitationPending: false,
   };
 }
 

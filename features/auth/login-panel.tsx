@@ -456,7 +456,11 @@ function LoginPanelSurface({
           return;
         }
 
-        toast.success(english ? "Signup completed" : "注册已完成");
+        toast.success(completeResult.invitationPending
+          ? english
+            ? "Your account is verified; the workspace invitation remains pending."
+            : "账号已验证；工作区邀请仍待处理。"
+          : english ? "Signup completed" : "注册已完成");
         router.push(completeResult.redirectTo);
         router.refresh();
         return;
@@ -492,7 +496,11 @@ function LoginPanelSurface({
         return;
       }
 
-      toast.success(english ? "Trial workspace created" : "试用工作区已创建");
+      toast.success(result.invitationPending
+        ? english
+          ? "Your account is verified; the workspace invitation remains pending."
+          : "账号已验证；工作区邀请仍待处理。"
+        : english ? "Trial workspace created" : "试用工作区已创建");
       router.push(result.redirectTo);
       router.refresh();
     });

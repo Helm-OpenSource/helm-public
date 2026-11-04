@@ -126,7 +126,7 @@ import {
 import { sendDingTalkInviteMessage } from "@/lib/connectors/dingtalk-directory-invite";
 import { getLatestDingTalkDirectoryInviteDryRunSnapshot } from "@/lib/connectors/dingtalk-directory-invite-snapshot";
 import { safeParseJson } from "@/lib/utils";
-import { defaultWorkspaceFeatureFlags, parseWorkspaceFeatureFlags, serializeWorkspaceFeatureFlags } from "@/lib/workspace-ops";
+import { defaultWorkspaceFeatureFlags, mergeWorkspaceFeatureFlags, parseWorkspaceFeatureFlags, serializeWorkspaceFeatureFlags } from "@/lib/workspace-ops";
 import {
   assertHelmReservedWorkspaceAccess,
   getHelmReservedWorkspaceDeniedMessage,
@@ -3435,10 +3435,9 @@ export async function updateWorkspaceSetupAction(input: z.infer<typeof workspace
       defaultLocale: nextLocale,
       pilotMode: parsed.data.pilotMode,
       captureConsentRequired: parsed.data.captureConsentRequired,
-      featureFlagsJson: serializeWorkspaceFeatureFlags({
-        ...defaultWorkspaceFeatureFlags,
-        ...parsed.data.featureFlags,
-      }),
+      featureFlagsJson: serializeWorkspaceFeatureFlags(
+        mergeWorkspaceFeatureFlags(workspace.featureFlagsJson, parsed.data.featureFlags),
+      ),
     },
   });
 
@@ -4105,6 +4104,7 @@ const workspaceOperationalControlsSchema = z.object({
     // 再从 baseline 重建 → 开关"保存成功"却回落默认(CodeX 运行审计 P1)。
     swarmReadOnlyWorkers: z.boolean(),
     controlTowerHome: z.boolean(),
+    membershipAutoActivation: z.boolean(),
   }),
 });
 
