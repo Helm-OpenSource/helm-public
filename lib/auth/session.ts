@@ -22,7 +22,7 @@ import {
   LEGACY_SESSION_COOKIE,
   SESSION_ID_COOKIE,
 } from "@/lib/auth/session-cookies";
-import { safeWriteAuditLog } from "@/lib/audit";
+import { safeWriteAuditLog, writeAuditLog } from "@/lib/audit";
 import {
   externalLandingPath,
   externalScopeOf,
@@ -33,6 +33,7 @@ import { isWriteConflictError } from "@/lib/db/conflict-aware-write";
 import { ensureWorkspaceCommercialFoundation, syncWorkspaceAccessState } from "@/lib/billing/foundation";
 import { db } from "@/lib/db";
 import { safeParseJson } from "@/lib/utils";
+import { parseWorkspaceFeatureFlags } from "@/lib/workspace-ops";
 
 const AUTH_SESSION_TTL_DAYS = 14;
 
@@ -661,19 +662,33 @@ function readMembership(input: { workspaceId: string; userId: string }) {
 }
 
 async function markInvitedMembershipActive(input: { workspaceId: string; userId: string }) {
-  // Keep the INVITED pre-state in the UPDATE itself. Prisma's MySQL updateMany
-  // path can select ids first and then update by id, so its count is not a sound
-  // compare-and-swap result under concurrency.
-  const count = await db.$executeRaw`
-    UPDATE \`Membership\`
-       SET \`status\` = ${MembershipStatus.ACTIVE},
-           \`joinedAt\` = UTC_TIMESTAMP(3),
-           \`updatedAt\` = UTC_TIMESTAMP(3)
-     WHERE \`workspaceId\` = ${input.workspaceId}
-       AND \`userId\` = ${input.userId}
-       AND \`status\` = ${MembershipStatus.INVITED}
-  `;
-  return { count };
+  return db.$transaction(async (tx) => {
+    // Keep INVITED in the UPDATE predicate and write its evidence in the same transaction.
+    const count = await tx.$executeRaw`
+      UPDATE \`Membership\`
+         SET \`status\` = ${MembershipStatus.ACTIVE},
+             \`joinedAt\` = UTC_TIMESTAMP(3),
+             \`updatedAt\` = UTC_TIMESTAMP(3)
+       WHERE \`workspaceId\` = ${input.workspaceId}
+         AND \`userId\` = ${input.userId}
+         AND \`status\` = ${MembershipStatus.INVITED}
+    `;
+    if (count > 0) {
+      await writeAuditLog({
+        workspaceId: input.workspaceId,
+        userId: input.userId,
+        actor: input.userId,
+        actorType: ActorType.USER,
+        actionType: MEMBERSHIP_AUTO_ACTIVATED_AUDIT_ACTION,
+        targetType: "Membership",
+        targetId: `${input.workspaceId}:${input.userId}`,
+        summary: "Member auto-activated own invited membership on first authenticated workspace use",
+        payload: { workspaceId: input.workspaceId, userId: input.userId, mechanism: "member_first_authenticated_use" },
+        sourcePage: "/auth/session",
+      }, { client: tx });
+    }
+    return { count };
+  });
 }
 
 export const MEMBERSHIP_AUTO_ACTIVATED_AUDIT_ACTION = "MEMBERSHIP_AUTO_ACTIVATED_ON_FIRST_USE";
@@ -682,6 +697,14 @@ export async function activateMembershipIfInvited(input: {
   workspaceId: string;
   userId: string;
 }) {
+  const workspace = await db.workspace.findUnique({
+    where: { id: input.workspaceId },
+    select: { featureFlagsJson: true },
+  });
+  if (!workspace || !parseWorkspaceFeatureFlags(workspace.featureFlagsJson).membershipAutoActivation) {
+    return readMembership(input);
+  }
+
   let activation: Awaited<ReturnType<typeof markInvitedMembershipActive>>;
 
   try {
@@ -708,25 +731,6 @@ export async function activateMembershipIfInvited(input: {
   }
 
   if (activation.count > 0) {
-    // Implicit accept-invite: the user reached an invited workspace and we
-    // auto-flipped INVITED → ACTIVE. AGENTS.md §6 forbids broad auto-write
-    // without leaving a trace, so the transition itself is audited even
-    // though no explicit "accept" UI exists yet (see audit §3.5).
-    await safeWriteAuditLog({
-      workspaceId: input.workspaceId,
-      userId: input.userId,
-      actor: input.userId,
-      actorType: ActorType.SYSTEM,
-      actionType: MEMBERSHIP_AUTO_ACTIVATED_AUDIT_ACTION,
-      targetType: "Membership",
-      targetId: `${input.workspaceId}:${input.userId}`,
-      summary: "Membership auto-activated on first workspace use (implicit accept-invite)",
-      payload: {
-        workspaceId: input.workspaceId,
-        userId: input.userId,
-      },
-      sourcePage: "/auth/session",
-    });
     return readMembership(input);
   }
 

@@ -4105,6 +4105,7 @@ const workspaceOperationalControlsSchema = z.object({
     // 再从 baseline 重建 → 开关"保存成功"却回落默认(CodeX 运行审计 P1)。
     swarmReadOnlyWorkers: z.boolean(),
     controlTowerHome: z.boolean(),
+    membershipAutoActivation: z.boolean(),
   }),
 });
 

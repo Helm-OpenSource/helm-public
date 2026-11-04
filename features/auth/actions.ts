@@ -1242,6 +1242,7 @@ export async function completeTrialSignupVerificationAction(
   // revoked is not an invite — and a separate flag could disagree with the value
   // it is supposed to describe.
   let workspaceIdForSession: string | null = null;
+  let invitationHandled = false;
   let redirectTo = "/setup?onboarding=trial";
 
   if (invitedWorkspaceId) {
@@ -1300,6 +1301,7 @@ export async function completeTrialSignupVerificationAction(
     // it declines the join and falls through to the self-serve path below,
     // exactly as it does for a user who was never invited.
     if (existingMembership?.status !== MembershipStatus.INACTIVE) {
+      invitationHandled = true;
       await db.membership.upsert({
         where: {
           workspaceId_userId: {
@@ -1311,7 +1313,7 @@ export async function completeTrialSignupVerificationAction(
           workspaceId: invitedWorkspace.id,
           userId: savedUser.id,
           role: existingMembership?.role ?? WorkspaceRole.MEMBER,
-          status: MembershipStatus.ACTIVE,
+          status: MembershipStatus.INVITED,
           ...(invitedMembershipTitle ? { title: invitedMembershipTitle } : {}),
           ...(invitedMembershipPersona ? { persona: invitedMembershipPersona } : {}),
         },
@@ -1333,30 +1335,18 @@ export async function completeTrialSignupVerificationAction(
         },
       });
 
-      // The INVITED -> ACTIVE transition, with the pre-state inside the UPDATE.
-      // Same shape and same reason as markInvitedMembershipActive in
-      // lib/auth/session.ts: Prisma's updateMany can select ids and then update
-      // by id, so its count is not a sound compare-and-swap under concurrency.
-      // A row revoked in the meantime does not match, and stays revoked.
-      await db.$executeRaw`
-        UPDATE \`Membership\`
-           SET \`status\` = ${MembershipStatus.ACTIVE},
-               \`joinedAt\` = UTC_TIMESTAMP(3),
-               \`updatedAt\` = UTC_TIMESTAMP(3)
-         WHERE \`workspaceId\` = ${invitedWorkspace.id}
-           AND \`userId\` = ${savedUser.id}
-           AND \`status\` = ${MembershipStatus.INVITED}
-      `;
-
-      workspaceIdForSession = invitedWorkspace.id;
-      redirectTo = resolveDeploymentPostLoginPath(
-        "/dashboard",
-        deploymentConfig,
-      );
+      const resultingMembership = await activateMembershipIfInvited({
+        workspaceId: invitedWorkspace.id,
+        userId: savedUser.id,
+      });
+      if (resultingMembership?.status === MembershipStatus.ACTIVE) {
+        workspaceIdForSession = invitedWorkspace.id;
+        redirectTo = resolveDeploymentPostLoginPath("/dashboard", deploymentConfig);
+      }
     }
   }
 
-  if (!workspaceIdForSession) {
+  if (!workspaceIdForSession && !invitationHandled) {
     // Recheck after invite resolution: an invitation may have been revoked since
     // the entry check. It must never turn into permission to create a workspace.
     if (!canSelfCreateOrganization() || !deploymentConfig.selfServeSignupEnabled) {
@@ -1964,11 +1954,15 @@ export async function selectLoginWorkspaceAction(
 
   await setActiveWorkspace(parsed.data.workspaceId);
 
+  let selectedMembership = membership;
   if (membership.status === MembershipStatus.INVITED) {
-    await activateMembershipIfInvited({
+    const resultingMembership = await activateMembershipIfInvited({
       workspaceId: parsed.data.workspaceId,
       userId: user.id,
     });
+    if (resultingMembership) {
+      selectedMembership = { ...membership, status: resultingMembership.status };
+    }
   }
 
   const requiresIdentityCompletion = shouldRequireFirstLoginIdentityCompletion(user);
@@ -1976,9 +1970,7 @@ export async function selectLoginWorkspaceAction(
     ? FIRST_LOGIN_IDENTITY_SETUP_PATH
     : resolveDeploymentPostLoginPath(
         resolvePostLoginRedirectPath(
-          membership.status === MembershipStatus.INVITED
-            ? { ...membership, status: MembershipStatus.ACTIVE }
-            : membership,
+          selectedMembership,
         ),
       );
 

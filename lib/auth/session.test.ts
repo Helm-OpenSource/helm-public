@@ -19,6 +19,7 @@ const {
   syncWorkspaceAccessStateMock: vi.fn(),
   dbMock: {
     $executeRaw: vi.fn(),
+    $transaction: vi.fn(),
     authSession: {
       findUnique: vi.fn(),
       findMany: vi.fn(),
@@ -216,6 +217,8 @@ describe("getCurrentWorkspaceSessionOrNull", () => {
     // that had stopped returning sessions at all.
     seatOn(MembershipStatus.ACTIVE);
     dbMock.$executeRaw.mockResolvedValue(0);
+    dbMock.$transaction.mockImplementation(async (callback: (client: typeof dbMock) => unknown) => callback(dbMock));
+    dbMock.workspace.findUnique.mockResolvedValue({ featureFlagsJson: JSON.stringify({ membershipAutoActivation: true }) });
     dbMock.membership.findUnique.mockResolvedValue(membershipRow(MembershipStatus.ACTIVE));
 
     const session = await getCurrentWorkspaceSessionOrNull();
@@ -363,11 +366,13 @@ describe("auth session substrate", () => {
     ensureWorkspaceCommercialFoundationMock.mockResolvedValue(undefined);
     syncWorkspaceAccessStateMock.mockResolvedValue(null);
     dbMock.$executeRaw.mockResolvedValue(0);
+    dbMock.$transaction.mockImplementation(async (callback: (client: typeof dbMock) => unknown) => callback(dbMock));
+    dbMock.workspace.findUnique.mockResolvedValue({ featureFlagsJson: JSON.stringify({ membershipAutoActivation: true }) });
     dbMock.membership.updateMany.mockResolvedValue({ count: 0 });
     dbMock.authSession.updateMany.mockResolvedValue({ count: 0 });
   });
 
-  it("activates an invited membership with one atomic conditional UPDATE", async () => {
+  it("activates only an opted-in member and writes transition audit in the CAS transaction", async () => {
     dbMock.$executeRaw.mockResolvedValue(1);
     dbMock.membership.findUnique.mockResolvedValue({
       workspaceId: "workspace-1",
@@ -381,6 +386,7 @@ describe("auth session substrate", () => {
     });
 
     expect(dbMock.membership.updateMany).not.toHaveBeenCalled();
+    expect(dbMock.$transaction).toHaveBeenCalledTimes(1);
     expect(dbMock.$executeRaw).toHaveBeenCalledTimes(1);
     const [query, ...values] = dbMock.$executeRaw.mock.calls[0] ?? [];
     expect(Array.from(query as TemplateStringsArray).join("?")).toContain(
@@ -398,11 +404,25 @@ describe("auth session substrate", () => {
     expect(writeAuditLogMock).toHaveBeenCalledWith(
       expect.objectContaining({
         actionType: MEMBERSHIP_AUTO_ACTIVATED_AUDIT_ACTION,
+        actor: "user-1",
+        actorType: "USER",
       }),
+      { client: dbMock },
     );
     expect(membership).toEqual(
       expect.objectContaining({ status: MembershipStatus.ACTIVE }),
     );
+  });
+
+  it("keeps invited memberships inactive when the workspace explicitly opts out", async () => {
+    dbMock.workspace.findUnique.mockResolvedValue({ featureFlagsJson: JSON.stringify({ membershipAutoActivation: false }) });
+    dbMock.membership.findUnique.mockResolvedValue({ status: MembershipStatus.INVITED });
+
+    const membership = await activateMembershipIfInvited({ workspaceId: "workspace-1", userId: "user-1" });
+
+    expect(membership?.status).toBe(MembershipStatus.INVITED);
+    expect(dbMock.$transaction).not.toHaveBeenCalled();
+    expect(writeAuditLogMock).not.toHaveBeenCalled();
   });
 
   it("uses the DB-backed auth session as the current user truth and ignores the legacy email cookie", async () => {

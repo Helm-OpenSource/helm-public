@@ -130,6 +130,7 @@ import {
   loginAction,
   passwordLoginAction,
   requestPhoneLoginCodeAction,
+  selectLoginWorkspaceAction,
   startTrialSignupAction,
   loginWithPhoneCodeAction,
 } from "@/features/auth/actions";
@@ -415,6 +416,7 @@ beforeEach(() => {
     (memberships: unknown[]) => memberships[0] ?? null,
   );
   mocks.workspaceOps.normalizeWorkspaceUiConfig.mockReturnValue({ demoMode: null });
+  mocks.session.activateMembershipIfInvited.mockResolvedValue({ status: MembershipStatus.ACTIVE });
 });
 
 afterEach(() => {
@@ -1112,6 +1114,7 @@ describe("auth verification code attempt cap", () => {
     });
     mocks.db.workspace.findUnique.mockResolvedValue({
       id: "workspace-invite-1",
+      featureFlagsJson: JSON.stringify({ membershipAutoActivation: true }),
     });
     mocks.db.membership.findUnique.mockResolvedValue(null);
     mocks.db.membership.upsert.mockResolvedValue({
@@ -1140,8 +1143,10 @@ describe("auth verification code attempt cap", () => {
             userId: "user-1",
           },
         },
+        create: expect.objectContaining({ status: MembershipStatus.INVITED }),
       }),
     );
+    expect(mocks.session.activateMembershipIfInvited).toHaveBeenCalledWith({ workspaceId: "workspace-invite-1", userId: "user-1" });
     expect(mocks.trialOnboarding.createSelfServeTrialOrganization).not.toHaveBeenCalled();
     expect(mocks.session.createSession).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1149,6 +1154,38 @@ describe("auth verification code attempt cap", () => {
         workspaceId: "workspace-invite-1",
       }),
     );
+  });
+
+  it("runs workspace selection activation only for the authenticated member's own membership", async () => {
+    mocks.session.requireCurrentUser.mockResolvedValue({
+      id: "user-1", email: "member@example.com", phone: "+8613800000000",
+      passwordHash: "hash", lastLoginAt: new Date(), memberships: [],
+    });
+    mocks.db.membership.findUnique.mockResolvedValue({
+      workspaceId: "workspace-1", userId: "user-1", role: WorkspaceRole.MEMBER,
+      status: MembershipStatus.INVITED,
+      workspace: { id: "workspace-1", slug: "workspace-1", status: "ACTIVE", profileType: "startup" },
+    });
+    mocks.session.activateMembershipIfInvited.mockResolvedValue({ status: MembershipStatus.INVITED });
+
+    const result = await selectLoginWorkspaceAction({ workspaceId: "workspace-1", locale: "en-US" });
+
+    expect(result).toMatchObject({ ok: true, redirectTo: "/dashboard" });
+    expect(mocks.session.activateMembershipIfInvited).toHaveBeenCalledWith({ workspaceId: "workspace-1", userId: "user-1" });
+  });
+
+  it("does not turn an admin's workspace selection into acceptance for a different member", async () => {
+    mocks.session.requireCurrentUser.mockResolvedValue({ id: "admin-1", email: "admin@example.com" });
+    mocks.db.membership.findUnique.mockResolvedValue(null);
+
+    const result = await selectLoginWorkspaceAction({ workspaceId: "workspace-1", locale: "en-US" });
+
+    expect(result.ok).toBe(false);
+    expect(mocks.db.membership.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+      where: { workspaceId_userId: { workspaceId: "workspace-1", userId: "admin-1" } },
+    }));
+    expect(mocks.session.activateMembershipIfInvited).not.toHaveBeenCalled();
+    expect(mocks.session.setActiveWorkspace).not.toHaveBeenCalled();
   });
 
   // A REVOKED INVITE MUST NOT BE RESURRECTED BY SIGNUP.
@@ -1294,6 +1331,7 @@ describe("auth verification code attempt cap", () => {
       title: "高级JAVA开发工程师",
       persona: "高级JAVA开发工程师",
     });
+    mocks.session.activateMembershipIfInvited.mockResolvedValue({ status: MembershipStatus.INVITED });
 
     const result = await completeTrialSignupVerificationAction({
       enrollmentId: "enrollment-1",
@@ -1306,11 +1344,15 @@ describe("auth verification code attempt cap", () => {
     expect(mocks.db.membership.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         create: expect.objectContaining({
+          status: MembershipStatus.INVITED,
           title: "高级JAVA开发工程师",
           persona: "高级JAVA开发工程师",
         }),
       }),
     );
+    expect(mocks.session.activateMembershipIfInvited).toHaveBeenCalledWith({ workspaceId: "workspace-invite-1", userId: "user-1" });
+    expect(mocks.trialOnboarding.createSelfServeTrialOrganization).not.toHaveBeenCalled();
+    expect(mocks.session.createSession).toHaveBeenCalledWith(expect.objectContaining({ workspaceId: null }));
   });
 });
 

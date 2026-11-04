@@ -71,6 +71,16 @@ describe("workspace ops", () => {
     }
     expect(parseWorkspaceFeatureFlags("not-json").controlTowerHome).toBe(false);
   });
+
+  it("preserves legacy membership activation unless a workspace explicitly opts out", () => {
+    expect(parseWorkspaceFeatureFlags(null).membershipAutoActivation).toBe(true);
+    expect(parseWorkspaceFeatureFlags("not-json").membershipAutoActivation).toBe(true);
+    expect(parseWorkspaceFeatureFlags(JSON.stringify({ membershipAutoActivation: true })).membershipAutoActivation).toBe(true);
+    expect(parseWorkspaceFeatureFlags(JSON.stringify({ membershipAutoActivation: false })).membershipAutoActivation).toBe(false);
+    for (const legacy of ["false", 1, "yes", {}, [], 0, null]) {
+      expect(parseWorkspaceFeatureFlags(JSON.stringify({ membershipAutoActivation: legacy })).membershipAutoActivation).toBe(true);
+    }
+  });
 });
 
 describe("resolveWorkspaceDefaultLandingPath", () => {
