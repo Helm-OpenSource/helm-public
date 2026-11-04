@@ -46,11 +46,13 @@ export const CAIO_ATTENTION_GRANT_MATRIX: Readonly<Record<string, Readonly<Parti
  * holds one entry per identity:
  *   generator — locks the candidate it suggests from (FOR UPDATE needs UPDATE) and reads memberships to skip inactive
  *               people in the prefill.
- *   web       — re-reads membership and role (FOR SHARE) inside every lifecycle transaction.
+ *   web       — re-reads membership and role (FOR SHARE) inside every lifecycle transaction and writes the dispatch
+ *               notice. The evidence-source reads are granted by lib/caio-attention-runtime/evidence-resolver.ts.
  */
 export const CAIO_ATTENTION_NEIGHBOUR_GRANTS: typeof CAIO_ATTENTION_GRANT_MATRIX = {
   CaioAnomalyCandidate: { attention_generator: { privileges: ["SELECT", "UPDATE"] } },
   Membership: { attention_generator: { privileges: S }, attention_web: { privileges: S } },
+  Notification: { attention_web: { privileges: SI } },
 };
 
 export function caioAttentionTableGrant(identity: CaioAttentionFixtureIdentity, table: string): CaioAttentionTableGrant | null {

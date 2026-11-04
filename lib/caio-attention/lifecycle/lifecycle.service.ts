@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import type { Prisma } from "@prisma/client";
 
 import type { CaioAttentionSeverity } from "../contracts";
@@ -9,8 +11,8 @@ import {
   type CaioAttentionOwnerCommandInput,
 } from "./core";
 import { diffCaioAttentionPrefill, validateCaioAttentionOwnerCommand, type CaioAttentionOwnerCommandPeople } from "../routing";
-import { caioAttentionDispatchFields } from "../schedule";
-import { authorizeCaioAttentionOperation } from "../state-machine";
+import { caioAttentionDispatchFields, caioAttentionSeverityRaiseFields, caioAttentionSuggestFields } from "../schedule";
+import { authorizeCaioAttentionOperation, isCaioAttentionTerminal, type CaioAttentionStatus } from "../state-machine";
 
 /**
  * OWNER operations of the attention lifecycle (design v4 §3, §7; v5 §2–§3; owner ruling §6.10). Only OWNER may
@@ -41,7 +43,7 @@ function issueCommand(
   if (!people) return Promise.resolve(rejectCaioAttention("input_invalid"));
   const involved = [people.primaryUserId, people.escalationUserId, ...people.ccUserIds, ...people.reviewerUserIds]
     .filter((id): id is string => id !== null);
-  const eventKind = op === "confirm" ? "CONFIRMED" : "REISSUED";
+  const eventKind = op === "confirm" ? "CONFIRMED" as const : "REISSUED" as const;
   return runCaioAttentionActorOperation(deps, request, { eventKind, gated: true, involvedUserIds: involved }, async (ctx) => {
     const { tx, row, parties, actor, members, now } = ctx;
     const auth = authorizeCaioAttentionOperation({ op, actor, parties, expectedCommandVersion: request.expectedCommandVersion });
@@ -83,12 +85,22 @@ function issueCommand(
       reviewerUserIdsJson: JSON.stringify(people.reviewerUserIds), reviewerVersion: row.reviewerVersion + 1,
       confirmedByUserId: actor.userId, committedDueAt: people.committedDueAt, dispatchedAt: now, respondedAt: null, ...reminders,
     });
+    // Dispatch notice D to primary and cc in the same transaction: critical at once (night included), warning only
+    // inside the daytime window. A warning confirmed at night keeps `dispatchNoticeAt` on the event (see below).
+    const noticeNow = dispatchNoticeAt.getTime() <= now.getTime();
+    if (noticeNow) {
+      for (const userId of new Set([people.primaryUserId, ...people.ccUserIds].filter((id): id is string => id !== null))) {
+        await tx.$executeRaw`INSERT INTO Notification (id, workspaceId, userId, type, title, body, url, dedupeKey, createdAt)
+          VALUES (${randomUUID()}, ${row.workspaceId}, ${userId}, 'REMINDER', ${`CAIO 关注事项 #${row.shortNo} · 已派发`}, '待你处理', NULL,
+            ${`ca:${row.id}:D:v${commandVersion}:${userId}`}, ${now})`;
+      }
+    }
     await appendCaioAttentionEvent(tx, {
       caseId: row.id, kind: eventKind, commandVersion, actorUserId: actor.userId, clientRequestId: ctx.requestId,
       payload: {
         changedFields: diffCaioAttentionPrefill(previous, people), previous: serializeCaioAttentionPeople(previous),
         command: serializeCaioAttentionPeople(people), ownerCommandHash: record.hash,
-        dispatchNoticeAt: dispatchNoticeAt.toISOString(), supersededDispositionId, note: noteOf(request.note),
+        dispatchNoticeAt: dispatchNoticeAt.toISOString(), dispatchNoticeSent: noticeNow, supersededDispositionId, note: noteOf(request.note),
       },
     });
     return accepted(row.id, "DISPATCHED", commandVersion);
@@ -105,7 +117,7 @@ export const reissueCaioAttentionCase = (deps: CaioAttentionLifecycleDeps, reque
 function ownerTransition(
   deps: CaioAttentionLifecycleDeps, op: "defer" | "dismiss" | "cancel", request: OwnerRequest & Readonly<{ deferredUntil?: Date }>,
 ): Promise<CaioAttentionLifecycleResult> {
-  const eventKind = { defer: "DEFERRED", dismiss: "DISMISSED", cancel: "CANCELLED" }[op];
+  const eventKind = ({ defer: "DEFERRED", dismiss: "DISMISSED", cancel: "CANCELLED" } as const)[op];
   return runCaioAttentionActorOperation(deps, request, { eventKind, gated: false }, async ({ tx, row, parties, actor, now, requestId }) => {
     const auth = authorizeCaioAttentionOperation({ op, actor, parties, expectedCommandVersion: request.expectedCommandVersion });
     if (!auth.ok) return rejectCaioAttention(auth.reason);
@@ -189,12 +201,39 @@ export function resumeDeferredCaioAttentionCase(
     const rearm = row.effectiveSeverity === "critical";
     await casCaioAttentionCase(tx, row, {
       status: "SUGGESTED", deferredUntil: null,
-      ...(rearm ? { r0aDueAt: now, r0aSentAt: null, r0bDueAt: null, r0bSentAt: null } : {}),
+      ...(rearm ? { ...caioAttentionSuggestFields("critical", now), r0aSentAt: null, r0bSentAt: null } : {}),
     });
     await appendCaioAttentionEvent(tx, {
       caseId: row.id, kind: "RESUMED", commandVersion: row.commandVersion, dedupeKey: `resume:${row.deferredUntil.toISOString()}`,
       payload: { deferredUntil: row.deferredUntil.toISOString(), rearmedPendingReminder: rearm },
     });
     return accepted(row.id, "SUGGESTED", row.commandVersion);
+  });
+}
+
+/**
+ * System step consuming the generator's SEVERITY_RAISED event (warning -> critical). The CAS on effectiveSeverity is
+ * the consumption mark, so a replay is a no-op. committedDueAt and the owner command never change; only the system
+ * escalation and reminder times move (design v4 §6.2, v6 §3.3, owner ruling §6.8). Not gated: it creates nothing.
+ * A DEFERRED case only switches severity here; resuming it re-arms the pending reminder.
+ */
+export function applyCaioAttentionSeverityRaise(
+  deps: CaioAttentionLifecycleDeps, request: Readonly<{ workspaceId: string; caseId: string }>,
+): Promise<CaioAttentionLifecycleResult> {
+  return runCaioAttentionTransaction(deps, async (tx) => {
+    const row = await lockCaioAttentionCase(tx, request.workspaceId, request.caseId);
+    if (!row) return rejectCaioAttention("not_found");
+    const status = row.status as CaioAttentionStatus;
+    if (isCaioAttentionTerminal(status)) return rejectCaioAttention("invalid_status");
+    if (row.effectiveSeverity === "critical") return { ok: true, caseId: row.id, status, commandVersion: row.commandVersion, replayed: true };
+    const raised = await tx.caioAttentionCaseEvent.findFirst({ where: { caseId: row.id, kind: "SEVERITY_RAISED", dedupeKey: "critical" } });
+    if (!raised) return rejectCaioAttention("not_due");
+    const fields = caioAttentionSeverityRaiseFields(status, { ...row, r2FiredSeverity: row.r2FiredSeverity as CaioAttentionSeverity | null }, row.respondedAt, raised.createdAt, deps.policy);
+    await casCaioAttentionCase(tx, row, { effectiveSeverity: "critical", reminderPolicy: "critical", ...fields });
+    await appendCaioAttentionEvent(tx, {
+      caseId: row.id, kind: "SEVERITY_APPLIED", commandVersion: row.commandVersion, dedupeKey: "critical",
+      payload: { raisedEventId: raised.id, raisedAt: raised.createdAt.toISOString(), fields: Object.keys(fields).sort() },
+    });
+    return accepted(row.id, status, row.commandVersion);
   });
 }

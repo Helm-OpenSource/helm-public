@@ -38,6 +38,17 @@ export type CaioAttentionLifecycleDeps = Readonly<{
   resolveEnterpriseScope?: (input: { workspaceId: string; enterpriseSlug: string }) => Promise<CaioAttentionEnterpriseScope>;
 }>;
 
+/**
+ * Every event kind written to CaioAttentionCaseEvent: generator (SUGGESTED, RECURRED, SEVERITY_RAISED), lifecycle,
+ * loader (READ) and reminder scanner (REMINDED, ESCALATED, R3_SENT).
+ */
+export const CAIO_ATTENTION_EVENT_KINDS = [
+  "SUGGESTED", "RECURRED", "SEVERITY_RAISED", "CONFIRMED", "REISSUED", "DEFERRED", "RESUMED", "DISMISSED", "CANCELLED",
+  "REVIEWERS_ASSIGNED", "DISPOSITION_SUPERSEDED", "SEVERITY_APPLIED", "ACK", "NOTE", "DISPOSITION_SUBMITTED",
+  "REVIEW_ACCEPTED", "REVIEW_RETURNED", "READ", "REMINDED", "ESCALATED", "R3_SENT",
+] as const;
+export type CaioAttentionEventKind = (typeof CAIO_ATTENTION_EVENT_KINDS)[number];
+
 export type CaioAttentionRejection = Extract<CaioAttentionAuthorization, { ok: false }>["reason"]
   | "intake_closed" | "input_invalid" | "command_invalid" | "not_due" | "client_request_conflict" | "evidence_invalid";
 
@@ -141,7 +152,7 @@ export async function casCaioAttentionCase(
 }
 
 export function appendCaioAttentionEvent(tx: Prisma.TransactionClient, event: Readonly<{
-  caseId: string; kind: string; commandVersion?: number | null; actorUserId?: string | null;
+  caseId: string; kind: CaioAttentionEventKind; commandVersion?: number | null; actorUserId?: string | null;
   clientRequestId?: string | null; dedupeKey?: string | null; payload: Record<string, unknown>;
 }>) {
   return tx.caioAttentionCaseEvent.create({
@@ -174,7 +185,7 @@ export async function checkGate(deps: CaioAttentionLifecycleDeps, tx: Prisma.Tra
 export function runCaioAttentionActorOperation(
   deps: CaioAttentionLifecycleDeps,
   request: CaioAttentionActorRequest,
-  options: Readonly<{ eventKind: string; gated: boolean; involvedUserIds?: readonly string[] }>,
+  options: Readonly<{ eventKind: CaioAttentionEventKind; gated: boolean; involvedUserIds?: readonly string[] }>,
   body: (context: CaioAttentionActorContext) => Promise<CaioAttentionLifecycleResult>,
 ): Promise<CaioAttentionLifecycleResult> {
   const actorUserId = canonicalCaioAttentionUserId(request.actorUserId);
