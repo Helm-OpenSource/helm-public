@@ -1,8 +1,9 @@
 import { MembershipStatus, WorkspaceRole } from "@prisma/client";
 import { AppShell } from "@/components/layout/app-shell";
 import { getWorkspaceLayoutData } from "@/features/workspace/queries";
-import { getCurrentExternalMemberScope, getCurrentWorkspaceSessionOrNull } from "@/lib/auth/session";
+import { getCurrentUser, getCurrentExternalMemberScope, getCurrentWorkspaceSessionOrNull } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
+import { getWorkspaceChoices, type WorkspaceChoice } from "@/lib/auth/workspace-choices";
 import { EXTERNAL_MEMBER_FALLBACK_PATH } from "@/lib/auth/external-member-scope";
 import { resolveWorkspaceNavExtensions } from "@/lib/extensions/registry";
 import { resolveWorkspaceUiLocale } from "@/lib/i18n/config";
@@ -37,6 +38,8 @@ export default async function WorkspaceLayout({
   children: React.ReactNode;
 }) {
   let shellProps: {
+    workspaceId: string;
+    workspaceChoices: WorkspaceChoice[];
     workspaceName: string;
     brandLabel: string | null;
     userName: string;
@@ -96,7 +99,10 @@ export default async function WorkspaceLayout({
     if (session instanceof Error) throw session;
     const { user, workspace, membership } = session;
 
-    const layoutData = await getWorkspaceLayoutData(workspace.id, user.id);
+    const [layoutData, currentUser] = await Promise.all([
+      getWorkspaceLayoutData(workspace.id, user.id),
+      getCurrentUser(),
+    ]);
     const workspaceUiConfig = normalizeWorkspaceUiConfig({
       ...workspace,
       requestLocale,
@@ -132,6 +138,8 @@ export default async function WorkspaceLayout({
     });
 
     shellProps = {
+      workspaceId: workspace.id,
+      workspaceChoices: getWorkspaceChoices(currentUser?.memberships ?? [], workspaceUiConfig.locale),
       workspaceName: workspace.name,
       // 租户品牌行覆盖(workspace.configuration.shellBrandLabel,fail-closed);null → 默认品牌。
       brandLabel: parseShellBrandLabel(workspace.configuration),

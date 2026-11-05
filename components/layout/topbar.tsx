@@ -31,7 +31,7 @@ import { CommandPalette } from "@/components/layout/command-palette";
 import { formatShellAlertText } from "@/components/layout/alert-display-copy";
 import { LiveRefreshStatus } from "@/components/shared/live-refresh-status";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { WorkspaceAccountSwitcher } from "@/features/auth/workspace-account-switcher";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,8 +67,11 @@ import {
 import { saveOpportunityAction } from "@/features/opportunities/actions";
 import { buildSearchIntentHref } from "@/features/search/ask-helm-entry-routing";
 import { CAIO_PRIMARY_DESTINATION } from "@/lib/shell/role-home";
+import type { WorkspaceChoice } from "@/lib/auth/workspace-choices";
 
 type TopbarProps = {
+  workspaceId: string;
+  workspaceChoices: WorkspaceChoice[];
   workspaceName: string;
   /** 租户品牌行覆盖;null → messages.shell.brand。 */
   brandLabel?: string | null;
@@ -126,6 +129,8 @@ type MeetingFormState = {
 };
 
 export function Topbar({
+  workspaceId,
+  workspaceChoices,
   workspaceName,
   brandLabel = null,
   userName,
@@ -608,26 +613,19 @@ export function Topbar({
                 </Badge>
               ) : null}
             </Button>
-            <div
-              className="workspace-panel-muted flex shrink-0 items-center gap-2.5 rounded-[22px] px-2.5 py-1.5"
+            <WorkspaceAccountSwitcher
+              workspaceId={workspaceId}
+              workspaceName={workspaceName}
+              userName={userName}
+              roleLabel={roleLabel}
+              locale={locale}
+              options={workspaceChoices}
               title={
                 demoProfile
                   ? `${workspaceName} · ${demoProfile.accountRoleLabel}`
                   : `${workspaceName} · ${messages.shell.workspaceTagline}`
               }
-            >
-              <Avatar className="h-9 w-9">
-                <AvatarFallback name={userName} />
-              </Avatar>
-              <div className="hidden min-w-0 leading-tight md:block">
-                <p className="truncate whitespace-nowrap text-sm font-semibold text-[color:var(--foreground)]">
-                  {userName}
-                </p>
-                <p className="truncate whitespace-nowrap text-[11px] text-[color:var(--muted-foreground)]">
-                  {workspaceName} · {roleLabel}
-                </p>
-              </div>
-            </div>
+            />
             <Button
               size="icon"
               variant="secondary"
