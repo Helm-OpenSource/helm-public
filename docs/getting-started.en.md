@@ -171,8 +171,9 @@ Leave them all blank on a first run.
 |---|---|
 | `SIGNAL_COLLECTION_SCHEDULER_ENABLED` | Signal collection scheduler; only starts when `true` |
 | `LIGHT_CHAIN_FOLLOW_THROUGH_CRON_ENABLED` | Daily follow-through sweep for the light task chain: produces **internal reminders and audit entries** for overdue / stalled action items and commitments — no external sends, no task-state mutation. Deployment-level switch that sweeps every workspace in the database; validate the cadence on an internal workspace first, see [the self-tenant operating runbook §5](./product/HELM_SELF_TENANT_OPERATING_RUNBOOK.md) |
+| `HELM_CAIO_ATTENTION_REMINDERS_ENABLED` | CAIO attention reminders, escalations and evaluation watchdog (every 5 minutes): targeted in-app notices only, no external send, no case-state change; starts only on `true` or `1`, and scans only after an overlay registers the tenant reminder policy (Not wired into process startup in this release, so setting it has no effect yet; it is wired with the next startup-file admission update.) |
 
-Neither scheduler affects a first run; leave them blank / `false`.
+None of these schedulers affects a first run; leave them blank / `false`.
 
 ### DEPLOYMENT_ENTRY (optional deployment entry)
 
@@ -214,6 +215,8 @@ directory and child paths are not exempted.
 |---|---|
 | `HELM_HEALTH_ATTESTATION_MODE` | Missing, empty, or exact `reachability` preserves the existing public reachability check; only exact `artifact-bound` enables source-release binding |
 | `HELM_RUNTIME_DEPLOYMENT_ID` | Non-secret opaque ID injected by the private release process; 1–128 ASCII characters matching `[A-Za-z0-9][A-Za-z0-9._:-]*` |
+| `HELM_RUNTIME_NODE_ID` | CAIO attention node identity of this host (one per host, non-secret, matching `[A-Za-z0-9][A-Za-z0-9._-]{0,95}`). Only together with an `artifact-bound` deployment ID does the process write its RuntimeNode heartbeat and does the local capability probe report this node, so a readiness proof can pass; missing or invalid means no heartbeat and intake stays paused (Not wired into process startup in this release, so setting it has no effect yet; it is wired with the next startup-file admission update.) |
+| `HELM_RUNTIME_NODE_ROLE` | Process role reported by the heartbeat, matching `[a-z][a-z0-9_-]{0,31}`; missing or empty means `http`, an invalid value disables the heartbeat (Not wired into process startup in this release, so setting it has no effect yet; it is wired with the next startup-file admission update.) |
 
 `artifact-bound` is explicit opt-in. A missing, oversized, whitespace-bearing,
 control-character-bearing, or otherwise invalid ID makes `GET /api/health`

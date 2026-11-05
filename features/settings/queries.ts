@@ -10,6 +10,8 @@ import {
   WorkspaceRole,
 } from "@prisma/client";
 import { subDays } from "date-fns";
+import { EMPTY_CAPPED_AUDIT_COUNT, RECENT_AUDIT_LOOKBACK_DAYS } from "@/lib/audit/capped-count";
+import { countAuditLogCapped } from "@/lib/audit/capped-count-query";
 import { buildWorkerCommercialWiringView } from "@/lib/billing/add-on-worker-commercial";
 import {
   getWorkspaceBillingSnapshot,
@@ -583,15 +585,13 @@ export async function getSettingsData(
     ),
     adminOnly(
       () =>
-        db.auditLog.count({
-          where: {
-            workspaceId,
-            createdAt: {
-              gte: sevenDaysAgo,
-            },
+        countAuditLogCapped({
+          workspaceId,
+          createdAt: {
+            gte: sevenDaysAgo,
           },
         }),
-      0,
+      EMPTY_CAPPED_AUDIT_COUNT,
     ),
     adminOnly(
       () =>
@@ -1114,6 +1114,9 @@ export async function getSettingsData(
           actionType: {
             in: organizationAuditActionTypes,
           },
+          createdAt: {
+            gte: subDays(new Date(), RECENT_AUDIT_LOOKBACK_DAYS),
+          },
         },
         orderBy: { createdAt: "desc" },
         take: 8,
@@ -1141,17 +1144,23 @@ export async function getSettingsData(
         }),
       )
       .find((item) => item !== null) ?? null;
+  // One newest-first seek per type on (workspaceId, actionType, createdAt), merged: an IN over both types
+  // cannot be read from that index in createdAt order and sorts every matching row.
   const recentDingTalkDirectoryInviteAudits = connectorManagementEnabled
-    ? await db.auditLog.findMany({
-        where: {
-          workspaceId,
-          actionType: {
-            in: [...dingtalkDirectoryInviteAuditActionTypes],
-          },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 12,
-      })
+    ? (
+        await Promise.all(
+          dingtalkDirectoryInviteAuditActionTypes.map((actionType) =>
+            db.auditLog.findMany({
+              where: { workspaceId, actionType },
+              orderBy: { createdAt: "desc" },
+              take: 12,
+            }),
+          ),
+        )
+      )
+        .flat()
+        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+        .slice(0, 12)
     : [];
   const auditDryRunSummary =
     recentDingTalkDirectoryInviteAudits
@@ -1921,7 +1930,8 @@ export async function getSettingsData(
     settlementOpsProofPack,
     settlementExceptionSummary,
     governanceSummary: {
-      auditEvents7d: recentAuditCount,
+      auditEvents7d: recentAuditCount.value,
+      auditEvents7dCapped: recentAuditCount.capped,
       pendingApprovals: pendingApprovalCount,
       llmFallbacks7d: llmFallbackCount,
       approvalProtectedActions,

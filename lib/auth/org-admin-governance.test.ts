@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MembershipStatus, WorkspaceRole } from "@prisma/client";
+import { RECENT_AUDIT_LOOKBACK_DAYS } from "@/lib/audit/capped-count";
 
 const { dbMock } = vi.hoisted(() => ({
   dbMock: {
@@ -20,6 +21,7 @@ const { dbMock } = vi.hoisted(() => ({
       findMany: vi.fn(),
       count: vi.fn(),
       findFirst: vi.fn(),
+      groupBy: vi.fn(),
     },
     memoryEntry: {
       count: vi.fn(),
@@ -569,6 +571,38 @@ function resolveAuditMarker(where: { actionType?: string | { in: string[] } }) {
   return null;
 }
 
+type AuditMarkerRow = NonNullable<ReturnType<typeof resolveAuditMarker>>;
+
+// findLatestAuditMarker takes MAX(createdAt) per action type, then seeks the winning row by
+// (actionType, createdAt). The export set also has an older support-pack export, listed first,
+// so only the newest type may win.
+const staleSupportPackExport: AuditMarkerRow = {
+  createdAt: new Date("2026-03-01T00:00:00Z"),
+  actionType: ORGANIZATION_SUPPORT_PACK_EXPORTED,
+  summary: "Exported support pack",
+  actor: "Stale Owner",
+  targetType: "Workspace",
+  targetId: "workspace-1",
+  sourcePage: "/stale",
+};
+const auditMarkerRows = new Map<string, AuditMarkerRow>();
+
+function resolveAuditMarkerGroups(where: { actionType?: string | { in: string[] } }) {
+  const marker = resolveAuditMarker(where);
+  const actionTypes = typeof where.actionType === "string" ? [] : (where.actionType?.in ?? []);
+  const rows = [
+    ...(sameActionTypes(actionTypes, DATA_EXPORT_AUDIT_ACTION_TYPES) ? [staleSupportPackExport] : []),
+    ...(marker ? [marker] : []),
+  ];
+  for (const row of rows) auditMarkerRows.set(`${row.actionType}|${row.createdAt.toISOString()}`, row);
+  return rows.map((row) => ({ actionType: row.actionType, _max: { createdAt: row.createdAt } }));
+}
+
+function resolveAuditMarkerRow(where: { actionType?: string | { in: string[] }; createdAt?: Date }) {
+  if (typeof where.actionType !== "string" || !(where.createdAt instanceof Date)) return null;
+  return auditMarkerRows.get(`${where.actionType}|${where.createdAt.toISOString()}`) ?? null;
+}
+
 describe("org admin governance support pack", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -708,9 +742,13 @@ describe("org admin governance support pack", () => {
     dbMock.auditLog.count.mockImplementation(({ where }: { where: { actionType?: string | { in: string[] } } }) =>
       Promise.resolve(resolveAuditCount(where)),
     );
-    dbMock.auditLog.findFirst.mockImplementation(
+    dbMock.auditLog.groupBy.mockImplementation(
       ({ where }: { where: { actionType?: string | { in: string[] } } }) =>
-        Promise.resolve(resolveAuditMarker(where)),
+        Promise.resolve(resolveAuditMarkerGroups(where)),
+    );
+    dbMock.auditLog.findFirst.mockImplementation(
+      ({ where }: { where: { actionType?: string | { in: string[] }; createdAt?: Date } }) =>
+        Promise.resolve(resolveAuditMarkerRow(where)),
     );
     dbMock.memoryEntry.count.mockResolvedValue(2);
     dbMock.memoryFact.count.mockResolvedValue(1);
@@ -742,6 +780,17 @@ describe("org admin governance support pack", () => {
     });
 
     expect(pack.version).toBe("v1");
+    // Recent-audit lists are time-bounded so MySQL ranges over (workspaceId, actionType, createdAt)
+    // instead of walking the whole workspace backwards by createdAt.
+    const recentAuditCalls = dbMock.auditLog.findMany.mock.calls.filter(
+      ([args]: [{ take?: number }]) => args?.take === 8,
+    );
+    expect(recentAuditCalls).toHaveLength(2);
+    for (const [args] of recentAuditCalls) {
+      const since = (args as { where: { createdAt: { gte: Date } } }).where.createdAt.gte;
+      expect(Date.now() - since.getTime()).toBeGreaterThanOrEqual((RECENT_AUDIT_LOOKBACK_DAYS - 1) * 86_400_000);
+      expect(Date.now() - since.getTime()).toBeLessThanOrEqual((RECENT_AUDIT_LOOKBACK_DAYS + 1) * 86_400_000);
+    }
     expect(pack.workspaceId).toBe("workspace-1");
     expect(pack.summary.membershipSummary.activeSeatCount).toBe(2);
     expect(pack.summary.membershipSummary.invitedSeatCount).toBe(1);
@@ -1229,6 +1278,26 @@ describe("org admin governance support pack", () => {
     expect(pack.summary.dataGovernanceClosure.latestDeleteSourcePage).toBe("/memory");
     expect(pack.summary.dataGovernanceClosure.latestRetentionSourcePage).toBe("/settings");
     expect(pack.summary.dataGovernanceClosure.latestSupportPackSourcePage).toBe("/settings");
+    expect(dbMock.auditLog.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          workspaceId: "workspace-1",
+          actionType: "MEMORY_SUMMARY_EXPORTED",
+          createdAt: new Date("2026-04-05T03:00:00Z"),
+        },
+      }),
+    );
+    for (const [args] of dbMock.auditLog.groupBy.mock.calls) {
+      expect(args).toMatchObject({ by: ["actionType"], _max: { createdAt: true } });
+      expect(args.where).toMatchObject({ workspaceId: "workspace-1" });
+      expect(args).not.toHaveProperty("orderBy");
+    }
+    for (const [args] of dbMock.auditLog.findFirst.mock.calls) {
+      expect(args.where.workspaceId).toBe("workspace-1");
+      expect(typeof args.where.actionType).toBe("string");
+      expect(args.where.createdAt).toBeInstanceOf(Date);
+      expect(args).not.toHaveProperty("orderBy");
+    }
     expect(pack.summary.workspaceIsolationAssertions.memoryExportScopedToWorkspace).toBe(true);
     expect(pack.summary.workspaceIsolationAssertions.supportPackExportScopedToWorkspace).toBe(true);
     expect(pack.summary.workspaceIsolationAssertions.deleteActionsScopedToWorkspace).toBe(true);
@@ -1241,6 +1310,17 @@ describe("org admin governance support pack", () => {
     expect(pack.summary.recentOrgAdminAudit[0]?.actionType).toBe("ORGANIZATION_MEMBER_ROLE_UPDATED");
     expect(pack.summary.recentDataGovernanceAudit[0]?.actionType).toBe("MEMORY_SUMMARY_EXPORTED");
     expect(pack.summary.boundaryNotes.length).toBeGreaterThan(0);
+    // The support pack says the two recent lists are a bounded window, not the full history.
+    expect(pack.summary.recentAuditWindow).toMatchObject({ days: RECENT_AUDIT_LOOKBACK_DAYS, limit: 8 });
+    expect(Date.now() - pack.summary.recentAuditWindow.since.getTime()).toBeGreaterThanOrEqual(
+      (RECENT_AUDIT_LOOKBACK_DAYS - 1) * 86_400_000,
+    );
+    // Appended last: the settings boundary card renders only boundaryNotes[0], which stays the tenant-scope note.
+    expect(pack.summary.boundaryNotes[0]).toBe("Support pack is tenant-scoped to the active workspace only.");
+    expect(pack.summary.boundaryNotes.at(-1)).toBe(
+      `Recent org-admin and data-governance audit lists hold at most 8 events from the last ${RECENT_AUDIT_LOOKBACK_DAYS} days; older events stay in the audit log and are not part of these lists.`,
+    );
+    expect(pack.summary.boundaryNotes.join(" ")).not.toContain("recentAuditWindow");
     expect(pack.summary.boundaryNotes).toContain(
       "Webhook tenancy governance only records callbacks once tenant mapping is asserted; unresolved external callbacks remain outside workspace-scoped support-pack truth.",
     );
@@ -1312,9 +1392,13 @@ describe("org admin governance support pack", () => {
     dbMock.auditLog.count.mockImplementation(({ where }: { where: { actionType?: string | { in: string[] } } }) =>
       Promise.resolve(resolveAuditCount(where)),
     );
-    dbMock.auditLog.findFirst.mockImplementation(
+    dbMock.auditLog.groupBy.mockImplementation(
       ({ where }: { where: { actionType?: string | { in: string[] } } }) =>
-        Promise.resolve(resolveAuditMarker(where)),
+        Promise.resolve(resolveAuditMarkerGroups(where)),
+    );
+    dbMock.auditLog.findFirst.mockImplementation(
+      ({ where }: { where: { actionType?: string | { in: string[] }; createdAt?: Date } }) =>
+        Promise.resolve(resolveAuditMarkerRow(where)),
     );
     dbMock.memoryEntry.count.mockResolvedValue(0);
     dbMock.memoryFact.count.mockResolvedValue(0);

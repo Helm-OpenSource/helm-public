@@ -1,5 +1,5 @@
 import { MembershipStatus, WorkspaceRole } from "@prisma/client";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { buildPermissionPolicyFromManifest } from "@/lib/extensions/permission-manifest";
 import {
@@ -138,6 +138,71 @@ describe("subject-aware extension access", () => {
         ],
       });
       expect(receivedBuildContext).toEqual({ subject, traceId: "trace-nav" });
+    } finally {
+      __resetPackRegistryForTest();
+    }
+  });
+
+  it("does not build a navigation cluster when the descriptor denies access", async () => {
+    __resetPackRegistryForTest();
+    const deniedBuildCluster = vi.fn(() => ({
+      placement: "customer-assets" as const,
+      extensionKey: "case-management-sample",
+      label: "Case Management",
+      items: [
+        {
+          key: "case-day-board",
+          href: "/cases",
+          label: "Cases",
+          iconKey: "shield-check" as const,
+        },
+      ],
+    }));
+    const allowedCluster = {
+      placement: "customer-assets" as const,
+      extensionKey: "allowed-sample",
+      label: "Allowed sample",
+      items: [
+        {
+          key: "allowed-board",
+          href: "/allowed-board",
+          label: "Allowed board",
+          iconKey: "boxes" as const,
+          statusBadge: { label: "Planned", tone: "planned" as const },
+        },
+      ],
+    };
+    try {
+      registerPackContributions("sample", {
+        workspaceNavExtensions: [
+          {
+            id: "case-management-sample-nav",
+            getAccess: buildPermissionedExtensionAccess({
+              actionName: "case.read",
+              policy,
+              resource: {
+                kind: "case_record",
+                workspaceId: "workspace-1",
+                extensionKey: "case-management-sample",
+                packKey: "case-management-sample",
+                dataClassifications: ["workspace_internal"],
+              },
+            }),
+            buildCluster: deniedBuildCluster,
+          },
+          {
+            id: "allowed-sample-nav",
+            getAccess: async () => ({ ok: true }),
+            buildCluster: () => allowedCluster,
+          },
+        ],
+      });
+
+      // No subject is threaded, so the permissioned probe denies (no_session).
+      await expect(
+        resolveWorkspaceNavExtensions({ workspace, english: true }),
+      ).resolves.toEqual({ clusters: [allowedCluster] });
+      expect(deniedBuildCluster).not.toHaveBeenCalled();
     } finally {
       __resetPackRegistryForTest();
     }

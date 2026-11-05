@@ -4,6 +4,7 @@ vi.mock("@/lib/auth/session", () => ({ getCurrentWorkspaceSession: mocks.session
 vi.mock("@/lib/auth/member-activation.service", () => ({ issueMemberActivation: mocks.issue, consumeMemberActivation: mocks.consume }));
 vi.mock("@/lib/auth/login-rate-limit.service", () => ({ getLoginLockStatus: mocks.lock, recordFailedLogin: mocks.failed, clearFailedLogins: mocks.clear }));
 import { issueMemberActivationAction, consumeMemberActivationAction } from "./member-activation-actions";
+import { MemberActivationError } from "@/lib/auth/member-activation-error";
 beforeEach(() => { vi.resetAllMocks(); vi.stubEnv("HELM_AUTH_MEMBER_ACTIVATION_ENABLED", "true"); mocks.session.mockResolvedValue({ user: { id: "actor" }, workspace: { id: "scope" }, authSessionId: "session" }); mocks.lock.mockResolvedValue({ locked: false }); mocks.issue.mockResolvedValue({ token: "synthetic", activationId: "id", expiresAt: "date" }); });
 afterEach(() => vi.unstubAllEnvs());
 describe("activation server action boundary", () => {
@@ -30,5 +31,24 @@ describe("activation server action boundary", () => {
     mocks.consume.mockRejectedValue(new Error("sensitive database diagnostics"));
     const result = await consumeMemberActivationAction({ token: "x".repeat(43), password: "password9" });
     expect(result.ok).toBe(false); expect(JSON.stringify(result)).not.toContain("diagnostics");
+  });
+  it("surfaces already-activated hint when target is already activated", async () => {
+    mocks.consume.mockRejectedValue(new MemberActivationError("target_already_activated"));
+    const result = await consumeMemberActivationAction({ token: "x".repeat(43), password: "password9" });
+    expect(result.ok).toBe(false);
+    expect("alreadyActivated" in result && result.alreadyActivated).toBe(true);
+    expect(result.error).toContain("已完成激活");
+  });
+  it("surfaces already-activated hint when token was already consumed", async () => {
+    mocks.consume.mockRejectedValue(new MemberActivationError("token_consumed"));
+    const result = await consumeMemberActivationAction({ token: "x".repeat(43), password: "password9" });
+    expect(result.ok).toBe(false);
+    expect("alreadyActivated" in result && result.alreadyActivated).toBe(true);
+  });
+  it("returns generic failure for other activation error codes", async () => {
+    mocks.consume.mockRejectedValue(new MemberActivationError("token_expired"));
+    const result = await consumeMemberActivationAction({ token: "x".repeat(43), password: "password9" });
+    expect(result.ok).toBe(false);
+    expect("alreadyActivated" in result).toBe(false);
   });
 });

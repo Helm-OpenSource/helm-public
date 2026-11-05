@@ -79,6 +79,7 @@ import {
   setActiveWorkspace,
 } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { resolveMemberIdentifier } from "./member-identifier";
 import { recordPolicyChangedDelta } from "@/lib/evolution/delta-event.service";
 import { refreshEvolutionState } from "@/lib/evolution/pattern-detection.service";
 import {
@@ -125,7 +126,7 @@ import {
 import { sendDingTalkInviteMessage } from "@/lib/connectors/dingtalk-directory-invite";
 import { getLatestDingTalkDirectoryInviteDryRunSnapshot } from "@/lib/connectors/dingtalk-directory-invite-snapshot";
 import { safeParseJson } from "@/lib/utils";
-import { defaultWorkspaceFeatureFlags, parseWorkspaceFeatureFlags, serializeWorkspaceFeatureFlags } from "@/lib/workspace-ops";
+import { defaultWorkspaceFeatureFlags, mergeWorkspaceFeatureFlags, parseWorkspaceFeatureFlags, serializeWorkspaceFeatureFlags } from "@/lib/workspace-ops";
 import {
   assertHelmReservedWorkspaceAccess,
   getHelmReservedWorkspaceDeniedMessage,
@@ -162,22 +163,6 @@ const optionalMemberIdentifierField = z.preprocess((value) => {
   const trimmed = value.trim();
   return trimmed.length === 0 ? undefined : trimmed;
 }, z.string().max(191).optional());
-
-function resolveMemberIdentifier(rawValue: string | null | undefined) {
-  const raw = String(rawValue ?? "").trim();
-  if (!raw) {
-    return { normalizedEmail: null, normalizedPhone: null };
-  }
-
-  const emailCandidate = z.string().email().safeParse(raw).success
-    ? normalizeEmailAddress(raw)
-    : null;
-  const phoneCandidate = emailCandidate ? null : normalizePhoneNumber(raw);
-  return {
-    normalizedEmail: emailCandidate,
-    normalizedPhone: phoneCandidate,
-  };
-}
 
 const DINGTALK_USER_BY_MOBILE_URL = "https://oapi.dingtalk.com/topapi/v2/user/getbymobile";
 
@@ -3450,10 +3435,9 @@ export async function updateWorkspaceSetupAction(input: z.infer<typeof workspace
       defaultLocale: nextLocale,
       pilotMode: parsed.data.pilotMode,
       captureConsentRequired: parsed.data.captureConsentRequired,
-      featureFlagsJson: serializeWorkspaceFeatureFlags({
-        ...defaultWorkspaceFeatureFlags,
-        ...parsed.data.featureFlags,
-      }),
+      featureFlagsJson: serializeWorkspaceFeatureFlags(
+        mergeWorkspaceFeatureFlags(workspace.featureFlagsJson, parsed.data.featureFlags),
+      ),
     },
   });
 
@@ -4120,6 +4104,7 @@ const workspaceOperationalControlsSchema = z.object({
     // 再从 baseline 重建 → 开关"保存成功"却回落默认(CodeX 运行审计 P1)。
     swarmReadOnlyWorkers: z.boolean(),
     controlTowerHome: z.boolean(),
+    membershipAutoActivation: z.boolean(),
   }),
 });
 

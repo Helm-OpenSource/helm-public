@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   resolveWorkspaceDefaultLandingPath,
   normalizeWorkspaceUiConfig,
+  mergeWorkspaceFeatureFlags,
   parseWorkspaceFeatureFlags,
 } from "@/lib/workspace-ops";
 
@@ -70,6 +71,27 @@ describe("workspace ops", () => {
       ).toBe(false);
     }
     expect(parseWorkspaceFeatureFlags("not-json").controlTowerHome).toBe(false);
+  });
+
+  it("preserves legacy membership activation unless a workspace explicitly opts out", () => {
+    expect(parseWorkspaceFeatureFlags(null).membershipAutoActivation).toBe(true);
+    expect(parseWorkspaceFeatureFlags("not-json").membershipAutoActivation).toBe(true);
+    expect(parseWorkspaceFeatureFlags(JSON.stringify({ membershipAutoActivation: true })).membershipAutoActivation).toBe(true);
+    expect(parseWorkspaceFeatureFlags(JSON.stringify({ membershipAutoActivation: false })).membershipAutoActivation).toBe(false);
+    for (const legacy of ["false", 1, "yes", {}, [], 0, null]) {
+      expect(parseWorkspaceFeatureFlags(JSON.stringify({ membershipAutoActivation: legacy })).membershipAutoActivation).toBe(true);
+    }
+  });
+
+  it("preserves hidden settings flags when setup saves only its visible subset", () => {
+    const current = JSON.stringify({ membershipAutoActivation: false, controlTowerHome: true });
+    const next = mergeWorkspaceFeatureFlags(current, { multilingualUi: false });
+
+    expect(next).toMatchObject({
+      membershipAutoActivation: false,
+      controlTowerHome: true,
+      multilingualUi: false,
+    });
   });
 });
 

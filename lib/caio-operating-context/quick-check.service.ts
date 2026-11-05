@@ -2,6 +2,8 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 
+import { buildCaioDetectorEvaluations, isCaioAttentionGeneratorEnabled } from "@/lib/caio-attention/detector-evaluation";
+import { runCaioAttentionGenerator, type CaioAttentionGeneratorResult } from "@/lib/caio-attention/generator.service";
 import { db } from "@/lib/db";
 import { isWriteConflictError, runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
 import {
@@ -59,6 +61,8 @@ export type CaioQuickCheckResult =
       skippedDetectors: number;
       failedDetectors: number;
       contextProjection: CaioQuickCheckContextProjection;
+      /** Present only while HELM_CAIO_ATTENTION_GENERATOR_ENABLED is "true"; absent otherwise. */
+      attention?: CaioAttentionGeneratorResult | { status: "failed" };
     };
 
 export type CaioQuickCheckContextProjection = "disabled" | "projected" | "rejected" | "no_signals" | "failed";
@@ -188,6 +192,8 @@ async function observeSources(ctx: ObserveContext, templates: readonly CaioMetri
 async function applyCandidateTransitions(input: {
   workspaceId: string;
   tickId: string;
+  bucketStart: Date;
+  recordEvaluations: boolean;
   now: Date;
   run: CaioDetectorRunResult;
   detectors: readonly CaioDetector[];
@@ -234,6 +240,12 @@ async function applyCandidateTransitions(input: {
       });
       cleared += result.count;
     }
+    if (input.recordEvaluations) {
+      // Same transaction as the candidate writes, so an evaluation row exists exactly when its tick's candidates moved.
+      await tx.caioDetectorEvaluation.createMany({ data: buildCaioDetectorEvaluations({
+        workspaceId: input.workspaceId, tickId: input.tickId, bucketStart: input.bucketStart, detectors: input.detectors, run: input.run,
+      }) });
+    }
     const hits: CaioContextHitRow[] = plan.upserts.map(({ detectorId, hit }) => ({
       detectorId, mergeKey: hit.mergeKey, objectKey: hit.objectKey, evidenceTemplateIds: [...hit.evidenceTemplateIds],
     }));
@@ -278,7 +290,10 @@ export async function runCaioQuickCheck(input: {
       templateTimeoutMs: input.templateTimeoutMs ?? DEFAULT_TEMPLATE_TIMEOUT_MS,
     }, templates);
     const run = runCaioDetectors({ detectors, observations: views, now });
-    const { hits, ...counts } = await applyCandidateTransitions({ workspaceId: input.workspaceId, tickId, now, run, detectors, views });
+    const attentionEnabled = isCaioAttentionGeneratorEnabled();
+    const { hits, ...counts } = await applyCandidateTransitions({
+      workspaceId: input.workspaceId, tickId, bucketStart, recordEvaluations: attentionEnabled, now, run, detectors, views,
+    });
     const known = [...views.values()].filter((view) => view.status === "ok").length;
     let contextProjection: CaioQuickCheckContextProjection = "disabled";
     if (isCaioContextProjectionEnabled()) {
@@ -298,7 +313,12 @@ export async function runCaioQuickCheck(input: {
         summaryJson: JSON.stringify({ ...result, status: undefined, tickId: undefined, skipped: run.skipped, failed: run.failed }),
       },
     });
-    return result;
+    if (!attentionEnabled) return result;
+    // After the tick is COMPLETED; a generator failure is reported on its own and never changes the tick.
+    const attention = await runCaioAttentionGenerator({
+      workspaceId: input.workspaceId, tickId, latestBucketStart: bucketStart, bucketMinutes: CAIO_QUICK_CHECK_BUCKET_MINUTES, now,
+    }).catch(() => ({ status: "failed" as const }));
+    return { ...result, attention };
   } catch {
     await db.caioQuickCheckTick.update({
       where: { id: tickId },

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { AuthCodeChannel, AuthCodePurpose, MembershipStatus, WorkspaceRole } from "@prisma/client";
 import { hashPassword, hashVerificationCode } from "@/lib/auth/formal-auth";
 import { writePublicOauthSignupPrefillCookie } from "@/lib/auth/public-oauth";
@@ -131,6 +132,7 @@ import {
   loginAction,
   passwordLoginAction,
   requestPhoneLoginCodeAction,
+  selectLoginWorkspaceAction,
   startTrialSignupAction,
   loginWithPhoneCodeAction,
 } from "@/features/auth/actions";
@@ -416,6 +418,7 @@ beforeEach(() => {
     (memberships: unknown[]) => memberships[0] ?? null,
   );
   mocks.workspaceOps.normalizeWorkspaceUiConfig.mockReturnValue({ demoMode: null });
+  mocks.session.activateMembershipIfInvited.mockResolvedValue({ status: MembershipStatus.ACTIVE });
 });
 
 afterEach(() => {
@@ -1113,6 +1116,7 @@ describe("auth verification code attempt cap", () => {
     });
     mocks.db.workspace.findUnique.mockResolvedValue({
       id: "workspace-invite-1",
+      featureFlagsJson: JSON.stringify({ membershipAutoActivation: true }),
     });
     mocks.db.membership.findUnique.mockResolvedValue(null);
     mocks.db.membership.upsert.mockResolvedValue({
@@ -1141,8 +1145,10 @@ describe("auth verification code attempt cap", () => {
             userId: "user-1",
           },
         },
+        create: expect.objectContaining({ status: MembershipStatus.INVITED }),
       }),
     );
+    expect(mocks.session.activateMembershipIfInvited).toHaveBeenCalledWith({ workspaceId: "workspace-invite-1", userId: "user-1" });
     expect(mocks.trialOnboarding.createSelfServeTrialOrganization).not.toHaveBeenCalled();
     expect(mocks.session.createSession).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1150,6 +1156,57 @@ describe("auth verification code attempt cap", () => {
         workspaceId: "workspace-invite-1",
       }),
     );
+  });
+
+  it("fails closed on own workspace selection when auto-activation is off", async () => {
+    mocks.session.requireCurrentUser.mockResolvedValue({
+      id: "user-1", email: "member@example.com", phone: "+8613800000000",
+      passwordHash: "hash", lastLoginAt: new Date(), memberships: [],
+    });
+    mocks.db.membership.findUnique.mockResolvedValue({
+      workspaceId: "workspace-1", userId: "user-1", role: WorkspaceRole.MEMBER,
+      status: MembershipStatus.INVITED,
+      workspace: { id: "workspace-1", slug: "workspace-1", status: "ACTIVE", profileType: "startup" },
+    });
+    mocks.session.activateMembershipIfInvited.mockResolvedValue({ status: MembershipStatus.INVITED });
+
+    const result = await selectLoginWorkspaceAction({ workspaceId: "workspace-1", locale: "en-US" });
+
+    expect(result).toMatchObject({ ok: true, redirectTo: "/invite-pending", invitationPending: true });
+    expect(mocks.session.activateMembershipIfInvited).toHaveBeenCalledWith({ workspaceId: "workspace-1", userId: "user-1" });
+    expect(mocks.session.setActiveWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("switches to the member's workspace after opted-in activation succeeds", async () => {
+    mocks.session.requireCurrentUser.mockResolvedValue({
+      id: "user-1", email: "member@example.com", phone: "+8613800000000",
+      passwordHash: "hash", lastLoginAt: new Date(), memberships: [],
+    });
+    mocks.db.membership.findUnique.mockResolvedValue({
+      workspaceId: "workspace-1", userId: "user-1", role: WorkspaceRole.MEMBER,
+      status: MembershipStatus.INVITED,
+      workspace: { id: "workspace-1", slug: "workspace-1", status: "ACTIVE", profileType: "startup" },
+    });
+    mocks.session.activateMembershipIfInvited.mockResolvedValue({ status: MembershipStatus.ACTIVE });
+
+    const result = await selectLoginWorkspaceAction({ workspaceId: "workspace-1", locale: "en-US" });
+
+    expect(result).toMatchObject({ ok: true, redirectTo: "/dashboard", invitationPending: false });
+    expect(mocks.session.setActiveWorkspace).toHaveBeenCalledWith("workspace-1");
+  });
+
+  it("does not turn an admin's workspace selection into acceptance for a different member", async () => {
+    mocks.session.requireCurrentUser.mockResolvedValue({ id: "admin-1", email: "admin@example.com" });
+    mocks.db.membership.findUnique.mockResolvedValue(null);
+
+    const result = await selectLoginWorkspaceAction({ workspaceId: "workspace-1", locale: "en-US" });
+
+    expect(result.ok).toBe(false);
+    expect(mocks.db.membership.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+      where: { workspaceId_userId: { workspaceId: "workspace-1", userId: "admin-1" } },
+    }));
+    expect(mocks.session.activateMembershipIfInvited).not.toHaveBeenCalled();
+    expect(mocks.session.setActiveWorkspace).not.toHaveBeenCalled();
   });
 
   // A REVOKED INVITE MUST NOT BE RESURRECTED BY SIGNUP.
@@ -1240,7 +1297,7 @@ describe("auth verification code attempt cap", () => {
     }
   });
 
-  it("fills membership title from invite prefill when signup form title is empty", async () => {
+  it("keeps a matching invite pending when auto-activation is explicitly disabled", async () => {
     installAuthCodeStore([]);
     const prefillCookie = issuePrefillCookie({
       name: "Owner",
@@ -1253,6 +1310,9 @@ describe("auth verification code attempt cap", () => {
     mocks.cookieStore.get.mockImplementation((name?: string) => {
       if (name === "helm-public-oauth-signup-prefill") {
         return { value: prefillCookie };
+      }
+      if (name === "helm-auth-session") {
+        return { value: "existing-workspace-session" };
       }
       if (name === "helm-ui-locale") {
         return { value: "zh-CN" };
@@ -1285,16 +1345,18 @@ describe("auth verification code attempt cap", () => {
     });
     mocks.db.workspace.findUnique.mockResolvedValue({
       id: "workspace-invite-1",
+      featureFlagsJson: JSON.stringify({ membershipAutoActivation: false }),
     });
     mocks.db.membership.findUnique.mockResolvedValue(null);
     mocks.db.membership.upsert.mockResolvedValue({
       workspaceId: "workspace-invite-1",
       userId: "user-1",
       role: WorkspaceRole.MEMBER,
-      status: MembershipStatus.ACTIVE,
+      status: MembershipStatus.INVITED,
       title: "高级JAVA开发工程师",
       persona: "高级JAVA开发工程师",
     });
+    mocks.session.activateMembershipIfInvited.mockResolvedValue({ status: MembershipStatus.INVITED });
 
     const result = await completeTrialSignupVerificationAction({
       enrollmentId: "enrollment-1",
@@ -1304,14 +1366,23 @@ describe("auth verification code attempt cap", () => {
     });
 
     expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected successful signup with pending invite");
+    expect(result).toMatchObject({ invitationPending: true, workspaceId: null, redirectTo: "/invite-pending" });
     expect(mocks.db.membership.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         create: expect.objectContaining({
+          status: MembershipStatus.INVITED,
           title: "高级JAVA开发工程师",
           persona: "高级JAVA开发工程师",
         }),
       }),
     );
+    expect(mocks.session.activateMembershipIfInvited).toHaveBeenCalledWith({ workspaceId: "workspace-invite-1", userId: "user-1" });
+    expect(mocks.trialOnboarding.createSelfServeTrialOrganization).not.toHaveBeenCalled();
+    expect(mocks.session.createSession).not.toHaveBeenCalled();
+    // The disabled verified-signup flow cannot reuse an unrelated pre-existing
+    // workspace session to give the still-invited member active access.
+    expect(mocks.session.clearSession).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -1601,6 +1672,55 @@ describe("password login action", () => {
     expect(mocks.session.createSession).not.toHaveBeenCalled();
   });
 
+  it("clears an existing session and does not bind a single pending invite login", async () => {
+    mocks.cookieStore.get.mockImplementation((name?: string) => {
+      if (name === "helm-auth-session") return { value: "existing-session" };
+      if (name === "helm-ui-locale") return { value: "en-US" };
+      return undefined;
+    });
+    mocks.db.user.findFirst.mockResolvedValue({
+      id: "user-1", email: "member@example.com", phone: null,
+      passwordHash: hashPassword("Password123"), lastLoginAt: null,
+      memberships: [{
+        workspaceId: "workspace-invite-1", role: WorkspaceRole.MEMBER,
+        status: MembershipStatus.INVITED,
+        workspace: { id: "workspace-invite-1", name: "Invite", profileType: "startup" },
+      }],
+    });
+    mocks.session.activateMembershipIfInvited.mockResolvedValue({ status: MembershipStatus.INVITED });
+
+    const result = await passwordLoginAction({ identifier: "member@example.com", password: "Password123", locale: "en-US" });
+
+    expect(result).toMatchObject({ ok: true, redirectTo: "/invite-pending", invitationPending: true });
+    expect(mocks.session.activateMembershipIfInvited).toHaveBeenCalledWith({ workspaceId: "workspace-invite-1", userId: "user-1" });
+    expect(mocks.session.clearSession).toHaveBeenCalledTimes(1);
+    expect(mocks.session.createSession).not.toHaveBeenCalled();
+  });
+
+  it("does not bind a preferred invited workspace during multi-membership login", async () => {
+    mocks.cookieStore.get.mockImplementation((name?: string) => {
+      if (name === "helm-active-workspace") return { value: "workspace-invite-1" };
+      if (name === "helm-ui-locale") return { value: "en-US" };
+      return undefined;
+    });
+    mocks.db.user.findFirst.mockResolvedValue({
+      id: "user-1", email: "member@example.com", phone: null,
+      passwordHash: hashPassword("Password123"), lastLoginAt: null,
+      memberships: [
+        { workspaceId: "workspace-invite-1", role: WorkspaceRole.MEMBER, status: MembershipStatus.INVITED,
+          workspace: { id: "workspace-invite-1", name: "Invite", profileType: "startup" } },
+        { workspaceId: "workspace-active-1", role: WorkspaceRole.MEMBER, status: MembershipStatus.ACTIVE,
+          workspace: { id: "workspace-active-1", name: "Active", profileType: "startup" } },
+      ],
+    });
+
+    const result = await passwordLoginAction({ identifier: "member@example.com", password: "Password123", locale: "en-US" });
+
+    expect(result).toMatchObject({ ok: true, redirectTo: "/login/workspaces", requiresWorkspaceSelection: true });
+    expect(mocks.session.createSession).toHaveBeenCalledWith(expect.objectContaining({ workspaceId: null }));
+    expect(mocks.session.activateMembershipIfInvited).not.toHaveBeenCalled();
+  });
+
   it("keeps missing users on the generic credential error path", async () => {
     mocks.db.user.findFirst.mockResolvedValue(null);
 
@@ -1615,6 +1735,21 @@ describe("password login action", () => {
       error: "Incorrect email/phone or password.",
     });
     expect(mocks.session.createSession).not.toHaveBeenCalled();
+  });
+});
+
+describe("invite-pending bilingual copy", () => {
+  it("describes only this workspace's pending invitation and member-owned next steps", () => {
+    const page = readFileSync(new URL("../../app/(auth)/invite-pending/page.tsx", import.meta.url), "utf8");
+
+    expect(page).toContain(
+      "This workspace invitation is still pending, so this workspace is not available yet. Automatic invite activation is disabled for this workspace. Ask its owner or an admin to review the setting; they cannot accept the invitation for you. If enabled, sign in and choose this workspace yourself.",
+    );
+    expect(page).toContain(
+      "此工作区邀请仍待处理，当前工作区尚未激活，暂不可访问。此工作区已关闭自动激活邀请。请联系工作区负责人或管理员检查设置；他们不能代替你接受邀请。若设置开启，请由你本人重新登录并选择此工作区。",
+    );
+    expect(page).not.toContain("no workspace access was granted");
+    expect(page).not.toContain("尚未授予工作区访问权限");
   });
 });
 

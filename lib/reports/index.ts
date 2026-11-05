@@ -3,6 +3,7 @@ import { enUS, zhCN } from "date-fns/locale";
 import { ActorType } from "@prisma/client";
 import { logEvent } from "@/lib/analytics";
 import { writeAuditLog } from "@/lib/audit";
+import { countAuditLogCapped } from "@/lib/audit/capped-count-query";
 import { db } from "@/lib/db";
 import { getMemoryExtractionQualityOverview } from "@/lib/evals/memory-evals";
 import { getRecommendationQualityOverview } from "@/lib/evals/recommendation-evals";
@@ -233,13 +234,11 @@ export async function generateWeeklyReport(input: {
         opportunityId: null,
       },
     }),
-    db.auditLog.count({
-      where: {
-        workspaceId: input.workspaceId,
-        createdAt: {
-          gte: weekStart,
-          lte: weekEnd,
-        },
+    countAuditLogCapped({
+      workspaceId: input.workspaceId,
+      createdAt: {
+        gte: weekStart,
+        lte: weekEnd,
       },
     }),
     db.lLMCallLog.count({
@@ -467,7 +466,8 @@ export async function generateWeeklyReport(input: {
       },
     },
     governanceMetrics: {
-      auditEventsCount: recentAuditCount,
+      auditEventsCount: recentAuditCount.value,
+      auditEventsCountCapped: recentAuditCount.capped,
       llmFallbackCount,
       averageApprovalTurnaroundHours,
       acceptedStrategyCount: evolution.recentAdoptions.length,

@@ -1,5 +1,6 @@
 import { endOfDay, startOfDay, subDays } from "date-fns";
 import { db } from "@/lib/db";
+import { countAuditLogCapped } from "@/lib/audit/capped-count-query";
 import { getRecommendationQualityOverview } from "@/lib/evals/recommendation-evals";
 import { getMemoryExtractionQualityOverview } from "@/lib/evals/memory-evals";
 import { getLLMOverview } from "@/lib/observability/llm-metrics.service";
@@ -227,13 +228,11 @@ export async function getDiagnosticsData(
         status: "PENDING",
       },
     }),
-    db.auditLog.count({
-      where: {
-        workspaceId,
-        createdAt: {
-          gte: since,
-          lte: until,
-        },
+    countAuditLogCapped({
+      workspaceId,
+      createdAt: {
+        gte: since,
+        lte: until,
       },
     }),
     getFirstLoopAdoptionData(workspaceId, {
@@ -263,7 +262,8 @@ export async function getDiagnosticsData(
     importJobs,
     identityReviewCount,
     pendingApprovals,
-    recentAuditCount,
+    recentAuditCount: recentAuditCount.value,
+    recentAuditCountCapped: recentAuditCount.capped,
     firstLoopAdoption,
   };
 }
