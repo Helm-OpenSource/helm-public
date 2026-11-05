@@ -126,7 +126,6 @@ vi.mock("@/lib/workspace-ops", () => ({
 }));
 
 import {
-  selectLoginWorkspaceAction,
   completeFirstLoginIdentityCompletionAction,
   completeTrialSignupVerificationAction,
   loginAction,
