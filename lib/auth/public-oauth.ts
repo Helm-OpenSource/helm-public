@@ -5,6 +5,7 @@ import path from "node:path";
 import { MembershipStatus, WorkspaceRole, type User, type Workspace } from "@prisma/client";
 import { logEvent } from "@/lib/analytics";
 import { createSession } from "@/lib/auth/session";
+import { externalMemberPostLoginPath, externalScopeOf } from "@/lib/auth/external-member-scope";
 import { FIRST_LOGIN_IDENTITY_SETUP_COOKIE } from "@/lib/auth/session-cookies";
 import type { AuthSessionProviderType } from "@/lib/auth/provider-seam";
 import {
@@ -61,6 +62,7 @@ type PublicOauthUser = User & {
     workspaceId: string;
     role: WorkspaceRole;
     status: MembershipStatus;
+    accessScope?: string | null;
     workspace: Workspace;
   }>;
 };
@@ -583,15 +585,14 @@ export async function finalizePublicOauthLogin(input: {
     selectableMemberships.find((membership) => membership.status === MembershipStatus.INVITED) ??
     selectableMemberships[0] ??
     null;
-  const requiresIdentityCompletion =
-    shouldRequireFirstLoginIdentityCompletion(input.user);
-
   if (!activeMembership) {
     return {
       ok: false as const,
       redirectTo: "/login?tab=phone",
     };
   }
+
+  const requiresIdentityCompletion = externalScopeOf(activeMembership) === null && shouldRequireFirstLoginIdentityCompletion(input.user);
 
   const patchName = normalizeName(input.profile?.name);
   const patchPhone = normalizePhoneNumber(input.profile?.phone ?? "");
@@ -646,13 +647,13 @@ export async function finalizePublicOauthLogin(input: {
     cookieStore.delete(FIRST_LOGIN_IDENTITY_SETUP_COOKIE);
   }
 
-  const redirectTo = requiresWorkspaceSelection
+  const redirectTo = externalMemberPostLoginPath(activeMembership, requiresWorkspaceSelection
     ? LOGIN_WORKSPACE_SELECTOR_PATH
     : requiresIdentityCompletion
       ? FIRST_LOGIN_IDENTITY_SETUP_PATH
       : resolveDeploymentPostLoginPath(
           resolvePostLoginRedirectPath(activeMembership),
-        );
+        ));
 
   await logEvent({
     workspaceId: activeMembership.workspaceId,
