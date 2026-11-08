@@ -106,7 +106,7 @@ connector 授权、写回、外发或审批证明。
 - [Stage 1 一把手经营闭环方法 / Stage 1 owner operating loop method](product/HELM_STAGE1_OWNER_LOOP_METHOD.md) — owner-authorized、read-only 到 review-first 的公共参考切片；不是生产连接器或自治授权
 - [Helm CAIO Pro 产品与实施需求 / Helm CAIO Pro product and implementation requirements](product/HELM_CAIO_PRO_IMPLEMENTATION_REQUIREMENTS.md) — 全资产目录、逐源只读授权、G0、10 题/选 0-3 题、模型出域和员工同意边界
 - [默认经营工作区重构蓝图 / Default operating workspace refactor blueprint](product/HELM_DEFAULT_OPERATING_WORKSPACE_REFACTOR_BLUEPRINT.md) — design-only 设计蓝图；不是实现、API freeze、路由删除批准或执行授权
-- [Solution extension 协议 / Solution extension protocol](product/HELM_SOLUTION_EXTENSION_PROTOCOL_V1.md)
+- [Solution extension 协议 / Solution extension protocol](product/HELM_SOLUTION_EXTENSION_PROTOCOL_V1.md) — 含外部成员登录落地优先级与服务端页面边界。
 - [扩展目录与命名协议 / Extension directory and naming protocol](product/HELM_MULTI_TENANT_EXTENSION_DIRECTORY_AND_NAMING_PROTOCOL_V1.md)
 - [经营信号首公里方法 / Signal First Mile method](product/HELM_SIGNAL_FIRST_MILE_METHOD.md)
 - [经营信号首公里 quickstart / Signal First Mile quickstart](product/HELM_SIGNAL_FIRST_MILE_QUICKSTART.md)

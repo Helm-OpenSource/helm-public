@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { AuthCodeChannel, AuthCodePurpose, MembershipStatus, WorkspaceRole } from "@prisma/client";
 import { hashPassword, hashVerificationCode } from "@/lib/auth/formal-auth";
 import { writePublicOauthSignupPrefillCookie } from "@/lib/auth/public-oauth";
+import { __resetPackRegistryForTest, registerPackContributions } from "@/lib/extensions/registry-contract";
 
 const mocks = vi.hoisted(() => {
   const cookieStore = {
@@ -1601,6 +1602,29 @@ describe("forged OAuth signup prefill cookie", () => {
 });
 
 describe("password login action", () => {
+  it.each([
+    ["partner-portal", false, false, "/ext-demo/portal"],
+    ["partner-portal", false, true, "/ext-demo/portal"],
+    ["partner-portal", true, false, "/ext-demo/portal"],
+    ["unregistered-scope", false, false, "/login"],
+  ] as const)("keeps %s members on their surface despite deployment home and workspace selection (%s, returning=%s)", async (accessScope, multiple, returning, expected) => {
+    __resetPackRegistryForTest();
+    registerPackContributions("demo-pack", { externalMemberSurfaces: [{ scope: "partner-portal", landingPath: "/ext-demo/portal", pathPrefixes: ["/ext-demo/portal"] }] });
+    vi.stubEnv("HELM_DEPLOYMENT_ENTRY_PROFILE", "tenant");
+    vi.stubEnv("HELM_DEPLOYMENT_ENTRY_HOME_PATH", "/tenant/home");
+    vi.stubEnv("HELM_DEPLOYMENT_ALLOWED_WORKSPACE_SLUGS", "workspace-1,workspace-2");
+    const membership = { workspaceId: "workspace-1", role: WorkspaceRole.MEMBER, status: MembershipStatus.ACTIVE, accessScope,
+      workspace: { id: "workspace-1", slug: "workspace-1", name: "Example", profileType: "startup" } };
+    mocks.db.user.findFirst.mockResolvedValue({ id: "user-1", email: "member@example.com", phone: null,
+      passwordHash: hashPassword("Password123"), lastLoginAt: returning ? now : null,
+      memberships: [membership, ...(multiple ? [{ ...membership, workspaceId: "workspace-2", workspace: { ...membership.workspace, id: "workspace-2", slug: "workspace-2" } }] : [])] });
+    try {
+      const result = await passwordLoginAction({ identifier: "member@example.com", password: "Password123", locale: "en-US" });
+      expect(result).toMatchObject({ ok: true, redirectTo: expected });
+      expect(mocks.cookieStore.set.mock.calls.some(([name]) => name === "helm-first-login-identity-setup")).toBe(false);
+    } finally { __resetPackRegistryForTest(); }
+  });
+
   it("selects only the identity fields needed to verify credentials and establish an active membership", async () => {
     const passwordHash = hashPassword("Password123");
     const user = {

@@ -5,6 +5,7 @@ import { __isReservedSurfaceSegmentForTest, __resetPackRegistryForTest, register
 import {
   EXTERNAL_MEMBER_FALLBACK_PATH,
   externalLandingPath,
+  externalMemberPostLoginPath,
   externalScopeOf,
   isPathInExternalScope,
   mayUseExternalSurface,
@@ -39,6 +40,14 @@ describe("external member scope", () => {
   it("lands a registered scope on its surface and an unknown one on the sign-in page", () => {
     expect(externalLandingPath("partner-portal")).toBe("/ext-demo/portal");
     expect(externalLandingPath("unknown")).toBe(EXTERNAL_MEMBER_FALLBACK_PATH);
+  });
+
+  it("prioritizes the registered surface over deployment home, profile completion and workspace selection", () => {
+    for (const fallback of ["/tenant/home", "/getting-started?mode=identity-completion", "/login/workspaces"]) {
+      expect(externalMemberPostLoginPath({ accessScope: "partner-portal" }, fallback)).toBe("/ext-demo/portal");
+      expect(externalMemberPostLoginPath({ accessScope: "unknown-scope" }, fallback)).toBe("/login");
+      expect(externalMemberPostLoginPath({ accessScope: null }, fallback)).toBe(fallback);
+    }
   });
 
   it("matches the surface on segment boundaries only", () => {

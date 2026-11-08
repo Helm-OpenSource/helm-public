@@ -35,6 +35,15 @@ export function externalLandingPath(scope: ExternalMemberScope | "unknown"): str
   return (scope !== "unknown" && getRegisteredExternalMemberSurface(scope)?.landingPath) || EXTERNAL_MEMBER_FALLBACK_PATH;
 }
 
+/** A deployment home or Core onboarding path never overrides an external member's registered surface. */
+export function externalMemberPostLoginPath(
+  membership: { accessScope?: string | null },
+  fallbackPath: string,
+): string {
+  const scope = externalScopeOf(membership);
+  return scope === null ? fallbackPath : externalLandingPath(scope);
+}
+
 /** Segment-boundary prefix match: "/api/x/portal" admits "/api/x/portal/orders", never "/api/x/portal-y". */
 export function isPathInExternalScope(scope: ExternalMemberScope | "unknown", pathname: string): boolean {
   if (scope === "unknown" || typeof pathname !== "string" || !pathname.startsWith("/")) return false;

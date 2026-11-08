@@ -18,6 +18,8 @@ WorkBuddy 部署准入见 [固定路由合同](docs/operations/CAIO_WORKBUDDY_RO
 
 **License**：Apache-2.0 · **仓库姿态**：open-source Core，已在 owner Go/No-Go 后公开 · **Helm Cloud / Enterprise**：商业版可选，不替代开源
 
+扩展外部成员的登录落地优先级与服务端页面边界见 [Solution extension 协议](docs/product/HELM_SOLUTION_EXTENSION_PROTOCOL_V1.md)。
+
 > **最快理解路径**：企业管理者先看下方"为什么关心"与"方法论"；交付工程师直接跑 `docker compose up` 和 Golden Path；合作伙伴可先用公开样例判断咨询 / 交付场景，不需要客户数据。
 
 ---

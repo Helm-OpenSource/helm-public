@@ -365,6 +365,10 @@ customer overlays and commercial Pack source are intentionally excluded.
 
 ## 14. 最终判断原则
 
+外部成员的登录落地由已登记的 `externalMemberSurfaces` 决定，优先于部署默认首页、Core 首次资料补全和 Core 工作区选择页；其可选资料与多工作区切换由所属扩展负责。未登记的非空 scope 回到登录页，不回退到普通成员入口。扩展页面必须在服务端先执行会话边界检查，再渲染管理界面，不能只靠浏览器取数接口拒绝访问。此规则不授予新的角色、工作区或业务权限。
+
+External member landing takes precedence over deployment home and Core onboarding. Unknown scopes fail closed. Extensions must guard server-rendered management pages before exposing their shell; API authorization remains independent.
+
 当不确定某个东西属于哪一层时，默认先问：
 
 1. 它回答的是能力，还是一整套场景化产品面？
