@@ -637,6 +637,13 @@ jobs:
           LLM_ENABLED: 'false'
         run: npm run test:spend-reservation:mysql
 
+      - name: Verify scoped usage observations against MySQL
+        env:
+          USAGE_LEDGER_MYSQL_DATABASE_URL: ${{ env.DATABASE_URL }}
+          USAGE_LEDGER_MYSQL_CI_CONTAINER: ${{ job.services.mysql.id }}
+          LLM_ENABLED: 'false'
+        run: npm run test:usage-ledger:mysql
+
       - name: Remove isolated bootstrap credential on all outcomes
         if: always()
         run: rm -f "${RUNNER_TEMP}/helm-c4-root-password"

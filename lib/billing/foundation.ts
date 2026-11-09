@@ -18,6 +18,7 @@ import {
 import { getDefaultPaymentProvider } from "@/lib/billing/payment-provider-resolver";
 import { findMembershipsWithExistingUsers } from "@/lib/auth/membership-with-user";
 import { db } from "@/lib/db";
+import { recordIdempotentUsage } from "@/lib/billing/usage-ledger";
 
 export const HELM_TEAM_PLAN = "helm_team_v1";
 export const BILLING_CURRENCY = "CNY";
@@ -320,7 +321,9 @@ export async function recordUsageLedgerEntry(input: {
   sourcePage?: string | null;
   metadata?: Record<string, unknown> | null;
   recordedAt?: Date;
+  operationKey?: string;
 }) {
+  if (input.operationKey !== undefined) return recordIdempotentUsage({ ...input, operationKey: input.operationKey }, db);
   return db.usageLedger.create({
     data: {
       workspaceId: input.workspaceId,

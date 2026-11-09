@@ -1838,11 +1838,16 @@ model UsageLedger {
   sourcePage  String?
   recordedAt  DateTime  @default(now())
   createdAt   DateTime  @default(now())
+  // Optional observation identity; legacy rows remain unkeyed. No monetary authority.
+  operationKey String?  @db.VarChar(191)
+  contentHash  String?  @db.VarChar(64)
+  reversalOfId String?  @unique @db.VarChar(191)
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, recordedAt])
   @@index([workspaceId, usageType, recordedAt])
+  @@unique([workspaceId, operationKey])
 }
 
 model WorkerPublisherProfile {
