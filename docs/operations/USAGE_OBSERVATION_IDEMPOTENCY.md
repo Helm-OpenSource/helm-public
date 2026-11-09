@@ -4,7 +4,7 @@
 
 `recordUsageLedgerEntry` keeps its existing behavior when `operationKey` is omitted.
 Opt-in callers supply a stable, server-owned operation key after checking the source object's workspace and permission.
-The key identifies one logical observation, not a browser click or one provider retry. No existing caller is automatically migrated.
+The key identifies one logical observation, not a browser click or one provider retry. Callers migrate only through explicit integration.
 
 不传 `operationKey` 时保持原行为；选择启用的调用方须先校验业务对象归属和权限，再用服务端稳定操作键记账。
 同一逻辑操作、同一工作区、同一内容重放返回原行；不同内容拒绝。操作键允许 ASCII 引用字符，最长 191 字符；内容按规范化 JSON 比较。
@@ -36,6 +36,36 @@ See [LLM spend contract](LLM_SPEND_RESERVATION_CONTRACT.md) and [trusted usage e
 本片不新增金额表、价格表、客户字段、真实供应商调用或收费开关。调用方不得将用量行直接等同可收费事件。
 现有使用情况汇总按 `recordedAt` 加总 quantity；新增负数仅表达该期间净用量，不证明资金或回款变化。
 
+## Briefing consumer / 简报消费接线
+
+The first opt-in consumer is `generateObjectBriefingSnapshot`, only when an existing server-owned
+`LLMWorkflowOperation` of kind `briefing`, generation 1, produces accepted structured output without fallback.
+Provider SUCCESS/ACCEPTED, a token log or a settled spend row alone is not a completed business artifact.
+Only this opt-in path strictly validates the existing briefing schema, including required fields, string-array items and no extra fields.
+The stable key is `briefing:${LLMWorkflowOperation.id}`; quantity is one, recognized at the saved snapshot's `generatedAt`.
+`LLMSpendLedgerEntry.operationRef` is a route decision reference, not this workflow operation ID; provider attempts remain separate.
+
+`recordIdempotentUsageInTransaction(tx, input)` reuses the same validation and persistence primitive without starting a transaction.
+The briefing service owns one bounded transaction (5s acquisition, 10s execution): it locks the existing operation,
+expires prior snapshots, saves the accepted snapshot and appends its usage. Any failure rolls all these writes back.
+No automatic provider retry, new composition installation, price authority, entitlement or bill is introduced.
+
+首个选择启用的消费方仅为已有 ordinary 简报路径；结构化结果通过解析/隐私检查并成功保存业务产物后才记一次。
+原有普通路径和确定性回退保持旧语义，不自动成为新的有键履约。解析或隐私失败不回退供应商已真实发生的消耗。
+本片不修改 `LLMWorkflowOperation.status` 为虚构的完成态，也不将 provider 终态当成业务成功。
+
+The existing `BriefingSnapshot.content.llmMeta.usageObservation` stores a versioned server-owned operation pointer.
+`UsageLedger.metadata` binds the original actor, source, slot, generation, artifact ID and exact content SHA-256.
+Cache/restart reads verify these persisted bindings and recognition time; a changed actor visiting a cached briefing does not
+rewrite provenance. Missing or conflicting referenced evidence fails closed. The receipt is an internal service result,
+not client authorization. The meeting API and both existing memory actions suppress their legacy unkeyed observation only
+when this verified receipt is present. A `force` request cannot mint a new logical operation or another provider attempt.
+
+缓存/重启依赖已有持久槽，不依赖进程 Map 或客户端字段；同键异内容拒绝，原 sourcePage/actor/artifact 保留。
+冲回不会自动重新计量同一产物；需要修订时仍须新的受控逻辑操作，不把取消/退款/账单冲正混入本观察契约。
+No additional schema migration is needed beyond the existing keyed usage and ordinary-operation migrations.
+Rollback removes this consumer integration while retaining snapshots, usage evidence and schema; there is no historical backfill.
+
 ## Verification / 验证
 
 Run `npm test -- lib/billing/usage-ledger.test.ts lib/billing/foundation-usage.test.ts` for pure behavior and legacy compatibility.
@@ -48,6 +78,8 @@ Test-only inputs are `USAGE_LEDGER_MYSQL_SOCKET` locally, or `USAGE_LEDGER_MYSQL
 `USAGE_LEDGER_MYSQL_REQUIRED=1` rejects a missing explicit target; an ordinary unit run skips the database suite.
 
 持久回归覆盖独立连接并发同键、同键异内容、大小写键、跨工作区、权限撤销、唯一反向行、事务回滚及SQL约束。
+简报回归还覆盖实际 workflow/registry 的解析及隐私拒绝、三个旧计数入口去重、缓存回读、独立连接同操作并发、
+产物/失效标记/usage 原子回滚和先前 settled 成本行不变。普通单测由现有 `npm test` 自动发现；实库用例沿用同一 mandatory CI job。
 合成验证不证明生产迁移、客户授权、真实计费或对账完成。临时数据库生命周期由外层有超时、空间限制和退出清理的runner负责。
 
 ## Migration and rollback / 迁移与回滚

@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { PrismaClient, UsageType } from "@prisma/client";
+import { ObjectType, PrismaClient, UsageType } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { recordIdempotentUsage, reverseUsageLedgerEntry } from "./usage-ledger";
+import { getAcceptedBriefing, persistAcceptedBriefingInTransaction } from "@/lib/memory/briefing-usage.service";
 
 // Never use DATABASE_URL or the application's default connection for this suite.
 const socket = process.env.USAGE_LEDGER_MYSQL_SOCKET;
@@ -49,8 +50,11 @@ describe.skipIf(!socket && !ciUrl)("persisted usage observation concurrency", ()
         "CREATE TABLE User (id VARCHAR(191) PRIMARY KEY,name VARCHAR(191),email VARCHAR(191),updatedAt DATETIME(3))",
         "CREATE TABLE Membership (id VARCHAR(191) PRIMARY KEY,workspaceId VARCHAR(191),userId VARCHAR(191),role VARCHAR(32),status VARCHAR(32) DEFAULT 'ACTIVE',accessScope VARCHAR(64) NULL,updatedAt DATETIME(3),UNIQUE KEY (workspaceId,userId))",
         `CREATE TABLE UsageLedger (id VARCHAR(191) PRIMARY KEY,workspaceId VARCHAR(191) NOT NULL,userId VARCHAR(191),usageType ENUM(${Object.values(UsageType).map(t => `'${t}'`).join(",")}) NOT NULL,quantity INT NOT NULL DEFAULT 1,metadata LONGTEXT,sourcePage VARCHAR(191),recordedAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3))`,
+        "CREATE TABLE BriefingSnapshot (id VARCHAR(191) PRIMARY KEY,workspaceId VARCHAR(191),objectType VARCHAR(191),objectId VARCHAR(191),snapshotType VARCHAR(191),content LONGTEXT,sourceFactIds LONGTEXT,sourceCommitmentIds LONGTEXT,sourceBlockerIds LONGTEXT,generatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),expiresAt DATETIME(3),version INT DEFAULT 1)",
+        "CREATE TABLE LLMSpendLedgerEntry (id VARCHAR(191) PRIMARY KEY,workspaceId VARCHAR(191),periodKey VARCHAR(191),periodPolicyVersion VARCHAR(191),attemptRef VARCHAR(191),state VARCHAR(191),reservedMicros BIGINT,settledMicros BIGINT,provider VARCHAR(191),model VARCHAR(191),expiresAt DATETIME(3),updatedAt DATETIME(3))",
       ]) await a.$executeRawUnsafe(sql);
       await a.$executeRawUnsafe(readFileSync(new URL("../../prisma/migrations/20261109130000_usage_ledger_idempotency/migration.sql", import.meta.url), "utf8"));
+      await a.$executeRawUnsafe(readFileSync(new URL("../../prisma/migrations/20261003190000_ordinary_llm_workflow_operation/migration.sql", import.meta.url), "utf8"));
     }
     for (const id of [workspace, other]) await a.$executeRaw`INSERT INTO Workspace (id,name,slug,updatedAt) VALUES (${id},'Synthetic usage',${id},NOW(3))`;
     for (const id of [owner, reviewer]) {
@@ -60,6 +64,9 @@ describe.skipIf(!socket && !ciUrl)("persisted usage observation concurrency", ()
   });
   afterAll(async () => {
     if (a && !socket) {
+      await a.briefingSnapshot.deleteMany({ where: { workspaceId: workspace } });
+      await a.lLMWorkflowOperation.deleteMany({ where: { workspaceId: workspace } });
+      await a.lLMSpendLedgerEntry.deleteMany({ where: { workspaceId: workspace } });
       await a.$executeRaw`DELETE FROM UsageLedger WHERE workspaceId IN (${workspace},${other})`;
       await a.$executeRaw`DELETE FROM Membership WHERE workspaceId = ${workspace}`;
       await a.$executeRaw`DELETE FROM Workspace WHERE id IN (${workspace},${other})`;
@@ -135,5 +142,47 @@ describe.skipIf(!socket && !ciUrl)("persisted usage observation concurrency", ()
     const legacy = await a.usageLedger.create({ data: { ...source, quantity: 0 } });
     expect(legacy.operationKey).toBeNull(); expect(legacy.quantity).toBe(0);
     await expect(reverseUsageLedgerEntry({ ...correction, entryId: legacy.id, operationKey: "legacy" }, b)).rejects.toThrow("usage_entry_not_reversible");
+  });
+  async function briefing(suffix: string) {
+    const operation = await a.lLMWorkflowOperation.create({ data: { workspaceId: workspace, operationKey: `op-${suffix}`,
+      requestKey: `request-${suffix}`, kind: "briefing", sourceType: "meeting", sourceId: `meeting-${suffix}`,
+      sourceVersion: "synthetic-v1", sourceDigest: "synthetic-digest", actorUserId: owner, generation: 1, slot: "pre_meeting_brief" } });
+    return { operationId: operation.id, actorUserId: owner, sourcePage: "/synthetic-briefing", data: {
+      workspaceId: workspace, objectType: ObjectType.MEETING, objectId: operation.sourceId, snapshotType: operation.slot,
+      content: JSON.stringify({ summary: "Synthetic accepted output", generationMode: "llm_enhanced", llmMeta: { success: true, fallbackUsed: false } }),
+    } };
+  }
+  it("atomically persists one artifact and one observation under concurrent logical replays", async () => {
+    const input = await briefing("concurrent");
+    const results = await Promise.all(Array.from({ length: 8 }, (_, i) => (i % 2 ? a : b).$transaction(
+      tx => persistAcceptedBriefingInTransaction(tx, input), { timeout: 10000 })));
+    expect(new Set(results.map(result => result.snapshot.id)).size).toBe(1);
+    expect(await a.briefingSnapshot.count({ where: { workspaceId: workspace, objectId: input.data.objectId } })).toBe(1);
+    expect(await a.usageLedger.count({ where: { workspaceId: workspace, operationKey: `briefing:${input.operationId}` } })).toBe(1);
+    const restarted = await getAcceptedBriefing(b, workspace, input.operationId);
+    expect(restarted?.usageReceipt).toEqual(results[0].usageReceipt);
+    await expect(b.$transaction(tx => persistAcceptedBriefingInTransaction(tx, { ...input,
+      data: { ...input.data, content: input.data.content.replace("accepted", "different") } }))).rejects.toThrow("briefing_usage_conflict");
+  });
+  it("rolls back artifact, expiration and usage together without undoing previously settled provider cost", async () => {
+    const input = await briefing("rollback");
+    const previous = await a.briefingSnapshot.create({ data: { ...input.data, content: "legacy" } });
+    const costId = `cost-${run}`;
+    await a.$executeRaw`INSERT INTO LLMSpendLedgerEntry (id,workspaceId,periodKey,periodPolicyVersion,attemptRef,state,reservedMicros,settledMicros,provider,model,expiresAt,updatedAt)
+      VALUES (${costId},${workspace},'synthetic-period','v1',${costId},'settled',100,80,'synthetic','synthetic',NOW(3),NOW(3))`;
+    const costs = () => a.$queryRaw`SELECT id,state,reservedMicros,settledMicros FROM LLMSpendLedgerEntry WHERE id=${costId}`;
+    const before = await costs();
+    await expect(a.$transaction(async tx => {
+      await persistAcceptedBriefingInTransaction(tx, input); throw new Error("synthetic_after_usage_failure");
+    })).rejects.toThrow("synthetic_after_usage_failure");
+    expect(await a.briefingSnapshot.findUnique({ where: { id: previous.id } })).toEqual(previous);
+    expect(await a.briefingSnapshot.count({ where: { workspaceId: workspace, objectId: input.data.objectId } })).toBe(1);
+    expect(await a.usageLedger.count({ where: { workspaceId: workspace, operationKey: `briefing:${input.operationId}` } })).toBe(0);
+    for (const reason of ["output_parse_failed", "policy_pii_in_output"]) {
+      await expect(b.$transaction(tx => persistAcceptedBriefingInTransaction(tx, { ...input, data: { ...input.data,
+        content: JSON.stringify({ generationMode: "fallback", llmMeta: { success: false, fallbackUsed: true, fallbackReason: reason } }) } })))
+        .rejects.toThrow("briefing_output_not_accepted");
+    }
+    expect(await costs()).toEqual(before);
   });
 });

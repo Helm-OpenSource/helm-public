@@ -79,6 +79,11 @@ export async function recordIdempotentUsage(input: IdempotentUsageInput, client:
   return transaction(client, tx => persist(tx, data));
 }
 
+/** The caller owns commit/rollback and any conflict retry; never starts a nested transaction. */
+export async function recordIdempotentUsageInTransaction(tx: Prisma.TransactionClient, input: IdempotentUsageInput) {
+  return persist(tx, payload(input));
+}
+
 export async function reverseUsageLedgerEntry(input: UsageCorrectionInput, client: PrismaClient) {
   reference(input.workspaceId, "usage_workspace_invalid");
   reference(input.actorUserId, "usage_correction_forbidden");
