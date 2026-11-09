@@ -36,6 +36,9 @@ import { safeParseJson } from "@/lib/utils";
 import { parseWorkspaceFeatureFlags } from "@/lib/workspace-ops";
 
 const AUTH_SESSION_TTL_DAYS = 14;
+// AuthSession.userAgent uses MySQL's default String capacity (VARCHAR(191)).
+// Request metadata must not prevent an otherwise valid login or rotation.
+const AUTH_SESSION_USER_AGENT_MAX_LENGTH = 191;
 
 export { ACTIVE_WORKSPACE_COOKIE, SESSION_ID_COOKIE } from "@/lib/auth/session-cookies";
 export const AUTH_SESSION_SCOPE_REVOKED_AUDIT_ACTION = "AUTH_SESSION_SCOPE_REVOKED";
@@ -300,8 +303,8 @@ async function rotateAuthSessionRecord(input: {
       sourcePage: authSession.sourcePage ?? undefined,
       providerType: authSession.providerType ?? undefined,
       userAgent:
-        normalizeHeaderValue(headerStore.get("user-agent"), 512) ??
-        authSession.userAgent ??
+        normalizeHeaderValue(headerStore.get("user-agent"), AUTH_SESSION_USER_AGENT_MAX_LENGTH) ??
+        normalizeHeaderValue(authSession.userAgent, AUTH_SESSION_USER_AGENT_MAX_LENGTH) ??
         undefined,
       ipAddress: resolveIpAddress(headerStore) ?? authSession.ipAddress ?? undefined,
       lastSeenAt: rotatedAt,
@@ -1136,7 +1139,9 @@ export async function createSession(input: {
       sessionKeyHash: hashAuthSessionKey(sessionKey),
       sourcePage: input.sourcePage ?? undefined,
       providerType: input.providerType ?? undefined,
-      userAgent: normalizeHeaderValue(headerStore.get("user-agent"), 512) ?? undefined,
+      userAgent:
+        normalizeHeaderValue(headerStore.get("user-agent"), AUTH_SESSION_USER_AGENT_MAX_LENGTH) ??
+        undefined,
       ipAddress: resolveIpAddress(headerStore) ?? undefined,
       lastSeenAt: createdAt,
       lastWorkspaceSwitchAt: input.workspaceId ? createdAt : undefined,
