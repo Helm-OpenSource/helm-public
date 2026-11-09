@@ -1,7 +1,8 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { WorkspaceSelectorPanel } from "@/features/auth/workspace-selector-panel";
-import { getCurrentUser } from "@/lib/auth/session";
+import { getCurrentExternalMemberScope, getCurrentUser } from "@/lib/auth/session";
+import { externalLandingPath, externalMemberPostLoginPath } from "@/lib/auth/external-member-scope";
 import {
   resolveDeploymentPostLoginPath,
 } from "@/lib/auth/deployment-entry";
@@ -10,6 +11,8 @@ import { resolveUiLocale } from "@/lib/i18n/config";
 import { getWorkspaceChoices } from "@/lib/auth/workspace-choices";
 
 export default async function LoginWorkspaceSelectionPage() {
+  const external = await getCurrentExternalMemberScope();
+  if (external !== null) redirect(externalLandingPath(external));
   const user = await getCurrentUser();
   if (!user) {
     redirect("/login");
@@ -25,9 +28,9 @@ export default async function LoginWorkspaceSelectionPage() {
     const membership = memberships[0];
     redirect(
       membership
-        ? resolveDeploymentPostLoginPath(
+        ? externalMemberPostLoginPath(membership, resolveDeploymentPostLoginPath(
             resolvePostLoginRedirectPath(membership),
-          )
+          ))
         : "/login",
     );
   }

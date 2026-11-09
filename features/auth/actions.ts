@@ -48,6 +48,7 @@ import {
   verifyPassword,
 } from "@/lib/auth/formal-auth";
 import { recordUserLastLogin } from "@/lib/auth/login-activity";
+import { externalMemberPostLoginPath, externalScopeOf } from "@/lib/auth/external-member-scope";
 import {
   PUBLIC_OAUTH_SIGNUP_PREFILL_COOKIE,
   readPublicOauthSignupPrefillCookie,
@@ -210,6 +211,7 @@ type AuthUser = {
     workspaceId: string;
     role: WorkspaceRole;
     status: MembershipStatus;
+    accessScope?: string | null;
     workspace: Workspace;
   }>;
 };
@@ -292,7 +294,7 @@ async function finalizeLoginForUser(
   await recordUserLastLogin(user.id);
   const workspaceConfig = normalizeWorkspaceUiConfig(activeMembership.workspace);
   const requiresIdentityCompletion =
-    !workspaceConfig.demoMode && shouldRequireFirstLoginIdentityCompletion(user);
+    externalScopeOf(activeMembership) === null && !workspaceConfig.demoMode && shouldRequireFirstLoginIdentityCompletion(user);
   const entryKind = workspaceConfig.demoMode
     ? "demo"
     : activeMembership.status === MembershipStatus.INVITED
@@ -346,13 +348,13 @@ async function finalizeLoginForUser(
     cookieStore.delete(FIRST_LOGIN_IDENTITY_SETUP_COOKIE);
   }
 
-  const redirectTo = requiresWorkspaceSelection
+  const redirectTo = externalMemberPostLoginPath(loginMembership, requiresWorkspaceSelection
     ? LOGIN_WORKSPACE_SELECTOR_PATH
     : requiresIdentityCompletion
       ? FIRST_LOGIN_IDENTITY_SETUP_PATH
       : resolveDeploymentPostLoginPath(
           resolvePostLoginRedirectPath(loginMembership),
-        );
+        ));
 
   await logEvent({
     workspaceId: activeMembership.workspaceId,
@@ -1358,7 +1360,7 @@ export async function completeTrialSignupVerificationAction(
       });
       if (resultingMembership?.status === MembershipStatus.ACTIVE) {
         workspaceIdForSession = invitedWorkspace.id;
-        redirectTo = resolveDeploymentPostLoginPath("/dashboard", deploymentConfig);
+        redirectTo = externalMemberPostLoginPath(resultingMembership, resolveDeploymentPostLoginPath("/dashboard", deploymentConfig));
       }
     }
   }
@@ -1837,9 +1839,9 @@ export async function completeFirstLoginIdentityCompletionAction(
     }
     return {
       ok: true,
-      redirectTo: resolveDeploymentPostLoginPath(
+      redirectTo: externalMemberPostLoginPath(membership, resolveDeploymentPostLoginPath(
         resolvePostLoginRedirectPath(membership),
-      ),
+      )),
     };
   }
 
@@ -1857,9 +1859,9 @@ export async function completeFirstLoginIdentityCompletionAction(
     }
     return {
       ok: true,
-      redirectTo: resolveDeploymentPostLoginPath(
+      redirectTo: externalMemberPostLoginPath(membership, resolveDeploymentPostLoginPath(
         resolvePostLoginRedirectPath(membership),
-      ),
+      )),
     };
   }
 
@@ -1935,9 +1937,9 @@ export async function completeFirstLoginIdentityCompletionAction(
 
   return {
     ok: true,
-    redirectTo: resolveDeploymentPostLoginPath(
+    redirectTo: externalMemberPostLoginPath(membership, resolveDeploymentPostLoginPath(
       resolvePostLoginRedirectPath(membership),
-    ),
+    )),
   };
 }
 
@@ -2003,14 +2005,14 @@ export async function selectLoginWorkspaceAction(
 
   await setActiveWorkspace(parsed.data.workspaceId);
 
-  const requiresIdentityCompletion = shouldRequireFirstLoginIdentityCompletion(user);
-  const redirectTo = requiresIdentityCompletion
+  const requiresIdentityCompletion = externalScopeOf(selectedMembership) === null && shouldRequireFirstLoginIdentityCompletion(user);
+  const redirectTo = externalMemberPostLoginPath(selectedMembership, requiresIdentityCompletion
     ? FIRST_LOGIN_IDENTITY_SETUP_PATH
     : resolveDeploymentPostLoginPath(
         resolvePostLoginRedirectPath(
           selectedMembership,
         ),
-      );
+      ));
 
   return {
     ok: true,
