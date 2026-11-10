@@ -54,7 +54,8 @@ async function readBoundedBody(request: Request): Promise<Uint8Array | null> {
   }
   return Buffer.concat(chunks);
 }
-// Database unreachable, connection closed, pool or interactive-transaction timeout: nothing committed, retry the same key.
+// Database unreachable, connection closed, pool or interactive-transaction timeout: outcome unknown, retry with the same key
+// (it replays or refuses). Other driver failures (e.g. P2010 without a MySQL code) stay internal_error: equally never release.
 const CONNECTION_CODES = new Set(["P1001", "P1002", "P1008", "P1017", "P2024", "P2028"]);
 const connectionLost = (error: unknown) => error instanceof Prisma.PrismaClientInitializationError ||
   (error instanceof Prisma.PrismaClientKnownRequestError && CONNECTION_CODES.has(error.code));

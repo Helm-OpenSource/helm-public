@@ -24,6 +24,7 @@ CREATE TABLE `BillingServiceGrant` (
     CONSTRAINT `BillingServiceGrant_validity` CHECK (`validFrom` < `validUntil`),
     CONSTRAINT `BillingServiceGrant_hash` CHECK (`contentHash` REGEXP '^sha256:[a-f0-9]{64}$'
       AND `keyFingerprint` REGEXP '^sha256:[a-f0-9]{64}$'),
+    CONSTRAINT `BillingServiceGrant_issuer` CHECK (`issuerRef` REGEXP '^[a-z0-9][a-z0-9._-]{0,63}$'),
     CONSTRAINT `BillingServiceGrant_public_key` CHECK (`publicKeyPem` LIKE '-----BEGIN PUBLIC KEY-----%'
       AND `publicKeyPem` NOT LIKE '%PRIVATE KEY%'),
     CONSTRAINT `BillingServiceGrant_revocation` CHECK ((`revokedAt` IS NULL) = (`revokedBy` IS NULL)),

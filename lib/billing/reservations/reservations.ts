@@ -148,7 +148,9 @@ async function reserveInTransaction(tx: Prisma.TransactionClient, actor: Service
     OR: [{ idempotencyKey: req.idempotencyKey }, { operationRef: req.operationRef }] } });
   const replay = prior.find(row => row.idempotencyKey === req.idempotencyKey);
   // v3.8: a key is replayed only to the service identity that made the reservation.
-  if (prior.length > 0 && (!replay || replay.contentHash !== contentHash || replay.createdBy !== createdBy)) reject("idempotency_conflict");
+  if (prior.length > 0 && (!replay || replay.contentHash !== contentHash || ownerOf(replay.createdBy) !== ownerOf(createdBy))) {
+    reject("idempotency_conflict");
+  }
   if (replay && req.expectedMode !== undefined && replay.billingMode !== req.expectedMode) reject("mode_mismatch");
   if (replay) return reserved(replay.billingMode, replay.id, replay.state, replay.chargeFen, replay.priceContentHash, replay.dayKey, replay.monthKey);
   let buckets: BucketRow[] = [];
@@ -192,8 +194,15 @@ type LockedReservation = { id: string; payerAccountId: string; operationRef: str
   unknownEvidenceRef: string | null; resolutionKey: string | null; releaseReason: string | null; resolutionEvidenceRef: string | null;
   createdBy: string };
 /**
- * Locks PayerAccount, the frozen-period buckets, then the row; the plain head read only finds immutable keys. `owner` (v3.8) is
- * the creating identity for business settle/release/markUnknown: any other caller sees the reservation as absent
+ * v3.8/v3.9 owner of a reservation: a billing service actor (`SYSTEM:billing-service:<issuerRef>/<grantId>`) is owned by its
+ * issuer, so a rotated grant of the same issuer keeps working; any other actor owns exactly its own ref.
+ */
+function ownerOf(createdBy: string) {
+  return /^(SYSTEM:billing-service:[a-z0-9][a-z0-9._-]{0,63})\/[^/]+$/.exec(createdBy)?.[1] ?? createdBy;
+}
+/**
+ * Locks PayerAccount, the frozen-period buckets, then the row; the plain head read only finds immutable keys. `owner` is the
+ * creating identity's owner for business settle/release/markUnknown: any other caller sees the reservation as absent
  * (`reservation_state_conflict`, before the operationRef check so nothing leaks); null only for the reconciliation channel.
  */
 async function lockReservationForResolution(tx: Prisma.TransactionClient, reservationId: string, operationRef: string,
@@ -209,7 +218,7 @@ async function lockReservationForResolution(tx: Prisma.TransactionClient, reserv
     priceContentHash, quantity, chargeFen, state, version, unknownKey, unknownEvidenceRef, resolutionKey, releaseReason,
     resolutionEvidenceRef, createdBy FROM BillingReservation WHERE id = ${reservationId} FOR UPDATE`;
   if (!row || row.id !== reservationId || row.grantId !== head.grantId || row.billingMode !== head.billingMode ||
-      (owner !== null && row.createdBy !== owner)) reject("reservation_state_conflict");
+      (owner !== null && ownerOf(row.createdBy) !== owner)) reject("reservation_state_conflict");
   if (row.operationRef !== operationRef) reject("idempotency_conflict");
   return { buckets, reservation: { ...row, quantity: BigInt(row.quantity), chargeFen: BigInt(row.chargeFen), version: Number(row.version) } };
 }
@@ -229,7 +238,7 @@ async function transition(tx: Prisma.TransactionClient, reservation: LockedReser
 export type MarkUnknownRequest = { idempotencyKey: string; reservationId: string; operationRef: string; evidenceRef: string };
 /** held -> unknown: the outcome cannot be proven; the hold stays counted and is never released by time. */
 export async function markUnknownInTransaction(tx: Prisma.TransactionClient, actor: ServiceActor, req: MarkUnknownRequest) {
-  const owner = serviceActor(actor); idempotencyKey(req?.idempotencyKey); reference(req.evidenceRef);
+  const owner = ownerOf(serviceActor(actor)); idempotencyKey(req?.idempotencyKey); reference(req.evidenceRef);
   const { reservation } = await lockReservationForResolution(tx, req.reservationId, req.operationRef, owner);
   if (reservation.unknownKey === req.idempotencyKey) {
     if (reservation.unknownEvidenceRef !== req.evidenceRef) reject("idempotency_conflict");
@@ -257,7 +266,7 @@ async function releaseFrom(tx: Prisma.TransactionClient, actor: ServiceActor, re
   const resolvedBy = serviceActor(actor);
   idempotencyKey(req?.idempotencyKey); reference(req.evidenceRef);
   const { reservation, buckets } = await lockReservationForResolution(tx, req.reservationId, req.operationRef,
-    unknownOnly ? null : resolvedBy);
+    unknownOnly ? null : ownerOf(resolvedBy));
   if (reservation.resolutionKey === req.idempotencyKey) {
     if (reservation.state !== "released" || reservation.releaseReason !== reason ||
         reservation.resolutionEvidenceRef !== req.evidenceRef) reject("idempotency_conflict");
@@ -289,7 +298,7 @@ async function settleFrom(tx: Prisma.TransactionClient, actor: ServiceActor, req
   idempotencyKey(req?.idempotencyKey); reference(req.evidenceRef);
   const quantityUsed = positiveQuantity(req.quantityUsed); // "0" is a release (protocol v2), not a settle
   const { reservation, buckets } = await lockReservationForResolution(tx, req.reservationId, req.operationRef,
-    unknownOnly ? null : resolvedBy);
+    unknownOnly ? null : ownerOf(resolvedBy));
   if (reservation.resolutionKey === req.idempotencyKey) {
     const charge = await tx.billingCharge.findUnique({ where: { reservationId: reservation.id } });
     if (reservation.state !== "settled" || !charge || charge.quantity !== quantityUsed || charge.evidenceRef !== req.evidenceRef) {
