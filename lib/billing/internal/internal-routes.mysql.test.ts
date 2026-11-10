@@ -5,10 +5,15 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { postFundsTransactionInTransaction } from "../funds/funds-journal";
 import { changeSpendGrant, createSpendGrant, publishPriceVersion } from "../grants/price-grants";
-import { createPayerAccount } from "../payer/payer-accounts";
+import { bindScope, createPayerAccount } from "../payer/payer-accounts";
 import { markUnknown, release, resolveUnknown, settle } from "../reservations/reservations";
 import { billingServiceGrantHash, billingServiceKeyFingerprint, signBillingInternalRequest } from "./service-auth";
+import { POST as markUnknownRoute } from "@/app/api/internal/billing/v1/mark-unknown/route";
+import { POST as quoteRoute } from "@/app/api/internal/billing/v1/quote/route";
+import { POST as releaseRoute } from "@/app/api/internal/billing/v1/release/route";
 import { POST as reserveRoute } from "@/app/api/internal/billing/v1/reserve/route";
+import { POST as resolveUnknownRoute } from "@/app/api/internal/billing/v1/resolve-unknown/route";
+import { POST as settleRoute } from "@/app/api/internal/billing/v1/settle/route";
 
 // The real routes run against the isolated database: only the app's client handle is swapped for it (never DATABASE_URL).
 const holder = vi.hoisted(() => ({ client: undefined as unknown }));
@@ -35,7 +40,7 @@ function assertIsolatedTarget(raw: string) {
 describe.skipIf(!url)("internal billing routes with service grants against MySQL", () => {
   if (!url) { it.skip("requires an explicit synthetic target", () => {}); return; }
   const run = randomUUID().replaceAll("-", "").slice(0, 12);
-  const ws = `bir-ws-${run}`, owner = `bir-owner-${run}`;
+  const ws = `bir-ws-${run}`, qws = `bir-qws-${run}`, owner = `bir-owner-${run}`;
   const event = "service-billing-event-v1:synthetic";
   let a: PrismaClient, priceId = "";
   // Ephemeral Ed25519 pairs per grant (no private key is ever written down); Core sees only the public half.
@@ -65,8 +70,10 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
   }
   type Call = { grantId: string; key?: KeyObject; timestamp?: number; nonce?: string; signedBody?: string; path?: string;
     stream?: boolean; contentLength?: string; signature?: (value: string) => string };
-  async function call(operation: "reserve", payload: unknown, auth: Call) {
-    const POST = { reserve: reserveRoute }[operation];
+  const routes = { quote: quoteRoute, reserve: reserveRoute, settle: settleRoute, release: releaseRoute,
+    "mark-unknown": markUnknownRoute, "resolve-unknown": resolveUnknownRoute };
+  async function call(operation: keyof typeof routes, payload: unknown, auth: Call) {
+    const POST = routes[operation];
     const body = payload instanceof Uint8Array ? payload : Buffer.from(typeof payload === "string" ? payload : JSON.stringify(payload));
     const path = `/api/internal/billing/v1/${operation}`, timestamp = String(auth.timestamp ?? Date.now());
     const nonce = auth.nonce ?? randomBytes(16).toString("base64url");
@@ -112,6 +119,8 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
     await a.$executeRaw`INSERT INTO Workspace (id,name,slug,updatedAt) VALUES (${ws},'Synthetic internal routes',${ws},NOW(3))`;
     await a.$executeRaw`INSERT INTO User (id,name,email,updatedAt) VALUES (${owner},'Synthetic',${`${owner}@example.invalid`},NOW(3))`;
     await a.$executeRaw`INSERT INTO Membership (id,workspaceId,userId,role,status,updatedAt) VALUES (${`m-${owner}`},${ws},${owner},'OWNER','ACTIVE',NOW(3))`;
+    await a.$executeRaw`INSERT INTO Workspace (id,name,slug,updatedAt) VALUES (${qws},'Synthetic quote',${qws},NOW(3))`;
+    await a.$executeRaw`INSERT INTO Membership (id,workspaceId,userId,role,status,updatedAt) VALUES (${`mq-${owner}`},${qws},${owner},'OWNER','ACTIVE',NOW(3))`;
     priceId = (await publishPriceVersion(a, { actor: { type: "SYSTEM", ref: "synthetic-catalog" }, productCode: `synthetic.bir${run}`,
       version: 1, meterUnit: "document", billingEventRef: event, acceptanceRef: "acceptance:synthetic", scopeKind: "workspace",
       unitPriceFenNumerator: BigInt(100), unitPriceDenominator: BigInt(1), effectiveFrom: new Date("2026-11-01T00:00:00Z"),
@@ -223,6 +232,65 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
     // the key's replay also answers to expectedMode (it is not part of the content hash)
     expect(await call("reserve", reserveBody(shadow, "m4", 2, { expectedMode: "enforce" }), { grantId: service })).toEqual(refused(409, "mode_mismatch"));
     expect(await call("reserve", reserveBody(shadow, "m4", 2), { grantId: service })).toEqual(observed);
+  });
+
+  it("runs every operation through its own route with exact protocol shapes; resolve-unknown is a separate grant", async () => {
+    const business = await grant("biz", ["quote", "reserve", "settle", "release", "mark-unknown"]);
+    const recon = await grant("recon", ["resolve-unknown"]);
+    const ids = await payer("enforce", 1000);
+    await bindScope(a, { actorUserId: owner, payerAccountId: ids.payerRef, expectedPayerVersion: 1, scopeKind: "workspace",
+      scopeRef: qws, evidenceRef: "consent:bind" });
+    const quoteBody = { subjectScope: { kind: "workspace", workspaceId: qws }, billingEventRef: event, meterUnit: "document", quantity: "2" };
+    expect(await call("quote", quoteBody, { grantId: business })).toEqual({ status: 200, body: { ok: true, payerRef: ids.payerRef,
+      grantId: ids.grantId, priceVersionId: priceId, mode: "enforce" } });
+    expect(await call("quote", { ...quoteBody, subjectScope: { kind: "vault", vaultId: "v-1" } }, { grantId: business })).toEqual(refused(400, "request_invalid"));
+    const held = async (key: string) => (await call("reserve", reserveBody(ids, key), { grantId: business })).body.reservationId as string;
+    const step = (reservationId: string, key: string, extra: object = {}) => ({ idempotencyKey: `idem:${key}:${run}`, reservationId,
+      operationRef: `op:${key}:${run}`, evidenceRef: `evidence:${key}`, ...extra });
+
+    const r1 = await held("e1");
+    // v3.9: another issuer sees r1 as absent
+    const other = await grant("biz2", ["settle", "release", "mark-unknown"], { issuerRef: "other-issuer" });
+    for (const [op, extra] of [["settle", { quantityUsed: "1" }], ["release", { reasonCode: "failed" }], ["mark-unknown", {}]] as const) {
+      expect(await call(op, step(r1, `x-${op}`, { operationRef: `op:e1:${run}`, ...extra }), { grantId: other }))
+        .toEqual(refused(409, "reservation_state_conflict"));
+    }
+    const settled = await call("settle", step(r1, "e1", { quantityUsed: "1" }), { grantId: business });
+    expect(settled).toMatchObject({ status: 200, body: { ok: true, state: "settled", chargeFen: "100" } });
+    expect(Object.keys(settled.body).sort()).toEqual(["chargeFen", "chargeId", "ok", "state"]);
+    expect(await call("settle", step(r1, "e1", { quantityUsed: "1" }), { grantId: business })).toEqual(settled);
+    expect(await call("release", step(r1, "e1b", { operationRef: `op:e1:${run}`, reasonCode: "failed" }), { grantId: business }))
+      .toEqual(refused(409, "reservation_state_conflict"));
+    const r2 = await held("e2");
+    expect(await call("settle", step(r2, "e2", { quantityUsed: "3" }), { grantId: business })).toEqual(refused(422, "quantity_exceeds_reservation"));
+    expect(await call("settle", step(r2, "e2", { operationRef: "op:other", quantityUsed: "1" }), { grantId: business })).toEqual(refused(409, "idempotency_conflict"));
+    expect(await call("release", step(r2, "e2", { reasonCode: "lost" }), { grantId: business })).toEqual(refused(400, "request_invalid"));
+    expect(await call("release", step(r2, "e2", { reasonCode: "not_executed" }), { grantId: business })).toEqual({ status: 200, body: { ok: true, state: "released" } });
+    expect(await call("settle", step(`missing-${run}`, "e9", { quantityUsed: "1" }), { grantId: business })).toEqual(refused(409, "reservation_state_conflict"));
+
+    const r3 = await held("e3"), r4 = await held("e4"), r5 = await held("e5");
+    for (const [id, key] of [[r3, "e3"], [r4, "e4"]]) {
+      expect(await call("mark-unknown", step(id, key), { grantId: business })).toEqual({ status: 200, body: { ok: true, state: "unknown" } });
+    }
+    expect(await call("settle", step(r3, "e3s", { operationRef: `op:e3:${run}`, quantityUsed: "1" }), { grantId: business }))
+      .toEqual(refused(409, "reservation_state_conflict")); // v3.5: only resolveUnknown leaves unknown
+    const resolve = (id: string, key: string, extra: object) => call("resolve-unknown", step(id, key, extra), { grantId: recon });
+    expect(await call("resolve-unknown", step(r3, "e3", { outcome: "released" }), { grantId: business })).toEqual(refused(403, "service_unauthorized"));
+    expect(await call("reserve", reserveBody(ids, "e6"), { grantId: recon })).toEqual(refused(403, "service_unauthorized"));
+    expect(await resolve(r3, "e3", { outcome: "settled", quantityUsed: "2" })).toMatchObject({ status: 200, body: { ok: true, state: "settled", chargeFen: "200" } });
+    expect(await resolve(r4, "e4", { outcome: "released", quantityUsed: "1" })).toEqual(refused(400, "request_invalid"));
+    expect(await resolve(r4, "e4", { outcome: "released" })).toEqual({ status: 200, body: { ok: true, state: "released" } });
+    expect(await resolve(r5, "e5", { outcome: "released" })).toEqual(refused(409, "unknown_resolution_conflict"));
+    expect(await a.billingCharge.count({ where: { payerAccountId: ids.payerRef } })).toBe(2);
+    expect(await a.billingReservation.findUniqueOrThrow({ where: { id: r3 } })).toMatchObject({ resolvedBy: `SYSTEM:billing-service:synthetic-consumer/${recon}` });
+
+    // A counter that disagrees with its holds is an invariant breach: 500 internal_error, PII-free alert, nothing committed.
+    await a.$executeRaw`UPDATE BudgetBucket SET reservedFen = 0, version = version + 1 WHERE grantId = ${ids.grantId} AND billingMode = 'enforce'`;
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await call("release", step(r5, "e5", { reasonCode: "failed" }), { grantId: business })).toEqual(refused(500, "internal_error"));
+    expect(logged.mock.calls.map(args => args.join(" "))).toEqual(['[billing-internal] {"event":"billing_internal_invariant_breach","operation":"release","reason":"reservation_invariant_breach"}']);
+    logged.mockRestore();
+    expect(await a.billingReservation.findUniqueOrThrow({ where: { id: r5 } })).toMatchObject({ state: "held" });
   });
 
   it("bounds the raw body while streaming (413 before authentication) and hashes and parses exactly the signed bytes", async () => {

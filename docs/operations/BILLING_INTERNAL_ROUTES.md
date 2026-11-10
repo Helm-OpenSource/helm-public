@@ -52,13 +52,19 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
   outcome is unknown, so the caller stays pending, alerts, backs off and **retries with the same idempotencyKey**; it never
   releases or changes the key. A `reserve` answered `core_unavailable` or `internal_error` must be retried with the same key
   before the work is abandoned (the reservation may exist; the retry replays it or refuses).
+- **Operations** (path = scope): `quote` (`subjectScope` `{ kind: "workspace", workspaceId }`; vault is `request_invalid` until
+  S3-f), `reserve`, `settle`, `release` (`not_executed|failed|partial_unusable`), `mark-unknown`, and `resolve-unknown`
+  (`outcome: settled` with `quantityUsed`, or `released`) for reconciliation grants only. Library semantics:
+  [BILLING_RESERVATIONS.md](BILLING_RESERVATIONS.md); the authenticated grant is the actor
+  (`SYSTEM:billing-service:<issuerRef>/<grantId>` in `createdBy`/`resolvedBy`).
 - **reserve** `expectedMode` (v3.4, optional `shadow|enforce`): a payer in the other mode is `mode_mismatch` before any bucket
   or reservation row; a replay of the key is also checked against it (not part of the content hash).
 - **Verify / rollback**: `npm run test:billing:mysql` (`internal-routes.mysql.test.ts`: gate, signature/expiry/replay/scope/
   revocation/pin/validity/content hash/scope canonicality/public key, bounded and exact body bytes, shape and refusal
-  mapping, expectedMode, issuer isolation and rotation, connection-error mapping). Roll back: unset the gate, then
+  mapping, expectedMode, issuer isolation and rotation, connection-error mapping, every operation, separate reconciliation
+  grant, invariant alert). Roll back: unset the gate, then
   `prisma/rollback/20261110_rollback_billing_service_grants.sql` (refuses while any grant or nonce row exists). Run it before the
   S2-c and S2-a rollbacks (their guards refuse while any later billing migration is applied); it does not depend on the
   charges, credit or reservations rollbacks.
-- **Not here**: quote/settle/release/mark-unknown/resolve-unknown routes (S3-b3b), `claim-verify`, reconcile (S5), the caller
+- **Not here**: `claim-verify`, reconcile (S5), the caller
   client (Overlay), CP env-contract entries for the two keys (both non-secret).

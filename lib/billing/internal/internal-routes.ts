@@ -4,7 +4,8 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { isDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
-import { type BillingRejectCode, reserve, type ServiceActor } from "../reservations/reservations";
+import { type BillingRejectCode, markUnknown, quote, release, reserve, resolveUnknown, type ServiceActor, settle }
+  from "../reservations/reservations";
 import { authenticateBillingService, type BillingServiceScope, ServiceAuthRefused } from "./service-auth";
 
 /**
@@ -22,10 +23,19 @@ function operation<S extends z.ZodType>(schema: S, run: (client: PrismaClient, a
     return parsed.success ? run(client, actor, parsed.data) : null;
   };
 }
+const resolution = { idempotencyKey: text, reservationId: text, operationRef: text, evidenceRef: text };
 const OPERATIONS = {
+  quote: operation(z.object({ subjectScope: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("workspace"), workspaceId: text }).strict(), z.object({ kind: z.literal("vault"), vaultId: text }).strict()]),
+  billingEventRef: text, meterUnit: text, quantity: text }).strict(), quote),
   reserve: operation(z.object({ idempotencyKey: text, operationRef: text, payerRef: text, grantId: text, priceVersionId: text,
     billingEventRef: text, meterUnit: text, quantity: text, expectedMode: z.enum(["shadow", "enforce"]).optional() }).strict(), reserve),
-} satisfies Partial<Record<BillingServiceScope, unknown>>;
+  settle: operation(z.object({ ...resolution, quantityUsed: text }).strict(), settle),
+  release: operation(z.object({ ...resolution, reasonCode: z.enum(["not_executed", "failed", "partial_unusable"]) }).strict(), release),
+  "mark-unknown": operation(z.object(resolution).strict(), markUnknown),
+  "resolve-unknown": operation(z.object({ ...resolution, outcome: z.enum(["settled", "released"]), quantityUsed: text.optional() })
+    .strict(), resolveUnknown),
+} satisfies Record<BillingServiceScope, unknown>;
 export type BillingInternalOperation = keyof typeof OPERATIONS;
 
 /** v3.7 `internal_error`: route-only (the library never returns it); the caller stays pending, alerts, backs off, never releases. */
