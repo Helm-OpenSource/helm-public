@@ -644,6 +644,13 @@ jobs:
           LLM_ENABLED: 'false'
         run: npm run test:usage-ledger:mysql
 
+      - name: Verify billing payer accounts and scope bindings against MySQL
+        env:
+          BILLING_MYSQL_DATABASE_URL: ${{ env.DATABASE_URL }}
+          BILLING_MYSQL_CI_CONTAINER: ${{ job.services.mysql.id }}
+          LLM_ENABLED: 'false'
+        run: npm run test:billing:mysql
+
       - name: Remove isolated bootstrap credential on all outcomes
         if: always()
         run: rm -f "${RUNNER_TEMP}/helm-c4-root-password"

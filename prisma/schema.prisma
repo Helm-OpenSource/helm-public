@@ -1850,6 +1850,76 @@ model UsageLedger {
   @@unique([workspaceId, operationKey])
 }
 
+// Billing V1 payer identity (S1-c). Not a wallet, balance or subscription; BillingAccount stays unchanged.
+enum PayerAccountKind {
+  consumer
+  enterprise_contract
+}
+
+enum PayerBillingMode {
+  off
+  shadow
+  enforce
+}
+
+enum PayerAccountStatus {
+  active
+  suspended
+  closed
+}
+
+enum PayerScopeKind {
+  workspace
+  consumer_principal
+}
+
+enum PayerScopeBindingState {
+  active
+  revoked
+}
+
+model PayerAccount {
+  id                   String              @id @default(cuid())
+  kind                 PayerAccountKind
+  // Workspace whose OWNER/BILLING_ADMIN governs this payer; required for enterprise_contract.
+  governingWorkspaceId String?             @db.VarChar(191)
+  contractSubjectRef   String              @db.VarChar(191)
+  collectionSubjectRef String?             @db.VarChar(191)
+  currency             String              @default("CNY") @db.VarChar(3)
+  billingMode          PayerBillingMode    @default(off)
+  status               PayerAccountStatus  @default(active)
+  version              Int                 @default(1)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  bindings             PayerScopeBinding[]
+
+  @@index([kind, contractSubjectRef])
+  @@index([governingWorkspaceId])
+}
+
+model PayerScopeBinding {
+  id                 String                 @id @default(cuid())
+  payerAccountId     String
+  scopeKind          PayerScopeKind
+  scopeRef           String                 @db.VarChar(191)
+  state              PayerScopeBindingState @default(active)
+  // Equals scopeRef while active, NULL once revoked: the unique key admits one active binding per scope.
+  activeScopeRef     String?                @db.VarChar(191)
+  version            Int                    @default(1)
+  authorizedByUserId String                 @db.VarChar(191)
+  evidenceRef        String                 @db.VarChar(191)
+  effectiveFrom      DateTime               @default(now())
+  revokedAt          DateTime?
+  revokedByUserId    String?                @db.VarChar(191)
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  payerAccount       PayerAccount           @relation(fields: [payerAccountId], references: [id], onDelete: Restrict)
+
+  @@unique([scopeKind, activeScopeRef])
+  @@index([payerAccountId, state])
+  @@index([scopeKind, scopeRef])
+}
+
 model WorkerPublisherProfile {
   id                        String                     @id @default(cuid())
   workspaceId               String
