@@ -317,6 +317,7 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
     expect(await resolve(one.reservationId, "res:9", "settled", "1")).toEqual(rejected("unknown_resolution_conflict"));
     expect(await a.billingReservation.findUniqueOrThrow({ where: { id: one.reservationId } })).toMatchObject({ releaseReason: "unknown_released" });
     expect(await unknown(one.reservationId, "unk:1")).toEqual({ ok: true, state: "released" }); // markUnknown replay: current state
+    await a.$executeRaw`UPDATE PayerAccount SET status = 'suspended' WHERE id = ${ids.payerAccountId}`; // reconciliation still settles
     expect(await resolve(two.reservationId, "res:2", "settled", "2")).toMatchObject({ ok: true, state: "settled", chargeFen: "200" });
     expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(800) });
     expect(await buckets(ids)).toEqual(settledBuckets(0, 200));

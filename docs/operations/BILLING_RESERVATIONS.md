@@ -33,7 +33,7 @@ S3-b1/S3-b2 (Core): migrations `20261110200000_billing_reservations`, `202611102
   Shadow writes the charge (`fundsTransactionId` null) and `billing.charge.shadow_settled`, never funds. Settle of a held
   reservation never checks payer status or mode (R05: delivered results are processed; only new reserves are blocked, for shadow
   and enforce alike); the funds journal admits a `charge` posting for a suspended/off payer only when `charge:<id>` names that payer's held
-  enforce reservation. `insufficient_funds`
+  or unknown enforce reservation (resolveUnknown posts before the state moves). `insufficient_funds`
   (wallet corrected below the hold) is refused: the business side keeps it retryable or `review_needed` and must not release.
 - **resolveUnknown** (reconciliation/manual channel; routes S3-b3/S5): `unknown -> settled` (needs `quantityUsed`) or
   `-> released` (`unknown_released`) on evidence; other states are `unknown_resolution_conflict`. **quote**
