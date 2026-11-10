@@ -112,6 +112,10 @@ HELM_OUTBOUND_VOICE_ASR_ENABLED="false"
 HELM_AUTOMATED_CUSTOMER_CALLS_ENABLED="false"
 HELM_SMS_SENDS_ENABLED="false"
 HELM_FINANCIAL_ACTIONS_ENABLED="false"
+# Billing internal service routes (/api/internal/billing/v1/*); off answers 404. The keyring is secret JSON
+# {"<keyRef>":{"grantId","grantHash","secret"}} provisioned per BillingServiceGrant; empty trusts no service.
+HELM_BILLING_INTERNAL_ROUTES_ENABLED="false"
+HELM_BILLING_SERVICE_KEYRING=""
 
 SIGNAL_COLLECTION_SCHEDULER_ENABLED="false"
 LIGHT_CHAIN_FOLLOW_THROUGH_CRON_ENABLED="false"

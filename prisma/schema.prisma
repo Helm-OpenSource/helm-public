@@ -2174,6 +2174,34 @@ model BillingCharge {
   @@index([payerAccountId, createdAt])
 }
 
+// Billing V1 internal route service identity (S3-b3), modeled on LLMSpendIssuerGrant: no key material (keyRef names a
+// separately provisioned keyring entry that pins contentHash); immutable except one-way revocation; no issuance API.
+model BillingServiceGrant {
+  id          String    @id @db.VarChar(64)
+  issuerRef   String    @db.VarChar(191)
+  scopesJson  String    @db.VarChar(255) // canonical JSON array; resolve-unknown only alone
+  keyRef      String    @unique @db.VarChar(64)
+  approvalRef String    @db.VarChar(191)
+  createdBy   String    @db.VarChar(191)
+  contentHash String    @db.VarChar(71)
+  validFrom   DateTime  @db.DateTime(3)
+  validUntil  DateTime  @db.DateTime(3)
+  revokedAt   DateTime? @db.DateTime(3)
+  revokedBy   String?   @db.VarChar(191)
+  createdAt   DateTime  @default(now()) @db.DateTime(3)
+}
+
+// Replay window state for signed internal billing requests; rows past expiresAt are purged.
+model BillingServiceNonce {
+  grantId   String   @db.VarChar(64)
+  nonce     String   @db.VarChar(64)
+  expiresAt DateTime @db.DateTime(3)
+  createdAt DateTime @default(now()) @db.DateTime(3)
+
+  @@id([grantId, nonce])
+  @@index([expiresAt])
+}
+
 // Billing V1 wallet top-up orders (S2-b). The persisted orderType keeps top-ups apart from legacy subscription orders.
 enum PaymentOrderType {
   wallet_topup

@@ -16,7 +16,7 @@ import { type BillingPeriodKeys, chargeFenForQuantity, lockSpendGrantForUseInTra
 export type BillingRejectCode = "billing_mode_off" | "insufficient_funds" | "limit_exceeded" | "grant_not_active" |
   "grant_price_version_mismatch" | "grant_meter_mismatch" | "grant_charge_zero" | "idempotency_conflict" |
   "reservation_state_conflict" | "quantity_exceeds_reservation" | "service_unauthorized" | "core_unavailable" |
-  "unknown_resolution_conflict" | "request_invalid"; // request_invalid: malformed request (adopted in protocol v3.2)
+  "unknown_resolution_conflict" | "request_invalid" | "mode_mismatch"; // request_invalid (v3.2), mode_mismatch (v3.4)
 
 export class BillingReject extends Error {
   constructor(readonly code: BillingRejectCode) { super(code); this.name = "BillingReject"; }
@@ -40,9 +40,10 @@ export async function asBillingResult<T extends object>(work: Promise<T>): Promi
     const mapped = error instanceof SpendGrantRefusal ? GRANT_REJECTS[error.code]
       : error instanceof FundsRefusal ? FUNDS_REJECTS[error.code] : undefined;
     if (mapped) return { ok: false, code: mapped };
-    // Write conflict, serialization failure, deadlock (1213) or lock wait timeout (1205): nothing committed; retry the same key.
+    // Write conflict (P2002 or raw 1062), serialization failure, deadlock (1213) or lock wait timeout (1205): nothing committed;
+    // retry the same key, which replays or refuses precisely under the PayerAccount lock.
     if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2002" || error.code === "P2034" ||
-        (error.code === "P2010" && ["1213", "1205"].includes(String((error.meta as { code?: unknown } | undefined)?.code))))) {
+        (error.code === "P2010" && ["1213", "1205", "1062"].includes(String((error.meta as { code?: unknown } | undefined)?.code))))) {
       return { ok: false, code: "core_unavailable" };
     }
     throw error;
@@ -75,7 +76,9 @@ const run = <T>(client: PrismaClient, body: (tx: Prisma.TransactionClient) => Pr
 
 function idempotencyKey(value: unknown) { if (typeof value !== "string" || !/^[A-Za-z0-9:_-]{8,128}$/.test(value)) reject("request_invalid"); }
 export type ReserveRequest = { idempotencyKey: string; operationRef: string; payerRef: string; grantId: string;
-  priceVersionId: string; billingEventRef: string; meterUnit: string; quantity: string };
+  priceVersionId: string; billingEventRef: string; meterUnit: string; quantity: string;
+  /** v3.4: the payer's actual mode must equal it, else `mode_mismatch` and nothing is held (not part of the content hash). */
+  expectedMode?: Mode };
 
 /** Pure validation; the content hash binds the key to everything the caller chose (never the server-derived time or price). */
 export function normalizeReserve(actor: ServiceActor, req: ReserveRequest) {
@@ -85,6 +88,7 @@ export function normalizeReserve(actor: ServiceActor, req: ReserveRequest) {
   for (const value of [req.operationRef, req.payerRef, req.grantId, req.priceVersionId, req.billingEventRef]) reference(value);
   if (typeof req.meterUnit !== "string" || !/^[a-z][a-z0-9_]{0,31}$/.test(req.meterUnit)) reject("request_invalid");
   const quantity = positiveQuantity(req.quantity);
+  if (req.expectedMode !== undefined && req.expectedMode !== "shadow" && req.expectedMode !== "enforce") reject("request_invalid");
   const content = { v: 1, operationRef: req.operationRef, payerRef: req.payerRef, grantId: req.grantId,
     priceVersionId: req.priceVersionId, billingEventRef: req.billingEventRef, meterUnit: req.meterUnit, quantity: req.quantity };
   return { createdBy, quantity, contentHash: createHash("sha256").update(JSON.stringify(content)).digest("hex") };
@@ -144,11 +148,13 @@ async function reserveInTransaction(tx: Prisma.TransactionClient, actor: Service
     OR: [{ idempotencyKey: req.idempotencyKey }, { operationRef: req.operationRef }] } });
   const replay = prior.find(row => row.idempotencyKey === req.idempotencyKey);
   if (prior.length > 0 && (!replay || replay.contentHash !== contentHash)) reject("idempotency_conflict");
+  if (replay && req.expectedMode !== undefined && replay.billingMode !== req.expectedMode) reject("mode_mismatch");
   if (replay) return reserved(replay.billingMode, replay.id, replay.state, replay.chargeFen, replay.priceContentHash, replay.dayKey, replay.monthKey);
   let buckets: BucketRow[] = [];
   const admitted = await lockSpendGrantForUseInTransaction(tx, { payerAccountId, grantId: req.grantId,
     priceVersionId: req.priceVersionId, billingEventRef: req.billingEventRef, meterUnit: req.meterUnit, quantity },
   async (grant, keys, mode) => {
+    if (req.expectedMode !== undefined && mode !== req.expectedMode) reject("mode_mismatch"); // before any bucket row
     buckets = await lockBuckets(tx, grant, keys, mode);
     const used = (bucket: BucketRow) => bucket.settledFen + bucket.reservedFen;
     return { day: used(buckets[0]), month: used(buckets[1]) };
