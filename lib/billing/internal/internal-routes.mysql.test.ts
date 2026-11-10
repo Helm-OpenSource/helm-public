@@ -1,7 +1,7 @@
 import { generateKeyPairSync, type KeyObject, randomBytes, randomUUID } from "node:crypto";
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { postFundsTransactionInTransaction } from "../funds/funds-journal";
 import { changeSpendGrant, createSpendGrant, publishPriceVersion } from "../grants/price-grants";
@@ -49,9 +49,9 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
   const otherKey = generateKeyPairSync("ed25519").privateKey;
 
   type GrantOptions = { pin?: boolean; validFrom?: Date; validUntil?: Date; foreignFingerprint?: boolean; scopesJson?: string;
-    staleHash?: boolean; privatePem?: boolean };
+    staleHash?: boolean; privatePem?: boolean; issuerRef?: string };
   async function grant(name: string, scopes: string[], options: GrantOptions = {}) {
-    const row = { id: `${name}-${run}`, issuerRef: "synthetic-consumer", scopesJson: options.scopesJson ?? JSON.stringify([...scopes].sort()),
+    const row = { id: `${name}-${run}`, issuerRef: options.issuerRef ?? "synthetic-consumer", scopesJson: options.scopesJson ?? JSON.stringify([...scopes].sort()),
       publicKeyPem: "", keyFingerprint: "", approvalRef: "approval:synthetic", createdBy: "SYSTEM:synthetic-provisioning",
       validFrom: options.validFrom ?? new Date(Date.now() - 3_600_000), validUntil: options.validUntil ?? new Date(Date.now() + 86_400_000) };
     const pair = generateKeyPairSync("ed25519");
@@ -153,7 +153,7 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
     expect(Object.keys(first.body).sort()).toEqual(["capFen", "mode", "ok", "periodKeys", "priceContentHash", "reservationId", "state"]);
     expect(first.body).toMatchObject({ ok: true, mode: "enforce", state: "held", capFen: "200" });
     expect(await a.billingReservation.findUniqueOrThrow({ where: { id: first.body.reservationId } }))
-      .toMatchObject({ createdBy: `SYSTEM:billing-service-grant:${service}` });
+      .toMatchObject({ createdBy: `SYSTEM:billing-service:synthetic-consumer/${service}` });
     expect(await call("reserve", reserveBody(ids, "ok"), { grantId: service })).toEqual(first);
     expect(await call("reserve", reserveBody(ids, "ok", 3), { grantId: service })).toEqual(refused(409, "idempotency_conflict"));
     expect(await call("reserve", reserveBody(ids, "big", 2), { grantId: service })).toEqual(refused(422, "insufficient_funds"));
@@ -249,7 +249,8 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
       operationRef: `op:${key}:${run}`, evidenceRef: `evidence:${key}`, ...extra });
 
     const r1 = await held("e1");
-    const other = await grant("biz2", ["settle", "release", "mark-unknown"]); // v3.8: another grant sees r1 as absent
+    // v3.9: another issuer sees r1 as absent
+    const other = await grant("biz2", ["settle", "release", "mark-unknown"], { issuerRef: "other-issuer" });
     for (const [op, extra] of [["settle", { quantityUsed: "1" }], ["release", { reasonCode: "failed" }], ["mark-unknown", {}]] as const) {
       expect(await call(op, step(r1, `x-${op}`, { operationRef: `op:e1:${run}`, ...extra }), { grantId: other }))
         .toEqual(refused(409, "reservation_state_conflict"));
@@ -281,7 +282,7 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
     expect(await resolve(r4, "e4", { outcome: "released" })).toEqual({ status: 200, body: { ok: true, state: "released" } });
     expect(await resolve(r5, "e5", { outcome: "released" })).toEqual(refused(409, "unknown_resolution_conflict"));
     expect(await a.billingCharge.count({ where: { payerAccountId: ids.payerRef } })).toBe(2);
-    expect(await a.billingReservation.findUniqueOrThrow({ where: { id: r3 } })).toMatchObject({ resolvedBy: `SYSTEM:billing-service-grant:${recon}` });
+    expect(await a.billingReservation.findUniqueOrThrow({ where: { id: r3 } })).toMatchObject({ resolvedBy: `SYSTEM:billing-service:synthetic-consumer/${recon}` });
 
     // A counter that disagrees with its holds is an invariant breach: 500 internal_error, PII-free alert, nothing committed.
     await a.$executeRaw`UPDATE BudgetBucket SET reservedFen = 0, version = version + 1 WHERE grantId = ${ids.grantId} AND billingMode = 'enforce'`;
@@ -330,20 +331,47 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
     await expect(grant("private", ["reserve"], { privatePem: true })).rejects.toThrow(/BillingServiceGrant_public_key/);
   });
 
-  it("binds a reservation to the grant that made it (v3.8); only reconciliation resolves across grants", async () => {
-    const first = await grant("own1", ["reserve"]), second = await grant("own2", ["reserve"]);
+  it("binds a reservation to its issuer (v3.9): a rotated grant keeps working, another issuer sees it as absent", async () => {
+    const old = await grant("rot1", ["reserve"], { issuerRef: "issuer-a" }), next = await grant("rot2", ["reserve"], { issuerRef: "issuer-a" });
+    const foreign = await grant("rot3", ["reserve"], { issuerRef: "issuer-b" });
     const ids = await payer("enforce", 1000);
-    const made = await call("reserve", reserveBody(ids, "own"), { grantId: first });
+    const made = await call("reserve", reserveBody(ids, "rot"), { grantId: old });
     expect(made.status).toBe(200);
-    expect(await call("reserve", reserveBody(ids, "own"), { grantId: second })).toEqual(refused(409, "idempotency_conflict"));
-    const as = (grantId: string) => ({ type: "SYSTEM" as const, ref: `billing-service-grant:${grantId}` });
-    const id = made.body.reservationId as string, step = { reservationId: id, operationRef: `op:own:${run}`, evidenceRef: "evidence:own" };
+    expect(await call("reserve", reserveBody(ids, "rot"), { grantId: next })).toEqual(made); // same issuer replays
+    expect(await call("reserve", reserveBody(ids, "rot"), { grantId: foreign })).toEqual(refused(409, "idempotency_conflict"));
+    await a.$executeRaw`UPDATE BillingServiceGrant SET revokedAt = UTC_TIMESTAMP(3), revokedBy = 'SYSTEM:synthetic' WHERE id = ${old}`;
+    const as = (issuer: string, grantId: string) => ({ type: "SYSTEM" as const, ref: `billing-service:${issuer}/${grantId}` });
+    const step = (key: string, reservationId: string) => ({ idempotencyKey: `idem:${key}:${run}`, reservationId,
+      operationRef: `op:${key}:${run}`, evidenceRef: `evidence:${key}` });
     const absent = { ok: false, code: "reservation_state_conflict" };
-    expect(await settle(a, as(second), { ...step, idempotencyKey: `idem:s2:${run}`, quantityUsed: "1" })).toEqual(absent);
-    expect(await release(a, as(second), { ...step, idempotencyKey: `idem:r2:${run}`, reasonCode: "failed" })).toEqual(absent);
-    expect(await markUnknown(a, as(second), { ...step, idempotencyKey: `idem:u2:${run}`, operationRef: "op:wrong" })).toEqual(absent); // no leak
-    expect(await markUnknown(a, as(first), { ...step, idempotencyKey: `idem:u1:${run}` })).toEqual({ ok: true, state: "unknown" });
-    expect(await resolveUnknown(a, as(`recon-${run}`), { ...step, idempotencyKey: `idem:x:${run}`, outcome: "released" }))
-      .toEqual({ ok: true, state: "released" });
+    const id = made.body.reservationId as string;
+    expect(await settle(a, as("issuer-b", foreign), { ...step("rot", id), quantityUsed: "1" })).toEqual(absent);
+    expect(await release(a, as("issuer-b", foreign), { ...step("rot", id), reasonCode: "failed" })).toEqual(absent);
+    expect(await markUnknown(a, as("issuer-b", foreign), { ...step("rot", id), operationRef: "op:wrong" })).toEqual(absent); // no leak
+    expect(await settle(a, as("issuer-a", next), { ...step("rot", id), quantityUsed: "1" }))
+      .toMatchObject({ ok: true, state: "settled", chargeFen: "100" }); // the old grant is revoked; its issuer finishes the work
+    const second = (await call("reserve", reserveBody(ids, "rot2"), { grantId: next })).body.reservationId as string;
+    expect(await markUnknown(a, as("issuer-a", next), step("rot2", second))).toEqual({ ok: true, state: "unknown" });
+    expect(await resolveUnknown(a, as("recon", `recon-${run}`), { ...step("rot2", second), outcome: "released" }))
+      .toEqual({ ok: true, state: "released" }); // reconciliation resolves across issuers
+    await expect(grant("badissuer", ["reserve"], { issuerRef: "Issuer/A" })).rejects.toThrow(/BillingServiceGrant_issuer/);
+  });
+
+  it("answers a lost connection or transaction timeout with core_unavailable and other driver failures with internal_error", async () => {
+    const service = await grant("conn", ["reserve"]);
+    const ids = await payer("enforce", 1000);
+    const failing = (code: string) => new Proxy(a, { get(target, key) {
+      if (key === "$transaction") return () => Promise.reject(new Prisma.PrismaClientKnownRequestError("synthetic", { code, clientVersion: "test" }));
+      const value = Reflect.get(target, key, target);
+      return typeof value === "function" ? value.bind(target) : value; } });
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      for (const [code, expected] of [["P2024", refused(503, "core_unavailable")], ["P2028", refused(503, "core_unavailable")],
+        ["P2010", refused(500, "internal_error")]] as const) {
+        holder.client = failing(code);
+        expect(await call("reserve", reserveBody(ids, `c-${code}`), { grantId: service })).toEqual(expected);
+      }
+    } finally { holder.client = a; logged.mockRestore(); }
+    expect(await reservations(ids.payerRef)).toBe(0);
   });
 });

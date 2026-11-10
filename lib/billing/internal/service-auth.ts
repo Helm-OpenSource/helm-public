@@ -96,7 +96,8 @@ export async function authenticateBillingService(client: PrismaClient, request: 
         String((error.meta as { code?: unknown } | undefined)?.code) === "1062") refuse("nonce_replayed");
     throw error;
   }
-  return { grantId, actor: { type: "SYSTEM", ref: `billing-service-grant:${grantId}` } satisfies ServiceActor };
+  // v3.9: reservations belong to the issuer (stable across rotation, covered by contentHash and the pin), not the grant.
+  return { grantId, actor: { type: "SYSTEM", ref: `billing-service:${grant.issuerRef}/${grantId}` } satisfies ServiceActor };
 }
 
 /** The pinned row's key must be an Ed25519 SPKI public key (never a private PEM) matching its stored fingerprint. */
