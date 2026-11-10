@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { lstatSync, realpathSync, statSync } from "node:fs";
+import { lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { type Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -240,32 +240,38 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
     await expect(a.$executeRaw`UPDATE BillingCharge SET chargeFen = 1 WHERE id = ${chargeId}`).rejects.toThrow(/billing_charge_immutable/);
     await expect(a.$executeRaw`DELETE FROM BillingCharge WHERE id = ${chargeId}`).rejects.toThrow(/billing_charge_immutable/);
   });
-  it("refuses over-quantity, zero and malformed settles without writes, and settles an unknown outcome on evidence", async () => {
+  it("refuses over-quantity and malformed settles, never settles unknown on the business path, and settles 0 fen without funds", async () => {
     const ids = await setup("enforce", 1000);
     const { reservationId } = await held(ids, "op:1", 3);
     expect(await settle(reservationId, "set:x", "4")).toEqual(rejected("quantity_exceeds_reservation"));
     expect(await settle(reservationId, "set:x", "0")).toEqual(rejected("request_invalid"));
     expect(await settle(reservationId, "set:x", "3", "e", a, "ref:wrong")).toEqual(rejected("idempotency_conflict"));
     expect(await unknown(reservationId, "unk:1")).toEqual({ ok: true, state: "unknown" });
-    expect(await settle(reservationId, "set:1", "3", "acceptance:late-proof")).toMatchObject({ ok: true, chargeFen: "300" });
+    expect(await settle(reservationId, "set:1", "3", "acceptance:late-proof")).toEqual(rejected("reservation_state_conflict"));
+    expect(await resolve(reservationId, "res:1", "settled", "3")).toMatchObject({ ok: true, chargeFen: "300" }); // reconciliation only
     expect(await buckets(ids)).toEqual(settledBuckets(0, 300));
     const cheap = await setup("enforce", 1000, undefined, () => cheapId);
     const big = await reserve(cheap, "op:c", 3, a, lateNov, cheapId); // 3 x 1/3 fen = 1 fen cap
     const cheapReservation = big.ok && big.mode === "enforce" ? big.reservationId : "";
-    expect(await settle(cheapReservation, "set:c", "1")).toEqual(rejected("grant_charge_zero")); // 1/3 fen rounds to 0: release instead
-    expect(await a.billingCharge.count({ where: { payerAccountId: cheap.payerAccountId } })).toBe(0);
+    const zero = await settle(cheapReservation, "set:c", "1"); // 1/3 fen rounds to 0: settled at 0 (v3.5), nothing posted
+    expect(zero).toMatchObject({ ok: true, state: "settled", chargeFen: "0" });
+    expect(await a.billingCharge.findUniqueOrThrow({ where: { reservationId: cheapReservation } })).toMatchObject({ chargeFen: fen(0), fundsTransactionId: null });
+    expect(await a.fundsTransaction.count({ where: { payerAccountId: cheap.payerAccountId, kind: "charge" } })).toBe(0);
+    expect(await a.billingOutbox.count({ where: { aggregateId: zero.ok ? zero.chargeId : "", eventType: "billing.charge.settled" } })).toBe(1);
   });
-  it("keeps a settle that can no longer be paid held: billing off or wallet corrected below the hold", async () => {
+  it("refuses an unpayable settle as retryable and still settles held work after suspension or off", async () => {
     const ids = await setup("enforce", 300);
     const { reservationId } = await held(ids, "op:1", 3);
     await a.$transaction(tx => postFundsTransactionInTransaction(tx, { payerAccountId: ids.payerAccountId, kind: "correction", operationKey: "corr:1",
       actor: service, evidenceRef: "correction:synthetic", entries: [{ account: "customer_wallet_available", direction: "debit", amountFen: fen(100) },
         { account: "correction_suspense", direction: "credit", amountFen: fen(100) }] }));
     expect(await settle(reservationId, "set:1", "3")).toEqual(rejected("insufficient_funds"));
-    await a.$executeRaw`UPDATE PayerAccount SET billingMode = 'off' WHERE id = ${ids.payerAccountId}`;
-    expect(await settle(reservationId, "set:1", "2")).toEqual(rejected("billing_mode_off"));
     expect(await a.billingReservation.findUniqueOrThrow({ where: { id: reservationId } })).toMatchObject({ state: "held", resolutionKey: null });
-    expect(await buckets(ids)).toEqual(counted(300));
+    await a.$executeRaw`UPDATE PayerAccount SET billingMode = 'off', status = 'suspended' WHERE id = ${ids.payerAccountId}`;
+    expect(await reserve(ids, "op:new", 1)).toEqual(rejected("grant_not_active")); // new work is blocked ...
+    expect(await settle(reservationId, "set:1", "2")).toMatchObject({ ok: true, chargeFen: "200" }); // ... delivered work settles (R05)
+    expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(0), charge_revenue: fen(200) });
+    expect(await buckets(ids)).toEqual(settledBuckets(0, 200));
   });
   it("charges once under a concurrent double settle and lets settle or release win, never both", async () => {
     const ids = await setup("enforce", 1000);
@@ -309,6 +315,7 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
     expect(await resolve(one.reservationId, "res:1", "released")).toEqual({ ok: true, state: "released" }); // replay
     expect(await resolve(one.reservationId, "res:9", "settled", "1")).toEqual(rejected("unknown_resolution_conflict"));
     expect(await a.billingReservation.findUniqueOrThrow({ where: { id: one.reservationId } })).toMatchObject({ releaseReason: "unknown_released" });
+    expect(await unknown(one.reservationId, "unk:1")).toEqual({ ok: true, state: "released" }); // markUnknown replay: current state
     expect(await resolve(two.reservationId, "res:2", "settled", "2")).toMatchObject({ ok: true, state: "settled", chargeFen: "200" });
     expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(800) });
     expect(await buckets(ids)).toEqual(settledBuckets(0, 200));
@@ -325,5 +332,21 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
     await a.$executeRaw`UPDATE PayerAccount SET status = 'suspended' WHERE id = ${ids.payerAccountId}`;
     expect(await q()).toEqual(rejected("grant_not_active"));
     expect(await reserve(ids, "op:susp", 1)).toEqual(rejected("grant_not_active")); // suspended never runs unbilled
+  });
+  it("refuses the S2-c and S2-a rollbacks while the charges migration is applied", async () => {
+    // CREATE PROCEDURE cannot run over the prepared-statement protocol, so evaluate each file's first guard (the one that must
+    // fire before any DDL) as written; the shell runner also executes the whole files against MySQL.
+    const guard = async (file: string) => {
+      const sql = readFileSync(join(process.cwd(), "prisma/rollback", file), "utf8");
+      const body = sql.slice(sql.indexOf("BEGIN")), condition = body.slice(body.indexOf("IF ") + 3, body.indexOf(" THEN"));
+      expect(body.slice(body.indexOf(" THEN"), body.indexOf("END IF"))).toContain("later billing migration is applied");
+      const [row] = await a.$queryRawUnsafe<Array<{ refused: bigint }>>(`SELECT (${condition}) AS refused`);
+      return Number(row.refused);
+    };
+    expect(await guard("20261110_rollback_billing_bank_receipts.sql")).toBe(1);
+    expect(await guard("20261110_rollback_billing_funds_journal.sql")).toBe(1);
+    const [kind] = await a.$queryRaw<Array<{ type: string }>>`SELECT COLUMN_TYPE AS type FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'FundsTransaction' AND COLUMN_NAME = 'kind'`;
+    expect(kind.type).toBe("enum('topup','correction','bank_topup','charge','credit_draw')");
   });
 });

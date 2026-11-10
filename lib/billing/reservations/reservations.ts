@@ -279,14 +279,13 @@ async function settleFrom(tx: Prisma.TransactionClient, actor: ServiceActor, req
     SELECT unitPriceFenNumerator, unitPriceDenominator, contentHash FROM BillingPriceVersion WHERE id = ${reservation.priceVersionId} FOR SHARE`;
   if (!price || price.contentHash !== reservation.priceContentHash) invariantBreach();
   const chargeFen = chargeFenForQuantity(price, quantityUsed);
-  if (chargeFen === ZERO) reject("grant_charge_zero"); // nothing to charge: the caller releases instead
   if (chargeFen > reservation.chargeFen) invariantBreach(); // half-up of a smaller quantity never exceeds the cap
   for (const bucket of buckets) {
     await moveBucket(tx, reservation.grantId, reservation.billingMode, bucket, { reservedDelta: -reservation.chargeFen,
       settledDelta: chargeFen, ceiling: null });
   }
-  // Shadow records the would-be charge only: no funds entry, projection or wallet check, ever.
-  const funds = reservation.billingMode === "shadow" ? null : await postFundsTransactionInTransaction(tx, {
+  // Shadow records the would-be charge only, and a 0-fen settle (smaller quantity, v3.5) has nothing to post: no funds entry.
+  const funds = reservation.billingMode === "shadow" || chargeFen === ZERO ? null : await postFundsTransactionInTransaction(tx, {
     payerAccountId: reservation.payerAccountId, kind: "charge", operationKey: `charge:${reservation.id}`, actor,
     evidenceRef: req.evidenceRef, entries: [{ account: "customer_wallet_available", direction: "debit", amountFen: chargeFen },
       { account: "charge_revenue", direction: "credit", amountFen: chargeFen }] });
@@ -309,7 +308,7 @@ async function settleFrom(tx: Prisma.TransactionClient, actor: ServiceActor, req
 }
 
 function assertResolvable(state: string, unknownOnly: boolean) {
-  if (unknownOnly ? state !== "unknown" : state !== "held" && state !== "unknown") {
+  if (unknownOnly ? state !== "unknown" : state !== "held") { // protocol v3.5: business settle/release only from held
     reject(unknownOnly ? "unknown_resolution_conflict" : "reservation_state_conflict");
   }
 }

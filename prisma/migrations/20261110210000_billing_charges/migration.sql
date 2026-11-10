@@ -1,11 +1,12 @@
--- Billing V1 S3-b2 (2026-11-10): settled charges. Adds the `charge` funds kind and the credit-normal `charge_revenue` account
--- (ENUM values appended after S2-c's `bank_topup` / `bank_clearing`, which must already be applied; metadata-only) and the immutable BillingCharge row (one per reservation, one per funds transaction).
--- A charge is created only by settling a reservation in its frozen period buckets; a shadow charge has no funds transaction. No FKs.
+-- Billing V1 S3-b2 (2026-11-10): settled charges. Adds the `charge` kind and credit-normal `charge_revenue` account. Each MODIFY
+-- writes the full agreed union (S2-c bank_*, S3-b2 charge*, S3-e credit_*; protocol v3.6) so this and S3-e's migration never drop
+-- each other's values in either order (appended values: metadata-only). BillingCharge is immutable, one per reservation; shadow
+-- and 0-fen charges have no funds transaction. No FKs.
 -- Rollback: prisma/rollback/20261110_rollback_billing_charges.sql (refuses while any charge row or charge posting exists).
 
-ALTER TABLE `FundsTransaction` MODIFY `kind` ENUM('topup', 'correction', 'bank_topup', 'charge') NOT NULL;
-ALTER TABLE `FundsJournalEntry` MODIFY `account` ENUM('customer_wallet_available', 'topup_clearing', 'correction_suspense', 'bank_clearing', 'charge_revenue') NOT NULL;
-ALTER TABLE `FundsAccountProjection` MODIFY `account` ENUM('customer_wallet_available', 'topup_clearing', 'correction_suspense', 'bank_clearing', 'charge_revenue') NOT NULL;
+ALTER TABLE `FundsTransaction` MODIFY `kind` ENUM('topup', 'correction', 'bank_topup', 'charge', 'credit_draw') NOT NULL;
+ALTER TABLE `FundsJournalEntry` MODIFY `account` ENUM('customer_wallet_available', 'topup_clearing', 'correction_suspense', 'bank_clearing', 'charge_revenue', 'credit_receivable') NOT NULL;
+ALTER TABLE `FundsAccountProjection` MODIFY `account` ENUM('customer_wallet_available', 'topup_clearing', 'correction_suspense', 'bank_clearing', 'charge_revenue', 'credit_receivable') NOT NULL;
 
 CREATE TABLE `BillingCharge` (
     `id` VARCHAR(191) NOT NULL,
@@ -30,9 +31,9 @@ CREATE TABLE `BillingCharge` (
     UNIQUE INDEX `BillingCharge_fundsTransactionId_key`(`fundsTransactionId`),
     INDEX `BillingCharge_payerAccountId_createdAt_idx`(`payerAccountId`, `createdAt`),
     PRIMARY KEY (`id`),
-    CONSTRAINT `BillingCharge_amount_check` CHECK (`quantity` > 0 AND `chargeFen` > 0 AND `chargeFen` <= `capFen`
+    CONSTRAINT `BillingCharge_amount_check` CHECK (`quantity` > 0 AND `chargeFen` >= 0 AND `chargeFen` <= `capFen`
       AND `capFen` <= 9007199254740991 AND CHAR_LENGTH(`dayKey`) = 10 AND LEFT(`dayKey`, 7) = `monthKey`
-      AND ((`billingMode` = 'shadow') = (`fundsTransactionId` IS NULL)) AND CHAR_LENGTH(`priceContentHash`) = 64 AND CHAR_LENGTH(`evidenceRef`) > 0 AND CHAR_LENGTH(`createdBy`) > 0)
+      AND ((`billingMode` = 'shadow' OR `chargeFen` = 0) = (`fundsTransactionId` IS NULL)) AND CHAR_LENGTH(`priceContentHash`) = 64 AND CHAR_LENGTH(`evidenceRef`) > 0 AND CHAR_LENGTH(`createdBy`) > 0)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 CREATE TRIGGER `BillingCharge_no_update` BEFORE UPDATE ON `BillingCharge`

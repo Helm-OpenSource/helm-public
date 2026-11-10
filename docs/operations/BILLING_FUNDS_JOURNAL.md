@@ -34,7 +34,9 @@ route or UI. 本片只提供 Core 本库资金分录原语，不接支付、不�
 - Lock order (S1-c): `PayerAccount FOR UPDATE`, then `FundsTransaction`, then projections by ascending account; later reads are locking reads.
 - Validation: 2–5 distinct accounts, positive bounded bigint amounts, Σdebit = Σcredit (`funds_unbalanced`). `topup` is exactly debit
   `topup_clearing` / credit wallet; a free `correction` uses only the wallet and `correction_suspense`; a `charge` is exactly debit wallet / credit
-  credit-normal `charge_revenue` and cannot be reversed (no refunds in V1) (`funds_accounts_not_allowed`, `funds_reversal_invalid`).
+  credit-normal `charge_revenue`, needs a `charge:` key (reserved for it) and cannot be reversed (no refunds in V1); it is
+  the one kind admitted for a suspended or off payer, because it settles already-held work (protocol v3.5). Later billing
+  migrations block this slice's rollback.
 - Payer gate: locked row `active`, `CNY`, with a governing workspace (`payer_account_unavailable`); `billingMode` `shadow` or `enforce`,
   `off` refuses `payer_billing_off` (S2-a decision).
 - Idempotency: same key and content returns the original rows (`replayed: true`, no new audit/outbox), even if the payer changed state since;
