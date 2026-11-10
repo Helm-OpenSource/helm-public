@@ -1924,12 +1924,14 @@ model PayerScopeBinding {
 enum FundsTransactionKind {
   topup
   correction
+  bank_topup // S2-c
 }
 
 enum FundsAccount {
   customer_wallet_available
   topup_clearing
   correction_suspense
+  bank_clearing // S2-c
 }
 
 enum FundsEntryDirection {
@@ -1991,6 +1993,70 @@ model BillingOutbox {
 
   @@unique([aggregateType, aggregateId, eventType])
   @@index([deliveredAt, createdAt])
+}
+
+// Billing V1 corporate bank receipts (S2-c). Maker/checker; approval posts a bank_topup in the same Core transaction.
+enum PlatformFinanceRole {
+  maker
+  checker
+}
+
+enum PlatformFinanceGrantState {
+  active
+  revoked
+}
+
+model PlatformFinanceGrant {
+  id              String                    @id @default(cuid())
+  userId          String                    @db.VarChar(191)
+  role            PlatformFinanceRole
+  state           PlatformFinanceGrantState @default(active)
+  // Equals userId while active, NULL once revoked: one active grant per (role, user).
+  activeUserId    String?                   @db.VarChar(191)
+  grantedByUserId String                    @db.VarChar(191)
+  evidenceRef     String                    @db.VarChar(191)
+  revokedByUserId String?                   @db.VarChar(191)
+  revokedAt       DateTime?
+  version         Int                       @default(1)
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  @@unique([role, activeUserId])
+  @@index([userId])
+}
+
+enum BankReceiptState {
+  drafted
+  reviewed
+  posted
+  rejected
+}
+
+model BankReceipt {
+  id                  String           @id @default(cuid())
+  payerAccountId      String           @db.VarChar(191)
+  receivingAccountRef String           @db.VarChar(191) // opaque reference to our receiving bank account
+  bankTxnRef          String           @db.VarChar(191)
+  // Equals bankTxnRef unless rejected: one live receipt per bank transaction per receiving account.
+  activeBankTxnRef    String?          @db.VarChar(191)
+  payerNameDigest     String?          @db.VarChar(191) // keyed digest or opaque reference; never a plaintext name
+  amountFen           BigInt
+  currency            String           @default("CNY") @db.VarChar(3)
+  valueDate           DateTime         @db.Date
+  state               BankReceiptState @default(drafted)
+  draftedByUserId     String           @db.VarChar(191)
+  reviewedByUserId    String?          @db.VarChar(191) // DB CHECK: differs from draftedByUserId
+  reviewedAt          DateTime?
+  evidenceRef         String           @db.VarChar(191)
+  reviewEvidenceRef   String?          @db.VarChar(191)
+  fundsTransactionId  String?          @unique @db.VarChar(191)
+  version             Int              @default(1)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  @@unique([receivingAccountRef, activeBankTxnRef])
+  @@index([payerAccountId, state])
+  @@index([state, createdAt])
 }
 
 model WorkerPublisherProfile {
