@@ -42,7 +42,8 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
   or reservation row; a replay of the key is also checked against it (not part of the content hash).
 - **Verify / rollback**: `npm run test:billing:mysql` (`internal-routes.mysql.test.ts`: gate, signature/expiry/replay/scope/
   revocation/pin, shape and refusal mapping, expectedMode). Roll back: unset the gate, then
-  `prisma/rollback/20261110_rollback_billing_service_grants.sql` (refuses while any grant or nonce row exists; independent of
-  the other billing rollbacks, any order).
+  `prisma/rollback/20261110_rollback_billing_service_grants.sql` (refuses while any grant or nonce row exists). Run it before the
+  S2-c and S2-a rollbacks (their guards refuse while any later billing migration is applied); it does not depend on the
+  charges, credit or reservations rollbacks.
 - **Not here**: quote/settle/release/mark-unknown/resolve-unknown routes (S3-b3b), `claim-verify`, reconcile (S5), the caller
   client (Overlay), CP env-contract entries for the two keys (both non-secret).

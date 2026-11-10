@@ -1,6 +1,6 @@
 -- Rollback of 20261110230000_billing_service_grants for an unused migration only (app rollback: unset
 -- HELM_BILLING_INTERNAL_ROUTES_ENABLED first). Refuses while any grant or nonce row exists: a grant is audit history and
--- cannot be deleted. Independent of the other billing migrations (no FKs, no shared ENUMs). DROP TABLE removes triggers.
+-- cannot be deleted. No FKs or shared ENUMs; run before the S2-c/S2-a rollbacks, which refuse while it is applied.
 DROP PROCEDURE IF EXISTS `rollback_empty_billing_service_grants`;
 DELIMITER $$
 CREATE PROCEDURE `rollback_empty_billing_service_grants`()
