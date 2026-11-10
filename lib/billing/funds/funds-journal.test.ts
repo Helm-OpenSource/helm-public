@@ -49,4 +49,15 @@ describe("funds posting normalization", () => {
     expect(normalizeFundsPosting(topup([{ ...clearingDebit(5), direction: "credit" }, { ...walletCredit(5), direction: "debit" }],
       { kind: "correction" }), "txn-a").reversalOfId).toBe("txn-a");
   });
+  it("accepts bank_topup only as debit bank_clearing / credit wallet; other kinds cannot use bank_clearing", () => {
+    const bankDebit = (amount: number): FundsEntryInput => ({ account: "bank_clearing", direction: "debit", amountFen: fen(amount) });
+    expect(normalizeFundsPosting(topup([walletCredit(9), bankDebit(9)], { kind: "bank_topup" })).entries.map(e => e.account))
+      .toEqual(["bank_clearing", "customer_wallet_available"]);
+    expect(() => normalizeFundsPosting(topup([clearingDebit(9), walletCredit(9)], { kind: "bank_topup" }))).toThrow("funds_accounts_not_allowed");
+    expect(() => normalizeFundsPosting(topup([{ ...bankDebit(9), direction: "credit" }, { ...walletCredit(9), direction: "debit" }],
+      { kind: "bank_topup" }))).toThrow("funds_accounts_not_allowed");
+    expect(() => normalizeFundsPosting(topup([bankDebit(9), walletCredit(9)]))).toThrow("funds_accounts_not_allowed");
+    expect(() => normalizeFundsPosting(topup([{ ...bankDebit(9), direction: "credit" }, { ...walletCredit(9), direction: "debit" }],
+      { kind: "correction" }))).toThrow("funds_accounts_not_allowed");
+  });
 });

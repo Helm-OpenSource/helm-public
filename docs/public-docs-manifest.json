@@ -30,6 +30,8 @@
     "docs/operations/USAGE_OBSERVATION_IDEMPOTENCY.md",
     "docs/operations/BILLING_PAYER_ACCOUNTS.md",
     "docs/operations/BILLING_FUNDS_JOURNAL.md",
+    "docs/operations/BILLING_TOPUP_ORDERS.md",
+    "docs/operations/BILLING_BANK_RECEIPTS.md",
     "docs/operations/BILLING_PRICE_GRANTS.md",
     "docs/operations/BILLING_RESERVATIONS.md",
     "docs/operations/MEMBERSHIP_AUTO_ACTIVATION.md",
