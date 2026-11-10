@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { postFundsTransactionInTransaction } from "../funds/funds-journal";
 import { changeSpendGrant, createSpendGrant, publishPriceVersion } from "../grants/price-grants";
 import { bindScope, createPayerAccount } from "../payer/payer-accounts";
+import { markUnknown, release, resolveUnknown, settle } from "../reservations/reservations";
 import { billingServiceGrantHash, billingServiceKeyFingerprint, signBillingInternalRequest } from "./service-auth";
 import { POST as markUnknownRoute } from "@/app/api/internal/billing/v1/mark-unknown/route";
 import { POST as quoteRoute } from "@/app/api/internal/billing/v1/quote/route";
@@ -47,14 +48,18 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
   const keys = new Map<string, KeyObject>();
   const otherKey = generateKeyPairSync("ed25519").privateKey;
 
-  async function grant(name: string, scopes: string[], options: { pin?: boolean; validUntil?: Date; foreignFingerprint?: boolean } = {}) {
-    const row = { id: `${name}-${run}`, issuerRef: "synthetic-consumer", scopesJson: JSON.stringify([...scopes].sort()),
+  type GrantOptions = { pin?: boolean; validFrom?: Date; validUntil?: Date; foreignFingerprint?: boolean; scopesJson?: string;
+    staleHash?: boolean; privatePem?: boolean };
+  async function grant(name: string, scopes: string[], options: GrantOptions = {}) {
+    const row = { id: `${name}-${run}`, issuerRef: "synthetic-consumer", scopesJson: options.scopesJson ?? JSON.stringify([...scopes].sort()),
       publicKeyPem: "", keyFingerprint: "", approvalRef: "approval:synthetic", createdBy: "SYSTEM:synthetic-provisioning",
-      validFrom: new Date(Date.now() - 3_600_000), validUntil: options.validUntil ?? new Date(Date.now() + 86_400_000) };
+      validFrom: options.validFrom ?? new Date(Date.now() - 3_600_000), validUntil: options.validUntil ?? new Date(Date.now() + 86_400_000) };
     const pair = generateKeyPairSync("ed25519");
-    row.publicKeyPem = pair.publicKey.export({ type: "spki", format: "pem" }).toString();
+    row.publicKeyPem = (options.privatePem ? pair.privateKey.export({ type: "pkcs8", format: "pem" })
+      : pair.publicKey.export({ type: "spki", format: "pem" })).toString();
     row.keyFingerprint = billingServiceKeyFingerprint(options.foreignFingerprint ? generateKeyPairSync("ed25519").publicKey : pair.publicKey);
-    const contentHash = billingServiceGrantHash(row);
+    // staleHash: stored and pinned, but not the hash of this row's content
+    const contentHash = billingServiceGrantHash(options.staleHash ? { ...row, approvalRef: "approval:other" } : row);
     await a.$executeRaw`INSERT INTO BillingServiceGrant (id, issuerRef, scopesJson, publicKeyPem, keyFingerprint, approvalRef,
       createdBy, contentHash, validFrom, validUntil) VALUES (${row.id}, ${row.issuerRef}, ${row.scopesJson}, ${row.publicKeyPem},
       ${row.keyFingerprint}, ${row.approvalRef}, ${row.createdBy}, ${contentHash}, ${row.validFrom}, ${row.validUntil})`;
@@ -63,19 +68,25 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
     process.env.HELM_BILLING_SERVICE_GRANT_PINS = JSON.stringify(pins);
     return row.id;
   }
-  type Call = { grantId: string; key?: KeyObject; timestamp?: number; nonce?: string; signedBody?: string; path?: string };
+  type Call = { grantId: string; key?: KeyObject; timestamp?: number; nonce?: string; signedBody?: string; path?: string;
+    stream?: boolean; contentLength?: string; signature?: (value: string) => string };
   const routes = { quote: quoteRoute, reserve: reserveRoute, settle: settleRoute, release: releaseRoute,
     "mark-unknown": markUnknownRoute, "resolve-unknown": resolveUnknownRoute };
   async function call(operation: keyof typeof routes, payload: unknown, auth: Call) {
     const POST = routes[operation];
-    const body = typeof payload === "string" ? payload : JSON.stringify(payload);
+    const body = payload instanceof Uint8Array ? payload : Buffer.from(typeof payload === "string" ? payload : JSON.stringify(payload));
     const path = `/api/internal/billing/v1/${operation}`, timestamp = String(auth.timestamp ?? Date.now());
     const nonce = auth.nonce ?? randomBytes(16).toString("base64url");
     const signature = signBillingInternalRequest(auth.key ?? keys.get(auth.grantId)!, { method: "POST",
       path: auth.path ?? path, grantId: auth.grantId, timestamp, nonce, body: auth.signedBody ?? body });
-    const response: Response = await POST(new Request(`http://core.invalid${path}`, { method: "POST", body, headers: {
+    // stream: a chunked body with no Content-Length, as a client may send it
+    const sent = auth.stream ? { body: new ReadableStream<Uint8Array>({ start(controller) {
+      for (let at = 0; at < body.length; at += 4096) controller.enqueue(body.subarray(at, at + 4096));
+      controller.close(); } }), duplex: "half" as const } : { body };
+    const response: Response = await POST(new Request(`http://core.invalid${path}`, { method: "POST", ...sent, headers: {
       "content-type": "application/json", "x-helm-billing-grant": auth.grantId, "x-helm-billing-timestamp": timestamp,
-      "x-helm-billing-nonce": nonce, "x-helm-billing-signature": signature } }));
+      "x-helm-billing-nonce": nonce, "x-helm-billing-signature": auth.signature ? auth.signature(signature) : signature,
+      ...(auth.contentLength ? { "content-length": auth.contentLength } : {}) } }));
     return { status: response.status, body: await response.json() };
   }
   async function payer(mode: "shadow" | "enforce", walletFen: number) {
@@ -238,6 +249,11 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
       operationRef: `op:${key}:${run}`, evidenceRef: `evidence:${key}`, ...extra });
 
     const r1 = await held("e1");
+    const other = await grant("biz2", ["settle", "release", "mark-unknown"]); // v3.8: another grant sees r1 as absent
+    for (const [op, extra] of [["settle", { quantityUsed: "1" }], ["release", { reasonCode: "failed" }], ["mark-unknown", {}]] as const) {
+      expect(await call(op, step(r1, `x-${op}`, { operationRef: `op:e1:${run}`, ...extra }), { grantId: other }))
+        .toEqual(refused(409, "reservation_state_conflict"));
+    }
     const settled = await call("settle", step(r1, "e1", { quantityUsed: "1" }), { grantId: business });
     expect(settled).toMatchObject({ status: 200, body: { ok: true, state: "settled", chargeFen: "100" } });
     expect(Object.keys(settled.body).sort()).toEqual(["chargeFen", "chargeId", "ok", "state"]);
@@ -267,12 +283,67 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
     expect(await a.billingCharge.count({ where: { payerAccountId: ids.payerRef } })).toBe(2);
     expect(await a.billingReservation.findUniqueOrThrow({ where: { id: r3 } })).toMatchObject({ resolvedBy: `SYSTEM:billing-service-grant:${recon}` });
 
-    // A counter that disagrees with its holds is an invariant breach: 500 core_unavailable, PII-free alert, nothing committed.
+    // A counter that disagrees with its holds is an invariant breach: 500 internal_error, PII-free alert, nothing committed.
     await a.$executeRaw`UPDATE BudgetBucket SET reservedFen = 0, version = version + 1 WHERE grantId = ${ids.grantId} AND billingMode = 'enforce'`;
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     expect(await call("release", step(r5, "e5", { reasonCode: "failed" }), { grantId: business })).toEqual(refused(500, "internal_error"));
     expect(logged.mock.calls.map(args => args.join(" "))).toEqual(['[billing-internal] {"event":"billing_internal_invariant_breach","operation":"release","reason":"reservation_invariant_breach"}']);
     logged.mockRestore();
     expect(await a.billingReservation.findUniqueOrThrow({ where: { id: r5 } })).toMatchObject({ state: "held" });
+  });
+
+  it("bounds the raw body while streaming (413 before authentication) and hashes and parses exactly the signed bytes", async () => {
+    const service = await grant("body", ["reserve"]);
+    const ids = await payer("enforce", 1000);
+    const big = Buffer.from(JSON.stringify({ ...reserveBody(ids, "big"), pad: "x".repeat(17_000) }));
+    const tooLarge = refused(413, "request_invalid");
+    expect(await call("reserve", big, { grantId: service, contentLength: String(big.length) })).toEqual(tooLarge);
+    expect(await call("reserve", big, { grantId: service, stream: true })).toEqual(tooLarge); // no Content-Length
+    expect(await a.billingServiceNonce.count({ where: { grantId: service } })).toBe(0);
+    const json = Buffer.from(JSON.stringify(reserveBody(ids, "bytes")));
+    expect((await call("reserve", json, { grantId: service, stream: true })).status).toBe(200); // a small chunked body is fine
+    const invalid = refused(400, "request_invalid"); // signed over these exact bytes, so authentication passes
+    expect(await call("reserve", Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), json]), { grantId: service })).toEqual(invalid);
+    expect(await call("reserve", Buffer.concat([json.subarray(0, 20), Buffer.from([0xff]), json.subarray(20)]), { grantId: service })).toEqual(invalid);
+    expect(await reservations(ids.payerRef)).toBe(1);
+  });
+
+  it("trusts a grant only inside its validity, with its own content hash, canonical scopes and a public key", async () => {
+    const ids = await payer("enforce", 1000);
+    const unauthorized = refused(401, "service_unauthorized"), denied = refused(403, "service_unauthorized");
+    const hour = 3_600_000, body = (key: string) => reserveBody(ids, key);
+    const future = await grant("future", ["reserve"], { validFrom: new Date(Date.now() + hour), validUntil: new Date(Date.now() + 2 * hour) });
+    const expired = await grant("expired", ["reserve"], { validFrom: new Date(Date.now() - 2 * hour), validUntil: new Date(Date.now() - hour) });
+    const stale = await grant("stale", ["reserve"], { staleHash: true });
+    expect(await call("reserve", body("v1"), { grantId: future })).toEqual(unauthorized);
+    expect(await call("reserve", body("v2"), { grantId: expired })).toEqual(unauthorized);
+    expect(await call("reserve", body("v3"), { grantId: stale })).toEqual(unauthorized);
+    for (const [name, scopesJson] of [["unsorted", '["reserve","quote"]'], ["dup", '["reserve","reserve"]'], ["unknown", '["admin","reserve"]']]) {
+      expect(await call("reserve", body(`s-${name}`), { grantId: await grant(name, [], { scopesJson }) })).toEqual(denied);
+    }
+    const ok = await grant("canon", ["reserve"]);
+    // same signature bytes, non-canonical base64 (unused low bits set): refused before verification
+    const loose = (value: string) => { const at = value.length - 3, alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+      return value.slice(0, at) + alphabet[alphabet.indexOf(value[at]) | 1] + value.slice(at + 1); };
+    expect(await call("reserve", body("v4"), { grantId: ok, signature: loose })).toEqual(unauthorized);
+    expect(await reservations(ids.payerRef)).toBe(0);
+    await expect(grant("private", ["reserve"], { privatePem: true })).rejects.toThrow(/BillingServiceGrant_public_key/);
+  });
+
+  it("binds a reservation to the grant that made it (v3.8); only reconciliation resolves across grants", async () => {
+    const first = await grant("own1", ["reserve"]), second = await grant("own2", ["reserve"]);
+    const ids = await payer("enforce", 1000);
+    const made = await call("reserve", reserveBody(ids, "own"), { grantId: first });
+    expect(made.status).toBe(200);
+    expect(await call("reserve", reserveBody(ids, "own"), { grantId: second })).toEqual(refused(409, "idempotency_conflict"));
+    const as = (grantId: string) => ({ type: "SYSTEM" as const, ref: `billing-service-grant:${grantId}` });
+    const id = made.body.reservationId as string, step = { reservationId: id, operationRef: `op:own:${run}`, evidenceRef: "evidence:own" };
+    const absent = { ok: false, code: "reservation_state_conflict" };
+    expect(await settle(a, as(second), { ...step, idempotencyKey: `idem:s2:${run}`, quantityUsed: "1" })).toEqual(absent);
+    expect(await release(a, as(second), { ...step, idempotencyKey: `idem:r2:${run}`, reasonCode: "failed" })).toEqual(absent);
+    expect(await markUnknown(a, as(second), { ...step, idempotencyKey: `idem:u2:${run}`, operationRef: "op:wrong" })).toEqual(absent); // no leak
+    expect(await markUnknown(a, as(first), { ...step, idempotencyKey: `idem:u1:${run}` })).toEqual({ ok: true, state: "unknown" });
+    expect(await resolveUnknown(a, as(`recon-${run}`), { ...step, idempotencyKey: `idem:x:${run}`, outcome: "released" }))
+      .toEqual({ ok: true, state: "released" });
   });
 });

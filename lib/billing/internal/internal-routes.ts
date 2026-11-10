@@ -1,6 +1,6 @@
 import "server-only";
 import { NextResponse } from "next/server";
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { isDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
@@ -52,12 +52,29 @@ function alert(event: string, operation: string, reason: string) {
   console.error("[billing-internal]", JSON.stringify({ event, operation, reason }));
 }
 
+/** Reads at most MAX_BODY_BYTES raw bytes, counting as it streams (chunked bodies too); null once the limit is passed. */
+async function readBoundedBody(request: Request): Promise<Uint8Array | null> {
+  if (!request.body) return new Uint8Array(0);
+  const reader = request.body.getReader(), chunks: Uint8Array[] = [];
+  let size = 0;
+  for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
+    size += chunk.value.byteLength;
+    if (size > MAX_BODY_BYTES) { await reader.cancel(); return null; }
+    chunks.push(chunk.value);
+  }
+  return Buffer.concat(chunks);
+}
+// Database unreachable, connection closed, pool or interactive-transaction timeout: nothing committed, retry the same key.
+const CONNECTION_CODES = new Set(["P1001", "P1002", "P1008", "P1017", "P2024", "P2028"]);
+const connectionLost = (error: unknown) => error instanceof Prisma.PrismaClientInitializationError ||
+  (error instanceof Prisma.PrismaClientKnownRequestError && CONNECTION_CODES.has(error.code));
+
 export async function handleBillingInternalRequest(operation: BillingInternalOperation, request: Request) {
   if (!isDeploymentCapabilityEnabled("billing_internal_route")) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   const declared = Number(request.headers.get("content-length") ?? "0");
   if (!(declared <= MAX_BODY_BYTES)) return rejected("request_invalid", 413);
-  const body = await request.text();
-  if (Buffer.byteLength(body) > MAX_BODY_BYTES) return rejected("request_invalid", 413);
+  const body = await readBoundedBody(request);
+  if (!body) return rejected("request_invalid", 413);
   let actor;
   try {
     ({ actor } = await authenticateBillingService(db, { method: request.method, path: new URL(request.url).pathname,
@@ -71,14 +88,19 @@ export async function handleBillingInternalRequest(operation: BillingInternalOpe
     return rejected("service_unauthorized", error.reason === "scope_denied" ? 403 : 401);
   }
   let input: unknown;
-  try { input = JSON.parse(body); } catch { return rejected("request_invalid"); }
+  // Strict UTF-8 that keeps a BOM (JSON.parse then refuses it): what was signed is exactly what is parsed.
+  try { input = JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(body)); } catch { return rejected("request_invalid"); }
   const pending = OPERATIONS[operation](db, actor, input);
   if (!pending) return rejected("request_invalid");
   try {
     const result = await pending;
     return result.ok ? answer(result, 200) : rejected(result.code);
   } catch (error) {
-    // Refusals are results; anything thrown is unmapped (it rolled back): internal_error with an operator alert.
+    if (connectionLost(error)) {
+      alert("billing_internal_core_unavailable", operation, error instanceof Error ? error.name : "unknown");
+      return rejected("core_unavailable");
+    }
+    // Refusals are results; anything else thrown is unmapped (it rolled back): internal_error with an operator alert.
     const breach = error instanceof Error && error.message.endsWith("_invariant_breach");
     alert(breach ? "billing_internal_invariant_breach" : "billing_internal_unexpected_error", operation,
       breach ? (error as Error).message : error instanceof Error ? error.name : "unknown");
