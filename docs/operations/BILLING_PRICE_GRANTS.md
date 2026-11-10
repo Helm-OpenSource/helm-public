@@ -20,12 +20,14 @@ route, UI or real price. 只提供价格版本与授权原语，所有授权默�
   `version + 1`, allows only the service transitions and makes revoked/expired terminal. Scheduled triggers and consumer prices refuse.
 - **Use gate** `lockSpendGrantForUseInTransaction` (S3-b): `PayerAccount FOR UPDATE`, grant `FOR SHARE`, refuses `payer_billing_off`; the
   use names price version, billing event, meter unit and quantity, and the gate **computes `chargeFen` from the bound price row** (a caller
-  amount is never trusted), then checks validity and per-charge/daily/monthly with S3-b's `usedFen`. A charge that rounds to 0 refuses
-  `grant_charge_zero`; S3-b decides that policy. Returns `chargeFen`, price `contentHash`, grant version and Asia/Shanghai `periodKeys`.
+  amount is never trusted). The use time is `UTC_TIMESTAMP(3)` read in the transaction (never a caller value); `usedFen` comes from the
+  caller's locked BudgetBucket rows (`lockUsedFen`), then validity and per-charge/daily/monthly are checked. A charge that rounds to 0
+  refuses `grant_charge_zero` (S3-b policy: never reserved as free). Returns the grant row, `chargeFen`, price `contentHash`, `at` and
+  Asia/Shanghai `periodKeys`; see [reservations](BILLING_RESERVATIONS.md) for the full lock order.
 - **Races**: writes and uses both lock PayerAccount first, so a revoke waits for an in-flight use (and a use behind a revoke sees it);
   of two writers on one version one wins (`grant_version_conflict`). No automatic retry.
 - **Verify / rollback**: unit `price-grants.test.ts`; `npm run test:billing:mysql` (CI `model-egress-mysql`). Rollback: stop calling the
   service; `prisma/rollback/20261110_rollback_billing_price_grants.sql` refuses while any row exists.
-- **Not here**: BudgetBucket, reservation/charge (S3-b), price retirement, `expired` sweep, consumer grants, Pack event contract, routes.
+- **Not here**: charge posting (S3-b2), price retirement, `expired` sweep, consumer grants, Pack event contract, routes.
   Before any route exposes price publishing, the `SYSTEM` actor must be authenticated by `BillingServiceGrant` (S0 §5). Two concurrent
   first-version publishes of one product may fail once with `billing_write_conflict`; retrying is safe (replay).

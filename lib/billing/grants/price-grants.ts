@@ -8,7 +8,8 @@ import { lockBillingAuthority } from "../payer/payer-accounts";
 /**
  * Billing V1 S3-a: immutable price versions and default-off spend grants; no reservation, charge or route. A grant binds one
  * price version for life (DB trigger), so a higher price never widens it. Lock order: Membership -> PayerAccount FOR UPDATE
- * -> SpendGrant, the PayerAccount-first order of the S3-b money path, so a revoke and a use of one grant serialize.
+ * -> SpendGrant (-> BudgetBucket -> BillingReservation on the S3-b money path), so a revoke and a use of one grant serialize.
+ * `changeSpendGrantInTransaction` callers must not lock budget buckets or reservations before calling it.
  */
 export type SpendGrantRefusalCode = "price_input_invalid" | "price_version_conflict" | "price_version_sequence_invalid" |
   "price_version_unavailable" | "price_version_not_effective" | "price_amount_out_of_range" | "grant_input_invalid" |
@@ -257,7 +258,7 @@ export async function changeSpendGrantInTransaction(tx: Prisma.TransactionClient
 
 /** The use names what it meters; the gate prices it from the grant's locked price row, never from a caller amount. */
 export type SpendGrantUse = { priceVersionId: string; billingEventRef: string; meterUnit: string; quantity: bigint; at: Date;
-  /** Settled plus pending-held fen already counted in this grant's day/month buckets (S3-b reads them under lock). */
+  /** Settled plus held/unknown fen in this grant's day/month buckets, read from the locked BudgetBucket rows (S3-b). */
   usedFen: { day: bigint; month: bigint } };
 
 /** Pure admission check against one grant and its bound price version; returns the charge or throws the first violation. */
@@ -271,19 +272,25 @@ export function evaluateSpendGrant(grant: SpendGrantRow, price: BillingPriceRow,
   if (use.billingEventRef !== price.billingEventRef || use.meterUnit !== price.meterUnit) refuse("grant_meter_mismatch");
   if (use.at < price.effectiveFrom || (price.effectiveUntil && use.at >= price.effectiveUntil)) refuse("price_version_not_effective");
   const chargeFen = chargeFenForQuantity(price, use.quantity);
-  if (chargeFen === ZERO) refuse("grant_charge_zero"); // S3-b decides whether a zero line is free usage or refused
+  // Zero-fen policy (S3-b): a use that prices to 0 fen is refused, never reserved or charged as "free"; free usage needs its
+  // own approved product path, and "nothing is due" after execution is a release with reason no_charge_due.
+  if (chargeFen === ZERO) refuse("grant_charge_zero");
   if (chargeFen > grant.perChargeLimitFen) refuse("grant_per_charge_exceeded");
   if (use.usedFen.day + chargeFen > grant.dailyLimitFen) refuse("grant_daily_limit_exceeded");
   if (use.usedFen.month + chargeFen > grant.monthlyLimitFen) refuse("grant_monthly_limit_exceeded");
   return chargeFen;
 }
 
+export type SpendGrantUseRequest = Omit<SpendGrantUse, "at" | "usedFen"> & { payerAccountId: string; grantId: string };
+export type BillingPeriodKeys = ReturnType<typeof billingPeriodKeys>;
+
 /**
- * Use-path gate for S3-b, inside the caller's transaction: PayerAccount FOR UPDATE first, then the grant FOR SHARE (a
- * concurrent change waits for the caller's commit), then the pure check. Returns the snapshot to store on the reservation.
+ * Use-path gate, inside the caller's transaction. Lock order: PayerAccount FOR UPDATE -> grant FOR SHARE (a concurrent change
+ * waits for the caller's commit) -> the caller's budget buckets via `lockUsedFen` (FOR UPDATE) -> pure check. The use time is
+ * the database's UTC_TIMESTAMP(3) read here, never a caller value. Returns the snapshot the reservation freezes.
  */
-export async function lockSpendGrantForUseInTransaction(tx: Prisma.TransactionClient,
-  input: SpendGrantUse & { payerAccountId: string; grantId: string }) {
+export async function lockSpendGrantForUseInTransaction(tx: Prisma.TransactionClient, input: SpendGrantUseRequest,
+  lockUsedFen: (grant: SpendGrantRow, periodKeys: BillingPeriodKeys, billingMode: "shadow" | "enforce") => Promise<SpendGrantUse["usedFen"]>) {
   reference(input?.payerAccountId, "payer_account_unavailable"); reference(input.grantId, "grant_unavailable");
   const payer = await lockPayer(tx, input.payerAccountId);
   assertPayerActive(payer);
@@ -292,8 +299,8 @@ export async function lockSpendGrantForUseInTransaction(tx: Prisma.TransactionCl
   if (!grant || grant.id !== input.grantId || grant.payerAccountId !== payer.id) refuse("grant_unavailable");
   const price = await readPrice(tx, grant.priceVersionId);
   if (!price) refuse("price_version_unavailable");
-  const chargeFen = evaluateSpendGrant(grant, price, input);
-  return { grantId: grant.id, grantVersion: grant.version, priceVersionId: price.id, priceContentHash: price.contentHash,
-    productId: grant.productId, chargeFen,
-    periodKeys: billingPeriodKeys(input.at), billingMode: payer.billingMode as "shadow" | "enforce" };
+  const [{ at }] = await tx.$queryRaw<Array<{ at: Date }>>`SELECT UTC_TIMESTAMP(3) AS at`;
+  const periodKeys = billingPeriodKeys(at), billingMode = payer.billingMode as "shadow" | "enforce";
+  const chargeFen = evaluateSpendGrant(grant, price, { ...input, at, usedFen: await lockUsedFen(grant, periodKeys, billingMode) });
+  return { grant, priceVersionId: price.id, priceContentHash: price.contentHash, chargeFen, at, periodKeys, billingMode };
 }

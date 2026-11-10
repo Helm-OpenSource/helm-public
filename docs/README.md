@@ -90,6 +90,7 @@ connector 授权、写回、外发或审批证明。
 - [付款主体与范围绑定 / Billing payer accounts](operations/BILLING_PAYER_ACCOUNTS.md) - payer identity and one-active-binding scope contract, default billingMode off; no balance, charge or payment.
 - [资金分录与余额投影 / Billing funds journal](operations/BILLING_FUNDS_JOURNAL.md) - append-only balanced fen journal, rebuildable projection and durable outbox; no payment entry, charge or route.
 - [价格版本与消费授权 / Billing price versions and spend grants](operations/BILLING_PRICE_GRANTS.md) - immutable price versions and default-off, version-bound spend grants; no reservation, charge or route.
+- [预算桶与预占 / Billing budget buckets and reservations](operations/BILLING_RESERVATIONS.md) - per grant day/month buckets, protocol-shaped reserve, release and unknown holds (shadow never moves money); no charge posting or route.
 - [LLM 智能深化 v1 / LLM intelligence deepening v1](product/HELM_LLM_INTELLIGENCE_DEEPENING_V1.md)
 - [LLM 智能深化 v2 / LLM intelligence deepening v2](product/HELM_LLM_INTELLIGENCE_DEEPENING_V2.md)
 - [LLM 智能深化 v3 / LLM intelligence deepening v3](product/HELM_LLM_INTELLIGENCE_DEEPENING_V3.md)
