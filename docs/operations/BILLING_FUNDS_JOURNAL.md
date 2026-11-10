@@ -1,3 +1,11 @@
+---
+status: active / formed-needs-next-layer
+owner: helm-core
+created: 2026-11-10
+review_after: 2026-12-10
+public_safety: Public source contract and synthetic test verification only. No deployment approval, payment, credential or customer data.
+---
+
 # Billing funds journal / 资金分录与余额投影
 
 Billing V1 slice S2-a: a Core-local, append-only, balanced funds journal with a rebuildable projection and a durable outbox row.
