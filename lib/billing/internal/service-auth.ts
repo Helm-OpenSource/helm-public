@@ -1,15 +1,16 @@
 import "server-only";
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createPublicKey, type KeyObject, sign, verify } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import type { ServiceActor } from "../reservations/reservations";
 
 /**
  * Billing V1 S3-b3 service identity for `/api/internal/billing/v1/*` (docs/operations/BILLING_INTERNAL_ROUTES.md), on the
- * LLMSpendIssuerGrant pattern: an immutable, one-way-revocable grant row with no key material, trusted only when the separately
- * provisioned keyring (`HELM_BILLING_SERVICE_KEYRING`) both holds its `keyRef` secret and pins its `contentHash`. Requests are
- * HMAC-SHA256 signed over method, path, grant, timestamp, nonce and body hash; database time bounds the window and a committed
- * nonce row refuses replays. Every refusal is the same `service_unauthorized` outside; secrets and signatures are never logged.
+ * LLMSpendIssuerGrant pattern (protocol v3.7): an immutable, one-way-revocable grant row holding only the caller's Ed25519
+ * public key, trusted only while separately governed config pins its `contentHash` (`HELM_BILLING_SERVICE_GRANT_PINS`, the
+ * counterpart of LLM `trustedIssuerGrants`). Core holds no shared secret. Requests are signed over version, method, path, grant,
+ * timestamp, nonce and body hash; database time bounds the window and a committed nonce row refuses replays. Every refusal is
+ * the same `service_unauthorized` outside; signatures and bodies are never logged.
  */
 export const BILLING_SERVICE_SCOPES = ["quote", "reserve", "settle", "release", "mark-unknown", "resolve-unknown"] as const;
 export type BillingServiceScope = (typeof BILLING_SERVICE_SCOPES)[number];
@@ -23,33 +24,37 @@ export class ServiceAuthRefused extends Error {
 }
 function refuse(reason: string): never { throw new ServiceAuthRefused(reason); }
 
-export type BillingServiceGrantRow = { id: string; issuerRef: string; scopesJson: string; keyRef: string; approvalRef: string;
-  createdBy: string; contentHash: string; validFrom: Date; validUntil: Date; revokedAt: Date | null };
+export type BillingServiceGrantRow = { id: string; issuerRef: string; scopesJson: string; publicKeyPem: string;
+  keyFingerprint: string; approvalRef: string; createdBy: string; contentHash: string; validFrom: Date; validUntil: Date;
+  revokedAt: Date | null };
+export function billingServiceKeyFingerprint(key: KeyObject): string {
+  return `sha256:${createHash("sha256").update(key.export({ type: "spki", format: "der" })).digest("hex")}`;
+}
 export function billingServiceGrantHash(row: Omit<BillingServiceGrantRow, "contentHash" | "revokedAt">): string {
-  const content = { schema: "helm.billing-service-grant/v1", id: row.id, issuerRef: row.issuerRef, scopesJson: row.scopesJson,
-    keyRef: row.keyRef, approvalRef: row.approvalRef, createdBy: row.createdBy, validFrom: row.validFrom.toISOString(),
-    validUntil: row.validUntil.toISOString() };
+  const content = { schema: "helm.billing-service-grant/v2", id: row.id, issuerRef: row.issuerRef, scopesJson: row.scopesJson,
+    publicKeyPem: row.publicKeyPem, keyFingerprint: row.keyFingerprint, approvalRef: row.approvalRef, createdBy: row.createdBy,
+    validFrom: row.validFrom.toISOString(), validUntil: row.validUntil.toISOString() };
   return `sha256:${createHash("sha256").update(JSON.stringify(content)).digest("hex")}`;
 }
 
-const keyringSchema = z.record(z.string().regex(/^[a-z0-9][a-z0-9._-]{2,63}$/), z.object({
-  grantId: z.string(), grantHash: z.string().regex(/^sha256:[a-f0-9]{64}$/), secret: z.string().regex(/^[A-Za-z0-9_-]{43,128}$/),
-}).strict());
-/** An absent keyring trusts nothing; a malformed one also trusts nothing (fail closed, never partially parsed). */
-function readKeyring(raw: string | undefined) {
-  if (!raw?.trim()) return refuse("keyring_empty");
+const pinsSchema = z.record(z.string(), z.string().regex(/^sha256:[a-f0-9]{64}$/));
+/** Absent or malformed pins trust nothing (fail closed, never partially parsed). Pins are not secret. */
+function readPins(raw: string | undefined) {
+  if (!raw?.trim()) return refuse("pins_empty");
   let parsed: unknown;
-  try { parsed = JSON.parse(raw); } catch { return refuse("keyring_invalid"); }
-  const result = keyringSchema.safeParse(parsed);
-  return result.success ? result.data : refuse("keyring_invalid");
+  try { parsed = JSON.parse(raw); } catch { return refuse("pins_invalid"); }
+  const result = pinsSchema.safeParse(parsed);
+  return result.success ? result.data : refuse("pins_invalid");
 }
 
 export type SignedRequestParts = { method: string; path: string; grantId: string; timestamp: string; nonce: string; body: string };
-/** HMAC-SHA256 over the canonical request; the secret is the keyring entry's base64url-decoded bytes (>= 32). */
-export function signBillingInternalRequest(secret: string, parts: SignedRequestParts): string {
-  const canonical = ["helm-billing-internal/v1", parts.method.toUpperCase(), parts.path, parts.grantId, parts.timestamp,
-    parts.nonce, createHash("sha256").update(parts.body).digest("hex")].join("\n");
-  return `v1=${createHmac("sha256", Buffer.from(secret, "base64url")).update(canonical).digest("hex")}`;
+function canonicalRequest(parts: SignedRequestParts) {
+  return Buffer.from(["helm-billing-internal/v1", parts.method.toUpperCase(), parts.path, parts.grantId, parts.timestamp,
+    parts.nonce, createHash("sha256").update(parts.body).digest("hex")].join("\n"));
+}
+/** Caller-side Ed25519 signature header value (`v1=<base64>`); Core only verifies. */
+export function signBillingInternalRequest(privateKey: KeyObject, parts: SignedRequestParts): string {
+  return `v1=${sign(null, canonicalRequest(parts), privateKey).toString("base64")}`;
 }
 
 /**
@@ -61,18 +66,17 @@ export async function authenticateBillingService(client: PrismaClient, request: 
   const grantId = request.headers.get(HEADERS.grant) ?? "", timestamp = request.headers.get(HEADERS.timestamp) ?? "";
   const nonce = request.headers.get(HEADERS.nonce) ?? "", signature = request.headers.get(HEADERS.signature) ?? "";
   if (!/^[a-z0-9][a-z0-9_-]{2,63}$/.test(grantId) || !/^[1-9][0-9]{12}$/.test(timestamp) ||
-      !/^[A-Za-z0-9_-]{16,64}$/.test(nonce) || !/^v1=[a-f0-9]{64}$/.test(signature)) refuse("headers_invalid");
-  const keyring = readKeyring(env.HELM_BILLING_SERVICE_KEYRING);
-  const [grant] = await client.$queryRaw<Array<BillingServiceGrantRow & { now: Date }>>`SELECT id, issuerRef, scopesJson, keyRef,
-    approvalRef, createdBy, contentHash, validFrom, validUntil, revokedAt, UTC_TIMESTAMP(3) AS now
+      !/^[A-Za-z0-9_-]{16,64}$/.test(nonce) || !/^v1=[A-Za-z0-9+/]{86}==$/.test(signature)) refuse("headers_invalid");
+  const pins = readPins(env.HELM_BILLING_SERVICE_GRANT_PINS);
+  const [grant] = await client.$queryRaw<Array<BillingServiceGrantRow & { now: Date }>>`SELECT id, issuerRef, scopesJson,
+    publicKeyPem, keyFingerprint, approvalRef, createdBy, contentHash, validFrom, validUntil, revokedAt, UTC_TIMESTAMP(3) AS now
     FROM BillingServiceGrant WHERE id = ${grantId}`;
   if (!grant || grant.id !== grantId) refuse("grant_unknown");
-  const key = Object.hasOwn(keyring, grant.keyRef) ? keyring[grant.keyRef] : undefined;
-  if (!key || key.grantId !== grant.id || key.grantHash !== grant.contentHash ||
+  if (!Object.hasOwn(pins, grant.id) || pins[grant.id] !== grant.contentHash ||
       billingServiceGrantHash(grant) !== grant.contentHash) refuse("grant_untrusted");
-  const expected = signBillingInternalRequest(key.secret, { method: request.method, path: request.path, grantId, timestamp,
-    nonce, body: request.body });
-  if (!timingSafeEqual(Buffer.from(expected), Buffer.from(signature))) refuse("signature_invalid"); // equal length by format
+  const key = publicKey(grant);
+  const parts = { method: request.method, path: request.path, grantId, timestamp, nonce, body: request.body };
+  if (!verify(null, canonicalRequest(parts), key, Buffer.from(signature.slice(3), "base64"))) refuse("signature_invalid");
   if (grant.revokedAt !== null || grant.validFrom > grant.now || grant.validUntil <= grant.now) refuse("grant_inactive");
   if (!grantScopes(grant.scopesJson).includes(scope)) refuse("scope_denied");
   const signedAt = Number(timestamp);
@@ -88,6 +92,14 @@ export async function authenticateBillingService(client: PrismaClient, request: 
     throw error;
   }
   return { grantId, actor: { type: "SYSTEM", ref: `billing-service-grant:${grantId}` } satisfies ServiceActor };
+}
+
+/** The pinned row's key must be Ed25519 and match its stored fingerprint. */
+function publicKey(grant: BillingServiceGrantRow): KeyObject {
+  let key: KeyObject;
+  try { key = createPublicKey(grant.publicKeyPem); } catch { return refuse("grant_key_invalid"); }
+  if (key.asymmetricKeyType !== "ed25519" || billingServiceKeyFingerprint(key) !== grant.keyFingerprint) refuse("grant_key_invalid");
+  return key;
 }
 
 /** Canonical (sorted, unique, known) scope list; anything else trusts no scope. */

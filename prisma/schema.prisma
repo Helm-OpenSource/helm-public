@@ -2174,13 +2174,14 @@ model BillingCharge {
   @@index([payerAccountId, createdAt])
 }
 
-// Billing V1 internal route service identity (S3-b3), modeled on LLMSpendIssuerGrant: no key material (keyRef names a
-// separately provisioned keyring entry that pins contentHash); immutable except one-way revocation; no issuance API.
+// Billing V1 internal route service identity (S3-b3), modeled on LLMSpendIssuerGrant: the caller's Ed25519 public key only
+// (no shared secret), trusted while governed config pins contentHash; immutable except one-way revocation; no issuance API.
 model BillingServiceGrant {
   id          String    @id @db.VarChar(64)
   issuerRef   String    @db.VarChar(191)
   scopesJson  String    @db.VarChar(255) // canonical JSON array; resolve-unknown only alone
-  keyRef      String    @unique @db.VarChar(64)
+  publicKeyPem String   @db.Text
+  keyFingerprint String @unique @db.VarChar(71) // sha256 of the SPKI DER
   approvalRef String    @db.VarChar(191)
   createdBy   String    @db.VarChar(191)
   contentHash String    @db.VarChar(71)
