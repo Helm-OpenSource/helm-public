@@ -234,6 +234,7 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
       operationKey: "rev:charge", actor: service, evidenceRef: "e" }))).rejects.toThrow("funds_reversal_invalid");
     await expect(a.$executeRaw`UPDATE BillingCharge SET chargeFen = 1 WHERE id = ${chargeId}`).rejects.toThrow(/billing_charge_immutable/);
     await expect(a.$executeRaw`DELETE FROM BillingCharge WHERE id = ${chargeId}`).rejects.toThrow(/billing_charge_immutable/);
+    expect(await settle((await held(ids, "op:2", 1)).reservationId, "set:1", "1")).toEqual(rejected("idempotency_conflict")); // key reuse
   });
   it("refuses over-quantity and malformed settles, never settles unknown on the business path, and settles 0 fen without funds", async () => {
     const ids = await setup("enforce", 1000);
@@ -252,6 +253,7 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
     expect(zero).toMatchObject({ ok: true, state: "settled", chargeFen: "0" });
     expect(await a.billingCharge.findUniqueOrThrow({ where: { reservationId: cheapReservation } })).toMatchObject({ chargeFen: fen(0), fundsTransactionId: null });
     expect(await a.fundsTransaction.count({ where: { payerAccountId: cheap.payerAccountId, kind: "charge" } })).toBe(0);
+    expect(await buckets(cheap)).toEqual(settledBuckets(0, 0)); // the 1-fen hold left; nothing settled
     expect(await a.billingOutbox.count({ where: { aggregateId: zero.ok ? zero.chargeId : "", eventType: "billing.charge.settled" } })).toBe(1);
   });
   it("refuses an unpayable settle as retryable and still settles held work after suspension or off", async () => {
@@ -266,6 +268,11 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
     expect(await reserve(ids, "op:new", 1)).toEqual(rejected("grant_not_active")); // new work is blocked ...
     expect(await settle(reservationId, "set:1", "2")).toMatchObject({ ok: true, chargeFen: "200" }); // ... delivered work settles (R05)
     expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(0), charge_revenue: fen(200) });
+    const other = await setup("enforce", 500); // a charge posting not backed by a held reservation is not exempt
+    await a.$executeRaw`UPDATE PayerAccount SET status = 'suspended' WHERE id = ${other.payerAccountId}`;
+    await expect(a.$transaction(tx => postFundsTransactionInTransaction(tx, { payerAccountId: other.payerAccountId, kind: "charge",
+      operationKey: `charge:${reservationId}`, actor: service, evidenceRef: "e", entries: [{ account: "customer_wallet_available",
+        direction: "debit", amountFen: fen(1) }, { account: "charge_revenue", direction: "credit", amountFen: fen(1) }] }))).rejects.toThrow("payer_account_unavailable");
     expect(await buckets(ids)).toEqual(settledBuckets(0, 200));
   });
   it("charges once under a concurrent double settle and lets settle or release win, never both", async () => {

@@ -32,7 +32,8 @@ S3-b1/S3-b2 (Core): migrations `20261110200000_billing_reservations`, `202611102
   and a `billing.charge.settled` outbox row. A 0-fen settle (smaller quantity) is `settled` with `chargeFen` 0 and no funds entry.
   Shadow writes the charge (`fundsTransactionId` null) and `billing.charge.shadow_settled`, never funds. Settle of a held
   reservation never checks payer status or mode (R05: delivered results are processed; only new reserves are blocked, for shadow
-  and enforce alike); the funds journal admits `charge` postings for suspended/off payers for this reason. `insufficient_funds`
+  and enforce alike); the funds journal admits a `charge` posting for a suspended/off payer only when `charge:<id>` names that payer's held
+  enforce reservation. `insufficient_funds`
   (wallet corrected below the hold) is refused: the business side keeps it retryable or `review_needed` and must not release.
 - **resolveUnknown** (reconciliation/manual channel; routes S3-b3/S5): `unknown -> settled` (needs `quantityUsed`) or
   `-> released` (`unknown_released`) on evidence; other states are `unknown_resolution_conflict`. **quote**
@@ -47,6 +48,6 @@ S3-b1/S3-b2 (Core): migrations `20261110200000_billing_reservations`, `202611102
   throws `reservation_invariant_breach` (not a code): the S3-b3 route must alert on it; do not retry.
 - **Verify / rollback**: `reservations.test.ts`; `npm run test:billing:mysql` (over-limit and 16-payer concurrency, racing keys,
   double settle, settle vs release, cross-period settle, triggers, guarded rollbacks). Stop calling the service; roll back charges
-  first (refuses while charge rows exist; removes only `charge`/`charge_revenue` from the current ENUMs), then reservations. The
-  S2-c and S2-a rollbacks refuse while a later billing migration is applied.
+  first (refuses while charge rows exist; removes only `charge`/`charge_revenue` from the current ENUMs), then reservations. The charges
+  rollback re-checks that no `charge*` value is left; the S2-c and S2-a rollbacks refuse while any later billing migration is applied.
 - **Not here**: refunds, routes (S3-b3), expiry, increasing a hold, execution claims (S0 §5).

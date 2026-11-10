@@ -22,6 +22,11 @@ BEGIN
     PREPARE stmt FROM @rollback_ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
     SET i = i + 1;
   END WHILE;
+  IF EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE()
+     AND TABLE_NAME IN ('FundsAccountProjection', 'FundsJournalEntry', 'FundsTransaction') AND COLUMN_NAME IN ('account', 'kind')
+     AND (COLUMN_TYPE LIKE '%''charge''%' OR COLUMN_TYPE LIKE '%''charge\_revenue''%')) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'rollback incomplete: charge ENUM values still present';
+  END IF;
   DELETE FROM `_prisma_migrations` WHERE `migration_name` = '20261110210000_billing_charges';
 END$$
 DELIMITER ;

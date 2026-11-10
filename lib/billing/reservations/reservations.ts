@@ -282,6 +282,7 @@ async function settleFrom(tx: Prisma.TransactionClient, actor: ServiceActor, req
     return { state: "settled" as const, chargeId: charge.id, chargeFen: charge.chargeFen.toString() };
   }
   assertResolvable(reservation.state, unknownOnly);
+  await keyFree(tx, reservation, "resolutionKey", req.idempotencyKey);
   if (quantityUsed > reservation.quantity) reject("quantity_exceeds_reservation");
   const [price] = await tx.$queryRaw<Array<{ unitPriceFenNumerator: bigint; unitPriceDenominator: bigint; contentHash: string }>>`
     SELECT unitPriceFenNumerator, unitPriceDenominator, contentHash FROM BillingPriceVersion WHERE id = ${reservation.priceVersionId} FOR SHARE`;

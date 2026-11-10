@@ -35,7 +35,7 @@ route or UI. 本片只提供 Core 本库资金分录原语，不接支付、不�
 - Validation: 2–5 distinct accounts, positive bounded bigint amounts, Σdebit = Σcredit (`funds_unbalanced`). `topup` is exactly debit
   `topup_clearing` / credit wallet; a free `correction` uses only the wallet and `correction_suspense`; a `charge` is exactly debit wallet / credit
   credit-normal `charge_revenue`, needs a `charge:` key (reserved for it) and cannot be reversed (no refunds in V1); it is
-  the one kind admitted for a suspended or off payer, because it settles already-held work (protocol v3.5). Later billing
+  admitted for a suspended or off payer only when its `charge:<id>` is that payer's held enforce reservation (v3.5). Later billing
   migrations block this slice's rollback.
 - Payer gate: locked row `active`, `CNY`, with a governing workspace (`payer_account_unavailable`); `billingMode` `shadow` or `enforce`,
   `off` refuses `payer_billing_off` (S2-a decision).

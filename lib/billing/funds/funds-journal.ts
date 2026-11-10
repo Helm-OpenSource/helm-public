@@ -137,7 +137,10 @@ async function postLocked(tx: Prisma.TransactionClient, payer: PayerRow, posting
   }
   // A `charge` only settles a reservation admitted while the payer was active and billing on; R05 / protocol v3.5: delivered
   // results are still charged after a suspension or switch to off (those block new reserves only). Every other kind is refused.
-  const settling = posting.kind === "charge";
+  // The exemption is bound to its reservation: `charge:<id>` must name this payer's held enforce reservation (locked by settle).
+  const settling = posting.kind === "charge" && (await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM BillingReservation
+    WHERE id = ${posting.operationKey.slice("charge:".length)} AND payerAccountId = ${posting.payerAccountId}
+      AND billingMode = 'enforce' AND state = 'held' FOR SHARE`).length === 1;
   if ((payer.status !== "active" && !settling) || payer.currency !== "CNY" || !payer.governingWorkspaceId) refuse("payer_account_unavailable");
   // S2-a decision: shadow and enforce accounts may hold a journal; off accounts may not move money at all (except the above).
   if (payer.billingMode !== "shadow" && payer.billingMode !== "enforce" && !settling) refuse("payer_billing_off");
