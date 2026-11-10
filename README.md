@@ -14,6 +14,7 @@
 交付预算接入前请核对 [LLM spend charge contract v2](docs/operations/LLM_SPEND_RESERVATION_CONTRACT.md)：当前只有最大费用、不可变价格/汇率/策略来源快照及原子账本候选，新增空注册表的签名元数据读回候选及 opt-in C3 接口；发行者身份、真实计价/用量、普通付费出口和生产限额仍未闭合，默认 authority 保持关闭。
 受控用量采集的源码与合成验证见 [独立证据核销合同](docs/operations/LLM_TRUSTED_USAGE_EVIDENCE.md)：默认仍无生产 collector/根，不代表真实 provider 账单、安装或月限额已生效。
 通用用量的可选去重与追加更正见 [Scoped usage observations / 工作区用量记录](docs/operations/USAGE_OBSERVATION_IDEMPOTENCY.md)；不自动迁移旧调用，不创建账单、退款或供应商调用。
+计费 V1 付款主体与范围绑定见 [Billing payer accounts / 付款主体](docs/operations/BILLING_PAYER_ACCOUNTS.md)：仅身份与可撤销绑定，默认 `billingMode=off`，无余额、扣费或收款。
 
 WorkBuddy 部署准入见 [固定路由合同](docs/operations/CAIO_WORKBUDDY_ROUTE_ADMISSION.md)：关闭或未知固定绑定先于入口配置和数据库依赖加载拒绝，Core 默认保留旧行为；源码验证不代表现场激活。
 
