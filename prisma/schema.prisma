@@ -1920,6 +1920,79 @@ model PayerScopeBinding {
   @@index([scopeKind, scopeRef])
 }
 
+// Billing V1 funds journal (S2-a). Append-only, balanced double entry in integer fen; projections are rebuildable.
+enum FundsTransactionKind {
+  topup
+  correction
+}
+
+enum FundsAccount {
+  customer_wallet_available
+  topup_clearing
+  correction_suspense
+}
+
+enum FundsEntryDirection {
+  debit
+  credit
+}
+
+model FundsTransaction {
+  id             String               @id @default(cuid())
+  payerAccountId String               @db.VarChar(191)
+  kind           FundsTransactionKind
+  operationKey   String               @db.VarChar(191)
+  contentHash    String               @db.Char(64)
+  reversalOfId   String?              @unique @db.VarChar(191) // mirror reversal; one per original
+  currency       String               @default("CNY") @db.VarChar(3)
+  evidenceRef    String               @db.VarChar(191)
+  createdBy      String               @db.VarChar(191)
+  createdAt      DateTime             @default(now())
+  entries        FundsJournalEntry[]
+
+  @@unique([payerAccountId, operationKey])
+}
+
+model FundsJournalEntry {
+  id             String              @id @default(cuid())
+  transactionId  String              @db.VarChar(191)
+  lineNo         Int
+  payerAccountId String              @db.VarChar(191)
+  account        FundsAccount
+  direction      FundsEntryDirection
+  amountFen      BigInt
+  createdAt      DateTime            @default(now())
+  transaction    FundsTransaction    @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+
+  @@unique([transactionId, lineNo])
+  @@unique([transactionId, account])
+  @@index([payerAccountId, account])
+}
+
+model FundsAccountProjection {
+  payerAccountId String       @db.VarChar(191)
+  account        FundsAccount
+  balanceFen     BigInt       @default(0) // credit-normal wallet; debit-normal clearing/suspense
+  version        Int          @default(0)
+  updatedAt      DateTime     @updatedAt
+
+  @@id([payerAccountId, account])
+}
+
+model BillingOutbox {
+  id            String    @id @default(cuid())
+  aggregateType String    @db.VarChar(64)
+  aggregateId   String    @db.VarChar(191)
+  eventType     String    @db.VarChar(64)
+  payload       String    @db.Text
+  payloadHash   String    @db.Char(64)
+  createdAt     DateTime  @default(now())
+  deliveredAt   DateTime?
+
+  @@unique([aggregateType, aggregateId, eventType])
+  @@index([deliveredAt, createdAt])
+}
+
 model WorkerPublisherProfile {
   id                        String                     @id @default(cuid())
   workspaceId               String
