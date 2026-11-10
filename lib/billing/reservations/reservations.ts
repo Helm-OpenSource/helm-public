@@ -122,7 +122,8 @@ async function moveBucket(tx: Prisma.TransactionClient, grantId: string, billing
 }
 
 /** Reserve: idempotent by (payer, key) + content hash, one per (payer, operationRef); any refusal rolls back, key unused. */
-export async function reserveInTransaction(tx: Prisma.TransactionClient, actor: ServiceActor, req: ReserveRequest) {
+// Not exported: its plain reads rely on PayerAccount being locked before the transaction's first read, which `reserve` guarantees.
+async function reserveInTransaction(tx: Prisma.TransactionClient, actor: ServiceActor, req: ReserveRequest) {
   const { createdBy, quantity, contentHash } = normalizeReserve(actor, req);
   const payerAccountId = req.payerRef;
   await lockPayerRow(tx, payerAccountId);
@@ -187,6 +188,11 @@ async function lockReservationForResolution(tx: Prisma.TransactionClient, reserv
   return { buckets, reservation: { ...row, quantity: BigInt(row.quantity), chargeFen: BigInt(row.chargeFen), version: Number(row.version) } };
 }
 
+/** A key used on another reservation of this payer is a conflict (checked under the PayerAccount lock, before the unique key). */
+async function keyFree(tx: Prisma.TransactionClient, reservation: LockedReservation, column: "unknownKey" | "resolutionKey", key: string) {
+  if (await tx.billingReservation.findFirst({ where: { payerAccountId: reservation.payerAccountId, [column]: key, NOT: { id: reservation.id } },
+    select: { id: true } })) reject("idempotency_conflict");
+}
 /** State CAS: version and pre-state stay in the UPDATE's own WHERE; the trigger also whitelists the move. */
 async function transition(tx: Prisma.TransactionClient, reservation: LockedReservation, set: Prisma.Sql) {
   const changed = await tx.$executeRaw`UPDATE BillingReservation SET ${set}, version = version + 1, updatedAt = CURRENT_TIMESTAMP(3)
@@ -204,6 +210,7 @@ export async function markUnknownInTransaction(tx: Prisma.TransactionClient, act
     return { state: reservation.state }; // replay reports the current state (it may have been resolved since)
   }
   if (reservation.state !== "held") reject("reservation_state_conflict");
+  await keyFree(tx, reservation, "unknownKey", req.idempotencyKey);
   await transition(tx, reservation, Prisma.sql`state = 'unknown', unknownKey = ${req.idempotencyKey},
     unknownEvidenceRef = ${req.evidenceRef}, unknownAt = UTC_TIMESTAMP(3)`);
   return { state: "unknown" as const };
@@ -226,6 +233,7 @@ export async function releaseInTransaction(tx: Prisma.TransactionClient, actor: 
     return { state: "released" as const };
   }
   if (reservation.state !== "held") reject("reservation_state_conflict"); // unknown leaves only via resolveUnknown (S3-b2)
+  await keyFree(tx, reservation, "resolutionKey", req.idempotencyKey);
   for (const bucket of buckets) {
     await moveBucket(tx, reservation.grantId, reservation.billingMode, bucket, { reservedDelta: -reservation.chargeFen, settledDelta: ZERO, ceiling: null });
   }
