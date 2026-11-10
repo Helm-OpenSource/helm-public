@@ -54,6 +54,8 @@ CREATE TABLE `BillingReservation` (
     `updatedAt` DATETIME(3) NOT NULL,
     UNIQUE INDEX `BillingReservation_payerAccountId_idempotencyKey_key`(`payerAccountId`, `idempotencyKey`),
     UNIQUE INDEX `BillingReservation_payerAccountId_operationRef_key`(`payerAccountId`, `operationRef`),
+    UNIQUE INDEX `BillingReservation_payerAccountId_unknownKey_key`(`payerAccountId`, `unknownKey`),
+    UNIQUE INDEX `BillingReservation_payerAccountId_resolutionKey_key`(`payerAccountId`, `resolutionKey`),
     INDEX `BillingReservation_payerAccountId_state_idx`(`payerAccountId`, `state`),
     PRIMARY KEY (`id`),
     CONSTRAINT `BillingReservation_amount_check` CHECK (`quantity` > 0 AND `chargeFen` > 0 AND `chargeFen` <= 9007199254740991
@@ -96,6 +98,7 @@ FOR EACH ROW BEGIN
    OR NOT (BINARY NEW.unknownKey <=> BINARY OLD.unknownKey)
    OR NOT (NEW.unknownAt <=> OLD.unknownAt)))
  OR OLD.state IN ('settled', 'released') OR NEW.version <> OLD.version + 1
- OR NOT ((NEW.state = 'unknown' AND OLD.state = 'held') OR (NEW.state IN ('settled', 'released') AND OLD.state IN ('held', 'unknown'))) THEN
+ OR NOT ((NEW.state = 'unknown' AND OLD.state = 'held') OR (NEW.state IN ('settled', 'released') AND OLD.state IN ('held', 'unknown')))
+ OR (NEW.state = 'released' AND ((OLD.state = 'unknown') <> (NEW.releaseReason <=> 'unknown_released'))) THEN
  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='billing_reservation_snapshot_immutable'; END IF;
 END;

@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 import { SpendGrantRefusal } from "../grants/price-grants";
 import { asBillingResult, markUnknownInTransaction, normalizeReserve, releaseInTransaction, type ReleaseReasonCode,
@@ -40,5 +40,7 @@ describe("reservation protocol normalization", () => {
     await expect(fail(new SpendGrantRefusal("payer_billing_off"))).resolves.toEqual({ ok: false, code: "billing_mode_off" });
     await expect(fail(new SpendGrantRefusal("grant_outside_validity"))).resolves.toEqual({ ok: false, code: "grant_not_active" });
     await expect(fail(new Error("reservation_invariant_breach"))).rejects.toThrow("reservation_invariant_breach");
+    await expect(fail(new Prisma.PrismaClientKnownRequestError("deadlock", { code: "P2010", clientVersion: "test", meta: { code: "1213" } })))
+      .resolves.toEqual({ ok: false, code: "core_unavailable" });
   });
 });
