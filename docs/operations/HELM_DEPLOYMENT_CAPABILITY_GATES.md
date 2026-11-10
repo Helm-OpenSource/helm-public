@@ -37,7 +37,6 @@ outbound voice provider, and are not an outbound voice deployment gate.
 | Automated customer call | `HELM_AUTOMATED_CUSTOMER_CALLS_ENABLED` | Safe default deny | No public Core provider binding; reserved as a required gate for a future separately reviewed adapter |
 | SMS send | `HELM_SMS_SENDS_ENABLED` | Safe default deny | No public Core provider binding; reserved as a required gate for a future separately reviewed adapter |
 | Financial action | `HELM_FINANCIAL_ACTIONS_ENABLED` | Legacy-compatible allow | Billing settings actions, billing integration and payment-provider adapters, and Stripe, Alipay, and WeChat Pay webhooks before verification or writes |
-| Billing internal route | `HELM_BILLING_INTERNAL_ROUTES_ENABLED` | Safe default deny | `/api/internal/billing/v1/*` answers 404 before reading the body or the service grant ([contract](BILLING_INTERNAL_ROUTES.md)) |
 
 The generated `.env.example` sets every gate to `false`. That is a safe
 fresh-deployment example, not the missing-key compatibility rule. Production

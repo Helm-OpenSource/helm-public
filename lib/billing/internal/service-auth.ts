@@ -47,7 +47,9 @@ function readPins(raw: string | undefined) {
   return result.success ? result.data : refuse("pins_invalid");
 }
 
-export type SignedRequestParts = { method: string; path: string; grantId: string; timestamp: string; nonce: string; body: string };
+/** `body` is the raw request bytes as sent (hashed as-is: no decoding, BOM or UTF-8 repair). The query string is not signed. */
+export type SignedRequestParts = { method: string; path: string; grantId: string; timestamp: string; nonce: string;
+  body: Uint8Array | string };
 function canonicalRequest(parts: SignedRequestParts) {
   return Buffer.from(["helm-billing-internal/v1", parts.method.toUpperCase(), parts.path, parts.grantId, parts.timestamp,
     parts.nonce, createHash("sha256").update(parts.body).digest("hex")].join("\n"));
@@ -62,21 +64,24 @@ export function signBillingInternalRequest(privateKey: KeyObject, parts: SignedR
  * replay is refused even when the operation later fails; a retry signs a fresh nonce and replays by idempotencyKey).
  */
 export async function authenticateBillingService(client: PrismaClient, request: { method: string; path: string;
-  headers: Headers; body: string }, scope: BillingServiceScope, env: Readonly<Record<string, string | undefined>> = process.env) {
+  headers: Headers; body: Uint8Array }, scope: BillingServiceScope, env: Readonly<Record<string, string | undefined>> = process.env) {
   const grantId = request.headers.get(HEADERS.grant) ?? "", timestamp = request.headers.get(HEADERS.timestamp) ?? "";
   const nonce = request.headers.get(HEADERS.nonce) ?? "", signature = request.headers.get(HEADERS.signature) ?? "";
   if (!/^[a-z0-9][a-z0-9_-]{2,63}$/.test(grantId) || !/^[1-9][0-9]{12}$/.test(timestamp) ||
       !/^[A-Za-z0-9_-]{16,64}$/.test(nonce) || !/^v1=[A-Za-z0-9+/]{86}==$/.test(signature)) refuse("headers_invalid");
   const pins = readPins(env.HELM_BILLING_SERVICE_GRANT_PINS);
+  if (!Object.hasOwn(pins, grantId)) refuse("grant_untrusted"); // unpinned ids never reach the database
+  const signatureBytes = Buffer.from(signature.slice(3), "base64");
+  if (signatureBytes.length !== 64 || signatureBytes.toString("base64") !== signature.slice(3)) refuse("headers_invalid");
   const [grant] = await client.$queryRaw<Array<BillingServiceGrantRow & { now: Date }>>`SELECT id, issuerRef, scopesJson,
     publicKeyPem, keyFingerprint, approvalRef, createdBy, contentHash, validFrom, validUntil, revokedAt, UTC_TIMESTAMP(3) AS now
     FROM BillingServiceGrant WHERE id = ${grantId}`;
   if (!grant || grant.id !== grantId) refuse("grant_unknown");
-  if (!Object.hasOwn(pins, grant.id) || pins[grant.id] !== grant.contentHash ||
+  if (pins[grant.id] !== grant.contentHash ||
       billingServiceGrantHash(grant) !== grant.contentHash) refuse("grant_untrusted");
   const key = publicKey(grant);
   const parts = { method: request.method, path: request.path, grantId, timestamp, nonce, body: request.body };
-  if (!verify(null, canonicalRequest(parts), key, Buffer.from(signature.slice(3), "base64"))) refuse("signature_invalid");
+  if (!verify(null, canonicalRequest(parts), key, signatureBytes)) refuse("signature_invalid");
   if (grant.revokedAt !== null || grant.validFrom > grant.now || grant.validUntil <= grant.now) refuse("grant_inactive");
   if (!grantScopes(grant.scopesJson).includes(scope)) refuse("scope_denied");
   const signedAt = Number(timestamp);
@@ -94,8 +99,9 @@ export async function authenticateBillingService(client: PrismaClient, request: 
   return { grantId, actor: { type: "SYSTEM", ref: `billing-service-grant:${grantId}` } satisfies ServiceActor };
 }
 
-/** The pinned row's key must be Ed25519 and match its stored fingerprint. */
+/** The pinned row's key must be an Ed25519 SPKI public key (never a private PEM) matching its stored fingerprint. */
 function publicKey(grant: BillingServiceGrantRow): KeyObject {
+  if (!grant.publicKeyPem.startsWith("-----BEGIN PUBLIC KEY-----\n")) refuse("grant_key_invalid");
   let key: KeyObject;
   try { key = createPublicKey(grant.publicKeyPem); } catch { return refuse("grant_key_invalid"); }
   if (key.asymmetricKeyType !== "ed25519" || billingServiceKeyFingerprint(key) !== grant.keyFingerprint) refuse("grant_key_invalid");

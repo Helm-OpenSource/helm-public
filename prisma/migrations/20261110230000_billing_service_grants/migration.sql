@@ -24,6 +24,8 @@ CREATE TABLE `BillingServiceGrant` (
     CONSTRAINT `BillingServiceGrant_validity` CHECK (`validFrom` < `validUntil`),
     CONSTRAINT `BillingServiceGrant_hash` CHECK (`contentHash` REGEXP '^sha256:[a-f0-9]{64}$'
       AND `keyFingerprint` REGEXP '^sha256:[a-f0-9]{64}$'),
+    CONSTRAINT `BillingServiceGrant_public_key` CHECK (`publicKeyPem` LIKE '-----BEGIN PUBLIC KEY-----%'
+      AND `publicKeyPem` NOT LIKE '%PRIVATE KEY%'),
     CONSTRAINT `BillingServiceGrant_revocation` CHECK ((`revokedAt` IS NULL) = (`revokedBy` IS NULL)),
     CONSTRAINT `BillingServiceGrant_scopes` CHECK (JSON_VALID(`scopesJson`) AND JSON_TYPE(CAST(`scopesJson` AS JSON)) = 'ARRAY'
       AND JSON_LENGTH(CAST(`scopesJson` AS JSON)) > 0 AND (NOT JSON_CONTAINS(CAST(`scopesJson` AS JSON), '"resolve-unknown"')
