@@ -7,13 +7,10 @@ import { postCreditDrawFundsInTransaction, type FundsActor } from "../funds/fund
 import { MAX_FEN } from "../funds/money";
 
 /**
- * Billing V1 S3-e credit facilities (授信). No facility means 0 credit; batch issuance for existing payers is S6, repayment and
- * receivables are S5. A platform finance maker proposes (draft); a different checker approves; then any platform finance role
- * holder activates, reduces, expires or revokes (those only keep or shrink exposure). Workspace roles and service identities have
- * no lifecycle path. AuditLog goes to the actor's reserved workspace in the same transaction (as S2-c).
- * Lock order everywhere: [PlatformFinanceGrant + reserved Membership FOR SHARE] -> PayerAccount FOR UPDATE -> CreditFacility
- * FOR UPDATE -> funds rows (S2-a). Reservation/settlement (S3-b) already holds the PayerAccount lock when it calls in.
- * V1 has no separate freeze: freezing is reduce-to-used (irreversible); restoring credit needs a new facility.
+ * Billing V1 S3-e credit facilities (授信); no facility = 0 credit. Issuance S6, repayment S5. A platform finance maker proposes, a
+ * different checker approves, any platform finance role activates/reduces/expires/revokes; no workspace-role or service path.
+ * AuditLog in the actor's reserved workspace (as S2-c). Lock order: [finance grant + reserved Membership FOR SHARE] -> PayerAccount
+ * -> CreditFacility (draws: see below). V1 freeze = reduce to used (irreversible); restoring credit needs a new facility.
  */
 export type CreditFacilityRefusalCode = "credit_input_invalid" | "credit_forbidden" | "credit_self_approval_forbidden" |
   "credit_operation_conflict" | "credit_unavailable" | "credit_version_conflict" | "credit_transition_invalid" |
@@ -185,7 +182,9 @@ export async function availableCreditFen(tx: Prisma.TransactionClient, payerAcco
   reference(payerAccountId, "payer_account_unavailable");
   const payer = await lockPayer(tx, payerAccountId);
   const facility = await lockDrawable(tx, payerAccountId);
-  return payer.status === "active" && facility?.inTerm ? facility.limitFen - facility.usedFen : ZERO;
+  // A held reservation may settle past a later reduce (usedFen > limitFen), so clamp: never negative.
+  const remaining = facility && facility.inTerm ? facility.limitFen - facility.usedFen : ZERO;
+  return payer.status === "active" && remaining > ZERO ? remaining : ZERO;
 }
 
 /** `reservedAt`: the held reservation's DB-time creation instant, read by S3-b from its locked row. */
@@ -195,13 +194,14 @@ export type CreditShortfallDraw = { borrowedFen: bigint; facilityId: string | nu
 const DRAW_PREFIX = "credit-draw:", FACILITY_PREFIX = "credit-facility:";
 
 /**
- * S3-b settle seam, in the caller's transaction under the PayerAccount lock: borrows only `max(0, chargeFen - wallet available)`
- * into the wallet (one balanced `credit_draw`: debit credit_receivable, credit customer_wallet_available; usedFen += shortfall), so
- * the caller can then charge the wallet in full. A shortfall of 0 writes nothing. The facility is the one drawable at `reservedAt`
- * (else the current one). If it was revoked, reduced or expired after `reservedAt`, the held reservation still settles: state and
- * current limit are skipped and `usedFen + shortfall <= approvedLimitFen` applies instead (protocol v3.6, S0 §5). Fails closed
- * otherwise. Key `credit-draw:<sourceRef>`: a repeat returns the recorded draw (a larger recorded draw refuses); a settle replay
- * that found the wallet sufficient wrote nothing, so S3-b must not call this again when it replays a settled reservation.
+ * S3-b settle seam, under the PayerAccount lock: borrows only `max(0, chargeFen - wallet)` into the wallet (one `credit_draw`:
+ * debit credit_receivable, credit customer_wallet_available; usedFen += shortfall); the caller then charges the wallet in full.
+ * Shortfall 0 writes nothing. Uses the facility drawable at `reservedAt` (else the current one); if it was revoked, reduced or
+ * expired after `reservedAt`, state and current limit are skipped and `usedFen + shortfall <= approvedLimitFen` applies (v3.6).
+ * WIRING (S3-b2 must check): `reservedAt` comes from the BillingReservation row locked in this same transaction (state held or
+ * unknown) and `sourceRef` is bound to that reservationId; a future `reservedAt` refuses. Key `credit-draw:<sourceRef>` returns a
+ * recorded draw (larger than the charge refuses); a wallet-covered settle wrote nothing, so never call this on a settle replay.
+ * Lock order: PayerAccount -> FundsTransaction (share) -> CreditFacility -> wallet projection -> journal posting.
  */
 export async function drawCreditShortfallInTransaction(tx: Prisma.TransactionClient,
   input: DrawCreditShortfallInput): Promise<CreditShortfallDraw> {
@@ -209,6 +209,8 @@ export async function drawCreditShortfallInTransaction(tx: Prisma.TransactionCli
   if (input.sourceRef.length > 191 - DRAW_PREFIX.length || !(input.reservedAt instanceof Date) ||
       Number.isNaN(input.reservedAt.getTime())) refuse("credit_input_invalid");
   if ((await lockPayer(tx, input.payerAccountId)).status !== "active") refuse("payer_account_unavailable");
+  const [clock] = await tx.$queryRaw<Array<{ ok: bigint | number }>>`SELECT ${input.reservedAt} <= UTC_TIMESTAMP(3) AS ok`;
+  if (Number(clock?.ok) !== 1) refuse("credit_input_invalid");
   const operationKey = `${DRAW_PREFIX}${input.sourceRef}`;
   const [prior] = await tx.$queryRaw<Array<{ id: string; evidenceRef: string; amountFen: bigint }>>`
     SELECT t.id, t.evidenceRef, e.amountFen FROM FundsTransaction t JOIN FundsJournalEntry e ON e.transactionId = t.id
@@ -218,7 +220,7 @@ export async function drawCreditShortfallInTransaction(tx: Prisma.TransactionCli
     return { borrowedFen: BigInt(prior.amountFen), facilityId: prior.evidenceRef.slice(FACILITY_PREFIX.length),
       fundsTransactionId: prior.id, walletCovered: false, replayed: true };
   }
-  // Lock order PayerAccount -> CreditFacility -> funds rows. Prefer the facility drawable when the reservation was taken.
+  // Prefer the facility that was drawable when the reservation was taken.
   const held = await lockFacility(tx, Prisma.sql`payerAccountId = ${input.payerAccountId} AND activatedAt <= ${input.reservedAt}
     AND (closedAt IS NULL OR closedAt > ${input.reservedAt}) AND (validUntil IS NULL OR validUntil > ${input.reservedAt})`);
   const facility = held ?? await lockDrawable(tx, input.payerAccountId);

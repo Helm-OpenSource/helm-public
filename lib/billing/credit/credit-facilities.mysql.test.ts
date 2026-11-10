@@ -215,7 +215,9 @@ describe.skipIf(!url)("credit facilities against MySQL", () => {
     await sleep(20);
     await change(facility.id, "reduce", checker, 3, { limitFen: fen(100) });
     await expect(settleIn(a, p, 600, "held-1", reservedAt)).resolves.toMatchObject({ borrowedFen: fen(600), facilityId: facility.id });
+    expect(await available(p)).toBe(fen(0)); // used 600 > reduced limit 100: clamped, never negative
     await expect(draw(p, 1, "after-reduce")).rejects.toThrow("credit_insufficient"); // a new reservation sees the reduced line
+    await expect(settleIn(a, p, 1, "future", new Date(Date.now() + 3600_000))).rejects.toThrow("credit_input_invalid");
     await change(facility.id, "revoke", checker, 4);
     await expect(settleIn(a, p, 401, "held-2", reservedAt)).rejects.toThrow("credit_insufficient"); // 600 + 401 > approved 1000
     await expect(settleIn(a, p, 400, "held-2", reservedAt)).resolves.toMatchObject({ borrowedFen: fen(400) });

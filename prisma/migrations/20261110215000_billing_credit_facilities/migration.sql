@@ -51,10 +51,9 @@ FOR EACH ROW BEGIN
  IF NOT (NEW.state = 'draft' AND NEW.usedFen = 0 AND NEW.version = 1 AND NEW.approvedByUserId IS NULL) THEN
  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='credit_facility_guard'; END IF;
 END;
--- Two update shapes only. A lifecycle step (version + 1, usedFen unchanged) follows the service transitions: draft -> approved
--- (approvedLimitFen := limitFen) -> active -> reduced* -> expired | revoked, revoke from any open state; limitFen only falls on
--- reduce. A draw (version unchanged, only usedFen rises, up to approvedLimitFen) is allowed on an activated facility in any later
--- state: a reservation held before a revoke, reduce or expiry may still settle against it (protocol v3.6). Repayment is S5.
+-- Two update shapes: a lifecycle step (version + 1, usedFen unchanged, service transitions, approvedLimitFen := limitFen on
+-- approve, limitFen only falls on reduce), or a draw (version unchanged, only usedFen rises up to approvedLimitFen) on an
+-- activated facility in any later state, so a reservation held before a tightening still settles (protocol v3.6).
 CREATE TRIGGER `CreditFacility_guard_update` BEFORE UPDATE ON `CreditFacility`
 FOR EACH ROW BEGIN
  IF NOT (BINARY NEW.id <=> BINARY OLD.id) OR NOT (BINARY NEW.payerAccountId <=> BINARY OLD.payerAccountId)
