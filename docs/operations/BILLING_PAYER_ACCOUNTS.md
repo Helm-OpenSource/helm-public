@@ -1,3 +1,11 @@
+---
+status: active / formed-needs-next-layer
+owner: helm-core
+created: 2026-11-10
+review_after: 2026-12-10
+public_safety: Public source contract and synthetic test verification only. No deployment approval, payment, credential or customer data.
+---
+
 # Billing payer accounts / 付款主体与范围绑定
 
 Billing V1 slice S1-c. Payer identity only: no wallet, balance, price, charge, payment, invoice or provider call.
