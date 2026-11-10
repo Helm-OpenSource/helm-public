@@ -1993,6 +1993,80 @@ model BillingOutbox {
   @@index([deliveredAt, createdAt])
 }
 
+// Billing V1 catalog and spend grants (S3-a). Products and price versions are immutable; a grant binds one price version.
+enum BillingPriceRounding {
+  half_up
+}
+
+enum SpendGrantState {
+  disabled
+  active
+  paused
+  revoked
+  expired
+}
+
+enum SpendGrantTrigger {
+  user_initiated
+  scheduled
+}
+
+model BillingProduct {
+  id        String   @id @default(cuid())
+  code      String   @unique @db.VarChar(64)
+  createdBy String   @db.VarChar(191)
+  createdAt DateTime @default(now())
+}
+
+model BillingPriceVersion {
+  id                    String               @id @default(cuid())
+  productId             String               @db.VarChar(191)
+  version               Int
+  billingEventRef       String               @db.VarChar(191)
+  meterUnit             String               @db.VarChar(32)
+  acceptanceRef         String               @db.VarChar(191)
+  scopeKind             PayerScopeKind
+  // Unit price = numerator / denominator fen; a charge line rounds once, half-up.
+  unitPriceFenNumerator BigInt
+  unitPriceDenominator  BigInt
+  rounding              BillingPriceRounding
+  currency              String               @default("CNY") @db.VarChar(3)
+  effectiveFrom         DateTime
+  effectiveUntil        DateTime?
+  approvalRef           String               @db.VarChar(191)
+  contentHash           String               @db.Char(64)
+  createdBy             String               @db.VarChar(191)
+  createdAt             DateTime             @default(now())
+
+  @@unique([productId, version])
+}
+
+model SpendGrant {
+  id                String            @id @default(cuid())
+  payerAccountId    String            @db.VarChar(191)
+  productId         String            @db.VarChar(191)
+  priceVersionId    String            @db.VarChar(191)
+  state             SpendGrantState   @default(disabled)
+  triggerKind       SpendGrantTrigger @default(user_initiated)
+  perChargeLimitFen BigInt            @default(0)
+  dailyLimitFen     BigInt            @default(0)
+  monthlyLimitFen   BigInt            @default(0)
+  validFrom         DateTime
+  validUntil        DateTime
+  operationKey      String            @db.VarChar(191)
+  contentHash       String            @db.Char(64)
+  version           Int               @default(1)
+  createdByUserId   String            @db.VarChar(191)
+  evidenceRef       String            @db.VarChar(191)
+  revokedAt         DateTime?
+  revokedByUserId   String?           @db.VarChar(191)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@unique([payerAccountId, operationKey])
+  @@index([payerAccountId, state])
+}
+
 model WorkerPublisherProfile {
   id                        String                     @id @default(cuid())
   workspaceId               String

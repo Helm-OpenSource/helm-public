@@ -30,6 +30,7 @@
     "docs/operations/USAGE_OBSERVATION_IDEMPOTENCY.md",
     "docs/operations/BILLING_PAYER_ACCOUNTS.md",
     "docs/operations/BILLING_FUNDS_JOURNAL.md",
+    "docs/operations/BILLING_PRICE_GRANTS.md",
     "docs/operations/MEMBERSHIP_AUTO_ACTIVATION.md",
     "docs/operations/HELM_OPC_WEEKLY_PACKET_TEMPLATE.md",
     "docs/operations/HELM_OPEN_SOURCE_GROWTH_7_DAY_OPERATING_PLAN_2026-06-02.md",
