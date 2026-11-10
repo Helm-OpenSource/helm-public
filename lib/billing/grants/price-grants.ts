@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { ActorType, Prisma, type PrismaClient } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { MAX_FEN } from "../funds/money";
+import { canManageWorkspaceBilling } from "@/lib/auth/billing-governance";
 import { lockBillingAuthority } from "../payer/payer-accounts";
 
 /**
@@ -141,7 +142,7 @@ const assertPayerActive = (payer: PayerRow) => { if (payer.status !== "active") 
 async function lockPayerForGrantWrite(tx: Prisma.TransactionClient, actorUserId: string, payerAccountId: string) {
   const head = await tx.payerAccount.findUnique({ where: { id: payerAccountId }, select: { governingWorkspaceId: true } });
   if (!head?.governingWorkspaceId) refuse("payer_account_unavailable");
-  try { await lockBillingAuthority(tx, actorUserId, [head.governingWorkspaceId]); } catch (error) {
+  try { await lockBillingAuthority(tx, actorUserId, [head.governingWorkspaceId], canManageWorkspaceBilling); } catch (error) {
     if (error instanceof Error && error.message === "payer_binding_forbidden") refuse("grant_forbidden");
     throw error;
   }

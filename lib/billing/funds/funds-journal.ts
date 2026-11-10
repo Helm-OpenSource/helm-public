@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { ActorType, Prisma } from "@prisma/client";
+import { ActorType, Prisma, type PrismaClient } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { assertPositiveFen } from "./money";
 
@@ -10,10 +10,10 @@ import { assertPositiveFen } from "./money";
  * not authorize people: callers prove authority and pass a server-derived actor. Lock order: PayerAccount FOR UPDATE (S1-c),
  * then FundsTransaction, then projection rows in ascending account order.
  */
-export const FUNDS_ACCOUNTS = ["correction_suspense", "customer_wallet_available", "topup_clearing"] as const;
+export const FUNDS_ACCOUNTS = ["bank_clearing", "correction_suspense", "customer_wallet_available", "topup_clearing"] as const;
 export type FundsAccountName = (typeof FUNDS_ACCOUNTS)[number];
 export type FundsDirection = "debit" | "credit";
-export type FundsKind = "topup" | "correction";
+export type FundsKind = "topup" | "correction" | "bank_topup";
 export type FundsEntryInput = { account: FundsAccountName; direction: FundsDirection; amountFen: bigint };
 /** Server-derived actor; `ref` is a user id for USER or a service name for SYSTEM. */
 export type FundsActor = { type: "USER" | "SYSTEM"; ref: string };
@@ -37,7 +37,7 @@ function reference(value: unknown): asserts value is string {
   if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,190}$/.test(value)) refuse("funds_input_invalid");
 }
 function sha256(text: string) { return createHash("sha256").update(text).digest("hex"); }
-/** Credit-normal for the customer wallet (a liability to the customer); debit-normal for clearing and suspense. */
+/** Credit-normal for the customer wallet (a liability to the customer); debit-normal for clearing (payment, bank) and suspense. */
 function signedDelta(account: FundsAccountName, direction: FundsDirection, amountFen: bigint) {
   const creditNormal = account === WALLET;
   return (direction === "credit") === creditNormal ? amountFen : -amountFen;
@@ -52,7 +52,7 @@ export function normalizeFundsPosting(input: PostFundsInput, reversalOfId: strin
   reference(input.payerAccountId); reference(input.operationKey); reference(input.evidenceRef);
   if (!input.actor || (input.actor.type !== "USER" && input.actor.type !== "SYSTEM")) refuse("funds_input_invalid");
   reference(input.actor.ref);
-  if (input.kind !== "topup" && input.kind !== "correction") refuse("funds_input_invalid");
+  if (input.kind !== "topup" && input.kind !== "correction" && input.kind !== "bank_topup") refuse("funds_input_invalid");
   if (reversalOfId !== null && input.kind !== "correction") refuse("funds_input_invalid");
   const count = Array.isArray(input.entries) ? input.entries.length : 0;
   if (count < 2 || count > FUNDS_ACCOUNTS.length) refuse("funds_input_invalid");
@@ -71,6 +71,9 @@ export function normalizeFundsPosting(input: PostFundsInput, reversalOfId: strin
     const line = (account: FundsAccountName) => entries.find(entry => entry.account === account);
     // A topup is exactly: debit verified-payment clearing, credit the customer wallet.
     if (input.kind === "topup" && (entries.length !== 2 || line("topup_clearing")?.direction !== "debit" ||
+        line(WALLET)?.direction !== "credit")) refuse("funds_accounts_not_allowed");
+    // S2-c: a reviewed corporate bank receipt is exactly: debit bank clearing, credit the customer wallet.
+    if (input.kind === "bank_topup" && (entries.length !== 2 || line("bank_clearing")?.direction !== "debit" ||
         line(WALLET)?.direction !== "credit")) refuse("funds_accounts_not_allowed");
     // A free correction moves value only between the wallet and correction suspense; reversals mirror the original.
     if (input.kind === "correction" && (entries.length !== 2 || !line("correction_suspense") || !line(WALLET))) {
@@ -172,6 +175,27 @@ async function postLocked(tx: Prisma.TransactionClient, payer: PayerRow, posting
   await tx.billingOutbox.create({ data: { aggregateType: "FundsTransaction", aggregateId: transaction.id,
     eventType: "funds.posted", payload, payloadHash: sha256(payload) } });
   return { transaction, entries, replayed: false };
+}
+
+/** Conflicts that abort the whole transaction and are safe to re-run: Prisma P2034, a MySQL 1213 deadlock from a raw query
+ * (P2010), or a concurrent same-key insert (`funds_write_conflict`). */
+export function isRetryableFundsConflict(error: unknown) {
+  if (error instanceof FundsRefusal) return error.code === "funds_write_conflict";
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
+  const dbCode = String((error.meta as { code?: unknown } | undefined)?.code ?? "");
+  return error.code === "P2034" || (error.code === "P2010" && (dbCode === "1213" || /Deadlock found/i.test(error.message)));
+}
+
+/** Runs a money transaction with a bounded retry on those conflicts; when attempts run out it refuses `funds_write_conflict`. */
+export async function runFundsTransactionWithRetry<T>(client: PrismaClient, run: (tx: Prisma.TransactionClient) => Promise<T>,
+  attempts = 3): Promise<T> {
+  for (let attempt = 1; ; attempt += 1) {
+    try { return await client.$transaction(run, { maxWait: 5000, timeout: 10000 }); } catch (error) {
+      if (!isRetryableFundsConflict(error)) throw error;
+      if (attempt >= attempts) refuse("funds_write_conflict");
+      await new Promise(resolve => setTimeout(resolve, 5 * attempt + Math.floor(Math.random() * 10)));
+    }
+  }
 }
 
 export async function postFundsTransactionInTransaction(tx: Prisma.TransactionClient, input: PostFundsInput) {
