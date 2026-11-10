@@ -49,4 +49,13 @@ describe("funds posting normalization", () => {
     expect(normalizeFundsPosting(topup([{ ...clearingDebit(5), direction: "credit" }, { ...walletCredit(5), direction: "debit" }],
       { kind: "correction" }), "txn-a").reversalOfId).toBe("txn-a");
   });
+  it("accepts a charge only as wallet debit against charge revenue", () => {
+    const debit = { account: "customer_wallet_available" as const, direction: "debit" as const, amountFen: fen(7) };
+    const revenue = { account: "charge_revenue" as const, direction: "credit" as const, amountFen: fen(7) };
+    expect(normalizeFundsPosting(topup([revenue, debit], { kind: "charge" })).entries.map(entry => entry.account))
+      .toEqual(["charge_revenue", "customer_wallet_available"]);
+    expect(() => normalizeFundsPosting(topup([clearingDebit(7), walletCredit(7)], { kind: "charge" }))).toThrow("funds_accounts_not_allowed");
+    expect(() => normalizeFundsPosting(topup([{ ...revenue, direction: "debit" }, { ...debit, direction: "credit" }], { kind: "charge" })))
+      .toThrow("funds_accounts_not_allowed");
+  });
 });

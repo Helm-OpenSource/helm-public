@@ -1924,12 +1924,14 @@ model PayerScopeBinding {
 enum FundsTransactionKind {
   topup
   correction
+  charge
 }
 
 enum FundsAccount {
   customer_wallet_available
   topup_clearing
   correction_suspense
+  charge_revenue
 }
 
 enum FundsEntryDirection {
@@ -2142,6 +2144,30 @@ model BillingReservation {
   @@unique([payerAccountId, idempotencyKey])
   @@unique([payerAccountId, operationRef])
   @@index([payerAccountId, state])
+}
+
+// Billing V1 settled charge (S3-b2): immutable, one per reservation; enforce charges have exactly one `charge` funds transaction.
+model BillingCharge {
+  id                 String   @id @default(cuid())
+  reservationId      String   @unique @db.VarChar(191)
+  payerAccountId     String   @db.VarChar(191)
+  grantId            String   @db.VarChar(191)
+  operationRef       String   @db.VarChar(191)
+  idempotencyKey     String   @db.VarChar(191) // the settle call's key
+  billingMode        BillingReservationMode
+  fundsTransactionId String?  @unique @db.VarChar(191) // null for shadow: never posted
+  priceVersionId     String   @db.VarChar(191)
+  priceContentHash   String   @db.Char(64)
+  quantity           BigInt
+  chargeFen          BigInt // <= capFen: repriced from the frozen price for the used quantity
+  capFen             BigInt
+  dayKey             String   @db.VarChar(10) // the reservation's frozen periods, not settle time
+  monthKey           String   @db.VarChar(7)
+  evidenceRef        String   @db.VarChar(191)
+  createdBy          String   @db.VarChar(191)
+  createdAt          DateTime @default(now())
+
+  @@index([payerAccountId, createdAt])
 }
 
 model WorkerPublisherProfile {
