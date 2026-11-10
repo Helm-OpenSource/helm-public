@@ -13,10 +13,10 @@ route or UI. 本片只提供 Core 本库资金分录原语，不接支付、不�
 
 ## Model / 模型（migration `20261110140000_billing_funds_journal`）
 
-- `FundsTransaction`: `kind` (`topup` | `correction` | `charge` from S3-b2 settle), byte-exact `operationKey`, `contentHash` (sha256 of the normalized
+- `FundsTransaction`: `kind` (`topup` | `correction` | `bank_topup` (S2-c) | `charge` (S3-b2 settle)), byte-exact `operationKey`, `contentHash` (sha256 of the normalized
   posting), `reversalOfId`, `currency` (`CNY`), `evidenceRef`, `createdBy` (`USER:<id>` | `SYSTEM:<service>`). UNIQUE `(payerAccountId,
   operationKey)` and UNIQUE `reversalOfId` (one reversal per original).
-- `FundsJournalEntry`: `account` (`customer_wallet_available` | `topup_clearing` | `correction_suspense` | `charge_revenue`), `direction`, `amountFen` BIGINT
+- `FundsJournalEntry`: `account` (`customer_wallet_available` | `topup_clearing` | `correction_suspense` | `bank_clearing` | `charge_revenue`), `direction`, `amountFen` BIGINT
   (CHECK `0 < amountFen <= 2^53-1`); one line per account per transaction. Triggers reject UPDATE/DELETE on both tables. 分录不可改不可删，错账只追加冲正。
 - `FundsAccountProjection` PK `(payerAccountId, account)`, `balanceFen`, `version`: wallet credit-normal (owed to the customer), clearing and
   suspense debit-normal; CHECK wallet `>= 0`. `BillingOutbox` (`funds.posted`, `payloadHash`, `deliveredAt` NULL): no delivery worker yet.
@@ -32,7 +32,7 @@ route or UI. 本片只提供 Core 本库资金分录原语，不接支付、不�
   transaction. `reverseFundsTransactionInTransaction(tx, input)`: appends a `correction` mirroring the original with `reversalOfId`.
   `recomputeFundsProjection(tx, payerAccountId)`: rebuilds balances from entries, reports drift and unbalanced transactions; never repairs.
 - Lock order (S1-c): `PayerAccount FOR UPDATE`, then `FundsTransaction`, then projections by ascending account; later reads are locking reads.
-- Validation: 2–4 distinct accounts, positive bounded bigint amounts, Σdebit = Σcredit (`funds_unbalanced`). `topup` is exactly debit
+- Validation: 2–5 distinct accounts, positive bounded bigint amounts, Σdebit = Σcredit (`funds_unbalanced`). `topup` is exactly debit
   `topup_clearing` / credit wallet; a free `correction` uses only the wallet and `correction_suspense`; a `charge` is exactly debit wallet / credit
   credit-normal `charge_revenue` and cannot be reversed (no refunds in V1) (`funds_accounts_not_allowed`, `funds_reversal_invalid`).
 - Payer gate: locked row `active`, `CNY`, with a governing workspace (`payer_account_unavailable`); `billingMode` `shadow` or `enforce`,

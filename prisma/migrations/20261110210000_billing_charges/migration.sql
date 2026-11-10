@@ -1,11 +1,11 @@
 -- Billing V1 S3-b2 (2026-11-10): settled charges. Adds the `charge` funds kind and the credit-normal `charge_revenue` account
--- (ENUM values appended, metadata-only) and the immutable BillingCharge row (one per reservation, one per funds transaction).
+-- (ENUM values appended after S2-c's `bank_topup` / `bank_clearing`, which must already be applied; metadata-only) and the immutable BillingCharge row (one per reservation, one per funds transaction).
 -- A charge is created only by settling a reservation in its frozen period buckets; a shadow charge has no funds transaction. No FKs.
 -- Rollback: prisma/rollback/20261110_rollback_billing_charges.sql (refuses while any charge row or charge posting exists).
 
-ALTER TABLE `FundsTransaction` MODIFY `kind` ENUM('topup', 'correction', 'charge') NOT NULL;
-ALTER TABLE `FundsJournalEntry` MODIFY `account` ENUM('customer_wallet_available', 'topup_clearing', 'correction_suspense', 'charge_revenue') NOT NULL;
-ALTER TABLE `FundsAccountProjection` MODIFY `account` ENUM('customer_wallet_available', 'topup_clearing', 'correction_suspense', 'charge_revenue') NOT NULL;
+ALTER TABLE `FundsTransaction` MODIFY `kind` ENUM('topup', 'correction', 'bank_topup', 'charge') NOT NULL;
+ALTER TABLE `FundsJournalEntry` MODIFY `account` ENUM('customer_wallet_available', 'topup_clearing', 'correction_suspense', 'bank_clearing', 'charge_revenue') NOT NULL;
+ALTER TABLE `FundsAccountProjection` MODIFY `account` ENUM('customer_wallet_available', 'topup_clearing', 'correction_suspense', 'bank_clearing', 'charge_revenue') NOT NULL;
 
 CREATE TABLE `BillingCharge` (
     `id` VARCHAR(191) NOT NULL,

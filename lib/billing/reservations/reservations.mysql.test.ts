@@ -313,7 +313,7 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
   it("quotes payer, grant and price version from the workspace binding and fails closed otherwise", async () => {
     const ids = await setup("enforce", 1000);
     const q = (meterUnit = "document") => asBillingResult(atClock(a, midNov, tx => quoteInTransaction(tx, service, {
-      subjectScope: { kind: "workspace", ref: qws }, billingEventRef: "service-billing-event-v1:synthetic", meterUnit, quantity: "1" })));
+      subjectScope: { kind: "workspace", workspaceId: qws }, billingEventRef: "service-billing-event-v1:synthetic", meterUnit, quantity: "1" })));
     expect(await q()).toEqual(rejected("billing_mode_off")); // unbound workspace: not billed (status quo)
     await bindScope(a, { actorUserId: owner, payerAccountId: ids.payerAccountId, expectedPayerVersion: 1, scopeKind: "workspace",
       scopeRef: qws, evidenceRef: "consent:bind" });

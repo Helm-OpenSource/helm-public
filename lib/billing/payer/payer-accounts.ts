@@ -36,9 +36,10 @@ function version(value: unknown, code: string): asserts value is number {
  * capability (OWNER/BILLING_ADMIN); binding and revocation commit or withdraw money authority and require OWNER (S0 §7).
  * Lock order for this module: Membership -> PayerAccount -> PayerScopeBinding.
  */
-const ownerOnly = (role: WorkspaceRole) => role === "OWNER";
+export const ownerOnly = (role: WorkspaceRole) => role === "OWNER";
+/** `allowed` is required: every caller names its role rule (ownerOnly or canManageWorkspaceBilling) explicitly. */
 export async function lockBillingAuthority(tx: Prisma.TransactionClient, actorUserId: string, workspaceIds: string[],
-  allowed: (role: WorkspaceRole) => boolean = canManageWorkspaceBilling) {
+  allowed: (role: WorkspaceRole) => boolean) {
   const ids = [...new Set(workspaceIds)].sort();
   const rows = await tx.$queryRaw<Array<{ workspaceId: string; userId: string; role: WorkspaceRole;
     status: string; accessScope: string | null; workspaceStatus: string }>>`
@@ -78,7 +79,7 @@ export async function createPayerAccount(client: PrismaClient, input: CreatePaye
   if (input.collectionSubjectRef != null) reference(input.collectionSubjectRef, "payer_collection_subject_invalid");
   if ((input.currency ?? "CNY") !== "CNY") fail("payer_currency_not_supported");
   return transaction(client, async tx => {
-    await lockBillingAuthority(tx, input.actorUserId, [input.workspaceId]);
+    await lockBillingAuthority(tx, input.actorUserId, [input.workspaceId], canManageWorkspaceBilling);
     const account = await tx.payerAccount.create({ data: {
       kind: "enterprise_contract", governingWorkspaceId: input.workspaceId, contractSubjectRef: input.contractSubjectRef,
       collectionSubjectRef: input.collectionSubjectRef ?? null, currency: "CNY",

@@ -44,10 +44,10 @@ then the caller passes the authenticated service actor (`SYSTEM`) as a separate 
   writes the shadow `BillingCharge` (`fundsTransactionId` null) and a `billing.charge.shadow_settled` outbox row, never funds.
 - **resolveUnknown** (reconciliation/manual channel only; route and operator entry S3-b3/S5): `unknown -> settled` (needs
   `quantityUsed`, same rules as settle) or `unknown -> released` (reason `unknown_released`), with evidence; any other state is
-  `unknown_resolution_conflict`. **quote** (`subjectScope: { kind: "workspace", ref }`): resolves the payer through the active
+  `unknown_resolution_conflict`. **quote** (`subjectScope: { kind: "workspace", workspaceId }`): resolves the payer through the active
   workspace binding and the single active, in-validity grant whose bound price matches event and meter unit, returning `payerRef`,
   `grantId`, `priceVersionId`, `mode`. Lock-free and advisory (reserve re-checks under lock). Unbound workspace or off payer is
-  `billing_mode_off`; suspended payer, no match or more than one match is `grant_not_active`. Consumer scopes: `request_invalid`.
+  `billing_mode_off`; suspended payer, no match or more than one match is `grant_not_active`. `vault` scopes: `request_invalid` until S3-f.
 - **Codes**: gate refusals map to protocol codes (per-charge/daily/monthly -> `limit_exceeded`; inactive, out-of-validity or
   ineffective price -> `grant_not_active`). Addition proposed to the protocol: `request_invalid` (malformed request). An unknown
   `reservationId` is `reservation_state_conflict`. Write conflicts are `core_unavailable` (retry with the same key).

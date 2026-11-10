@@ -332,7 +332,8 @@ export async function resolveUnknownInTransaction(tx: Prisma.TransactionClient, 
   return releaseFrom(tx, actor, req, "unknown_released", true);
 }
 
-export type QuoteRequest = { subjectScope: { kind: "workspace"; ref: string }; billingEventRef: string; meterUnit: string;
+export type QuoteRequest = { subjectScope: { kind: "workspace"; workspaceId: string } | { kind: "vault"; vaultId: string };
+  billingEventRef: string; meterUnit: string;
   quantity: string };
 /**
  * Resolves payer, grant and price version for a subject (protocol v2 §3) so the business side never picks a grant. Advisory and
@@ -341,11 +342,13 @@ export type QuoteRequest = { subjectScope: { kind: "workspace"; ref: string }; b
  */
 export async function quoteInTransaction(tx: Prisma.TransactionClient, actor: ServiceActor, req: QuoteRequest) {
   serviceActor(actor);
-  if (!req?.subjectScope || req.subjectScope.kind !== "workspace") reject("request_invalid"); // consumer scopes: not enabled (S1-c)
-  reference(req.subjectScope.ref); reference(req.billingEventRef); positiveQuantity(req.quantity);
+  // vault scopes need consumer payers (S3-f); until then request_invalid (protocol v3.2)
+  if (!req?.subjectScope || req.subjectScope.kind !== "workspace") reject("request_invalid");
+  const workspaceId = req.subjectScope.workspaceId;
+  reference(workspaceId); reference(req.billingEventRef); positiveQuantity(req.quantity);
   if (typeof req.meterUnit !== "string" || !/^[a-z][a-z0-9_]{0,31}$/.test(req.meterUnit)) reject("request_invalid");
   let payer: Awaited<ReturnType<typeof resolvePayerForWorkspaceInTransaction>>;
-  try { payer = await resolvePayerForWorkspaceInTransaction(tx, req.subjectScope.ref); } catch (error) {
+  try { payer = await resolvePayerForWorkspaceInTransaction(tx, workspaceId); } catch (error) {
     // No active binding: the workspace is not billed today (status quo). A suspended payer fails closed.
     if (error instanceof Error && error.message === "payer_unresolved") reject("billing_mode_off");
     if (error instanceof Error && error.message === "payer_account_unavailable") reject("grant_not_active");
