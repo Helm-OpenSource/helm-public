@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { generateKeyPairSync, type KeyObject, randomBytes, randomUUID } from "node:crypto";
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { PrismaClient } from "@prisma/client";
@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { postFundsTransactionInTransaction } from "../funds/funds-journal";
 import { changeSpendGrant, createSpendGrant, publishPriceVersion } from "../grants/price-grants";
 import { bindScope, createPayerAccount } from "../payer/payer-accounts";
-import { billingServiceGrantHash, signBillingInternalRequest } from "./service-auth";
+import { billingServiceGrantHash, billingServiceKeyFingerprint, signBillingInternalRequest } from "./service-auth";
 import { POST as markUnknownRoute } from "@/app/api/internal/billing/v1/mark-unknown/route";
 import { POST as quoteRoute } from "@/app/api/internal/billing/v1/quote/route";
 import { POST as releaseRoute } from "@/app/api/internal/billing/v1/release/route";
@@ -42,24 +42,28 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
   const ws = `bir-ws-${run}`, qws = `bir-qws-${run}`, owner = `bir-owner-${run}`;
   const event = "service-billing-event-v1:synthetic";
   let a: PrismaClient, priceId = "";
-  const keyring: Record<string, { grantId: string; grantHash: string; secret: string }> = {};
-  const secrets = new Map<string, string>();
+  // Ephemeral Ed25519 pairs per grant (no private key is ever written down); Core sees only the public half.
+  const pins: Record<string, string> = {};
+  const keys = new Map<string, KeyObject>();
+  const otherKey = generateKeyPairSync("ed25519").privateKey;
 
-  async function grant(name: string, scopes: string[], options: { pin?: boolean; validUntil?: Date } = {}) {
+  async function grant(name: string, scopes: string[], options: { pin?: boolean; validUntil?: Date; foreignFingerprint?: boolean } = {}) {
     const row = { id: `${name}-${run}`, issuerRef: "synthetic-consumer", scopesJson: JSON.stringify([...scopes].sort()),
-      keyRef: `key-${name}-${run}`, approvalRef: "approval:synthetic", createdBy: "SYSTEM:synthetic-provisioning",
+      publicKeyPem: "", keyFingerprint: "", approvalRef: "approval:synthetic", createdBy: "SYSTEM:synthetic-provisioning",
       validFrom: new Date(Date.now() - 3_600_000), validUntil: options.validUntil ?? new Date(Date.now() + 86_400_000) };
+    const pair = generateKeyPairSync("ed25519");
+    row.publicKeyPem = pair.publicKey.export({ type: "spki", format: "pem" }).toString();
+    row.keyFingerprint = billingServiceKeyFingerprint(options.foreignFingerprint ? generateKeyPairSync("ed25519").publicKey : pair.publicKey);
     const contentHash = billingServiceGrantHash(row);
-    await a.$executeRaw`INSERT INTO BillingServiceGrant (id, issuerRef, scopesJson, keyRef, approvalRef, createdBy, contentHash,
-      validFrom, validUntil) VALUES (${row.id}, ${row.issuerRef}, ${row.scopesJson}, ${row.keyRef}, ${row.approvalRef},
-      ${row.createdBy}, ${contentHash}, ${row.validFrom}, ${row.validUntil})`;
-    const secret = randomBytes(32).toString("base64url");
-    secrets.set(row.id, secret);
-    if (options.pin !== false) keyring[row.keyRef] = { grantId: row.id, grantHash: contentHash, secret };
-    process.env.HELM_BILLING_SERVICE_KEYRING = JSON.stringify(keyring);
+    await a.$executeRaw`INSERT INTO BillingServiceGrant (id, issuerRef, scopesJson, publicKeyPem, keyFingerprint, approvalRef,
+      createdBy, contentHash, validFrom, validUntil) VALUES (${row.id}, ${row.issuerRef}, ${row.scopesJson}, ${row.publicKeyPem},
+      ${row.keyFingerprint}, ${row.approvalRef}, ${row.createdBy}, ${contentHash}, ${row.validFrom}, ${row.validUntil})`;
+    keys.set(row.id, pair.privateKey);
+    if (options.pin !== false) pins[row.id] = contentHash;
+    process.env.HELM_BILLING_SERVICE_GRANT_PINS = JSON.stringify(pins);
     return row.id;
   }
-  type Call = { grantId: string; secret?: string; timestamp?: number; nonce?: string; signedBody?: string; path?: string };
+  type Call = { grantId: string; key?: KeyObject; timestamp?: number; nonce?: string; signedBody?: string; path?: string };
   const routes = { quote: quoteRoute, reserve: reserveRoute, settle: settleRoute, release: releaseRoute,
     "mark-unknown": markUnknownRoute, "resolve-unknown": resolveUnknownRoute };
   async function call(operation: keyof typeof routes, payload: unknown, auth: Call) {
@@ -67,7 +71,7 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
     const body = typeof payload === "string" ? payload : JSON.stringify(payload);
     const path = `/api/internal/billing/v1/${operation}`, timestamp = String(auth.timestamp ?? Date.now());
     const nonce = auth.nonce ?? randomBytes(16).toString("base64url");
-    const signature = signBillingInternalRequest(auth.secret ?? secrets.get(auth.grantId)!, { method: "POST",
+    const signature = signBillingInternalRequest(auth.key ?? keys.get(auth.grantId)!, { method: "POST",
       path: auth.path ?? path, grantId: auth.grantId, timestamp, nonce, body: auth.signedBody ?? body });
     const response: Response = await POST(new Request(`http://core.invalid${path}`, { method: "POST", body, headers: {
       "content-type": "application/json", "x-helm-billing-grant": auth.grantId, "x-helm-billing-timestamp": timestamp,
@@ -113,7 +117,7 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
     process.env.HELM_BILLING_INTERNAL_ROUTES_ENABLED = "true";
   });
   afterAll(async () => {
-    delete process.env.HELM_BILLING_INTERNAL_ROUTES_ENABLED; delete process.env.HELM_BILLING_SERVICE_KEYRING;
+    delete process.env.HELM_BILLING_INTERNAL_ROUTES_ENABLED; delete process.env.HELM_BILLING_SERVICE_GRANT_PINS;
     await a?.$disconnect();
   });
 
@@ -151,14 +155,16 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
     const body = reserveBody(ids, "auth");
     const unauthorized = refused(401, "service_unauthorized");
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(await call("reserve", body, { grantId: service, secret: randomBytes(32).toString("base64url") })).toEqual(unauthorized);
+    expect(await call("reserve", body, { grantId: service, key: otherKey })).toEqual(unauthorized);
     expect(await call("reserve", body, { grantId: service, signedBody: JSON.stringify({ ...body, quantity: "1" }) })).toEqual(unauthorized);
     expect(await call("reserve", body, { grantId: service, path: "/api/internal/billing/v1/release" })).toEqual(unauthorized);
     expect(await call("reserve", body, { grantId: service, timestamp: Date.now() - 301_000 })).toEqual(unauthorized);
     expect(await call("reserve", body, { grantId: service, timestamp: Date.now() + 301_000 })).toEqual(unauthorized);
-    expect(await call("reserve", body, { grantId: `missing-${run}`, secret: secrets.get(service) })).toEqual(unauthorized);
+    expect(await call("reserve", body, { grantId: `missing-${run}`, key: keys.get(service) })).toEqual(unauthorized);
     const unpinned = await grant("unpinned", ["reserve"], { pin: false });
     expect(await call("reserve", body, { grantId: unpinned })).toEqual(unauthorized);
+    const foreign = await grant("foreign", ["reserve"], { foreignFingerprint: true }); // pinned row, key/fingerprint disagree
+    expect(await call("reserve", body, { grantId: foreign })).toEqual(unauthorized);
     const quoteOnly = await grant("scope", ["quote"]);
     expect(await call("reserve", body, { grantId: quoteOnly })).toEqual(refused(403, "service_unauthorized"));
     expect(await reservations(ids.payerRef)).toBe(0);
@@ -166,16 +172,15 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
     const nonce = randomBytes(16).toString("base64url"), timestamp = Date.now();
     expect((await call("reserve", body, { grantId: service, nonce, timestamp })).status).toBe(200);
     expect(await call("reserve", body, { grantId: service, nonce, timestamp })).toEqual(unauthorized); // same signed request again
-    const saved = process.env.HELM_BILLING_SERVICE_KEYRING;
-    process.env.HELM_BILLING_SERVICE_KEYRING = "{not json";
+    const saved = process.env.HELM_BILLING_SERVICE_GRANT_PINS;
+    process.env.HELM_BILLING_SERVICE_GRANT_PINS = "{not json";
     expect(await call("reserve", reserveBody(ids, "auth2"), { grantId: service })).toEqual(unauthorized);
-    process.env.HELM_BILLING_SERVICE_KEYRING = saved;
+    process.env.HELM_BILLING_SERVICE_GRANT_PINS = saved;
     const lines = logged.mock.calls.map(args => args.join(" "));
     logged.mockRestore();
     expect(lines.some(line => line.includes('"reason":"nonce_replayed"'))).toBe(true);
     for (const line of lines) {
       expect(line).toMatch(/^\[billing-internal\] \{"event":"billing_internal_auth_refused","operation":"reserve","reason":"[a-z_]+"\}$/);
-      for (const secret of secrets.values()) expect(line).not.toContain(secret);
     }
 
     await a.$executeRaw`UPDATE BillingServiceGrant SET revokedAt = UTC_TIMESTAMP(3), revokedBy = 'SYSTEM:synthetic' WHERE id = ${service}`;
@@ -265,7 +270,7 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
     // A counter that disagrees with its holds is an invariant breach: 500 core_unavailable, PII-free alert, nothing committed.
     await a.$executeRaw`UPDATE BudgetBucket SET reservedFen = 0, version = version + 1 WHERE grantId = ${ids.grantId} AND billingMode = 'enforce'`;
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(await call("release", step(r5, "e5", { reasonCode: "failed" }), { grantId: business })).toEqual(refused(500, "core_unavailable"));
+    expect(await call("release", step(r5, "e5", { reasonCode: "failed" }), { grantId: business })).toEqual(refused(500, "internal_error"));
     expect(logged.mock.calls.map(args => args.join(" "))).toEqual(['[billing-internal] {"event":"billing_internal_invariant_breach","operation":"release","reason":"reservation_invariant_breach"}']);
     logged.mockRestore();
     expect(await a.billingReservation.findUniqueOrThrow({ where: { id: r5 } })).toMatchObject({ state: "held" });

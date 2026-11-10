@@ -38,13 +38,15 @@ const OPERATIONS = {
 } satisfies Record<BillingServiceScope, unknown>;
 export type BillingInternalOperation = keyof typeof OPERATIONS;
 
-const STATUS: Record<BillingRejectCode, number> = { request_invalid: 400, service_unauthorized: 401,
+/** v3.7 `internal_error`: route-only (the library never returns it); the caller stays pending, alerts, backs off, never releases. */
+type ProtocolCode = BillingRejectCode | "internal_error";
+const STATUS: Record<ProtocolCode, number> = { internal_error: 500, request_invalid: 400, service_unauthorized: 401,
   idempotency_conflict: 409, reservation_state_conflict: 409, unknown_resolution_conflict: 409, mode_mismatch: 409,
   billing_mode_off: 422, insufficient_funds: 422, limit_exceeded: 422, grant_not_active: 422, grant_price_version_mismatch: 422,
   grant_meter_mismatch: 422, grant_charge_zero: 422, quantity_exceeds_reservation: 422, core_unavailable: 503 };
 const NO_STORE = { "Cache-Control": "no-store" };
 const answer = (body: object, status: number) => NextResponse.json(body, { status, headers: NO_STORE });
-const rejected = (code: BillingRejectCode, status = STATUS[code]) => answer({ ok: false, code }, status);
+const rejected = (code: ProtocolCode, status = STATUS[code]) => answer({ ok: false, code }, status);
 /** Structured, PII-free operator signal: operation and a fixed reason only (never ids, keys, signatures or SQL). */
 function alert(event: string, operation: string, reason: string) {
   console.error("[billing-internal]", JSON.stringify({ event, operation, reason }));
@@ -76,10 +78,10 @@ export async function handleBillingInternalRequest(operation: BillingInternalOpe
     const result = await pending;
     return result.ok ? answer(result, 200) : rejected(result.code);
   } catch (error) {
-    // Refusals are results; anything thrown is unmapped. An invariant breach rolled back: alert, do not retry blindly.
+    // Refusals are results; anything thrown is unmapped (it rolled back): internal_error with an operator alert.
     const breach = error instanceof Error && error.message.endsWith("_invariant_breach");
     alert(breach ? "billing_internal_invariant_breach" : "billing_internal_unexpected_error", operation,
       breach ? (error as Error).message : error instanceof Error ? error.name : "unknown");
-    return rejected("core_unavailable", 500);
+    return rejected("internal_error");
   }
 }

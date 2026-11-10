@@ -1926,6 +1926,7 @@ enum FundsTransactionKind {
   correction
   bank_topup // S2-c
   charge // S3-b2 (the DB ENUM also holds S3-e's credit_draw from the agreed-union MODIFY; S3-e adds it here)
+  credit_draw // S3-e
 }
 
 enum FundsAccount {
@@ -1934,6 +1935,7 @@ enum FundsAccount {
   correction_suspense
   bank_clearing // S2-c
   charge_revenue // S3-b2 (DB ENUM also holds S3-e's credit_receivable; S3-e adds it here)
+  credit_receivable // S3-e
 }
 
 enum FundsEntryDirection {
@@ -2174,13 +2176,14 @@ model BillingCharge {
   @@index([payerAccountId, createdAt])
 }
 
-// Billing V1 internal route service identity (S3-b3), modeled on LLMSpendIssuerGrant: no key material (keyRef names a
-// separately provisioned keyring entry that pins contentHash); immutable except one-way revocation; no issuance API.
+// Billing V1 internal route service identity (S3-b3), modeled on LLMSpendIssuerGrant: the caller's Ed25519 public key only
+// (no shared secret), trusted while governed config pins contentHash; immutable except one-way revocation; no issuance API.
 model BillingServiceGrant {
   id          String    @id @db.VarChar(64)
   issuerRef   String    @db.VarChar(191)
   scopesJson  String    @db.VarChar(255) // canonical JSON array; resolve-unknown only alone
-  keyRef      String    @unique @db.VarChar(64)
+  publicKeyPem String   @db.Text
+  keyFingerprint String @unique @db.VarChar(71) // sha256 of the SPKI DER
   approvalRef String    @db.VarChar(191)
   createdBy   String    @db.VarChar(191)
   contentHash String    @db.VarChar(71)
@@ -2324,6 +2327,44 @@ model BankReceipt {
   @@unique([receivingAccountRef, activeBankTxnRef])
   @@index([payerAccountId, state])
   @@index([state, createdAt])
+}
+
+// Billing V1 credit facility (S3-e). No facility means 0 credit. One active/reduced facility per payer; see the migration triggers.
+enum CreditFacilityState {
+  draft
+  approved
+  active
+  reduced
+  expired
+  revoked
+}
+
+model CreditFacility {
+  id                   String              @id @default(cuid())
+  payerAccountId       String              @db.VarChar(191)
+  state                CreditFacilityState @default(draft)
+  limitFen             BigInt              @default(0)
+  approvedLimitFen     BigInt? // frozen at approval: the exposure cap, also for reservations held before a tightening
+  usedFen              BigInt              @default(0)
+  validUntil           DateTime?
+  // Equals payerAccountId while active or reduced, NULL otherwise: the unique key admits one drawable facility per payer.
+  activePayerAccountId String?             @unique @db.VarChar(191)
+  operationKey         String              @db.VarChar(191)
+  contentHash          String              @db.Char(64)
+  proposedByUserId     String              @db.VarChar(191)
+  evidenceRef          String              @db.VarChar(191)
+  approvedByUserId     String?             @db.VarChar(191) // DB CHECK: differs from proposedByUserId
+  approvalRef          String?             @db.VarChar(191)
+  approvedAt           DateTime?
+  activatedAt          DateTime?
+  lastReducedAt        DateTime?
+  closedAt             DateTime?
+  version              Int                 @default(1)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  @@unique([payerAccountId, operationKey])
+  @@index([payerAccountId, state])
 }
 
 model WorkerPublisherProfile {

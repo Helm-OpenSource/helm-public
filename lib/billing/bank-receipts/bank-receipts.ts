@@ -65,11 +65,16 @@ async function lockReservedMember(tx: Prisma.TransactionClient, userId: string, 
   return row && (!ownerOnly || row.role === "OWNER") ? row.workspaceId : null;
 }
 
-/** Requires an active grant of `role` held by a current reserved-workspace member; returns that workspace id for audit. */
+/** Share-locks an active grant of one of `roles` held by a current reserved-workspace member; returns that workspace id (for
+ * audit) or null. Also used by S3-e credit facilities. */
+export async function findPlatformFinanceActorInTransaction(tx: Prisma.TransactionClient, userId: string,
+  roles: PlatformFinanceRoleName[]) {
+  const [grant] = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM PlatformFinanceGrant
+    WHERE role IN (${Prisma.join(roles)}) AND state = 'active' AND activeUserId = ${userId} FOR SHARE`;
+  return grant ? lockReservedMember(tx, userId, false) : null;
+}
 async function lockFinanceActor(tx: Prisma.TransactionClient, userId: string, role: PlatformFinanceRoleName) {
-  const [grant] = await tx.$queryRaw<Array<{ id: string }>>`
-    SELECT id FROM PlatformFinanceGrant WHERE role = ${role} AND state = 'active' AND activeUserId = ${userId} FOR SHARE`;
-  const workspaceId = grant ? await lockReservedMember(tx, userId, false) : null;
+  const workspaceId = await findPlatformFinanceActorInTransaction(tx, userId, [role]);
   if (!workspaceId) refuse("bank_receipt_forbidden");
   return workspaceId;
 }
