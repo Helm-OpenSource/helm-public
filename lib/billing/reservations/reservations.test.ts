@@ -1,14 +1,15 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 import { SpendGrantRefusal } from "../grants/price-grants";
 import { asBillingResult, markUnknownInTransaction, normalizeReserve, releaseInTransaction, type ReleaseReasonCode,
-  reserveInTransaction, type ReserveRequest, settleInTransaction } from "./reservations";
+  reserve, type ReserveRequest, settleInTransaction } from "./reservations";
 
 const service = { type: "SYSTEM" as const, ref: "metering" };
 const req = (extra: Partial<ReserveRequest> = {}): ReserveRequest => ({ idempotencyKey: "idem:0001", operationRef: "op:bill/1",
   payerRef: "payer-1", grantId: "grant-1", priceVersionId: "pv-1", billingEventRef: "service-billing-event-v1:bill_parsed",
   meterUnit: "document", quantity: "2", ...extra });
 const noDb = {} as Prisma.TransactionClient; // input refusals must happen before any database call
+const noDbClient = { $transaction: (body: (tx: Prisma.TransactionClient) => unknown) => body(noDb) } as unknown as PrismaClient;
 const invalid = { ok: false, code: "request_invalid" };
 
 describe("reservation protocol normalization", () => {
@@ -25,9 +26,9 @@ describe("reservation protocol normalization", () => {
   it("refuses user actors, non-canonical quantities and malformed references before the database", async () => {
     for (const bad of [{ quantity: "0" }, { quantity: "02" }, { quantity: "-1" }, { quantity: "1.5" }, { quantity: 2 },
       { quantity: "9007199254740992" }, { idempotencyKey: "" }, { idempotencyKey: "short:1" }, { idempotencyKey: "idem/0001" }, { payerRef: "a b" }, { meterUnit: "Document" }]) {
-      await expect(asBillingResult(reserveInTransaction(noDb, service, req(bad as Partial<ReserveRequest>)))).resolves.toEqual(invalid);
+      await expect(reserve(noDbClient, service, req(bad as Partial<ReserveRequest>))).resolves.toEqual(invalid);
     }
-    await expect(asBillingResult(reserveInTransaction(noDb, { type: "USER", ref: "u1" } as never, req()))).resolves.toEqual(invalid);
+    await expect(reserve(noDbClient, { type: "USER", ref: "u1" } as never, req())).resolves.toEqual(invalid);
     const release = { idempotencyKey: "rel:0001", reservationId: "r1", operationRef: "op:1", reasonCode: "failed" as ReleaseReasonCode, evidenceRef: "claim:1" };
     await expect(asBillingResult(releaseInTransaction(noDb, service, { ...release, reasonCode: "timeout" as ReleaseReasonCode }))).resolves.toEqual(invalid);
     await expect(asBillingResult(releaseInTransaction(noDb, service, { ...release, evidenceRef: "" }))).resolves.toEqual(invalid);

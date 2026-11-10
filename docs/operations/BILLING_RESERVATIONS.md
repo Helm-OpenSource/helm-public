@@ -24,7 +24,7 @@ S3-b1/S3-b2 (Core): migrations `20261110200000_billing_reservations`, `202611102
 - **States**: `held -> unknown` (`markUnknown`) keeps the hold; `held -> released` (`release`, `not_executed|failed|partial_unusable`)
   returns it to the **frozen** periods even on a later day/month. Business `settle`/`release` accept only `held`; unknown leaves
   only via `resolveUnknown` (trigger: only reason `unknown_released` from unknown). Same key + content replays (markUnknown reports the current state); other content or a
-  wrong `operationRef` is `idempotency_conflict`; an unknown `reservationId` is `reservation_state_conflict`. Keys are unique per payer.
+  wrong `operationRef` is `idempotency_conflict`; an unknown `reservationId` is `reservation_state_conflict`. A key reused on another of the payer's reservations is `idempotency_conflict`.
 - **Settle** (`held -> settled`, once): `quantityUsed` <= reserved (`quantity_exceeds_reservation`; `"0"` is `request_invalid`, use
   release) is repriced from the frozen price row (hash re-checked), `chargeFen <= capFen`. One transaction moves reserved to
   settled in the **frozen** buckets (a later-day/month settle counts in the reserve-time periods), posts a `charge` transaction
@@ -42,8 +42,8 @@ S3-b1/S3-b2 (Core): migrations `20261110200000_billing_reservations`, `202611102
 - **Codes**: limits -> `limit_exceeded`; inactive/out-of-validity/ineffective price -> `grant_not_active`; `request_invalid` (v3.2).
   Write conflicts, deadlocks (1213) and lock timeouts (1205) are `core_unavailable` (retry the same key).
 - **Locks**: Membership -> PayerAccount `FOR UPDATE` (per-payer mutex) -> SpendGrant -> buckets day, month -> reservation. Hold sums,
-  wallet and bucket existence are plain reads (current under the mutex; locking reads gap-locked across payers and deadlocked), so
-  callers must not read before calling. `changeSpendGrantInTransaction` callers must not lock buckets first. A bucket CAS miss
+  wallet and bucket existence are plain reads (current under the mutex; locking reads gap-locked across payers and deadlocked);
+  `reserve` owns its transaction (no exported in-transaction variant) so PayerAccount is locked before the first read. `changeSpendGrantInTransaction` callers must not lock buckets first. A bucket CAS miss
   throws `reservation_invariant_breach` (not a code): the S3-b3 route must alert on it; do not retry.
 - **Verify / rollback**: `reservations.test.ts`; `npm run test:billing:mysql` (over-limit and 16-payer concurrency, racing keys,
   double settle, settle vs release, cross-period settle, triggers, guarded rollbacks). Stop calling the service; roll back charges
