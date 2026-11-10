@@ -1993,6 +1993,66 @@ model BillingOutbox {
   @@index([deliveredAt, createdAt])
 }
 
+// Billing V1 wallet top-up orders (S2-b). The persisted orderType keeps top-ups apart from legacy subscription orders.
+enum PaymentOrderType {
+  wallet_topup
+}
+
+enum PaymentOrderProvider {
+  wechat_pay
+  alipay
+}
+
+enum PaymentOrderState {
+  created
+  pending
+  paid_verified
+  closed_unpaid
+  unknown
+}
+
+enum VerifiedPaymentSource {
+  callback
+  query
+}
+
+model PaymentOrder {
+  id              String               @id @default(cuid())
+  payerAccountId  String               @db.VarChar(191)
+  payerBindingId  String               @db.VarChar(191) // binding the order was created under (history)
+  workspaceId     String               @db.VarChar(191)
+  orderType       PaymentOrderType
+  provider        PaymentOrderProvider
+  providerOrderNo String               @unique @db.VarChar(64)
+  amountFen       BigInt
+  currency        String               @default("CNY") @db.VarChar(3)
+  merchantRef     String               @db.VarChar(191) // opaque server config refs, never secrets
+  appRef          String               @db.VarChar(191)
+  state           PaymentOrderState    @default(created)
+  version         Int                  @default(1)
+  expiresAt       DateTime
+  createdBy       String               @db.VarChar(191)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@index([payerAccountId, createdAt])
+}
+
+model VerifiedPayment {
+  id                 String                @id @default(cuid())
+  provider           PaymentOrderProvider
+  providerTxnId      String                @db.VarChar(64)
+  paymentOrderId     String                @unique @db.VarChar(191)
+  amountFen          BigInt
+  currency           String                @default("CNY") @db.VarChar(3)
+  source             VerifiedPaymentSource
+  lateAfterClose     Boolean               @default(false)
+  fundsTransactionId String                @unique @db.VarChar(191)
+  verifiedAt         DateTime              @default(now())
+
+  @@unique([provider, providerTxnId])
+}
+
 model WorkerPublisherProfile {
   id                        String                     @id @default(cuid())
   workspaceId               String

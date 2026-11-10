@@ -89,6 +89,7 @@ connector 授权、写回、外发或审批证明。
 - [工作区用量去重与更正 / Scoped usage observations](operations/USAGE_OBSERVATION_IDEMPOTENCY.md) - opt-in logical operation identity and append-only correction, not invoicing or provider cost authority.
 - [付款主体与范围绑定 / Billing payer accounts](operations/BILLING_PAYER_ACCOUNTS.md) - payer identity and one-active-binding scope contract, default billingMode off; no balance, charge or payment.
 - [资金分录与余额投影 / Billing funds journal](operations/BILLING_FUNDS_JOURNAL.md) - append-only balanced fen journal, rebuildable projection and durable outbox; no payment entry, charge or route.
+- [钱包充值订单与支付核验 / Billing wallet top-up orders](operations/BILLING_TOPUP_ORDERS.md) - wallet_topup orders and one callback/query verification entry crediting once; no route, real provider or merchant credential.
 - [LLM 智能深化 v1 / LLM intelligence deepening v1](product/HELM_LLM_INTELLIGENCE_DEEPENING_V1.md)
 - [LLM 智能深化 v2 / LLM intelligence deepening v2](product/HELM_LLM_INTELLIGENCE_DEEPENING_V2.md)
 - [LLM 智能深化 v3 / LLM intelligence deepening v3](product/HELM_LLM_INTELLIGENCE_DEEPENING_V3.md)

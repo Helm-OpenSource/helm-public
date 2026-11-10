@@ -37,7 +37,7 @@ function version(value: unknown, code: string): asserts value is number {
  * Lock order for this module: Membership -> PayerAccount -> PayerScopeBinding.
  */
 const ownerOnly = (role: WorkspaceRole) => role === "OWNER";
-async function lockBillingAuthority(tx: Prisma.TransactionClient, actorUserId: string, workspaceIds: string[],
+export async function lockBillingAuthority(tx: Prisma.TransactionClient, actorUserId: string, workspaceIds: string[],
   allowed: (role: WorkspaceRole) => boolean = canManageWorkspaceBilling) {
   const ids = [...new Set(workspaceIds)].sort();
   const rows = await tx.$queryRaw<Array<{ workspaceId: string; userId: string; role: WorkspaceRole;
