@@ -10,11 +10,11 @@ import { assertPositiveFen } from "./money";
  * not authorize people: callers prove authority and pass a server-derived actor. Lock order: PayerAccount FOR UPDATE (S1-c),
  * then FundsTransaction, then projection rows in ascending account order.
  */
-export const FUNDS_ACCOUNTS = ["bank_clearing", "charge_revenue", "correction_suspense", "customer_wallet_available",
-  "topup_clearing"] as const;
+export const FUNDS_ACCOUNTS = ["bank_clearing", "charge_revenue", "correction_suspense", "credit_receivable",
+  "customer_wallet_available", "topup_clearing"] as const;
 export type FundsAccountName = (typeof FUNDS_ACCOUNTS)[number];
 export type FundsDirection = "debit" | "credit";
-export type FundsKind = "topup" | "correction" | "bank_topup" | "charge";
+export type FundsKind = "topup" | "correction" | "bank_topup" | "charge" | "credit_draw";
 export type FundsEntryInput = { account: FundsAccountName; direction: FundsDirection; amountFen: bigint };
 /** Server-derived actor; `ref` is a user id for USER or a service name for SYSTEM. */
 export type FundsActor = { type: "USER" | "SYSTEM"; ref: string };
@@ -49,14 +49,14 @@ type Normalized = { payerAccountId: string; kind: FundsKind; operationKey: strin
   evidenceRef: string; createdBy: string; actor: FundsActor; entries: FundsEntryInput[]; contentHash: string };
 
 /** Pure validation. Lines are sorted by account so the content hash and line numbers ignore caller ordering. */
-export function normalizeFundsPosting(input: PostFundsInput, reversalOfId: string | null = null): Normalized {
+export function normalizeFundsPosting(input: PostFundsInput, reversalOfId: string | null = null, creditDraw = false): Normalized {
   if (!input || typeof input !== "object") refuse("funds_input_invalid");
   reference(input.payerAccountId); reference(input.operationKey); reference(input.evidenceRef);
   if (!input.actor || (input.actor.type !== "USER" && input.actor.type !== "SYSTEM")) refuse("funds_input_invalid");
   reference(input.actor.ref);
-  if (input.kind !== "topup" && input.kind !== "correction" && input.kind !== "bank_topup" && input.kind !== "charge") {
-    refuse("funds_input_invalid");
-  }
+  if (!["topup", "correction", "bank_topup", "charge", "credit_draw"].includes(input.kind)) refuse("funds_input_invalid");
+  // S3-e: a credit draw must move the facility's usedFen in the same transaction, so only the credit module may post one.
+  if ((input.kind === "credit_draw") !== creditDraw) refuse("funds_accounts_not_allowed");
   if (reversalOfId !== null && input.kind !== "correction") refuse("funds_input_invalid");
   // `charge:` keys are reserved for settle postings (one per reservation, protocol v3.5).
   if ((input.kind === "charge") !== input.operationKey.startsWith("charge:")) refuse("funds_input_invalid");
@@ -84,6 +84,9 @@ export function normalizeFundsPosting(input: PostFundsInput, reversalOfId: strin
     // A charge (S3-b2, settled reservation only) is exactly: debit the customer wallet, credit charge revenue.
     if (input.kind === "charge" && (entries.length !== 2 || line(WALLET)?.direction !== "debit" ||
         line("charge_revenue")?.direction !== "credit")) refuse("funds_accounts_not_allowed");
+    // S3-e: a credit draw is exactly: debit credit receivable (the customer owes it), credit the customer wallet.
+    if (input.kind === "credit_draw" && (entries.length !== 2 || line("credit_receivable")?.direction !== "debit" ||
+        line(WALLET)?.direction !== "credit")) refuse("funds_accounts_not_allowed");
     // A free correction moves value only between the wallet and correction suspense; reversals mirror the original.
     if (input.kind === "correction" && (entries.length !== 2 || !line("correction_suspense") || !line(WALLET))) {
       refuse("funds_accounts_not_allowed");
@@ -219,13 +222,19 @@ export async function postFundsTransactionInTransaction(tx: Prisma.TransactionCl
   return postLocked(tx, await lockPayer(tx, posting.payerAccountId), posting);
 }
 
+/** S3-e only: posts a `credit_draw`; `drawCreditShortfallInTransaction` moves the facility's usedFen in the same transaction. */
+export async function postCreditDrawFundsInTransaction(tx: Prisma.TransactionClient, input: PostFundsInput) {
+  const posting = normalizeFundsPosting(input, null, true);
+  return postLocked(tx, await lockPayer(tx, posting.payerAccountId), posting);
+}
+
 /** Appends a mirror transaction (each line's direction swapped) referencing the original; nothing is edited or deleted. */
 export async function reverseFundsTransactionInTransaction(tx: Prisma.TransactionClient, input: ReverseFundsInput) {
   reference(input.payerAccountId); reference(input.originalTransactionId);
   const payer = await lockPayer(tx, input.payerAccountId);
   const original = await readTransaction(tx, Prisma.sql`id = ${input.originalTransactionId}`);
   if (!original || original.id !== input.originalTransactionId || original.payerAccountId !== input.payerAccountId ||
-      original.reversalOfId !== null || original.kind === "charge") refuse("funds_reversal_invalid"); // refunds are not in V1
+      original.reversalOfId !== null || original.kind === "charge" || original.kind === "credit_draw") refuse("funds_reversal_invalid");
   const mirrored = (await readEntries(tx, original.id)).map(entry => ({ account: entry.account,
     direction: entry.direction === "debit" ? "credit" as const : "debit" as const, amountFen: entry.amountFen }));
   const posting = normalizeFundsPosting({ payerAccountId: input.payerAccountId, kind: "correction",
