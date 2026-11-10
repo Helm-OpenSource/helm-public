@@ -30,7 +30,7 @@ describe.skipIf(!url)("payer accounts against MySQL", () => {
   if (!url) { it.skip("requires an explicit synthetic target", () => {}); return; }
   const run = randomUUID().replaceAll("-", "").slice(0, 16);
   const ws = { a: `pay-a-${run}`, b: `pay-b-${run}`, g1: `pay-g1-${run}`, g2: `pay-g2-${run}` };
-  const user = { u1: `payer-u1-${run}`, u2: `payer-u2-${run}`, member: `payer-m-${run}` };
+  const user = { u1: `payer-u1-${run}`, u2: `payer-u2-${run}`, member: `payer-m-${run}`, billing: `payer-ba-${run}` };
   let a: PrismaClient, b: PrismaClient;
   const evidenceRef = "contract:synthetic/annex-1";
   async function membership(workspaceId: string, userId: string, role: string) {
@@ -48,7 +48,8 @@ describe.skipIf(!url)("payer accounts against MySQL", () => {
     for (const id of Object.values(ws)) await a.$executeRaw`INSERT INTO Workspace (id,name,slug,updatedAt) VALUES (${id},'Synthetic payer',${id},NOW(3))`;
     for (const id of Object.values(user)) await a.$executeRaw`INSERT INTO User (id,name,email,updatedAt) VALUES (${id},'Synthetic',${`${id}@example.invalid`},NOW(3))`;
     for (const id of [ws.a, ws.b, ws.g1]) await membership(id, user.u1, "OWNER");
-    for (const id of [ws.a, ws.g2]) await membership(id, user.u2, "BILLING_ADMIN");
+    for (const id of [ws.a, ws.g2]) await membership(id, user.u2, "OWNER");
+    for (const id of [ws.a, ws.b, ws.g1]) await membership(id, user.billing, "BILLING_ADMIN");
     for (const id of [ws.a, ws.g1]) await membership(id, user.member, "ADMIN");
   });
   afterAll(async () => {
@@ -57,9 +58,9 @@ describe.skipIf(!url)("payer accounts against MySQL", () => {
       await a.payerScopeBinding.deleteMany({ where: { payerAccountId: { in: payers } } });
       await a.payerAccount.deleteMany({ where: { id: { in: payers } } });
       await a.auditLog.deleteMany({ where: { workspaceId: { in: Object.values(ws) } } });
-      await a.$executeRaw`DELETE FROM Membership WHERE userId IN (${user.u1},${user.u2},${user.member})`;
+      await a.$executeRaw`DELETE FROM Membership WHERE userId IN (${user.u1},${user.u2},${user.member},${user.billing})`;
       await a.$executeRaw`DELETE FROM Workspace WHERE id IN (${ws.a},${ws.b},${ws.g1},${ws.g2})`;
-      await a.$executeRaw`DELETE FROM User WHERE id IN (${user.u1},${user.u2},${user.member})`;
+      await a.$executeRaw`DELETE FROM User WHERE id IN (${user.u1},${user.u2},${user.member},${user.billing})`;
     }
     await Promise.all([a?.$disconnect(), b?.$disconnect()]);
   });
@@ -71,8 +72,8 @@ describe.skipIf(!url)("payer accounts against MySQL", () => {
     const account = await payer(user.u1, ws.g1);
     expect(account).toMatchObject({ billingMode: "off", currency: "CNY", version: 1, status: "active", governingWorkspaceId: ws.g1 });
     expect(await a.auditLog.count({ where: { workspaceId: ws.g1, targetId: account.id, actionType: "BILLING_PAYER_ACCOUNT_CREATED" } })).toBe(1);
-    await expect(a.payerAccount.create({ data: { kind: "enterprise_contract", governingWorkspaceId: ws.g1, contractSubjectRef: "x", currency: "USD" } })).rejects.toThrow();
-    await expect(a.payerAccount.create({ data: { kind: "enterprise_contract", contractSubjectRef: "x" } })).rejects.toThrow();
+    await expect(a.payerAccount.create({ data: { kind: "enterprise_contract", governingWorkspaceId: ws.g1, contractSubjectRef: "x", currency: "USD" } })).rejects.toThrow(/PayerAccount_currency_check/);
+    await expect(a.payerAccount.create({ data: { kind: "enterprise_contract", contractSubjectRef: "x" } })).rejects.toThrow(/PayerAccount_shape_check/);
   });
   it("rejects a second active binding for one scope in the database itself", async () => {
     const [p1, p2] = [await payer(user.u1, ws.g1), await payer(user.u1, ws.g1)];
@@ -80,10 +81,12 @@ describe.skipIf(!url)("payer accounts against MySQL", () => {
       activeScopeRef: ws.b, authorizedByUserId: user.u1, evidenceRef });
     await a.payerScopeBinding.create({ data: row(p1.id) });
     await expect(a.payerScopeBinding.create({ data: row(p2.id) })).rejects.toMatchObject({ code: "P2002" });
+    // MySQL 3819 (check constraint violated) names the constraint; assert the name, not just "some error".
+    const activeKeyCheck = /PayerScopeBinding_active_key_check/;
     // The CHECK keeps the active key honest: no active row without it, no revoked row holding it.
-    await expect(a.payerScopeBinding.create({ data: { ...row(p2.id), scopeRef: `${ws.b}-x`, activeScopeRef: null } })).rejects.toThrow();
-    await expect(a.payerScopeBinding.create({ data: { ...row(p2.id), scopeRef: `${ws.b}-y`, activeScopeRef: `${ws.b}-z` } })).rejects.toThrow();
-    await expect(a.payerScopeBinding.create({ data: { ...row(p2.id), state: "revoked", revokedAt: new Date(), revokedByUserId: user.u1 } })).rejects.toThrow();
+    await expect(a.payerScopeBinding.create({ data: { ...row(p2.id), scopeRef: `${ws.b}-x`, activeScopeRef: null } })).rejects.toThrow(activeKeyCheck);
+    await expect(a.payerScopeBinding.create({ data: { ...row(p2.id), scopeRef: `${ws.b}-y`, activeScopeRef: `${ws.b}-z` } })).rejects.toThrow(activeKeyCheck);
+    await expect(a.payerScopeBinding.create({ data: { ...row(p2.id), state: "revoked", revokedAt: new Date(), revokedByUserId: user.u1 } })).rejects.toThrow(activeKeyCheck);
     await a.payerScopeBinding.deleteMany({ where: { scopeRef: ws.b } });
   });
   it("revokes then rebinds, keeping the old binding as immutable history", async () => {
@@ -105,12 +108,13 @@ describe.skipIf(!url)("payer accounts against MySQL", () => {
     expect(await a.auditLog.count({ where: { workspaceId: ws.b, targetId: { in: [first.id, second.id] } } })).toBe(3);
     await revokeBinding(a, { actorUserId: user.u1, bindingId: second.id, expectedVersion: 1, evidenceRef });
   });
-  it("refuses binders without billing authority on both sides", async () => {
+  it("refuses binders that are not OWNER on both sides", async () => {
     const p1 = await payer(user.u1, ws.g1);
     const attempt = (actorUserId: string, scopeRef: string) => bindScope(a, { actorUserId, payerAccountId: p1.id,
       expectedPayerVersion: 1, scopeKind: "workspace", scopeRef, evidenceRef });
     await expect(attempt(user.member, ws.a)).rejects.toThrow("payer_binding_forbidden"); // ADMIN in both: not billing
-    await expect(attempt(user.u2, ws.a)).rejects.toThrow("payer_binding_forbidden"); // billing admin of target only
+    await expect(attempt(user.billing, ws.a)).rejects.toThrow("payer_binding_forbidden"); // BILLING_ADMIN on both sides
+    await expect(attempt(user.u2, ws.a)).rejects.toThrow("payer_binding_forbidden"); // OWNER of target only
     await a.$executeRaw`UPDATE Membership SET status='INACTIVE' WHERE workspaceId=${ws.g1} AND userId=${user.u1}`;
     await expect(attempt(user.u1, ws.a)).rejects.toThrow("payer_binding_forbidden");
     await a.$executeRaw`UPDATE Membership SET status='ACTIVE' WHERE workspaceId=${ws.g1} AND userId=${user.u1}`;
@@ -124,13 +128,18 @@ describe.skipIf(!url)("payer accounts against MySQL", () => {
     await expect(resolve(ws.b)).rejects.toThrow("payer_unresolved");
     await expect(resolve(ws.a.toUpperCase())).rejects.toThrow("payer_unresolved");
     expect((await resolve(ws.a)).bindingId).toBe(binding.id);
-    await revokeBinding(a, { actorUserId: user.u1, bindingId: binding.id, expectedVersion: 1, evidenceRef });
+    // BILLING_ADMIN of both sides cannot revoke; the bound workspace's OWNER alone can decline the payer.
+    await expect(revokeBinding(a, { actorUserId: user.billing, bindingId: binding.id, expectedVersion: 1, evidenceRef }))
+      .rejects.toThrow("payer_binding_forbidden");
+    await expect(revokeBinding(a, { actorUserId: user.u2, bindingId: binding.id, expectedVersion: 1, evidenceRef }))
+      .resolves.toMatchObject({ state: "revoked", revokedByUserId: user.u2 });
   });
   it("lets exactly one of concurrent double-binds win across independent sessions", async () => {
     const [sa] = await a.$queryRaw<Array<{ id: bigint }>>`SELECT CONNECTION_ID() AS id`;
     const [sb] = await b.$queryRaw<Array<{ id: bigint }>>`SELECT CONNECTION_ID() AS id`;
     expect(sa.id).not.toBe(sb.id);
-    // Different admins hold disjoint membership locks, so only the unique key arbitrates.
+    // Different OWNERs lock disjoint Membership rows (FOR UPDATE OF m leaves Workspace unlocked), so only the
+    // unique key arbitrates.
     const [p1, p2] = [await payer(user.u1, ws.g1), await payer(user.u2, ws.g2)];
     const results = await Promise.allSettled(Array.from({ length: 8 }, (_, i) => bindScope(i % 2 ? a : b, {
       actorUserId: i % 2 ? user.u1 : user.u2, payerAccountId: i % 2 ? p1.id : p2.id, expectedPayerVersion: 1,

@@ -19,14 +19,19 @@ Billing V1 slice S1-c. Payer identity only: no wallet, balance, price, charge, p
 | Function | Authority | Effect |
 |---|---|---|
 | `createPayerAccount` | OWNER/BILLING_ADMIN of `workspaceId` (becomes governing workspace) | enterprise payer, `billingMode=off` |
-| `bindScope` | OWNER/BILLING_ADMIN of **both** the payer's governing workspace and the target workspace; `expectedPayerVersion` | one active binding, payer `version+1` |
-| `revokeBinding` | OWNER/BILLING_ADMIN of the bound or governing workspace; `expectedVersion` | `revoked`, binding `version+1` |
+| `bindScope` | **OWNER** of **both** the payer's governing workspace and the target workspace (BILLING_ADMIN refused); `expectedPayerVersion` | one active binding, payer `version+1` |
+| `revokeBinding` | **OWNER** of the governing workspace, or **OWNER** of the bound workspace (BILLING_ADMIN refused); `expectedVersion` | `revoked`, binding `version+1` |
 | `resolvePayerForWorkspaceInTransaction(tx, workspaceId)` | server-side only | snapshot `{payerAccountId, bindingId, bindingVersion, billingMode, currency}` |
 
-- Authority is the locked current Membership/Workspace row (existing `canManageWorkspaceBilling`), never a caller flag.
+- Authority is the actor's current Membership row, locked `FOR UPDATE OF m`, never a caller flag. Per S0 §7 binding and
+  revocation are OWNER-only; payer creation (no money effect) uses the existing billing capability (OWNER/BILLING_ADMIN).
   `actorUserId` must come from the server session. Lock order: Membership → PayerAccount → PayerScopeBinding.
+- Revocation by the **bound workspace's OWNER** is that workspace declining the payer (拒付): it stops future resolution
+  for that workspace only, without the payer side's consent; it does not undo history. 目标工作区 OWNER 撤销即本工作区拒绝由该付款方付费。
 - Clients never supply a payer id at use time; callers persist the resolved snapshot with the operation so history stays frozen.
-  The resolver share-locks the binding, so a concurrent revoke waits for the caller's commit. Missing/foreign/case-variant scopes fail closed (`payer_unresolved`).
+  The resolver locks only the binding (`FOR SHARE OF b`), so a concurrent revoke waits for the caller's commit.
+  Money paths (S2/S3) must lock `PayerAccount` `FOR UPDATE` first, then resolve (resolve once unlocked to learn the id,
+  lock, resolve again and require identical snapshots). Missing/foreign/case-variant scopes fail closed (`payer_unresolved`).
 - Every write audits (`BILLING_PAYER_*`) in the same transaction, in each affected workspace. No automatic retry: stale versions
   return `payer_version_conflict`, a lost unique race returns `payer_scope_already_bound`.
 - 客户端不传付款账户；跨工作区统账要求同一操作者同时具备两侧计费权限并留证据引用。
@@ -43,4 +48,5 @@ Billing V1 slice S1-c. Payer identity only: no wallet, balance, price, charge, p
   frozen snapshot, non-admin and one-sided authority refused, foreign/case-variant workspace unresolved, concurrent double-bind single winner,
   transaction rollback removes binding and audit together. Unit: `lib/billing/payer/payer-accounts.test.ts`.
 - Migration `20261110120000_billing_payer_accounts` adds two tables only. Application rollback: stop calling the service (all accounts stay `off`).
-  Schema rollback `prisma/rollback/20261110_rollback_billing_payer_accounts.sql` refuses while any row exists.
+  Schema rollback `prisma/rollback/20261110_rollback_billing_payer_accounts.sql` refuses while any row exists;
+  **stop all writers first** (deploy code without callers / revoke write grants) so no row can appear between the check and the DROP.

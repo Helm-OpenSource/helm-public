@@ -31,11 +31,14 @@ function version(value: unknown, code: string): asserts value is number {
 }
 
 /**
- * Locks the actor's current billing authority in each workspace (sorted, so concurrent callers take the same order)
- * and refuses unless every one is an ACTIVE, unscoped OWNER/BILLING_ADMIN membership of an ACTIVE workspace.
+ * Locks the actor's own Membership rows (FOR UPDATE OF m: not the shared Workspace rows) in sorted order and refuses
+ * unless every one is ACTIVE, unscoped, in an ACTIVE workspace and passes `allowed`. Payer creation uses the billing
+ * capability (OWNER/BILLING_ADMIN); binding and revocation commit or withdraw money authority and require OWNER (S0 §7).
  * Lock order for this module: Membership -> PayerAccount -> PayerScopeBinding.
  */
-async function lockBillingAuthority(tx: Prisma.TransactionClient, actorUserId: string, workspaceIds: string[]) {
+const ownerOnly = (role: WorkspaceRole) => role === "OWNER";
+async function lockBillingAuthority(tx: Prisma.TransactionClient, actorUserId: string, workspaceIds: string[],
+  allowed: (role: WorkspaceRole) => boolean = canManageWorkspaceBilling) {
   const ids = [...new Set(workspaceIds)].sort();
   const rows = await tx.$queryRaw<Array<{ workspaceId: string; userId: string; role: WorkspaceRole;
     status: string; accessScope: string | null; workspaceStatus: string }>>`
@@ -43,11 +46,11 @@ async function lockBillingAuthority(tx: Prisma.TransactionClient, actorUserId: s
     FROM Workspace w JOIN Membership m ON m.workspaceId = w.id
     WHERE m.userId = ${actorUserId} AND w.id IN (${Prisma.join(ids)})
       AND CAST(m.userId AS BINARY) = CAST(${actorUserId} AS BINARY)
-    ORDER BY m.workspaceId FOR UPDATE`;
+    ORDER BY m.workspaceId FOR UPDATE OF m`;
   for (const id of ids) {
     const member = rows.find(row => row.workspaceId === id && row.userId === actorUserId);
     if (!member || member.status !== "ACTIVE" || member.workspaceStatus !== "ACTIVE" ||
-        (member.accessScope !== null && member.accessScope !== "") || !canManageWorkspaceBilling(member.role)) {
+        (member.accessScope !== null && member.accessScope !== "") || !allowed(member.role)) {
       fail("payer_binding_forbidden");
     }
   }
@@ -88,7 +91,7 @@ export async function createPayerAccount(client: PrismaClient, input: CreatePaye
   });
 }
 
-/** Explicit binding: the actor must hold billing authority over both the payer's governing workspace and the target. */
+/** Explicit binding: the actor must be OWNER of both the payer's governing workspace and the target (BILLING_ADMIN refused). */
 export async function bindScope(client: PrismaClient, input: BindScopeInput) {
   reference(input.actorUserId, "payer_binding_forbidden");
   reference(input.payerAccountId, "payer_account_unavailable");
@@ -101,7 +104,7 @@ export async function bindScope(client: PrismaClient, input: BindScopeInput) {
     const governing = await tx.payerAccount.findUnique({ where: { id: input.payerAccountId },
       select: { id: true, governingWorkspaceId: true } });
     if (!governing || governing.id !== input.payerAccountId || !governing.governingWorkspaceId) fail("payer_account_unavailable");
-    await lockBillingAuthority(tx, input.actorUserId, [governing.governingWorkspaceId, input.scopeRef]);
+    await lockBillingAuthority(tx, input.actorUserId, [governing.governingWorkspaceId, input.scopeRef], ownerOnly);
     const [payer] = await tx.$queryRaw<Array<{ id: string; kind: string; status: string; version: number;
       governingWorkspaceId: string | null }>>`
       SELECT id, kind, status, version, governingWorkspaceId FROM PayerAccount
@@ -140,12 +143,13 @@ export async function revokeBinding(client: PrismaClient, input: RevokeBindingIn
   return transaction(client, async tx => {
     const binding = await tx.payerScopeBinding.findUnique({ where: { id: input.bindingId } });
     if (!binding || binding.id !== input.bindingId || binding.scopeKind !== "workspace") fail("payer_binding_unavailable");
-    // Either side may withdraw: the bound workspace or the payer's governing workspace.
+    // OWNER of either side may withdraw: the payer's governing OWNER stops paying; the bound workspace's OWNER
+    // declines this payer for its own workspace. BILLING_ADMIN is refused on both sides.
     const payer = await tx.payerAccount.findUnique({ where: { id: binding.payerAccountId }, select: { governingWorkspaceId: true } });
     const authorityCandidates = [binding.scopeRef, payer?.governingWorkspaceId].filter((id): id is string => !!id);
     let authorized: string | null = null;
     for (const workspaceId of authorityCandidates) {
-      try { await lockBillingAuthority(tx, input.actorUserId, [workspaceId]); authorized = workspaceId; break; }
+      try { await lockBillingAuthority(tx, input.actorUserId, [workspaceId], ownerOnly); authorized = workspaceId; break; }
       catch (error) { if (!(error instanceof Error) || error.message !== "payer_binding_forbidden") throw error; }
     }
     if (!authorized) fail("payer_binding_forbidden");
@@ -169,9 +173,13 @@ export async function revokeBinding(client: PrismaClient, input: RevokeBindingIn
 }
 
 /**
- * Resolves the payer for a workspace inside the caller's transaction and share-locks the binding so a concurrent
- * revoke waits for the caller to commit. Store the returned snapshot with the operation: history keeps the
- * payerAccountId/bindingId/bindingVersion it ran under even after a later revoke or rebind. Fails closed.
+ * Resolves the payer for a workspace inside the caller's transaction and share-locks only the binding row
+ * (FOR SHARE OF b), so a concurrent revoke waits for the caller to commit. PayerAccount is read, not locked.
+ * Lock order for money paths (S2/S3): lock PayerAccount FOR UPDATE first, then call this resolver, then any budget or
+ * reservation rows. A caller that does not yet know the payer id may resolve once to learn it, lock PayerAccount
+ * FOR UPDATE, then resolve again and refuse unless both snapshots match.
+ * Store the returned snapshot with the operation: history keeps the payerAccountId/bindingId/bindingVersion it ran
+ * under even after a later revoke or rebind. Fails closed.
  */
 export async function resolvePayerForWorkspaceInTransaction(tx: Prisma.TransactionClient, workspaceId: string): Promise<PayerSnapshot> {
   reference(workspaceId, "payer_unresolved");
@@ -181,7 +189,7 @@ export async function resolvePayerForWorkspaceInTransaction(tx: Prisma.Transacti
       a.billingMode, a.currency
     FROM PayerScopeBinding b JOIN PayerAccount a ON a.id = b.payerAccountId
     WHERE b.scopeKind = 'workspace' AND b.state = 'active' AND b.activeScopeRef = ${workspaceId}
-    FOR SHARE`;
+    FOR SHARE OF b`;
   if (rows.length !== 1 || rows[0].scopeRef !== workspaceId) fail("payer_unresolved");
   const [row] = rows;
   if (row.status !== "active" || row.currency !== "CNY") fail("payer_account_unavailable");

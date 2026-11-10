@@ -2,7 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 import { bindScope, createPayerAccount, resolvePayerForWorkspaceInTransaction, revokeBinding } from "./payer-accounts";
 
-function member(workspaceId: string, role = "BILLING_ADMIN", extra: Record<string, unknown> = {}) {
+function member(workspaceId: string, role = "OWNER", extra: Record<string, unknown> = {}) {
   return { workspaceId, userId: "actor", role, status: "ACTIVE", accessScope: null, workspaceStatus: "ACTIVE", ...extra };
 }
 function fake(options: { members?: Array<Record<string, unknown>>; payerRows?: Array<Record<string, unknown>>;
@@ -57,12 +57,18 @@ describe("payer accounts", () => {
     await expect(createPayerAccount(client, { ...create, ...patch } as typeof create)).rejects.toThrow(code);
     expect(mock.$transaction).not.toHaveBeenCalled();
   });
-  it.each(["MEMBER", "ADMIN", "OPERATOR", "REVIEWER"])("refuses %s as binder", async role => {
+  it.each(["BILLING_ADMIN", "MEMBER", "ADMIN", "OPERATOR", "REVIEWER"])("refuses %s as binder", async role => {
     const { client, mock } = fake({ members: [member("ws-a", role), member("ws-gov")] });
     await expect(bindScope(client, bind)).rejects.toThrow("payer_binding_forbidden");
     expect(mock.payerScopeBinding.create).not.toHaveBeenCalled();
   });
-  it("requires billing authority on the payer side as well as the bound workspace", async () => {
+  it("refuses BILLING_ADMIN on both sides as binder, but lets it create a payer", async () => {
+    const { client, mock } = fake({ members: [member("ws-a", "BILLING_ADMIN"), member("ws-gov", "BILLING_ADMIN")] });
+    await expect(bindScope(client, bind)).rejects.toThrow("payer_binding_forbidden");
+    expect(mock.payerScopeBinding.create).not.toHaveBeenCalled();
+    await expect(createPayerAccount(client, create)).resolves.toMatchObject({ billingMode: "off" });
+  });
+  it("requires OWNER on the payer side as well as the bound workspace", async () => {
     const { client } = fake({ members: [member("ws-a")] });
     await expect(bindScope(client, bind)).rejects.toThrow("payer_binding_forbidden");
   });
@@ -105,7 +111,18 @@ describe("payer accounts", () => {
     await expect(revokeBinding(client, { actorUserId: "actor", bindingId: "binding-1", expectedVersion: 1, evidenceRef: "t" }))
       .rejects.toThrow("payer_version_conflict");
   });
-  it("refuses revoke by a non-admin on both sides", async () => {
+  it.each(["BILLING_ADMIN", "MEMBER"])("refuses revoke by %s on both sides", async role => {
+    const { client, mock } = fake({ members: [member("ws-a", role), member("ws-gov", role)] });
+    await expect(revokeBinding(client, { actorUserId: "actor", bindingId: "binding-1", expectedVersion: 1, evidenceRef: "t" }))
+      .rejects.toThrow("payer_binding_forbidden");
+    expect(mock.$executeRaw).not.toHaveBeenCalled();
+  });
+  it("lets the bound workspace OWNER alone decline the payer", async () => {
+    const { client } = fake({ members: [member("ws-a", "OWNER")] });
+    await expect(revokeBinding(client, { actorUserId: "actor", bindingId: "binding-1", expectedVersion: 1, evidenceRef: "t" }))
+      .resolves.toMatchObject({ state: "revoked" });
+  });
+  it("refuses revoke by a non-admin of the bound workspace only", async () => {
     const { client } = fake({ members: [member("ws-a", "MEMBER")] });
     await expect(revokeBinding(client, { actorUserId: "actor", bindingId: "binding-1", expectedVersion: 1, evidenceRef: "t" }))
       .rejects.toThrow("payer_binding_forbidden");
