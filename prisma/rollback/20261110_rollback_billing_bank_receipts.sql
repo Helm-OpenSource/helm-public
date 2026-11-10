@@ -6,6 +6,11 @@ DELIMITER $$
 
 CREATE PROCEDURE `rollback_empty_billing_bank_receipts`()
 BEGIN
+  -- S3-b2 review: later billing migrations (e.g. charges, credit) rewrite these ENUMs; shrinking them now would drop their values.
+  IF EXISTS (SELECT 1 FROM `_prisma_migrations` WHERE `migration_name` LIKE '%billing%'
+     AND `migration_name` > '20261110170000_billing_bank_receipts') THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'rollback refused: a later billing migration is applied; roll it back first';
+  END IF;
   IF EXISTS (SELECT 1 FROM `BankReceipt`) OR EXISTS (SELECT 1 FROM `PlatformFinanceGrant`)
      OR EXISTS (SELECT 1 FROM `FundsTransaction` WHERE `kind` = 'bank_topup')
      OR EXISTS (SELECT 1 FROM `FundsJournalEntry` WHERE `account` = 'bank_clearing')

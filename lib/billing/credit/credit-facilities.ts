@@ -173,21 +173,16 @@ export async function changeCreditFacilityInTransaction(tx: Prisma.TransactionCl
   return row;
 }
 
-/**
- * S3-b seam: undrawn credit of the payer's one active/reduced, in-term facility; 0 when there is none or the payer is not active.
- * Call under the PayerAccount lock (re-taken here, re-entrant) and before any CreditFacility row; held reservations are not netted
- * out here, so S3-b subtracts its own held totals: reservable = wallet available + this - held.
- */
+/** S3-b seam, under the PayerAccount lock (re-taken, re-entrant): max(0, limit - used) of the active, in-term facility, else 0 (also
+ * for a non-active payer). Held reservations are not netted out: reservable = wallet available + this - held (S3-b). */
 export async function availableCreditFen(tx: Prisma.TransactionClient, payerAccountId: string): Promise<bigint> {
   reference(payerAccountId, "payer_account_unavailable");
   const payer = await lockPayer(tx, payerAccountId);
   const facility = await lockDrawable(tx, payerAccountId);
-  // A held reservation may settle past a later reduce (usedFen > limitFen), so clamp: never negative.
   const remaining = facility && facility.inTerm ? facility.limitFen - facility.usedFen : ZERO;
-  return payer.status === "active" && remaining > ZERO ? remaining : ZERO;
+  return payer.status === "active" && remaining > ZERO ? remaining : ZERO; // held settles may leave usedFen > limitFen
 }
 
-/** `reservedAt`: the held reservation's DB-time creation instant, read by S3-b from its locked row. */
 export type DrawCreditShortfallInput = { payerAccountId: string; chargeFen: bigint; sourceRef: string; actor: FundsActor; reservedAt: Date };
 export type CreditShortfallDraw = { borrowedFen: bigint; facilityId: string | null; fundsTransactionId: string | null;
   walletCovered: boolean; replayed: boolean };

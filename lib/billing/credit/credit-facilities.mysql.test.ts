@@ -92,7 +92,7 @@ describe.skipIf(!url)("credit facilities against MySQL", () => {
   const settleTx = async (tx: Prisma.TransactionClient, payerAccountId: string, amount: number, sourceRef: string, reservedAt?: Date) => {
     const drawn = await drawCreditShortfallInTransaction(tx, { payerAccountId, chargeFen: fen(amount), sourceRef, actor: SETTLE,
       reservedAt: reservedAt ?? await dbNow(tx) });
-    await postFundsTransactionInTransaction(tx, { payerAccountId, kind: "correction", operationKey: `charge:${sourceRef}`, actor: SETTLE,
+    await postFundsTransactionInTransaction(tx, { payerAccountId, kind: "correction", operationKey: `fee:${sourceRef}`, actor: SETTLE,
       evidenceRef: "charge:synthetic", entries: [{ account: "customer_wallet_available", direction: "debit", amountFen: fen(amount) },
         { account: "correction_suspense", direction: "credit", amountFen: fen(amount) }] });
     return drawn;

@@ -68,11 +68,18 @@ describe.skipIf(!url)("price versions and spend grants against MySQL", () => {
       validFrom, validUntil, ...extra });
   const change = (grantId: string, expectedVersion: number, action: SpendGrantAction, extra: Record<string, unknown> = {}, client = a) =>
     changeSpendGrant(client, { actorUserId: owner, grantId, expectedVersion, action, evidenceRef: "consent:change", ...extra });
-  const gateInput = (payerAccountId: string, grantId: string, quantity: number, extra: Record<string, unknown> = {}) => ({ payerAccountId,
-    grantId, priceVersionId: v1Id, billingEventRef: "service-billing-event-v1:synthetic", meterUnit: "document", quantity: fen(quantity),
-    at, usedFen: { day: fen(0), month: fen(0) }, ...extra });
+  /** The gate reads UTC_TIMESTAMP(3); tests pin it with the session clock only, never through the service input. */
+  async function atClock<T>(tx: Prisma.TransactionClient, body: () => Promise<T>) {
+    await tx.$executeRaw`SET timestamp = ${at.getTime() / 1000}`;
+    try { return await body(); } finally { await tx.$executeRaw`SET timestamp = DEFAULT`; }
+  }
+  const gate = (tx: Prisma.TransactionClient, payerAccountId: string, grantId: string, quantity: number, extra: Record<string, unknown> = {}) => {
+    const { usedFen = { day: fen(0), month: fen(0) }, ...rest } = extra as { usedFen?: { day: bigint; month: bigint } };
+    return atClock(tx, () => lockSpendGrantForUseInTransaction(tx, { payerAccountId, grantId, priceVersionId: v1Id,
+      billingEventRef: "service-billing-event-v1:synthetic", meterUnit: "document", quantity: fen(quantity), ...rest }, async () => usedFen));
+  };
   const use = (payerAccountId: string, grantId: string, quantity: number, extra: Record<string, unknown> = {}, client = a) =>
-    client.$transaction(tx => lockSpendGrantForUseInTransaction(tx, gateInput(payerAccountId, grantId, quantity, extra)));
+    client.$transaction(tx => gate(tx, payerAccountId, grantId, quantity, extra));
   /** Runs `body` in a transaction and keeps it (and its locks) open until released. */
   function hold(client: PrismaClient, body: (tx: Prisma.TransactionClient) => Promise<unknown>) {
     let release!: () => void, locked!: () => void;
@@ -114,7 +121,8 @@ describe.skipIf(!url)("price versions and spend grants against MySQL", () => {
   });
   it("enforces per-charge, daily and monthly limits on an active grant", async () => {
     const { payerAccountId, grantId } = await activeGrant("grant:limits");
-    await expect(use(payerAccountId, grantId, 5)).resolves.toMatchObject({ grantId, grantVersion: 2, chargeFen: fen(500), periodKeys: { day: "2026-11-10", month: "2026-11" } });
+    await expect(use(payerAccountId, grantId, 5)).resolves.toMatchObject({ grant: { id: grantId, version: 2 }, chargeFen: fen(500), at,
+      periodKeys: { day: "2026-11-10", month: "2026-11" } });
     await expect(use(payerAccountId, grantId, 6)).rejects.toThrow("grant_per_charge_exceeded");
     await expect(use(payerAccountId, grantId, 4, { usedFen: { day: fen(601), month: fen(601) } })).rejects.toThrow("grant_daily_limit_exceeded");
     await expect(use(payerAccountId, grantId, 4, { usedFen: { day: fen(0), month: fen(2601) } })).rejects.toThrow("grant_monthly_limit_exceeded");
@@ -136,12 +144,12 @@ describe.skipIf(!url)("price versions and spend grants against MySQL", () => {
   });
   it("serializes revocation behind an in-flight use and refuses every later use", async () => {
     const { payerAccountId, grantId } = await activeGrant("grant:race");
-    const inFlight = hold(a, tx => lockSpendGrantForUseInTransaction(tx, gateInput(payerAccountId, grantId, 1)));
+    const inFlight = hold(a, tx => gate(tx, payerAccountId, grantId, 1));
     await inFlight.isLocked;
     const revoke = change(grantId, 2, "revoke", {}, b);
     expect(await settlesWithin(revoke)).toBe(false); // waits on the PayerAccount lock held by the use
     inFlight.release();
-    await expect(inFlight.done).resolves.toMatchObject({ grantVersion: 2 });
+    await expect(inFlight.done).resolves.toMatchObject({ grant: { version: 2 } });
     await expect(revoke).resolves.toMatchObject({ state: "revoked", version: 3, revokedByUserId: owner });
     await expect(use(payerAccountId, grantId, 1, {}, b)).rejects.toThrow("grant_not_active");
     await expect(change(grantId, 3, "resume")).rejects.toThrow("grant_transition_invalid");

@@ -37,7 +37,8 @@ Billing V1 S3-e (Core): migrations `20261110215000_billing_credit_facilities` an
   `BillingReservation` row locked in the same transaction (state `held` or `unknown`) and `sourceRef` must be bound to that
   reservationId; a `reservedAt` later than database time refuses `credit_input_invalid`. Lock order: PayerAccount -> FundsTransaction
   (share) -> CreditFacility -> wallet projection -> journal posting. Only this module posts `credit_draw`; it is never reversed as a
-  correction. S5 reconciliation must check the invariant `credit_receivable` projection = Σ `usedFen`.
+  correction, and unlike S3-b2's `charge` it has no suspended/off-payer exemption (the wiring slice decides, bound to the same
+  held/unknown reservation). S5 reconciliation must check the invariant `credit_receivable` projection = Σ `usedFen`.
 - **Verify / rollback**: unit `credit-facilities.test.ts`; `npm run test:billing:mysql`. Rollback: stop calling the service;
   `prisma/rollback/20261110_rollback_billing_credit_facilities.sql` refuses while any facility or credit journal row exists, removes
   both migrations and shrinks the ENUMs to the union minus `credit_draw` / `credit_receivable`. Order: S3-e first, then S3-b2 charges,
