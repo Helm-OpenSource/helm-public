@@ -49,7 +49,7 @@ S3-b1/S3-b2 (Core): migrations `20261110200000_billing_reservations`, `202611102
   Unbound workspace or off payer is `billing_mode_off`; suspended payer, none or several grants are `grant_not_active`.
 - **Codes**: limits -> `limit_exceeded`; inactive/out-of-validity/ineffective price -> `grant_not_active`; `request_invalid` (v3.2).
   Write conflicts, deadlocks (1213) and lock timeouts (1205) are `core_unavailable` (retry the same key).
-- **Isolation (S3-w)**: every entry point runs `READ COMMITTED`: no gap locks, so settles of different payers drawing credit no
+- **Isolation (S3-w)**: every reservations entry point (`run()`) runs `READ COMMITTED` (funds, credit, grant and payer entry points stay on the default isolation): no gap locks, so settles of different payers drawing credit no
   longer deadlock on the funds `(payerAccountId, operationKey)` unique index (seen under REPEATABLE READ); correctness rests on the
   PayerAccount mutex and the unique keys. **Enablement prerequisite (verify in production before enabling; not yet checked)**:
   the production MySQL `binlog_format` must be `ROW` (READ COMMITTED with statement binlog refuses writes).
