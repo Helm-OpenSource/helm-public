@@ -1,14 +1,17 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
+import { FundsRefusal, postFundsTransactionInTransaction } from "../funds/funds-journal";
 import { MAX_FEN } from "../funds/money";
-import { type BillingPeriodKeys, lockSpendGrantForUseInTransaction, SpendGrantRefusal, type SpendGrantRefusalCode,
-  type SpendGrantRow } from "../grants/price-grants";
+import { resolvePayerForWorkspaceInTransaction } from "../payer/payer-accounts";
+import { type BillingPeriodKeys, chargeFenForQuantity, lockSpendGrantForUseInTransaction, SpendGrantRefusal,
+  type SpendGrantRefusalCode, type SpendGrantRow } from "../grants/price-grants";
 
 /**
  * Billing V1 S3-b reservations on the S3 internal protocol (docs/operations/BILLING_RESERVATIONS.md); nothing auto-releases and
  * shadow never moves money. Lock order: Membership -> PayerAccount FOR UPDATE (per-payer mutex) -> SpendGrant -> BudgetBucket
- * day, month -> BillingReservation; the bucket CAS and limit guard in the UPDATE's own WHERE are the second line.
+ * day, month -> BillingReservation -> FundsTransaction -> FundsAccountProjection; the bucket CAS and limit guard in the
+ * UPDATE's own WHERE are the second line.
  */
 export type BillingRejectCode = "billing_mode_off" | "insufficient_funds" | "limit_exceeded" | "grant_not_active" |
   "grant_price_version_mismatch" | "grant_meter_mismatch" | "grant_charge_zero" | "idempotency_conflict" |
@@ -28,11 +31,14 @@ const GRANT_REJECTS: Partial<Record<SpendGrantRefusalCode, BillingRejectCode>> =
   grant_charge_zero: "grant_charge_zero", grant_input_invalid: "request_invalid", price_input_invalid: "request_invalid",
   price_amount_out_of_range: "request_invalid",
 };
+const FUNDS_REJECTS: Partial<Record<FundsRefusal["code"], BillingRejectCode>> = { funds_insufficient: "insufficient_funds",
+  payer_billing_off: "billing_mode_off", payer_account_unavailable: "grant_not_active", funds_write_conflict: "core_unavailable" };
 /** Maps refusals to `{ ok: false, code }`. An invariant breach or unexpected error propagates (callers see core_unavailable). */
 export async function asBillingResult<T extends object>(work: Promise<T>): Promise<({ ok: true } & T) | { ok: false; code: BillingRejectCode }> {
   try { return { ok: true, ...(await work) }; } catch (error) {
     if (error instanceof BillingReject) return { ok: false, code: error.code };
-    const mapped = error instanceof SpendGrantRefusal ? GRANT_REJECTS[error.code] : undefined;
+    const mapped = error instanceof SpendGrantRefusal ? GRANT_REJECTS[error.code]
+      : error instanceof FundsRefusal ? FUNDS_REJECTS[error.code] : undefined;
     if (mapped) return { ok: false, code: mapped };
     // Write conflict, serialization failure, deadlock (1213) or lock wait timeout (1205): nothing committed; retry the same key.
     if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2002" || error.code === "P2034" ||
@@ -90,6 +96,11 @@ async function lockPayerRow(tx: Prisma.TransactionClient, payerAccountId: string
   if (!payer) reject("grant_not_active"); // an unknown payer fails closed, never "unbilled"
 }
 
+/**
+ * Seam for S3-e CreditFacility: remaining usable credit of the payer, read under the caller's PayerAccount lock. Fixed at 0
+ * until S3-e lands. Settle still debits the wallet only (the journal keeps it non-negative): S3-e decides how a shortfall books.
+ */
+export async function availableCreditFen(_tx: Prisma.TransactionClient, _payerAccountId: string): Promise<bigint> { return ZERO; }
 type Mode = "shadow" | "enforce";
 type BucketRow = { periodKind: "day" | "month"; periodKey: string; settledFen: bigint; reservedFen: bigint; version: number };
 /** Locks the mode's day, month buckets (creating zero rows); plain existence read under PayerAccount avoids cross-payer gap locks. */
@@ -150,7 +161,8 @@ async function reserveInTransaction(tx: Prisma.TransactionClient, actor: Service
       FROM BillingReservation WHERE payerAccountId = ${payerAccountId} AND billingMode = 'enforce' AND state IN ('held', 'unknown')`;
     const [wallet] = await tx.$queryRaw<Array<{ balanceFen: bigint }>>`SELECT balanceFen FROM FundsAccountProjection
       WHERE payerAccountId = ${payerAccountId} AND account = 'customer_wallet_available'`;
-    if (BigInt(wallet?.balanceFen ?? ZERO) - BigInt(held) < chargeFen) reject("insufficient_funds");
+    const credit = await availableCreditFen(tx, payerAccountId); // owner v3: wallet + remaining credit must cover the holds
+    if (BigInt(wallet?.balanceFen ?? ZERO) + credit - BigInt(held) < chargeFen) reject("insufficient_funds");
   }
   for (const bucket of buckets) {
     await moveBucket(tx, grant.id, billingMode, bucket, { reservedDelta: chargeFen, settledDelta: ZERO,
@@ -223,23 +235,139 @@ export type ReleaseRequest = { idempotencyKey: string; reservationId: string; op
  * or is unusable (S0 §4) via evidenceRef. Same key + content replays.
  */
 export async function releaseInTransaction(tx: Prisma.TransactionClient, actor: ServiceActor, req: ReleaseRequest) {
+  if (!RELEASE_REASONS.includes(req?.reasonCode)) reject("request_invalid");
+  return releaseFrom(tx, actor, req, req.reasonCode, false);
+}
+async function releaseFrom(tx: Prisma.TransactionClient, actor: ServiceActor, req: Omit<ReleaseRequest, "reasonCode">,
+  reason: ReleaseReasonCode | "unknown_released", unknownOnly: boolean) {
   const resolvedBy = serviceActor(actor);
   idempotencyKey(req?.idempotencyKey); reference(req.evidenceRef);
-  if (!RELEASE_REASONS.includes(req.reasonCode)) reject("request_invalid");
   const { reservation, buckets } = await lockReservationForResolution(tx, req.reservationId, req.operationRef);
   if (reservation.resolutionKey === req.idempotencyKey) {
-    if (reservation.state !== "released" || reservation.releaseReason !== req.reasonCode ||
+    if (reservation.state !== "released" || reservation.releaseReason !== reason ||
         reservation.resolutionEvidenceRef !== req.evidenceRef) reject("idempotency_conflict");
     return { state: "released" as const };
   }
-  if (reservation.state !== "held") reject("reservation_state_conflict"); // unknown leaves only via resolveUnknown (S3-b2)
+  assertResolvable(reservation.state, unknownOnly);
   await keyFree(tx, reservation, "resolutionKey", req.idempotencyKey);
   for (const bucket of buckets) {
     await moveBucket(tx, reservation.grantId, reservation.billingMode, bucket, { reservedDelta: -reservation.chargeFen, settledDelta: ZERO, ceiling: null });
   }
-  await transition(tx, reservation, Prisma.sql`state = 'released', releaseReason = ${req.reasonCode}, resolutionKey = ${req.idempotencyKey},
+  await transition(tx, reservation, Prisma.sql`state = 'released', releaseReason = ${reason}, resolutionKey = ${req.idempotencyKey},
     resolutionEvidenceRef = ${req.evidenceRef}, resolvedBy = ${resolvedBy}, resolvedAt = UTC_TIMESTAMP(3)`);
   return { state: "released" as const };
+}
+
+export type SettleRequest = { idempotencyKey: string; reservationId: string; operationRef: string; quantityUsed: string;
+  evidenceRef: string };
+/**
+ * held|unknown -> settled, exactly once. The charge is repriced from the frozen price row for `quantityUsed` (<= the reserved
+ * quantity, so <= capFen), moves from reserved to settled in the reservation's frozen-period buckets (not settle time), posts a
+ * balanced `charge` funds transaction (wallet debit, charge revenue credit; its audit and funds outbox) and a charge outbox row,
+ * all in this transaction. A refusal (e.g. billing turned off, wallet corrected below the hold) leaves the reservation held.
+ */
+export async function settleInTransaction(tx: Prisma.TransactionClient, actor: ServiceActor, req: SettleRequest) {
+  return settleFrom(tx, actor, req, false);
+}
+async function settleFrom(tx: Prisma.TransactionClient, actor: ServiceActor, req: SettleRequest, unknownOnly: boolean) {
+  const resolvedBy = serviceActor(actor);
+  idempotencyKey(req?.idempotencyKey); reference(req.evidenceRef);
+  const quantityUsed = positiveQuantity(req.quantityUsed); // "0" is a release (protocol v2), not a settle
+  const { reservation, buckets } = await lockReservationForResolution(tx, req.reservationId, req.operationRef);
+  if (reservation.resolutionKey === req.idempotencyKey) {
+    const charge = await tx.billingCharge.findUnique({ where: { reservationId: reservation.id } });
+    if (reservation.state !== "settled" || !charge || charge.quantity !== quantityUsed || charge.evidenceRef !== req.evidenceRef) {
+      reject("idempotency_conflict");
+    }
+    return { state: "settled" as const, chargeId: charge.id, chargeFen: charge.chargeFen.toString() };
+  }
+  assertResolvable(reservation.state, unknownOnly);
+  await keyFree(tx, reservation, "resolutionKey", req.idempotencyKey);
+  if (quantityUsed > reservation.quantity) reject("quantity_exceeds_reservation");
+  const [price] = await tx.$queryRaw<Array<{ unitPriceFenNumerator: bigint; unitPriceDenominator: bigint; contentHash: string }>>`
+    SELECT unitPriceFenNumerator, unitPriceDenominator, contentHash FROM BillingPriceVersion WHERE id = ${reservation.priceVersionId} FOR SHARE`;
+  if (!price || price.contentHash !== reservation.priceContentHash) invariantBreach();
+  const chargeFen = chargeFenForQuantity(price, quantityUsed);
+  if (chargeFen > reservation.chargeFen) invariantBreach(); // half-up of a smaller quantity never exceeds the cap
+  for (const bucket of buckets) {
+    await moveBucket(tx, reservation.grantId, reservation.billingMode, bucket, { reservedDelta: -reservation.chargeFen,
+      settledDelta: chargeFen, ceiling: null });
+  }
+  // Shadow records the would-be charge only, and a 0-fen settle (smaller quantity, v3.5) has nothing to post: no funds entry.
+  const funds = reservation.billingMode === "shadow" || chargeFen === ZERO ? null : await postFundsTransactionInTransaction(tx, {
+    payerAccountId: reservation.payerAccountId, kind: "charge", operationKey: `charge:${reservation.id}`, actor,
+    evidenceRef: req.evidenceRef, entries: [{ account: "customer_wallet_available", direction: "debit", amountFen: chargeFen },
+      { account: "charge_revenue", direction: "credit", amountFen: chargeFen }] });
+  if (funds?.replayed) invariantBreach(); // a charge posting exists for an unsettled reservation
+  const charge = await tx.billingCharge.create({ data: { reservationId: reservation.id, payerAccountId: reservation.payerAccountId,
+    grantId: reservation.grantId, operationRef: reservation.operationRef, idempotencyKey: req.idempotencyKey,
+    billingMode: reservation.billingMode, fundsTransactionId: funds?.transaction.id ?? null, priceVersionId: reservation.priceVersionId, priceContentHash: reservation.priceContentHash,
+    quantity: quantityUsed, chargeFen, capFen: reservation.chargeFen, dayKey: buckets[0].periodKey, monthKey: buckets[1].periodKey,
+    evidenceRef: req.evidenceRef, createdBy: resolvedBy } });
+  await transition(tx, reservation, Prisma.sql`state = 'settled', resolutionKey = ${req.idempotencyKey},
+    resolutionEvidenceRef = ${req.evidenceRef}, resolvedBy = ${resolvedBy}, resolvedAt = UTC_TIMESTAMP(3)`);
+  const payload = JSON.stringify({ chargeId: charge.id, reservationId: reservation.id, mode: charge.billingMode, payerAccountId: charge.payerAccountId,
+    operationRef: charge.operationRef, fundsTransactionId: charge.fundsTransactionId, quantity: quantityUsed.toString(),
+    chargeFen: chargeFen.toString(), capFen: reservation.chargeFen.toString(), dayKey: charge.dayKey, monthKey: charge.monthKey,
+    evidenceRef: charge.evidenceRef });
+  await tx.billingOutbox.create({ data: { aggregateType: "BillingCharge", aggregateId: charge.id,
+    eventType: charge.billingMode === "shadow" ? "billing.charge.shadow_settled" : "billing.charge.settled",
+    payload, payloadHash: createHash("sha256").update(payload).digest("hex") } });
+  return { state: "settled" as const, chargeId: charge.id, chargeFen: chargeFen.toString() };
+}
+
+function assertResolvable(state: string, unknownOnly: boolean) {
+  if (unknownOnly ? state !== "unknown" : state !== "held") { // protocol v3.5: business settle/release only from held
+    reject(unknownOnly ? "unknown_resolution_conflict" : "reservation_state_conflict");
+  }
+}
+
+export type ResolveUnknownRequest = { idempotencyKey: string; reservationId: string; operationRef: string;
+  outcome: "settled" | "released"; quantityUsed?: string; evidenceRef: string };
+/**
+ * Reconciliation / manual channel only (protocol v2 §5; route and operator entry are S3-b3 / S5): resolves an `unknown`
+ * reservation on evidence, as settle (needs `quantityUsed`) or as release (reason `unknown_released`). Any other state is
+ * `unknown_resolution_conflict`; a same-key replay returns the recorded result.
+ */
+export async function resolveUnknownInTransaction(tx: Prisma.TransactionClient, actor: ServiceActor,
+  req: ResolveUnknownRequest): Promise<{ state: "settled"; chargeId: string; chargeFen: string } | { state: "released" }> {
+  if (req?.outcome === "settled") return settleFrom(tx, actor, { ...req, quantityUsed: req.quantityUsed ?? "" }, true);
+  if (req?.outcome !== "released" || req.quantityUsed !== undefined) reject("request_invalid");
+  return releaseFrom(tx, actor, req, "unknown_released", true);
+}
+
+export type QuoteRequest = { subjectScope: { kind: "workspace"; workspaceId: string } | { kind: "vault"; vaultId: string };
+  billingEventRef: string; meterUnit: string;
+  quantity: string };
+/**
+ * Resolves payer, grant and price version for a subject (protocol v2 §3) so the business side never picks a grant. Advisory and
+ * lock-free: `reserve` re-checks everything under lock. An unbound workspace or an off payer is `billing_mode_off` (not billed);
+ * a suspended payer, no active, in-validity grant whose bound price matches the event and meter unit, or more than one, is `grant_not_active`.
+ */
+export async function quoteInTransaction(tx: Prisma.TransactionClient, actor: ServiceActor, req: QuoteRequest) {
+  serviceActor(actor);
+  // vault scopes need consumer payers (S3-f); until then request_invalid (protocol v3.2)
+  if (!req?.subjectScope || req.subjectScope.kind !== "workspace") reject("request_invalid");
+  const workspaceId = req.subjectScope.workspaceId;
+  reference(workspaceId); reference(req.billingEventRef); positiveQuantity(req.quantity);
+  if (typeof req.meterUnit !== "string" || !/^[a-z][a-z0-9_]{0,31}$/.test(req.meterUnit)) reject("request_invalid");
+  let payer: Awaited<ReturnType<typeof resolvePayerForWorkspaceInTransaction>>;
+  try { payer = await resolvePayerForWorkspaceInTransaction(tx, workspaceId); } catch (error) {
+    // No active binding: the workspace is not billed today (status quo). A suspended payer fails closed.
+    if (error instanceof Error && error.message === "payer_unresolved") reject("billing_mode_off");
+    if (error instanceof Error && error.message === "payer_account_unavailable") reject("grant_not_active");
+    throw error;
+  }
+  if (payer.billingMode === "off") reject("billing_mode_off");
+  const grants = await tx.$queryRaw<Array<{ grantId: string; priceVersionId: string }>>`SELECT g.id AS grantId,
+      g.priceVersionId FROM SpendGrant g JOIN BillingPriceVersion p ON p.id = g.priceVersionId
+    WHERE g.payerAccountId = ${payer.payerAccountId} AND g.state = 'active' AND g.validFrom <= UTC_TIMESTAMP(3)
+      AND g.validUntil > UTC_TIMESTAMP(3) AND p.billingEventRef = ${req.billingEventRef} AND p.meterUnit = ${req.meterUnit}
+      AND p.effectiveFrom <= UTC_TIMESTAMP(3) AND (p.effectiveUntil IS NULL OR p.effectiveUntil > UTC_TIMESTAMP(3))
+    ORDER BY g.id LIMIT 2`;
+  if (grants.length !== 1) reject("grant_not_active");
+  return { payerRef: payer.payerAccountId, grantId: grants[0].grantId, priceVersionId: grants[0].priceVersionId,
+    mode: payer.billingMode };
 }
 
 /** BillingCoreClient-shaped entry points; S3-b3 routes call these with the authenticated service identity. */
@@ -249,3 +377,9 @@ export const markUnknown = (client: PrismaClient, actor: ServiceActor, req: Mark
   asBillingResult(run(client, tx => markUnknownInTransaction(tx, actor, req)));
 export const release = (client: PrismaClient, actor: ServiceActor, req: ReleaseRequest) =>
   asBillingResult(run(client, tx => releaseInTransaction(tx, actor, req)));
+export const settle = (client: PrismaClient, actor: ServiceActor, req: SettleRequest) =>
+  asBillingResult(run(client, tx => settleInTransaction(tx, actor, req)));
+export const resolveUnknown = (client: PrismaClient, actor: ServiceActor, req: ResolveUnknownRequest) =>
+  asBillingResult(run(client, tx => resolveUnknownInTransaction(tx, actor, req)));
+export const quote = (client: PrismaClient, actor: ServiceActor, req: QuoteRequest) =>
+  asBillingResult(run(client, tx => quoteInTransaction(tx, actor, req)));

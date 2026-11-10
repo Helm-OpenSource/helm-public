@@ -10,10 +10,11 @@ import { assertPositiveFen } from "./money";
  * not authorize people: callers prove authority and pass a server-derived actor. Lock order: PayerAccount FOR UPDATE (S1-c),
  * then FundsTransaction, then projection rows in ascending account order.
  */
-export const FUNDS_ACCOUNTS = ["bank_clearing", "correction_suspense", "customer_wallet_available", "topup_clearing"] as const;
+export const FUNDS_ACCOUNTS = ["bank_clearing", "charge_revenue", "correction_suspense", "customer_wallet_available",
+  "topup_clearing"] as const;
 export type FundsAccountName = (typeof FUNDS_ACCOUNTS)[number];
 export type FundsDirection = "debit" | "credit";
-export type FundsKind = "topup" | "correction" | "bank_topup";
+export type FundsKind = "topup" | "correction" | "bank_topup" | "charge";
 export type FundsEntryInput = { account: FundsAccountName; direction: FundsDirection; amountFen: bigint };
 /** Server-derived actor; `ref` is a user id for USER or a service name for SYSTEM. */
 export type FundsActor = { type: "USER" | "SYSTEM"; ref: string };
@@ -37,9 +38,10 @@ function reference(value: unknown): asserts value is string {
   if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,190}$/.test(value)) refuse("funds_input_invalid");
 }
 function sha256(text: string) { return createHash("sha256").update(text).digest("hex"); }
-/** Credit-normal for the customer wallet (a liability to the customer); debit-normal for clearing (payment, bank) and suspense. */
+/** Credit-normal for the customer wallet (a liability to the customer) and charge revenue; debit-normal for clearing (payment,
+ * bank) and suspense. */
 function signedDelta(account: FundsAccountName, direction: FundsDirection, amountFen: bigint) {
-  const creditNormal = account === WALLET;
+  const creditNormal = account === WALLET || account === "charge_revenue";
   return (direction === "credit") === creditNormal ? amountFen : -amountFen;
 }
 
@@ -52,8 +54,12 @@ export function normalizeFundsPosting(input: PostFundsInput, reversalOfId: strin
   reference(input.payerAccountId); reference(input.operationKey); reference(input.evidenceRef);
   if (!input.actor || (input.actor.type !== "USER" && input.actor.type !== "SYSTEM")) refuse("funds_input_invalid");
   reference(input.actor.ref);
-  if (input.kind !== "topup" && input.kind !== "correction" && input.kind !== "bank_topup") refuse("funds_input_invalid");
+  if (input.kind !== "topup" && input.kind !== "correction" && input.kind !== "bank_topup" && input.kind !== "charge") {
+    refuse("funds_input_invalid");
+  }
   if (reversalOfId !== null && input.kind !== "correction") refuse("funds_input_invalid");
+  // `charge:` keys are reserved for settle postings (one per reservation, protocol v3.5).
+  if ((input.kind === "charge") !== input.operationKey.startsWith("charge:")) refuse("funds_input_invalid");
   const count = Array.isArray(input.entries) ? input.entries.length : 0;
   if (count < 2 || count > FUNDS_ACCOUNTS.length) refuse("funds_input_invalid");
   const entries = input.entries.map(entry => {
@@ -75,6 +81,9 @@ export function normalizeFundsPosting(input: PostFundsInput, reversalOfId: strin
     // S2-c: a reviewed corporate bank receipt is exactly: debit bank clearing, credit the customer wallet.
     if (input.kind === "bank_topup" && (entries.length !== 2 || line("bank_clearing")?.direction !== "debit" ||
         line(WALLET)?.direction !== "credit")) refuse("funds_accounts_not_allowed");
+    // A charge (S3-b2, settled reservation only) is exactly: debit the customer wallet, credit charge revenue.
+    if (input.kind === "charge" && (entries.length !== 2 || line(WALLET)?.direction !== "debit" ||
+        line("charge_revenue")?.direction !== "credit")) refuse("funds_accounts_not_allowed");
     // A free correction moves value only between the wallet and correction suspense; reversals mirror the original.
     if (input.kind === "correction" && (entries.length !== 2 || !line("correction_suspense") || !line(WALLET))) {
       refuse("funds_accounts_not_allowed");
@@ -126,9 +135,16 @@ async function postLocked(tx: Prisma.TransactionClient, payer: PayerRow, posting
         existing.reversalOfId !== posting.reversalOfId) refuse("funds_operation_conflict");
     return { transaction: existing, entries: await readEntries(tx, existing.id), replayed: true };
   }
-  if (payer.status !== "active" || payer.currency !== "CNY" || !payer.governingWorkspaceId) refuse("payer_account_unavailable");
-  // S2-a decision: shadow and enforce accounts may hold a journal; off accounts may not move money at all.
-  if (payer.billingMode !== "shadow" && payer.billingMode !== "enforce") refuse("payer_billing_off");
+  // A `charge` only settles a reservation admitted while the payer was active and billing on; R05 / protocol v3.5: delivered
+  // results are still charged after a suspension or switch to off (those block new reserves only). Every other kind is refused.
+  // The exemption is bound to its reservation: `charge:<id>` must name this payer's held or unknown enforce reservation (locked
+  // by settle; resolveUnknown posts while the row is still unknown and moves it to settled afterwards).
+  const settling = posting.kind === "charge" && (await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM BillingReservation
+    WHERE id = ${posting.operationKey.slice("charge:".length)} AND payerAccountId = ${posting.payerAccountId}
+      AND billingMode = 'enforce' AND state IN ('held', 'unknown') FOR SHARE`).length === 1;
+  if ((payer.status !== "active" && !settling) || payer.currency !== "CNY" || !payer.governingWorkspaceId) refuse("payer_account_unavailable");
+  // S2-a decision: shadow and enforce accounts may hold a journal; off accounts may not move money at all (except the above).
+  if (payer.billingMode !== "shadow" && payer.billingMode !== "enforce" && !settling) refuse("payer_billing_off");
   const reversed = posting.reversalOfId && await readTransaction(tx, Prisma.sql`reversalOfId = ${posting.reversalOfId}`);
   if (reversed) refuse("funds_already_reversed");
   let transaction: TransactionRow;
@@ -209,7 +225,7 @@ export async function reverseFundsTransactionInTransaction(tx: Prisma.Transactio
   const payer = await lockPayer(tx, input.payerAccountId);
   const original = await readTransaction(tx, Prisma.sql`id = ${input.originalTransactionId}`);
   if (!original || original.id !== input.originalTransactionId || original.payerAccountId !== input.payerAccountId ||
-      original.reversalOfId !== null) refuse("funds_reversal_invalid");
+      original.reversalOfId !== null || original.kind === "charge") refuse("funds_reversal_invalid"); // refunds are not in V1
   const mirrored = (await readEntries(tx, original.id)).map(entry => ({ account: entry.account,
     direction: entry.direction === "debit" ? "credit" as const : "debit" as const, amountFen: entry.amountFen }));
   const posting = normalizeFundsPosting({ payerAccountId: input.payerAccountId, kind: "correction",

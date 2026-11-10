@@ -49,6 +49,18 @@ describe("funds posting normalization", () => {
     expect(normalizeFundsPosting(topup([{ ...clearingDebit(5), direction: "credit" }, { ...walletCredit(5), direction: "debit" }],
       { kind: "correction" }), "txn-a").reversalOfId).toBe("txn-a");
   });
+  it("accepts a charge only as wallet debit against charge revenue", () => {
+    const debit = { account: "customer_wallet_available" as const, direction: "debit" as const, amountFen: fen(7) };
+    const revenue = { account: "charge_revenue" as const, direction: "credit" as const, amountFen: fen(7) };
+    const charge = { kind: "charge" as const, operationKey: "charge:reservation-1" };
+    expect(normalizeFundsPosting(topup([revenue, debit], charge)).entries.map(entry => entry.account))
+      .toEqual(["charge_revenue", "customer_wallet_available"]);
+    expect(() => normalizeFundsPosting(topup([clearingDebit(7), walletCredit(7)], charge))).toThrow("funds_accounts_not_allowed");
+    expect(() => normalizeFundsPosting(topup([{ ...revenue, direction: "debit" }, { ...debit, direction: "credit" }], charge)))
+      .toThrow("funds_accounts_not_allowed");
+    expect(() => normalizeFundsPosting(topup([revenue, debit], { kind: "charge" }))).toThrow("funds_input_invalid"); // charge: prefix only
+    expect(() => normalizeFundsPosting(topup([clearingDebit(7), walletCredit(7)], { operationKey: "charge:x" }))).toThrow("funds_input_invalid");
+  });
   it("accepts bank_topup only as debit bank_clearing / credit wallet; other kinds cannot use bank_clearing", () => {
     const bankDebit = (amount: number): FundsEntryInput => ({ account: "bank_clearing", direction: "debit", amountFen: fen(amount) });
     expect(normalizeFundsPosting(topup([walletCredit(9), bankDebit(9)], { kind: "bank_topup" })).entries.map(e => e.account))

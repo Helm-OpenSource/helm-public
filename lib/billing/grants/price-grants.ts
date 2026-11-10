@@ -273,8 +273,8 @@ export function evaluateSpendGrant(grant: SpendGrantRow, price: BillingPriceRow,
   if (use.billingEventRef !== price.billingEventRef || use.meterUnit !== price.meterUnit) refuse("grant_meter_mismatch");
   if (use.at < price.effectiveFrom || (price.effectiveUntil && use.at >= price.effectiveUntil)) refuse("price_version_not_effective");
   const chargeFen = chargeFenForQuantity(price, use.quantity);
-  // Zero-fen policy (S3-b): a use that prices to 0 fen is refused, never reserved or charged as "free"; free usage needs its
-  // own approved product path, and "nothing is due" after execution is a release with reason no_charge_due.
+  // Zero-fen policy (S3-b): a use that prices to 0 fen is refused, never reserved as "free"; free usage needs its own approved
+  // product path. (A settle of a smaller quantity may round to 0 fen; that settles at 0, protocol v3.5.)
   if (chargeFen === ZERO) refuse("grant_charge_zero");
   if (chargeFen > grant.perChargeLimitFen) refuse("grant_per_charge_exceeded");
   if (use.usedFen.day + chargeFen > grant.dailyLimitFen) refuse("grant_daily_limit_exceeded");

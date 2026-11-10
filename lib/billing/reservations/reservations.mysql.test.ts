@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { lstatSync, realpathSync, statSync } from "node:fs";
+import { lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { postFundsTransactionInTransaction } from "../funds/funds-journal";
+import { postFundsTransactionInTransaction, recomputeFundsProjection, reverseFundsTransactionInTransaction } from "../funds/funds-journal";
 import { changeSpendGrant, createSpendGrant, publishPriceVersion } from "../grants/price-grants";
-import { createPayerAccount } from "../payer/payer-accounts";
-import { markUnknown as markUnknownSpend, release as releaseSpend, type ReleaseReasonCode, reserve as reserveSpend } from "./reservations";
+import { bindScope, createPayerAccount } from "../payer/payer-accounts";
+import { markUnknown as markUnknownSpend, quote as quoteSpend, release as releaseSpend, type ReleaseReasonCode, reserve as reserveSpend,
+  resolveUnknown as resolveSpend, settle as settleSpend } from "./reservations";
 
 // Runs only against a fully migrated, explicitly isolated database; never DATABASE_URL or the app's connection.
 const url = process.env.BILLING_MYSQL_DATABASE_URL;
@@ -31,7 +32,7 @@ function assertIsolatedTarget(raw: string) {
 describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
   if (!url) { it.skip("requires an explicit synthetic target", () => {}); return; }
   const run = randomUUID().replaceAll("-", "").slice(0, 16);
-  const ws = `resv-ws-${run}`, owner = `resv-owner-${run}`;
+  const ws = `resv-ws-${run}`, qws = `resv-qws-${run}`, owner = `resv-owner-${run}`;
   const fen = (value: number) => BigInt(value);
   const service = { type: "SYSTEM" as const, ref: "synthetic-metering" };
   // 2026-11-30 23:59:59.900 in Asia/Shanghai; the next instants below fall on 12-01.
@@ -47,6 +48,8 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
     await a.$executeRaw`INSERT INTO Workspace (id,name,slug,updatedAt) VALUES (${ws},'Synthetic reservations',${ws},NOW(3))`;
     await a.$executeRaw`INSERT INTO User (id,name,email,updatedAt) VALUES (${owner},'Synthetic',${`${owner}@example.invalid`},NOW(3))`;
     await a.$executeRaw`INSERT INTO Membership (id,workspaceId,userId,role,status,updatedAt) VALUES (${`m-${owner}`},${ws},${owner},'OWNER','ACTIVE',NOW(3))`;
+    await a.$executeRaw`INSERT INTO Workspace (id,name,slug,updatedAt) VALUES (${qws},'Synthetic quote',${qws},NOW(3))`;
+    await a.$executeRaw`INSERT INTO Membership (id,workspaceId,userId,role,status,updatedAt) VALUES (${`mq-${owner}`},${qws},${owner},'OWNER','ACTIVE',NOW(3))`;
     const publish = (code: string, numerator: number, denominator: number) => publishPriceVersion(a, {
       actor: { type: "SYSTEM", ref: "synthetic-catalog" }, productCode: `synthetic.${code}${run}`, version: 1, meterUnit: "document",
       billingEventRef: "service-billing-event-v1:synthetic", acceptanceRef: "acceptance:synthetic", scopeKind: "workspace",
@@ -200,5 +203,152 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
     const pair = await Promise.all([release(id, "rel:a", "not_executed", "e1", 0, "ref:op:twin"), release(id, "rel:b", "failed", "e2", 1, "ref:op:twin")]);
     expect(pair).toEqual(expect.arrayContaining([{ ok: true, state: "released" }, rejected("reservation_state_conflict")]));
     expect(await buckets(ids)).toEqual(counted(0));
+  });
+
+  const settle = async (reservationId: string, key: string, quantityUsed: string, evidenceRef = "acceptance:usable", lane = 0, operationRef?: string) =>
+    settleSpend(await clocked(earlyDec, lane), service, { idempotencyKey: `idem:${key}`, reservationId,
+      operationRef: operationRef ?? await refOf(reservationId), quantityUsed, evidenceRef });
+  const balances = async (payerAccountId: string) => Object.fromEntries((await a.fundsAccountProjection.findMany({ where: { payerAccountId } }))
+    .map(row => [row.account, row.balanceFen]));
+  const settledBuckets = (reserved: number, settled: number) => counted(reserved).map(bucket => ({ ...bucket, settledFen: fen(settled) }));
+
+  it("settles exactly once into the journal, repriced for the used quantity, in the frozen periods", async () => {
+    const ids = await setup("enforce", 1000);
+    const { reservationId } = await held(ids, "op:1", 3); // 2026-11-30 Shanghai, cap 300
+    const first = await settle(reservationId, "set:1", "2"); // settled on 2026-12-01 Shanghai
+    expect(first).toMatchObject({ ok: true, state: "settled", chargeFen: "200" });
+    const chargeId = first.ok ? first.chargeId : "";
+    expect(await settle(reservationId, "set:1", "2")).toEqual(first);
+    expect(await settle(reservationId, "set:1", "3")).toEqual(rejected("idempotency_conflict"));
+    expect(await settle(reservationId, "set:2", "2")).toEqual(rejected("reservation_state_conflict"));
+    expect(await release(reservationId, "rel:1")).toEqual(rejected("reservation_state_conflict"));
+    expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(800), charge_revenue: fen(200), topup_clearing: fen(1000) });
+    expect(await buckets(ids)).toEqual(settledBuckets(0, 200)); // no 12-01 / 2026-12 bucket
+    const charge = await a.billingCharge.findUniqueOrThrow({ where: { id: chargeId } });
+    expect(charge).toMatchObject({ reservationId, quantity: fen(2), chargeFen: fen(200), capFen: fen(300), dayKey: "2026-11-30", monthKey: "2026-11" });
+    expect(await a.fundsTransaction.findUniqueOrThrow({ where: { id: charge.fundsTransactionId } })).toMatchObject({ kind: "charge", operationKey: `charge:${reservationId}` });
+    expect(await a.billingOutbox.count({ where: { OR: [{ aggregateId: chargeId, eventType: "billing.charge.settled" },
+      { aggregateId: charge.fundsTransactionId, eventType: "funds.posted" }] } })).toBe(2);
+    expect((await a.$transaction(tx => recomputeFundsProjection(tx, ids.payerAccountId))).consistent).toBe(true);
+    await expect(a.$transaction(tx => reverseFundsTransactionInTransaction(tx, { payerAccountId: ids.payerAccountId, originalTransactionId: charge.fundsTransactionId,
+      operationKey: "rev:charge", actor: service, evidenceRef: "e" }))).rejects.toThrow("funds_reversal_invalid");
+    await expect(a.$executeRaw`UPDATE BillingCharge SET chargeFen = 1 WHERE id = ${chargeId}`).rejects.toThrow(/billing_charge_immutable/);
+    await expect(a.$executeRaw`DELETE FROM BillingCharge WHERE id = ${chargeId}`).rejects.toThrow(/billing_charge_immutable/);
+    expect(await settle((await held(ids, "op:2", 1)).reservationId, "set:1", "1")).toEqual(rejected("idempotency_conflict")); // key reuse
+  });
+  it("refuses over-quantity and malformed settles, never settles unknown on the business path, and settles 0 fen without funds", async () => {
+    const ids = await setup("enforce", 1000);
+    const { reservationId } = await held(ids, "op:1", 3);
+    expect(await settle(reservationId, "set:x", "4")).toEqual(rejected("quantity_exceeds_reservation"));
+    expect(await settle(reservationId, "set:x", "0")).toEqual(rejected("request_invalid"));
+    expect(await settle(reservationId, "set:x", "3", "e", a, "ref:wrong")).toEqual(rejected("idempotency_conflict"));
+    expect(await unknown(reservationId, "unk:1")).toEqual({ ok: true, state: "unknown" });
+    expect(await settle(reservationId, "set:1", "3", "acceptance:late-proof")).toEqual(rejected("reservation_state_conflict"));
+    expect(await resolve(reservationId, "res:1", "settled", "3")).toMatchObject({ ok: true, chargeFen: "300" }); // reconciliation only
+    expect(await buckets(ids)).toEqual(settledBuckets(0, 300));
+    const cheap = await setup("enforce", 1000, undefined, () => cheapId);
+    const big = await reserve(cheap, "op:c", 3, a, lateNov, cheapId); // 3 x 1/3 fen = 1 fen cap
+    const cheapReservation = big.ok && big.mode === "enforce" ? big.reservationId : "";
+    const zero = await settle(cheapReservation, "set:c", "1"); // 1/3 fen rounds to 0: settled at 0 (v3.5), nothing posted
+    expect(zero).toMatchObject({ ok: true, state: "settled", chargeFen: "0" });
+    expect(await a.billingCharge.findUniqueOrThrow({ where: { reservationId: cheapReservation } })).toMatchObject({ chargeFen: fen(0), fundsTransactionId: null });
+    expect(await a.fundsTransaction.count({ where: { payerAccountId: cheap.payerAccountId, kind: "charge" } })).toBe(0);
+    expect(await buckets(cheap)).toEqual(settledBuckets(0, 0)); // the 1-fen hold left; nothing settled
+    expect(await a.billingOutbox.count({ where: { aggregateId: zero.ok ? zero.chargeId : "", eventType: "billing.charge.settled" } })).toBe(1);
+  });
+  it("refuses an unpayable settle as retryable and still settles held work after suspension or off", async () => {
+    const ids = await setup("enforce", 300);
+    const { reservationId } = await held(ids, "op:1", 3);
+    await a.$transaction(tx => postFundsTransactionInTransaction(tx, { payerAccountId: ids.payerAccountId, kind: "correction", operationKey: "corr:1",
+      actor: service, evidenceRef: "correction:synthetic", entries: [{ account: "customer_wallet_available", direction: "debit", amountFen: fen(100) },
+        { account: "correction_suspense", direction: "credit", amountFen: fen(100) }] }));
+    expect(await settle(reservationId, "set:1", "3")).toEqual(rejected("insufficient_funds"));
+    expect(await a.billingReservation.findUniqueOrThrow({ where: { id: reservationId } })).toMatchObject({ state: "held", resolutionKey: null });
+    await a.$executeRaw`UPDATE PayerAccount SET billingMode = 'off', status = 'suspended' WHERE id = ${ids.payerAccountId}`;
+    expect(await reserve(ids, "op:new", 1)).toEqual(rejected("grant_not_active")); // new work is blocked ...
+    expect(await settle(reservationId, "set:1", "2")).toMatchObject({ ok: true, chargeFen: "200" }); // ... delivered work settles (R05)
+    expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(0), charge_revenue: fen(200) });
+    const other = await setup("enforce", 500); // a charge posting not backed by a held reservation is not exempt
+    await a.$executeRaw`UPDATE PayerAccount SET status = 'suspended' WHERE id = ${other.payerAccountId}`;
+    await expect(a.$transaction(tx => postFundsTransactionInTransaction(tx, { payerAccountId: other.payerAccountId, kind: "charge",
+      operationKey: `charge:${reservationId}`, actor: service, evidenceRef: "e", entries: [{ account: "customer_wallet_available",
+        direction: "debit", amountFen: fen(1) }, { account: "charge_revenue", direction: "credit", amountFen: fen(1) }] }))).rejects.toThrow("payer_account_unavailable");
+    expect(await buckets(ids)).toEqual(settledBuckets(0, 200));
+  });
+  it("charges once under a concurrent double settle and lets settle or release win, never both", async () => {
+    const ids = await setup("enforce", 1000);
+    const { reservationId } = await held(ids, "op:d", 3);
+    const pair = await Promise.all([settle(reservationId, "set:a", "3", "e", 0, "ref:op:d"), settle(reservationId, "set:b", "3", "e", 1, "ref:op:d")]);
+    expect(pair.filter(result => result.ok)).toHaveLength(1);
+    expect(pair).toContainEqual(rejected("reservation_state_conflict"));
+    expect(await a.fundsTransaction.count({ where: { payerAccountId: ids.payerAccountId, kind: "charge" } })).toBe(1);
+    expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(700), charge_revenue: fen(300) });
+    const race = await held(ids, "op:r", 2);
+    const outcome = await Promise.all([settle(race.reservationId, "set:r", "2", "e", 0, "ref:op:r"), release(race.reservationId, "rel:r", "failed", "e", 1, "ref:op:r")]);
+    expect(outcome.filter(result => result.ok)).toHaveLength(1);
+    const settledWon = outcome[0].ok;
+    expect(await a.billingCharge.count({ where: { reservationId: race.reservationId } })).toBe(settledWon ? 1 : 0);
+    expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(settledWon ? 500 : 700) });
+    expect(await buckets(ids)).toEqual(settledBuckets(0, settledWon ? 500 : 300));
+  });
+  const resolve = async (reservationId: string, key: string, outcome: "settled" | "released", quantityUsed?: string) =>
+    resolveSpend(await clocked(earlyDec, 0), service, { idempotencyKey: `idem:${key}`, reservationId, operationRef: await refOf(reservationId),
+      outcome, quantityUsed, evidenceRef: "reconciliation:synthetic" });
+  it("settles shadow reservations as shadow charges only, never touching funds", async () => {
+    const ids = await setup("shadow", 0);
+    const { reservationId } = await held(ids, "op:s", 3);
+    const result = await settle(reservationId, "set:s", "3");
+    expect(result).toMatchObject({ ok: true, state: "settled", chargeFen: "300" });
+    expect(await a.billingCharge.findUniqueOrThrow({ where: { reservationId } })).toMatchObject({ billingMode: "shadow", fundsTransactionId: null });
+    expect(await a.fundsTransaction.count({ where: { payerAccountId: ids.payerAccountId } })).toBe(0);
+    expect(await a.fundsAccountProjection.count({ where: { payerAccountId: ids.payerAccountId } })).toBe(0);
+    expect(await buckets(ids, "shadow")).toEqual(settledBuckets(0, 300));
+    expect(await a.billingOutbox.count({ where: { aggregateId: result.ok ? result.chargeId : "", eventType: "billing.charge.shadow_settled" } })).toBe(1);
+  });
+  it("resolves only unknown reservations through the reconciliation channel, on evidence", async () => {
+    const ids = await setup("enforce", 1000);
+    const one = await held(ids, "op:u1", 3), two = await held(ids, "op:u2", 3);
+    expect(await resolve(one.reservationId, "res:1", "released")).toEqual(rejected("unknown_resolution_conflict")); // still held
+    await unknown(one.reservationId, "unk:1"); await unknown(two.reservationId, "unk:2");
+    expect(await resolve(one.reservationId, "res:1", "settled")).toEqual(rejected("request_invalid")); // quantityUsed required
+    expect(await resolve(one.reservationId, "res:1", "released", "1")).toEqual(rejected("request_invalid"));
+    expect(await resolve(one.reservationId, "res:1", "released")).toEqual({ ok: true, state: "released" });
+    expect(await resolve(one.reservationId, "res:1", "released")).toEqual({ ok: true, state: "released" }); // replay
+    expect(await resolve(one.reservationId, "res:9", "settled", "1")).toEqual(rejected("unknown_resolution_conflict"));
+    expect(await a.billingReservation.findUniqueOrThrow({ where: { id: one.reservationId } })).toMatchObject({ releaseReason: "unknown_released" });
+    expect(await unknown(one.reservationId, "unk:1")).toEqual({ ok: true, state: "released" }); // markUnknown replay: current state
+    await a.$executeRaw`UPDATE PayerAccount SET status = 'suspended' WHERE id = ${ids.payerAccountId}`; // reconciliation still settles
+    expect(await resolve(two.reservationId, "res:2", "settled", "2")).toMatchObject({ ok: true, state: "settled", chargeFen: "200" });
+    expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(800) });
+    expect(await buckets(ids)).toEqual(settledBuckets(0, 200));
+  });
+  it("quotes payer, grant and price version from the workspace binding and fails closed otherwise", async () => {
+    const ids = await setup("enforce", 1000);
+    const q = async (meterUnit = "document") => quoteSpend(await clocked(midNov, 0), service, {
+      subjectScope: { kind: "workspace", workspaceId: qws }, billingEventRef: "service-billing-event-v1:synthetic", meterUnit, quantity: "1" });
+    expect(await q()).toEqual(rejected("billing_mode_off")); // unbound workspace: not billed (status quo)
+    await bindScope(a, { actorUserId: owner, payerAccountId: ids.payerAccountId, expectedPayerVersion: 1, scopeKind: "workspace",
+      scopeRef: qws, evidenceRef: "consent:bind" });
+    expect(await q()).toEqual({ ok: true, payerRef: ids.payerAccountId, grantId: ids.grantId, priceVersionId: priceId, mode: "enforce" });
+    expect(await q("page")).toEqual(rejected("grant_not_active"));
+    await a.$executeRaw`UPDATE PayerAccount SET status = 'suspended' WHERE id = ${ids.payerAccountId}`;
+    expect(await q()).toEqual(rejected("grant_not_active"));
+    expect(await reserve(ids, "op:susp", 1)).toEqual(rejected("grant_not_active")); // suspended never runs unbilled
+  });
+  it("refuses the S2-c and S2-a rollbacks while the charges migration is applied", async () => {
+    // CREATE PROCEDURE cannot run over the prepared-statement protocol, so evaluate each file's first guard (the one that must
+    // fire before any DDL) as written; the shell runner also executes the whole files against MySQL.
+    const guard = async (file: string) => {
+      const sql = readFileSync(join(process.cwd(), "prisma/rollback", file), "utf8");
+      const body = sql.slice(sql.indexOf("BEGIN")), condition = body.slice(body.indexOf("IF ") + 3, body.indexOf(" THEN"));
+      expect(body.slice(body.indexOf(" THEN"), body.indexOf("END IF"))).toContain("later billing migration is applied");
+      const [row] = await a.$queryRawUnsafe<Array<{ refused: bigint }>>(`SELECT (${condition}) AS refused`);
+      return Number(row.refused);
+    };
+    expect(await guard("20261110_rollback_billing_bank_receipts.sql")).toBe(1);
+    expect(await guard("20261110_rollback_billing_funds_journal.sql")).toBe(1);
+    const [kind] = await a.$queryRaw<Array<{ type: string }>>`SELECT COLUMN_TYPE AS type FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'FundsTransaction' AND COLUMN_NAME = 'kind'`;
+    expect(kind.type).toBe("enum('topup','correction','bank_topup','charge','credit_draw')");
   });
 });

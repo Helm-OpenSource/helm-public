@@ -2,7 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 import { SpendGrantRefusal } from "../grants/price-grants";
 import { asBillingResult, markUnknownInTransaction, normalizeReserve, releaseInTransaction, type ReleaseReasonCode,
-  reserve, type ReserveRequest } from "./reservations";
+  reserve, type ReserveRequest, settleInTransaction } from "./reservations";
 
 const service = { type: "SYSTEM" as const, ref: "metering" };
 const req = (extra: Partial<ReserveRequest> = {}): ReserveRequest => ({ idempotencyKey: "idem:0001", operationRef: "op:bill/1",
@@ -34,6 +34,10 @@ describe("reservation protocol normalization", () => {
     await expect(asBillingResult(releaseInTransaction(noDb, service, { ...release, evidenceRef: "" }))).resolves.toEqual(invalid);
     await expect(asBillingResult(markUnknownInTransaction(noDb, service, { idempotencyKey: "unk:0001", reservationId: "r1", operationRef: "op:1",
       evidenceRef: " " }))).resolves.toEqual(invalid);
+    const settle = { idempotencyKey: "set:0001", reservationId: "r1", operationRef: "op:1", quantityUsed: "1", evidenceRef: "acceptance:1" };
+    for (const quantityUsed of ["0", "", "1e3", "-2"]) {
+      await expect(asBillingResult(settleInTransaction(noDb, service, { ...settle, quantityUsed }))).resolves.toEqual(invalid);
+    }
   });
   it("maps gate refusals to protocol codes and lets unexpected errors propagate", async () => {
     const fail = (error: Error) => asBillingResult(Promise.reject(error));
