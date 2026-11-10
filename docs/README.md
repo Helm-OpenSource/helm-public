@@ -92,6 +92,7 @@ connector 授权、写回、外发或审批证明。
 - [钱包充值订单与支付核验 / Billing wallet top-up orders](operations/BILLING_TOPUP_ORDERS.md) - wallet_topup orders and one callback/query verification entry crediting once; no route, real provider or merchant credential.
 - [对公到账复核与钱包查询 / Billing bank receipts](operations/BILLING_BANK_RECEIPTS.md) - maker/checker corporate bank receipts posting `bank_topup`, platform finance grants and read-only wallet query; no bank import or UI.
 - [价格版本与消费授权 / Billing price versions and spend grants](operations/BILLING_PRICE_GRANTS.md) - immutable price versions and default-off, version-bound spend grants; no reservation, charge or route.
+- [授信额度 / Billing credit facilities](operations/BILLING_CREDIT_FACILITIES.md) - maker/checker credit lines per payer, default 0, balanced credit draws for S3-b; no batch issuance, repayment or route.
 - [LLM 智能深化 v1 / LLM intelligence deepening v1](product/HELM_LLM_INTELLIGENCE_DEEPENING_V1.md)
 - [LLM 智能深化 v2 / LLM intelligence deepening v2](product/HELM_LLM_INTELLIGENCE_DEEPENING_V2.md)
 - [LLM 智能深化 v3 / LLM intelligence deepening v3](product/HELM_LLM_INTELLIGENCE_DEEPENING_V3.md)
