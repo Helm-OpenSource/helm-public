@@ -1926,6 +1926,7 @@ enum FundsTransactionKind {
   correction
   bank_topup // S2-c
   charge // S3-b2 (the DB ENUM also holds S3-e's credit_draw from the agreed-union MODIFY; S3-e adds it here)
+  credit_draw // S3-e
 }
 
 enum FundsAccount {
@@ -1934,6 +1935,7 @@ enum FundsAccount {
   correction_suspense
   bank_clearing // S2-c
   charge_revenue // S3-b2 (DB ENUM also holds S3-e's credit_receivable; S3-e adds it here)
+  credit_receivable // S3-e
 }
 
 enum FundsEntryDirection {
@@ -2296,6 +2298,44 @@ model BankReceipt {
   @@unique([receivingAccountRef, activeBankTxnRef])
   @@index([payerAccountId, state])
   @@index([state, createdAt])
+}
+
+// Billing V1 credit facility (S3-e). No facility means 0 credit. One active/reduced facility per payer; see the migration triggers.
+enum CreditFacilityState {
+  draft
+  approved
+  active
+  reduced
+  expired
+  revoked
+}
+
+model CreditFacility {
+  id                   String              @id @default(cuid())
+  payerAccountId       String              @db.VarChar(191)
+  state                CreditFacilityState @default(draft)
+  limitFen             BigInt              @default(0)
+  approvedLimitFen     BigInt? // frozen at approval: the exposure cap, also for reservations held before a tightening
+  usedFen              BigInt              @default(0)
+  validUntil           DateTime?
+  // Equals payerAccountId while active or reduced, NULL otherwise: the unique key admits one drawable facility per payer.
+  activePayerAccountId String?             @unique @db.VarChar(191)
+  operationKey         String              @db.VarChar(191)
+  contentHash          String              @db.Char(64)
+  proposedByUserId     String              @db.VarChar(191)
+  evidenceRef          String              @db.VarChar(191)
+  approvedByUserId     String?             @db.VarChar(191) // DB CHECK: differs from proposedByUserId
+  approvalRef          String?             @db.VarChar(191)
+  approvedAt           DateTime?
+  activatedAt          DateTime?
+  lastReducedAt        DateTime?
+  closedAt             DateTime?
+  version              Int                 @default(1)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  @@unique([payerAccountId, operationKey])
+  @@index([payerAccountId, state])
 }
 
 model WorkerPublisherProfile {
