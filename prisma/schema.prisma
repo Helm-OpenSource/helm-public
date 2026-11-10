@@ -2145,6 +2145,8 @@ model BillingReservation {
 
   @@unique([payerAccountId, idempotencyKey])
   @@unique([payerAccountId, operationRef])
+  @@unique([payerAccountId, unknownKey])
+  @@unique([payerAccountId, resolutionKey])
   @@index([payerAccountId, state])
 }
 

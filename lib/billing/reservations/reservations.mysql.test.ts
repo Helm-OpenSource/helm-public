@@ -70,11 +70,9 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
   async function setup(mode: "shadow" | "enforce", walletFen: number, limits = [500, 1000, 3000], price = () => priceId) {
     const account = await createPayerAccount(a, { actorUserId: owner, workspaceId: ws, kind: "enterprise_contract", contractSubjectRef: "subject-resv" });
     await a.$executeRaw`UPDATE PayerAccount SET billingMode = ${mode} WHERE id = ${account.id}`; // no mode API yet
-    if (walletFen > 0) {
-      await a.$transaction(tx => postFundsTransactionInTransaction(tx, { payerAccountId: account.id, kind: "topup", operationKey: `topup:${account.id}`,
-        actor: service, evidenceRef: "verified-payment:synthetic", entries: [{ account: "topup_clearing", direction: "debit", amountFen: fen(walletFen) },
-          { account: "customer_wallet_available", direction: "credit", amountFen: fen(walletFen) }] }));
-    }
+    if (walletFen > 0) await a.$transaction(tx => postFundsTransactionInTransaction(tx, { payerAccountId: account.id, kind: "topup", operationKey: `topup:${account.id}`,
+      actor: service, evidenceRef: "verified-payment:synthetic", entries: [{ account: "topup_clearing", direction: "debit", amountFen: fen(walletFen) },
+        { account: "customer_wallet_available", direction: "credit", amountFen: fen(walletFen) }] }));
     const [per, day, month] = limits.map(fen);
     const { grant } = await createSpendGrant(a, { actorUserId: owner, payerAccountId: account.id, priceVersionId: price(),
       operationKey: "grant:resv", evidenceRef: "consent:synthetic", validFrom: new Date("2026-11-01T00:00:00Z"),
@@ -83,15 +81,12 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
     return { payerAccountId: account.id, grantId: grant.id };
   }
   type Ids = Awaited<ReturnType<typeof setup>>;
-  const reserve = (ids: Ids, key: string, quantity: number, client = a, at = lateNov, priceVersionId = priceId) =>
-    asBillingResult(atClock(client, at, tx => reserveInTransaction(tx, service, { idempotencyKey: `idem:${key}`, operationRef: `ref:${key}`,
+  const reserve = (ids: Ids, key: string, quantity: number, client = a, at = lateNov, priceVersionId = priceId, operationRef = `ref:${key}`) =>
+    asBillingResult(atClock(client, at, tx => reserveInTransaction(tx, service, { idempotencyKey: `idem:${key}`, operationRef,
       payerRef: ids.payerAccountId, grantId: ids.grantId, priceVersionId, billingEventRef: "service-billing-event-v1:synthetic",
       meterUnit: "document", quantity: String(quantity) })));
   const held = async (ids: Ids, key: string, quantity: number, client = a, at = lateNov) => {
-    const result = await reserve(ids, key, quantity, client, at);
-    if (!result.ok) throw new Error(`reserve_failed:${JSON.stringify(result)}`);
-    return result;
-  };
+    const result = await reserve(ids, key, quantity, client, at); if (!result.ok) throw new Error(JSON.stringify(result)); return result; };
   const release = (reservationId: string, key: string, reasonCode: ReleaseReasonCode = "failed", evidenceRef = "claim:failed", client = a, operationRef?: string) =>
     asBillingResult(atClock(client, earlyDec, async tx => releaseInTransaction(tx, service, { idempotencyKey: `idem:${key}`, reservationId,
       operationRef: operationRef ?? (await tx.billingReservation.findUniqueOrThrow({ where: { id: reservationId } })).operationRef, reasonCode, evidenceRef })));
@@ -101,9 +96,8 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
   const rejected = (code: string) => ({ ok: false, code });
   const buckets = (ids: Ids, billingMode: "shadow" | "enforce" = "enforce") => a.budgetBucket.findMany({ where: { grantId: ids.grantId, billingMode }, orderBy: [{ periodKind: "asc" }, { periodKey: "asc" }],
     select: { periodKind: true, periodKey: true, reservedFen: true, settledFen: true } });
-  const counted = (reserved: number, day = "2026-11-30", month = "2026-11") => [
-    { periodKind: "day", periodKey: day, reservedFen: fen(reserved), settledFen: fen(0) },
-    { periodKind: "month", periodKey: month, reservedFen: fen(reserved), settledFen: fen(0) }];
+  const counted = (reserved: number) => [{ periodKind: "day", periodKey: "2026-11-30", reservedFen: fen(reserved), settledFen: fen(0) },
+    { periodKind: "month", periodKey: "2026-11", reservedFen: fen(reserved), settledFen: fen(0) }];
 
   it("freezes database time, period keys, price and cap; replays the key and refuses other content", async () => {
     const ids = await setup("enforce", 1000);
@@ -116,10 +110,7 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
       chargeFen: fen(300), grantVersion: 2, createdBy: "SYSTEM:synthetic-metering" });
     expect(await reserve(ids, "op:1", 3, b, earlyDec)).toEqual(first); // replay on another day keeps the frozen keys
     expect(await reserve(ids, "op:1", 4)).toEqual(rejected("idempotency_conflict"));
-    const sameRef = await asBillingResult(atClock(a, lateNov, tx => reserveInTransaction(tx, service, { idempotencyKey: "idem:other",
-      operationRef: "ref:op:1", payerRef: ids.payerAccountId, grantId: ids.grantId, priceVersionId: priceId,
-      billingEventRef: "service-billing-event-v1:synthetic", meterUnit: "document", quantity: "3" })));
-    expect(sameRef).toEqual(rejected("idempotency_conflict")); // one reservation per operationRef, whatever the key
+    expect(await reserve(ids, "op:other", 3, a, lateNov, priceId, "ref:op:1")).toEqual(rejected("idempotency_conflict")); // one per operationRef
     expect(await buckets(ids)).toEqual(counted(300));
     await expect(a.$executeRaw`UPDATE BillingReservation SET chargeFen = 1, state = 'released', releaseReason = 'failed', resolutionKey = 'x', resolutionEvidenceRef = 'x', resolvedBy = 'x', resolvedAt = NOW(3), version = version + 1 WHERE id = ${id}`).rejects.toThrow(/billing_reservation_snapshot_immutable/);
     await expect(a.$executeRaw`UPDATE BillingReservation SET dayKey = '2026-12-01', state = 'unknown', unknownKey = 'x', unknownEvidenceRef = 'x', unknownAt = NOW(3), version = version + 1 WHERE id = ${id}`).rejects.toThrow(/billing_reservation_snapshot_immutable/);
@@ -175,7 +166,7 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
     await expect(a.$executeRaw`UPDATE BillingReservation SET state = 'held', releaseReason = NULL, resolutionKey = NULL, resolutionEvidenceRef = NULL, resolvedBy = NULL, resolvedAt = NULL, version = version + 1 WHERE id = ${reservationId}`).rejects.toThrow(/billing_reservation_snapshot_immutable/);
     await held(ids, "op:2", 10); // the released 300 no longer counts: 1000 wallet covers 1000
   });
-  it("keeps an unknown outcome reserved and counted until evidence releases it", async () => {
+  it("keeps an unknown outcome reserved and counted; business release cannot free it", async () => {
     const ids = await setup("enforce", 600);
     const { reservationId } = await held(ids, "op:1", 5);
     expect(await unknown(reservationId, "unk:1")).toEqual({ ok: true, state: "unknown" });
@@ -184,9 +175,20 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
     expect(await unknown(reservationId, "unk:2")).toEqual(rejected("reservation_state_conflict"));
     expect(await buckets(ids)).toEqual(counted(500));
     expect(await reserve(ids, "op:2", 2)).toEqual(rejected("insufficient_funds")); // the unknown hold still blocks funds
-    expect(await release(reservationId, "rel:1", "not_executed", "claim:void-proof")).toEqual({ ok: true, state: "released" });
-    expect(await a.billingReservation.findUniqueOrThrow({ where: { id: reservationId } })).toMatchObject({ unknownEvidenceRef: "claim:timeout" });
-    expect(await buckets(ids)).toEqual(counted(0));
+    expect(await release(reservationId, "rel:1", "not_executed", "claim:void-proof")).toEqual(rejected("reservation_state_conflict"));
+    await expect(a.$executeRaw`UPDATE BillingReservation SET state = 'released', releaseReason = 'failed', resolutionKey = 'k', resolutionEvidenceRef = 'e', resolvedBy = 'x', resolvedAt = NOW(3), version = version + 1 WHERE id = ${reservationId}`).rejects.toThrow(/billing_reservation_snapshot_immutable/);
+    expect(await buckets(ids)).toEqual(counted(500)); // only resolveUnknown (S3-b2, reason unknown_released) frees it
+  });
+  it("never deadlocks first reserves across 16 payers on 8 connections", async () => {
+    const payers = [];
+    for (let i = 0; i < 16; i++) payers.push(await setup("enforce", 100000, [1000, 100000, 100000]));
+    const pool = Array.from({ length: 8 }, () => new PrismaClient({ datasources: { db: { url } } }));
+    try {
+      for (let round = 0; round < 4; round++) {
+        const results = await Promise.all(payers.map((ids, i) => reserve(ids, `op:m${i}-${round}`, 1, pool[(i + round) % 8])));
+        expect(results.filter(result => !result.ok)).toEqual([]);
+      }
+    } finally { await Promise.all(pool.map(client => client.$disconnect())); }
   });
   it("admits exactly the in-limit share of concurrent reserves on two connections", async () => {
     const ids = await setup("enforce", 100000, [100, 700, 3000]);
@@ -201,6 +203,7 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
     expect(twin[0]).toEqual(twin[1]);
     expect(await a.billingReservation.count({ where: { payerAccountId: ids.payerAccountId } })).toBe(1);
     const id = twin[0].reservationId;
+    await expect(a.$executeRaw`UPDATE BillingReservation SET state = 'released', releaseReason = 'unknown_released', resolutionKey = 'k', resolutionEvidenceRef = 'e', resolvedBy = 'x', resolvedAt = NOW(3), version = version + 1 WHERE id = ${id}`).rejects.toThrow(/billing_reservation_snapshot_immutable/);
     const pair = await Promise.all([release(id, "rel:a", "not_executed", "e1", a, "ref:op:twin"), release(id, "rel:b", "failed", "e2", b, "ref:op:twin")]);
     expect(pair).toEqual(expect.arrayContaining([{ ok: true, state: "released" }, rejected("reservation_state_conflict")]));
     expect(await buckets(ids)).toEqual(counted(0));

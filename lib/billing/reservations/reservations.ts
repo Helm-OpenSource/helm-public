@@ -8,24 +8,21 @@ import { type BillingPeriodKeys, chargeFenForQuantity, lockSpendGrantForUseInTra
   type SpendGrantRefusalCode, type SpendGrantRow } from "../grants/price-grants";
 
 /**
- * Billing V1 S3-b reservations, shaped 1:1 on the S3 internal protocol v2 (BillingCoreClient; routes and BillingServiceGrant
- * authentication are S3-b3). A payer reserves a priced use against one spend grant before execution, then settles it exactly
- * once, releases it or marks the outcome unknown, which keeps the hold counted until evidence resolves it; nothing
- * auto-releases. Shadow payers run the same lifecycle in separate shadow bucket counters and never move or check money. Lock
- * order for every money-path writer: Membership -> PayerAccount FOR UPDATE -> SpendGrant -> BudgetBucket day, then month, FOR
- * UPDATE -> BillingReservation -> FundsTransaction -> FundsAccountProjection (ascending account). PayerAccount is the per-payer mutex; the
- * bucket version CAS and limit guard in the UPDATE's own WHERE are the second line.
+ * Billing V1 S3-b reservations on the S3 internal protocol (docs/operations/BILLING_RESERVATIONS.md); nothing auto-releases and
+ * shadow never moves money. Lock order: Membership -> PayerAccount FOR UPDATE (per-payer mutex) -> SpendGrant -> BudgetBucket
+ * day, month -> BillingReservation -> FundsTransaction -> FundsAccountProjection; the bucket CAS and limit guard in the
+ * UPDATE's own WHERE are the second line.
  */
 export type BillingRejectCode = "billing_mode_off" | "insufficient_funds" | "limit_exceeded" | "grant_not_active" |
   "grant_price_version_mismatch" | "grant_meter_mismatch" | "grant_charge_zero" | "idempotency_conflict" |
   "reservation_state_conflict" | "quantity_exceeds_reservation" | "service_unauthorized" | "core_unavailable" |
-  "unknown_resolution_conflict" | "request_invalid"; // request_invalid: malformed request (proposed protocol addition)
+  "unknown_resolution_conflict" | "request_invalid"; // request_invalid: malformed request (adopted in protocol v3.2)
 
 export class BillingReject extends Error {
   constructor(readonly code: BillingRejectCode) { super(code); this.name = "BillingReject"; }
 }
 const GRANT_REJECTS: Partial<Record<SpendGrantRefusalCode, BillingRejectCode>> = {
-  // billing_mode_off means "run unbilled" (protocol v2 §4), so only an explicit off payer maps to it; suspended fails closed.
+  // Only an explicit off payer is billing_mode_off; an unknown or suspended payer fails closed as grant_not_active (v3.2).
   payer_billing_off: "billing_mode_off", payer_account_unavailable: "grant_not_active", grant_not_active: "grant_not_active",
   grant_unavailable: "grant_not_active", grant_outside_validity: "grant_not_active", price_version_not_effective: "grant_not_active",
   price_version_unavailable: "grant_not_active", grant_per_charge_exceeded: "limit_exceeded",
@@ -43,8 +40,9 @@ export async function asBillingResult<T extends object>(work: Promise<T>): Promi
     const mapped = error instanceof SpendGrantRefusal ? GRANT_REJECTS[error.code]
       : error instanceof FundsRefusal ? FUNDS_REJECTS[error.code] : undefined;
     if (mapped) return { ok: false, code: mapped };
-    // Write conflict / serialization failure: nothing committed; a same-key retry replays or decides again.
-    if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2002" || error.code === "P2034")) {
+    // Write conflict, serialization failure, deadlock (1213) or lock wait timeout (1205): nothing committed; retry the same key.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2002" || error.code === "P2034" ||
+        (error.code === "P2010" && ["1213", "1205"].includes(String((error.meta as { code?: unknown } | undefined)?.code))))) {
       return { ok: false, code: "core_unavailable" };
     }
     throw error;
@@ -105,16 +103,19 @@ async function lockPayerRow(tx: Prisma.TransactionClient, payerAccountId: string
 export async function availableCreditFen(_tx: Prisma.TransactionClient, _payerAccountId: string): Promise<bigint> { return ZERO; }
 type Mode = "shadow" | "enforce";
 type BucketRow = { periodKind: "day" | "month"; periodKey: string; settledFen: bigint; reservedFen: bigint; version: number };
-/** Locks the mode's day and month buckets in that order, creating absent ones at zero; callers hold PayerAccount. */
+/** Locks the mode's day, month buckets (creating zero rows); plain existence read under PayerAccount avoids cross-payer gap locks. */
 async function lockBuckets(tx: Prisma.TransactionClient, grant: Pick<SpendGrantRow, "id" | "payerAccountId">,
   keys: BillingPeriodKeys, billingMode: Mode) {
   const rows: BucketRow[] = [];
   for (const [periodKind, periodKey] of [["day", keys.day], ["month", keys.month]] as const) {
+    const id = { grantId: grant.id, billingMode, periodKind, periodKey };
+    if (!await tx.budgetBucket.findUnique({ where: { grantId_billingMode_periodKind_periodKey: id }, select: { version: true } })) {
+      await tx.budgetBucket.create({ data: { ...id, payerAccountId: grant.payerAccountId } });
+    }
     const [row] = await tx.$queryRaw<BucketRow[]>`SELECT periodKind, periodKey, settledFen, reservedFen, version FROM BudgetBucket
       WHERE grantId = ${grant.id} AND billingMode = ${billingMode} AND periodKind = ${periodKind} AND periodKey = ${periodKey} FOR UPDATE`;
-    if (!row) await tx.budgetBucket.create({ data: { grantId: grant.id, billingMode, periodKind, periodKey, payerAccountId: grant.payerAccountId } });
-    rows.push(row ? { ...row, settledFen: BigInt(row.settledFen), reservedFen: BigInt(row.reservedFen), version: Number(row.version) }
-      : { periodKind, periodKey, settledFen: ZERO, reservedFen: ZERO, version: 0 });
+    if (!row) invariantBreach();
+    rows.push({ ...row, settledFen: BigInt(row.settledFen), reservedFen: BigInt(row.reservedFen), version: Number(row.version) });
   }
   return rows;
 }
@@ -131,11 +132,7 @@ async function moveBucket(tx: Prisma.TransactionClient, grantId: string, billing
   if (changed !== 1) invariantBreach();
 }
 
-/**
- * Reserve, idempotent by (payer, idempotencyKey) + content hash; one reservation per (payer, operationRef). The gate prices the
- * use from the grant's bound price row at database time against the mode's locked buckets. Enforce also needs wallet balance
- * minus every open enforce hold to cover it. Any refusal rolls back and leaves the idempotencyKey unused.
- */
+/** Reserve: idempotent by (payer, key) + content hash, one per (payer, operationRef); any refusal rolls back, key unused. */
 export async function reserveInTransaction(tx: Prisma.TransactionClient, actor: ServiceActor, req: ReserveRequest) {
   const { createdBy, quantity, contentHash } = normalizeReserve(actor, req);
   const payerAccountId = req.payerRef;
@@ -157,10 +154,12 @@ export async function reserveInTransaction(tx: Prisma.TransactionClient, actor: 
   });
   const { grant, chargeFen, billingMode } = admitted;
   if (billingMode === "enforce") {
+    // Non-locking reads: every hold and wallet writer holds this PayerAccount lock, so the snapshot (first read after it) is
+    // current; FOR SHARE range locks here deadlocked first reserves across payers. Callers must not read before calling.
     const [{ held }] = await tx.$queryRaw<Array<{ held: bigint }>>`SELECT CAST(COALESCE(SUM(chargeFen), 0) AS SIGNED) AS held
-      FROM BillingReservation WHERE payerAccountId = ${payerAccountId} AND billingMode = 'enforce' AND state IN ('held', 'unknown') FOR SHARE`;
+      FROM BillingReservation WHERE payerAccountId = ${payerAccountId} AND billingMode = 'enforce' AND state IN ('held', 'unknown')`;
     const [wallet] = await tx.$queryRaw<Array<{ balanceFen: bigint }>>`SELECT balanceFen FROM FundsAccountProjection
-      WHERE payerAccountId = ${payerAccountId} AND account = 'customer_wallet_available' FOR SHARE`;
+      WHERE payerAccountId = ${payerAccountId} AND account = 'customer_wallet_available'`;
     const credit = await availableCreditFen(tx, payerAccountId); // owner v3: wallet + remaining credit must cover the holds
     if (BigInt(wallet?.balanceFen ?? ZERO) + credit - BigInt(held) < chargeFen) reject("insufficient_funds");
   }
@@ -183,10 +182,7 @@ function reserved(mode: Mode, reservationId: string, state: string, capFen: bigi
 type LockedReservation = { id: string; payerAccountId: string; operationRef: string; grantId: string; billingMode: Mode; priceVersionId: string;
   priceContentHash: string; quantity: bigint; chargeFen: bigint; state: string; version: number; unknownKey: string | null;
   unknownEvidenceRef: string | null; resolutionKey: string | null; releaseReason: string | null; resolutionEvidenceRef: string | null };
-/**
- * Locks a reservation for resolution in the documented order: PayerAccount, then its frozen-period buckets, then the row.
- * The head read only finds the immutable payer, grant and period keys; everything is re-read under lock.
- */
+/** Locks PayerAccount, the frozen-period buckets, then the row; the plain head read only finds immutable keys. */
 async function lockReservationForResolution(tx: Prisma.TransactionClient, reservationId: string, operationRef: string) {
   reference(reservationId); reference(operationRef);
   const head = await tx.billingReservation.findUnique({ where: { id: reservationId },
@@ -217,7 +213,7 @@ export async function markUnknownInTransaction(tx: Prisma.TransactionClient, act
   const { reservation } = await lockReservationForResolution(tx, req.reservationId, req.operationRef);
   if (reservation.unknownKey === req.idempotencyKey) {
     if (reservation.unknownEvidenceRef !== req.evidenceRef) reject("idempotency_conflict");
-    return { state: "unknown" as const };
+    return { state: reservation.state }; // replay reports the current state (it may have been resolved since)
   }
   if (reservation.state !== "held") reject("reservation_state_conflict");
   await transition(tx, reservation, Prisma.sql`state = 'unknown', unknownKey = ${req.idempotencyKey},
@@ -228,8 +224,8 @@ export async function markUnknownInTransaction(tx: Prisma.TransactionClient, act
 export type ReleaseRequest = { idempotencyKey: string; reservationId: string; operationRef: string; reasonCode: ReleaseReasonCode;
   evidenceRef: string };
 /**
- * held|unknown -> released; the hold leaves its frozen-period buckets. The caller proves the work did not run (claim void),
- * failed, or is unusable (S0 §4); from unknown that proof is the evidenceRef. Same key + content replays.
+ * held -> released; the hold leaves its frozen-period buckets. The caller proves the work did not run (claim void), failed,
+ * or is unusable (S0 §4) via evidenceRef. Same key + content replays.
  */
 export async function releaseInTransaction(tx: Prisma.TransactionClient, actor: ServiceActor, req: ReleaseRequest) {
   if (!RELEASE_REASONS.includes(req?.reasonCode)) reject("request_invalid");
