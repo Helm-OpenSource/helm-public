@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { ActorType, Prisma } from "@prisma/client";
+import { ActorType, Prisma, type PrismaClient } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { assertPositiveFen } from "./money";
 
@@ -175,6 +175,27 @@ async function postLocked(tx: Prisma.TransactionClient, payer: PayerRow, posting
   await tx.billingOutbox.create({ data: { aggregateType: "FundsTransaction", aggregateId: transaction.id,
     eventType: "funds.posted", payload, payloadHash: sha256(payload) } });
   return { transaction, entries, replayed: false };
+}
+
+/** Conflicts that abort the whole transaction and are safe to re-run: Prisma P2034, a MySQL 1213 deadlock from a raw query
+ * (P2010), or a concurrent same-key insert (`funds_write_conflict`). */
+export function isRetryableFundsConflict(error: unknown) {
+  if (error instanceof FundsRefusal) return error.code === "funds_write_conflict";
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
+  const dbCode = String((error.meta as { code?: unknown } | undefined)?.code ?? "");
+  return error.code === "P2034" || (error.code === "P2010" && (dbCode === "1213" || /Deadlock found/i.test(error.message)));
+}
+
+/** Runs a money transaction with a bounded retry on those conflicts; when attempts run out it refuses `funds_write_conflict`. */
+export async function runFundsTransactionWithRetry<T>(client: PrismaClient, run: (tx: Prisma.TransactionClient) => Promise<T>,
+  attempts = 3): Promise<T> {
+  for (let attempt = 1; ; attempt += 1) {
+    try { return await client.$transaction(run, { maxWait: 5000, timeout: 10000 }); } catch (error) {
+      if (!isRetryableFundsConflict(error)) throw error;
+      if (attempt >= attempts) refuse("funds_write_conflict");
+      await new Promise(resolve => setTimeout(resolve, 5 * attempt + Math.floor(Math.random() * 10)));
+    }
+  }
 }
 
 export async function postFundsTransactionInTransaction(tx: Prisma.TransactionClient, input: PostFundsInput) {
