@@ -1,3 +1,11 @@
+---
+status: active / formed-needs-next-layer
+owner: helm-core
+created: 2026-11-09
+review_after: 2026-12-10
+public_safety: Public source contract and synthetic test verification only. No deployment approval, payment, credential or customer data.
+---
+
 # Scoped usage observations / 工作区用量记录
 
 ## Contract / 契约
