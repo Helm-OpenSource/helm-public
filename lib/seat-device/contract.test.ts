@@ -225,9 +225,9 @@ describe("seat device request validation", () => {
     expect(parseSeatDeviceRevokeRequest({ refreshToken, reason: "device_logout" })).toEqual({ ok: true, value: { refreshToken, reason: "device_logout" } });
     expect(parseSeatDeviceRevokeRequest({ refreshToken, reason: "client_cancelled" })).toMatchObject({ value: { reason: "client_cancelled" } });
     for (const reason of ["admin", "refresh_reuse", "self", "DEVICE_LOGOUT", "", null, 1]) {
-      expect(parseSeatDeviceRevokeRequest({ refreshToken, reason })).toEqual({ ok: false, code: "request_invalid" });
+      expect(parseSeatDeviceRevokeRequest({ refreshToken, reason })).toEqual({ ok: false, code: "invalid_input" });
     }
-    expect(SEAT_DEVICE_ERROR_STATUS.request_invalid).toBe(400);
+    expect(SEAT_DEVICE_ERROR_STATUS).not.toHaveProperty("request_invalid");
     expect(parseSeatDeviceRevokeRequest({ refreshToken: "hsdr_short" })).toEqual({ ok: false, code: "invalid_input" });
     expect(parseSeatDeviceRevokeRequest({ refreshToken, reason: "device_logout", extra: 1 })).toEqual({ ok: false, code: "invalid_input" });
   });

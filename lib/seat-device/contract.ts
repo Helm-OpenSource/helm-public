@@ -85,8 +85,6 @@ export type SeatDeviceTokenKind = (typeof SEAT_DEVICE_TOKEN_HISTORY_KINDS)[numbe
 // Error body is {error:{code}}; the value is the HTTP status.
 export const SEAT_DEVICE_ERROR_STATUS = {
   invalid_input: 400,
-  // revoke body whose reason is outside SEAT_DEVICE_CLIENT_REVOKE_REASONS (client-confirmed 2026-11-10).
-  request_invalid: 400,
   client_not_supported: 400,
   poll_token_invalid: 403,
   token_revoked: 401,
@@ -148,6 +146,8 @@ export function normalizeSeatDevicePairingCode(input: string): string | null {
 }
 
 // Hash of the normalized code: the displayed and typed forms hash alike.
+// Unpeppered by decision (D1): the code lives 10 minutes, its hash is cleared
+// once decided and code entry is rate limited, so the offline window is small.
 export function hashSeatDevicePairingCode(input: string): string | null {
   const code = normalizeSeatDevicePairingCode(input);
   return code === null ? null : createHash("sha256").update(code, "utf8").digest("hex");
@@ -341,7 +341,8 @@ export function parseSeatDeviceRevokeRequest(
   const { refreshToken, reason } = parsed.data;
   if (reason === undefined) return { ok: true, value: { refreshToken, reason: SEAT_DEVICE_DEFAULT_CLIENT_REVOKE_REASON } };
   if (!(SEAT_DEVICE_CLIENT_REVOKE_REASONS as readonly unknown[]).includes(reason)) {
-    return { ok: false, code: "request_invalid" };
+    // Client bug: 400. Every token-state outcome of revoke stays 200 {} (no probing).
+    return { ok: false, code: "invalid_input" };
   }
   return { ok: true, value: { refreshToken, reason: reason as SeatDeviceClientRevokeReason } };
 }
