@@ -36,8 +36,8 @@ Billing V1 S3-e (Core): migrations `20261110215000_billing_credit_facilities` an
   not call it again when replaying a settled reservation. **Wiring (S3-w, done)**: reserve sufficiency calls `availableCreditFen`;
   enforce settle (and `resolveUnknown` settled) draws with `reservedAt` read from the `BillingReservation` row it locked (state
   `held`/`unknown`) and `sourceRef` `reservation:<id>`, after its replay return, never for 0 fen or shadow. A `reservation:` sourceRef
-  is verified in-lock: it must name this payer's held/unknown enforce reservation and carry its own `reservedAt`, else
-  `credit_input_invalid`. Only such a bound draw is allowed for a suspended/off payer (R05, protocol v3.5 §3; the funds journal
+  is verified in-lock: it must name this payer's held/unknown enforce reservation, carry its own `reservedAt` and a `chargeFen`
+  within its cap, else `credit_input_invalid`. Only such a bound draw is allowed for a suspended/off payer (R05, protocol v3.5 §3; the funds journal
   applies the same binding, as for `charge`); any other sourceRef needs an active payer. A `reservedAt` later than database time
   refuses `credit_input_invalid`. Lock order: PayerAccount -> BillingReservation (share) -> FundsTransaction (share) ->
   CreditFacility -> wallet projection -> journal posting. Only this module posts `credit_draw`; it is never reversed as a correction. S5 reconciliation must check the invariant `credit_receivable` projection = Σ `usedFen`.

@@ -59,7 +59,7 @@ export function normalizeFundsPosting(input: PostFundsInput, reversalOfId: strin
   if ((input.kind === "credit_draw") !== creditDraw) refuse("funds_accounts_not_allowed");
   if (reversalOfId !== null && input.kind !== "correction") refuse("funds_input_invalid");
   // `charge:` keys are reserved for settle postings (one per reservation, protocol v3.5).
-  if ((input.kind === "charge") !== input.operationKey.startsWith("charge:")) refuse("funds_input_invalid");
+  if ((input.kind === "charge") !== input.operationKey.startsWith(CHARGE_PREFIX)) refuse("funds_input_invalid");
   const count = Array.isArray(input.entries) ? input.entries.length : 0;
   if (count < 2 || count > FUNDS_ACCOUNTS.length) refuse("funds_input_invalid");
   const entries = input.entries.map(entry => {
@@ -193,20 +193,27 @@ async function postLocked(tx: Prisma.TransactionClient, payer: PayerRow, posting
   return { transaction, entries, replayed: false };
 }
 
-const SETTLING_PREFIX: Partial<Record<FundsKind, string>> = { charge: "charge:", credit_draw: "credit-draw:reservation:" };
+// Settle-bound operation keys, shared by funds, credit and reservations: `charge:<reservationId>` and
+// `credit-draw:<sourceRef>` with sourceRef `reservation:<reservationId>` for the settle shortfall draw.
+const CHARGE_PREFIX = "charge:", DRAW_PREFIX = "credit-draw:", SETTLE_SOURCE_PREFIX = "reservation:";
+export const chargeOperationKey = (reservationId: string) => `${CHARGE_PREFIX}${reservationId}`;
+export const settleDrawSourceRef = (reservationId: string) => `${SETTLE_SOURCE_PREFIX}${reservationId}`;
+export const isSettleDrawSourceRef = (sourceRef: string) => sourceRef.startsWith(SETTLE_SOURCE_PREFIX);
+export const creditDrawOperationKey = (sourceRef: string) => `${DRAW_PREFIX}${sourceRef}`;
+const SETTLING_PREFIX: Partial<Record<FundsKind, string>> = { charge: CHARGE_PREFIX, credit_draw: creditDrawOperationKey(SETTLE_SOURCE_PREFIX) };
 /**
  * The suspended/off-payer exemption is bound to one reservation: `charge:<id>` or `credit-draw:reservation:<id>` must name this
  * payer's held or unknown enforce reservation (locked by settle; resolveUnknown posts while the row is still unknown and moves it
- * to settled afterwards). Returns that row's frozen `reservedAt`, or null for any other posting.
+ * to settled afterwards). Returns that row's frozen `reservedAt` and cap `chargeFen`, or null for any other posting.
  */
 export async function settlingReservationInTransaction(tx: Prisma.TransactionClient, payerAccountId: string, kind: FundsKind,
-  operationKey: string): Promise<{ reservedAt: Date } | null> {
+  operationKey: string): Promise<{ reservedAt: Date; chargeFen: bigint } | null> {
   const prefix = SETTLING_PREFIX[kind];
   if (!prefix || !operationKey.startsWith(prefix)) return null;
-  const [row] = await tx.$queryRaw<Array<{ reservedAt: Date }>>`SELECT reservedAt FROM BillingReservation
+  const [row] = await tx.$queryRaw<Array<{ reservedAt: Date; chargeFen: bigint }>>`SELECT reservedAt, chargeFen FROM BillingReservation
     WHERE id = ${operationKey.slice(prefix.length)} AND payerAccountId = ${payerAccountId}
       AND billingMode = 'enforce' AND state IN ('held', 'unknown') FOR SHARE`;
-  return row ?? null;
+  return row ? { reservedAt: row.reservedAt, chargeFen: BigInt(row.chargeFen) } : null;
 }
 
 /** Conflicts that abort the whole transaction and are safe to re-run: Prisma P2034, a MySQL 1213 deadlock from a raw query

@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import { ActorType, Prisma, type CreditFacility, type PrismaClient } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { findPlatformFinanceActorInTransaction, type PlatformFinanceRoleName } from "../bank-receipts/bank-receipts";
-import { postCreditDrawFundsInTransaction, settlingReservationInTransaction, type FundsActor } from "../funds/funds-journal";
+import { creditDrawOperationKey, isSettleDrawSourceRef, postCreditDrawFundsInTransaction, settlingReservationInTransaction,
+  type FundsActor } from "../funds/funds-journal";
 import { MAX_FEN } from "../funds/money";
 
 /**
@@ -186,7 +187,7 @@ export async function availableCreditFen(tx: Prisma.TransactionClient, payerAcco
 export type DrawCreditShortfallInput = { payerAccountId: string; chargeFen: bigint; sourceRef: string; actor: FundsActor; reservedAt: Date };
 export type CreditShortfallDraw = { borrowedFen: bigint; facilityId: string | null; fundsTransactionId: string | null;
   walletCovered: boolean; replayed: boolean };
-const DRAW_PREFIX = "credit-draw:", FACILITY_PREFIX = "credit-facility:", RESERVATION_PREFIX = "reservation:";
+const FACILITY_PREFIX = "credit-facility:";
 
 /**
  * S3-b settle seam, under the PayerAccount lock: borrows only `max(0, chargeFen - wallet)` into the wallet (one `credit_draw`:
@@ -194,7 +195,7 @@ const DRAW_PREFIX = "credit-draw:", FACILITY_PREFIX = "credit-facility:", RESERV
  * Shortfall 0 writes nothing. Uses the facility drawable at `reservedAt` (else the current one); if it was revoked, reduced or
  * expired after `reservedAt`, state and current limit are skipped and `usedFen + shortfall <= approvedLimitFen` applies (v3.6).
  * Settle (S3-w) passes `sourceRef` `reservation:<id>` of the held/unknown enforce reservation it locked; such a draw must carry
- * that row's own `reservedAt` (checked here, in-lock) and is the only one allowed for a suspended/off payer (R05, protocol v3.5
+ * that row's own `reservedAt` and at most its cap `chargeFen` (checked here, in-lock) and is the only one allowed for a suspended/off payer (R05, protocol v3.5
  * §3); any other sourceRef is a free-standing draw and needs an active payer. A future `reservedAt` refuses. Key
  * `credit-draw:<sourceRef>` returns a recorded draw (larger than the charge refuses); a wallet-covered settle wrote nothing, so
  * settle never calls this on a replay.
@@ -204,13 +205,14 @@ const DRAW_PREFIX = "credit-draw:", FACILITY_PREFIX = "credit-facility:", RESERV
 export async function drawCreditShortfallInTransaction(tx: Prisma.TransactionClient,
   input: DrawCreditShortfallInput): Promise<CreditShortfallDraw> {
   reference(input?.payerAccountId, "payer_account_unavailable"); positiveFen(input.chargeFen); reference(input.sourceRef);
-  if (input.sourceRef.length > 191 - DRAW_PREFIX.length || !(input.reservedAt instanceof Date) ||
+  if (creditDrawOperationKey(input.sourceRef).length > 191 || !(input.reservedAt instanceof Date) ||
       Number.isNaN(input.reservedAt.getTime())) refuse("credit_input_invalid");
   const payer = await lockPayer(tx, input.payerAccountId);
-  const operationKey = `${DRAW_PREFIX}${input.sourceRef}`;
+  const operationKey = creditDrawOperationKey(input.sourceRef);
   const settling = await settlingReservationInTransaction(tx, input.payerAccountId, "credit_draw", operationKey);
-  if (input.sourceRef.startsWith(RESERVATION_PREFIX) && settling?.reservedAt.getTime() !== input.reservedAt.getTime()) {
-    refuse("credit_input_invalid"); // not this payer's open enforce reservation, or not its frozen reserve time
+  if (isSettleDrawSourceRef(input.sourceRef) && (!settling || settling.reservedAt.getTime() !== input.reservedAt.getTime() ||
+      input.chargeFen > settling.chargeFen)) {
+    refuse("credit_input_invalid"); // not this payer's open enforce reservation, its frozen reserve time, or within its cap
   }
   if (payer.status !== "active" && !settling) refuse("payer_account_unavailable");
   const [clock] = await tx.$queryRaw<Array<{ ok: bigint | number }>>`SELECT ${input.reservedAt} <= UTC_TIMESTAMP(3) AS ok`;

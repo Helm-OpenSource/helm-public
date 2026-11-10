@@ -422,11 +422,12 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
     expect(await resolve(two.reservationId, "res:2", "settled", "2")).toMatchObject({ ok: true, chargeFen: "200" });
     expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(0), credit_receivable: fen(500), charge_revenue: fen(500) });
     const foreign = await held(await setup("enforce", 1000), "op:f", 1); // another payer's open reservation
-    const draw = async (sourceRef: string, reservedAt = lateNov) => (await clocked(earlyDec, 0)).$transaction(tx =>
-      drawCreditShortfallInTransaction(tx, { payerAccountId: ids.payerAccountId, chargeFen: fen(1), sourceRef, actor: service, reservedAt }));
+    const draw = async (sourceRef: string, reservedAt = lateNov, chargeFen = fen(1)) => (await clocked(earlyDec, 0)).$transaction(tx =>
+      drawCreditShortfallInTransaction(tx, { payerAccountId: ids.payerAccountId, chargeFen, sourceRef, actor: service, reservedAt }));
     await expect(draw("manual:topup-gap")).rejects.toThrow("payer_account_unavailable"); // free-standing
     await expect(draw(`reservation:${one.reservationId}`)).rejects.toThrow("credit_input_invalid"); // no longer open
     await expect(draw(`reservation:${kept.reservationId}`, earlyDec)).rejects.toThrow("credit_input_invalid"); // not its reservedAt
+    await expect(draw(`reservation:${kept.reservationId}`, lateNov, fen(101))).rejects.toThrow("credit_input_invalid"); // above its cap
     await expect(draw(`reservation:${foreign.reservationId}`)).rejects.toThrow("credit_input_invalid");
     expect(await draws(ids.payerAccountId)).toBe(2);
     expect(await settle(kept.reservationId, "set:3", "1")).toMatchObject({ ok: true, chargeFen: "100" });
@@ -446,6 +447,27 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
     expect(await usedFen(ids.payerAccountId)).toBe(fen(100));
     expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(0), credit_receivable: fen(100), charge_revenue: fen(100) });
     expect(await a.billingReservation.count({ where: { payerAccountId: ids.payerAccountId, state: "held" } })).toBe(1); // retryable
+  });
+  it("never deadlocks settles across 16 payers on 8 connections, half of them borrowing every charge", async () => {
+    const payers = [];
+    for (let i = 0; i < 16; i++) {
+      const ids = await setup("enforce", i % 2 ? 0 : 100000, [1000, 100000, 100000]);
+      if (i % 2) await credit(ids.payerAccountId, 100000);
+      payers.push(ids);
+    }
+    let open: string[] = [];
+    for (let round = 0; round < 8; round++) { // each payer reserves a new hold while its previous one settles
+      const reserving = Promise.all(payers.map((ids, i) => reserve(ids, `op:x${i}-${round}`, 1, (i + round) % 8)));
+      const settling = Promise.all(open.map((reservationId, i) => settle(reservationId, `set:x${i}-${round}`, "1", "e", (i + round + 3) % 8)));
+      const [reserved, settled] = await Promise.all([reserving, settling]);
+      expect([...reserved, ...settled].filter(result => !result.ok)).toEqual([]);
+      open = reserved.map(result => (result.ok ? result.reservationId : ""));
+    }
+    for (const [i, ids] of payers.entries()) { // 7 settles of 100 fen each: borrowed in full, or paid from the wallet
+      expect(await draws(ids.payerAccountId)).toBe(i % 2 ? 7 : 0);
+      expect(await balances(ids.payerAccountId)).toMatchObject(i % 2 ? { charge_revenue: fen(700), credit_receivable: fen(700) }
+        : { charge_revenue: fen(700), customer_wallet_available: fen(100000 - 700) });
+    }
   });
   it("refuses the S2-c and S2-a rollbacks while the charges migration is applied", async () => {
     // CREATE PROCEDURE cannot run over the prepared-statement protocol, so evaluate each file's first guard (the one that must

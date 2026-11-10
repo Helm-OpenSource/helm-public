@@ -49,6 +49,10 @@ S3-b1/S3-b2 (Core): migrations `20261110200000_billing_reservations`, `202611102
   Unbound workspace or off payer is `billing_mode_off`; suspended payer, none or several grants are `grant_not_active`.
 - **Codes**: limits -> `limit_exceeded`; inactive/out-of-validity/ineffective price -> `grant_not_active`; `request_invalid` (v3.2).
   Write conflicts, deadlocks (1213) and lock timeouts (1205) are `core_unavailable` (retry the same key).
+- **Isolation (S3-w)**: every entry point runs `READ COMMITTED`: no gap locks, so settles of different payers drawing credit no
+  longer deadlock on the funds `(payerAccountId, operationKey)` unique index (seen under REPEATABLE READ); correctness rests on the
+  PayerAccount mutex and the unique keys. **Enablement prerequisite (verify in production before enabling; not yet checked)**:
+  the production MySQL `binlog_format` must be `ROW` (READ COMMITTED with statement binlog refuses writes).
 - **Locks**: Membership -> PayerAccount `FOR UPDATE` (per-payer mutex) -> SpendGrant -> buckets day, month -> reservation. Hold sums,
   wallet and bucket existence are plain reads (current under the mutex; locking reads gap-locked across payers and deadlocked);
   `reserve` owns its transaction (no exported in-transaction variant) so PayerAccount is locked before the first read. `changeSpendGrantInTransaction` callers must not lock buckets first. A bucket CAS miss
