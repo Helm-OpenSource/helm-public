@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { ActorType, Prisma, type CreditFacility, type PrismaClient } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { findPlatformFinanceActorInTransaction, type PlatformFinanceRoleName } from "../bank-receipts/bank-receipts";
-import { postCreditDrawFundsInTransaction, type FundsActor } from "../funds/funds-journal";
+import { postCreditDrawFundsInTransaction, settlingReservationInTransaction, type FundsActor } from "../funds/funds-journal";
 import { MAX_FEN } from "../funds/money";
 
 /**
@@ -186,27 +186,35 @@ export async function availableCreditFen(tx: Prisma.TransactionClient, payerAcco
 export type DrawCreditShortfallInput = { payerAccountId: string; chargeFen: bigint; sourceRef: string; actor: FundsActor; reservedAt: Date };
 export type CreditShortfallDraw = { borrowedFen: bigint; facilityId: string | null; fundsTransactionId: string | null;
   walletCovered: boolean; replayed: boolean };
-const DRAW_PREFIX = "credit-draw:", FACILITY_PREFIX = "credit-facility:";
+const DRAW_PREFIX = "credit-draw:", FACILITY_PREFIX = "credit-facility:", RESERVATION_PREFIX = "reservation:";
 
 /**
  * S3-b settle seam, under the PayerAccount lock: borrows only `max(0, chargeFen - wallet)` into the wallet (one `credit_draw`:
  * debit credit_receivable, credit customer_wallet_available; usedFen += shortfall); the caller then charges the wallet in full.
  * Shortfall 0 writes nothing. Uses the facility drawable at `reservedAt` (else the current one); if it was revoked, reduced or
  * expired after `reservedAt`, state and current limit are skipped and `usedFen + shortfall <= approvedLimitFen` applies (v3.6).
- * WIRING (S3-b2 must check): `reservedAt` comes from the BillingReservation row locked in this same transaction (state held or
- * unknown) and `sourceRef` is bound to that reservationId; a future `reservedAt` refuses. Key `credit-draw:<sourceRef>` returns a
- * recorded draw (larger than the charge refuses); a wallet-covered settle wrote nothing, so never call this on a settle replay.
- * Lock order: PayerAccount -> FundsTransaction (share) -> CreditFacility -> wallet projection -> journal posting.
+ * Settle (S3-w) passes `sourceRef` `reservation:<id>` of the held/unknown enforce reservation it locked; such a draw must carry
+ * that row's own `reservedAt` (checked here, in-lock) and is the only one allowed for a suspended/off payer (R05, protocol v3.5
+ * §3); any other sourceRef is a free-standing draw and needs an active payer. A future `reservedAt` refuses. Key
+ * `credit-draw:<sourceRef>` returns a recorded draw (larger than the charge refuses); a wallet-covered settle wrote nothing, so
+ * settle never calls this on a replay.
+ * Lock order: PayerAccount -> BillingReservation (share; settle already holds it) -> FundsTransaction (share) -> CreditFacility
+ * -> wallet projection -> journal posting.
  */
 export async function drawCreditShortfallInTransaction(tx: Prisma.TransactionClient,
   input: DrawCreditShortfallInput): Promise<CreditShortfallDraw> {
   reference(input?.payerAccountId, "payer_account_unavailable"); positiveFen(input.chargeFen); reference(input.sourceRef);
   if (input.sourceRef.length > 191 - DRAW_PREFIX.length || !(input.reservedAt instanceof Date) ||
       Number.isNaN(input.reservedAt.getTime())) refuse("credit_input_invalid");
-  if ((await lockPayer(tx, input.payerAccountId)).status !== "active") refuse("payer_account_unavailable");
+  const payer = await lockPayer(tx, input.payerAccountId);
+  const operationKey = `${DRAW_PREFIX}${input.sourceRef}`;
+  const settling = await settlingReservationInTransaction(tx, input.payerAccountId, "credit_draw", operationKey);
+  if (input.sourceRef.startsWith(RESERVATION_PREFIX) && settling?.reservedAt.getTime() !== input.reservedAt.getTime()) {
+    refuse("credit_input_invalid"); // not this payer's open enforce reservation, or not its frozen reserve time
+  }
+  if (payer.status !== "active" && !settling) refuse("payer_account_unavailable");
   const [clock] = await tx.$queryRaw<Array<{ ok: bigint | number }>>`SELECT ${input.reservedAt} <= UTC_TIMESTAMP(3) AS ok`;
   if (Number(clock?.ok) !== 1) refuse("credit_input_invalid");
-  const operationKey = `${DRAW_PREFIX}${input.sourceRef}`;
   const [prior] = await tx.$queryRaw<Array<{ id: string; evidenceRef: string; amountFen: bigint }>>`
     SELECT t.id, t.evidenceRef, e.amountFen FROM FundsTransaction t JOIN FundsJournalEntry e ON e.transactionId = t.id
       AND e.account = 'credit_receivable' WHERE t.payerAccountId = ${input.payerAccountId} AND t.operationKey = ${operationKey} FOR SHARE`;
