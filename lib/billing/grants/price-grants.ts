@@ -6,17 +6,16 @@ import { MAX_FEN } from "../funds/money";
 import { lockBillingAuthority } from "../payer/payer-accounts";
 
 /**
- * Billing V1 S3-a: immutable product price versions and default-off spend grants. No reservation, charge or route
- * happens here. A grant binds exactly one price version for life (DB trigger), so publishing a higher price never
- * widens an existing grant: it needs a new grant. Lock order: Membership -> PayerAccount FOR UPDATE -> SpendGrant,
- * the same PayerAccount-first order the S3-b money path uses, so a revoke and a use of one grant serialize.
+ * Billing V1 S3-a: immutable price versions and default-off spend grants; no reservation, charge or route. A grant binds one
+ * price version for life (DB trigger), so a higher price never widens it. Lock order: Membership -> PayerAccount FOR UPDATE
+ * -> SpendGrant, the PayerAccount-first order of the S3-b money path, so a revoke and a use of one grant serialize.
  */
 export type SpendGrantRefusalCode = "price_input_invalid" | "price_version_conflict" | "price_version_sequence_invalid" |
   "price_version_unavailable" | "price_version_not_effective" | "price_amount_out_of_range" | "grant_input_invalid" |
   "grant_limits_invalid" | "grant_limits_zero" | "grant_forbidden" | "grant_trigger_not_enabled" | "grant_scope_not_enabled" |
-  "grant_operation_conflict" | "grant_unavailable" | "grant_version_conflict" | "grant_transition_invalid" |
-  "grant_not_active" | "grant_outside_validity" | "grant_price_version_mismatch" | "grant_per_charge_exceeded" |
-  "grant_daily_limit_exceeded" | "grant_monthly_limit_exceeded" | "payer_account_unavailable" | "payer_billing_off" |
+  "grant_operation_conflict" | "grant_unavailable" | "grant_version_conflict" | "grant_transition_invalid" | "grant_not_active" |
+  "grant_outside_validity" | "grant_price_version_mismatch" | "grant_per_charge_exceeded" | "grant_daily_limit_exceeded" |
+  "grant_monthly_limit_exceeded" | "grant_meter_mismatch" | "grant_charge_zero" | "payer_account_unavailable" | "payer_billing_off" |
   "billing_write_conflict";
 
 export class SpendGrantRefusal extends Error {
@@ -29,19 +28,14 @@ function refuse(code: SpendGrantRefusalCode): never { throw new SpendGrantRefusa
 function reference(value: unknown, code: SpendGrantRefusalCode): asserts value is string {
   if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,190}$/.test(value)) refuse(code);
 }
-function date(value: unknown, code: SpendGrantRefusalCode): asserts value is Date {
-  if (!(value instanceof Date) || Number.isNaN(value.getTime())) refuse(code);
-}
-function fen(value: unknown, min: bigint, code: SpendGrantRefusalCode): asserts value is bigint {
-  if (typeof value !== "bigint" || value < min || value > MAX_FEN) refuse(code);
-}
-function sha256(text: string) { return createHash("sha256").update(text).digest("hex"); }
+function date(value: unknown, code: SpendGrantRefusalCode): asserts value is Date { if (!(value instanceof Date) || Number.isNaN(value.getTime())) refuse(code); }
+function fen(value: unknown, min: bigint, code: SpendGrantRefusalCode): asserts value is bigint { if (typeof value !== "bigint" || value < min || value > MAX_FEN) refuse(code); }
+const hashOf = (value: object) => createHash("sha256")
+  .update(JSON.stringify(value, (_key, item: unknown) => (typeof item === "bigint" ? item.toString() : item))).digest("hex");
 function run<T>(client: PrismaClient, body: (tx: Prisma.TransactionClient) => Promise<T>) {
   // No automatic retry: a conflicting writer re-reads the current version and decides again.
   return client.$transaction(body, { maxWait: 5000, timeout: 10000 }).catch((error: unknown) => {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2002" || error.code === "P2034")) {
-      refuse("billing_write_conflict");
-    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2002" || error.code === "P2034")) refuse("billing_write_conflict");
     throw error;
   });
 }
@@ -52,8 +46,9 @@ export type PublishPriceVersionInput = {
   acceptanceRef: string; scopeKind: "workspace" | "consumer_principal"; unitPriceFenNumerator: bigint;
   unitPriceDenominator: bigint; effectiveFrom: Date; effectiveUntil: Date | null; approvalRef: string;
 };
-type PriceRow = { id: string; productId: string; version: number; scopeKind: string; unitPriceFenNumerator: bigint;
-  unitPriceDenominator: bigint; effectiveFrom: Date; effectiveUntil: Date | null; contentHash: string };
+export type BillingPriceRow = { id: string; productId: string; version: number; scopeKind: string; billingEventRef: string;
+  meterUnit: string; unitPriceFenNumerator: bigint; unitPriceDenominator: bigint; effectiveFrom: Date; effectiveUntil: Date | null;
+  contentHash: string };
 
 /** Pure validation and content hash; the same (product, version) replays only with this exact content. */
 export function normalizePriceVersion(input: PublishPriceVersionInput) {
@@ -76,10 +71,7 @@ export function normalizePriceVersion(input: PublishPriceVersionInput) {
     unitPriceFenNumerator: input.unitPriceFenNumerator, unitPriceDenominator: input.unitPriceDenominator,
     rounding: "half_up" as const, effectiveFrom: input.effectiveFrom, effectiveUntil: input.effectiveUntil,
     approvalRef: input.approvalRef };
-  const contentHash = sha256(JSON.stringify({ v: 1, ...content, unitPriceFenNumerator: content.unitPriceFenNumerator.toString(),
-    unitPriceDenominator: content.unitPriceDenominator.toString(), effectiveFrom: content.effectiveFrom.toISOString(),
-    effectiveUntil: content.effectiveUntil?.toISOString() ?? null }));
-  return { ...content, contentHash, createdBy: `SYSTEM:${input.actor.ref}` };
+  return { ...content, contentHash: hashOf({ v: 1, ...content }), createdBy: `SYSTEM:${input.actor.ref}` };
 }
 
 /** Appends version N of a product (creating the product at version 1). Versions are never edited (DB trigger). */
@@ -93,7 +85,7 @@ export async function publishPriceVersion(client: PrismaClient, input: PublishPr
       if (price.version !== 1) refuse("price_version_sequence_invalid");
       productId = (await tx.billingProduct.create({ data: { code: productCode, createdBy } })).id;
     }
-    const [existing] = await tx.$queryRaw<PriceRow[]>`SELECT id, contentHash FROM BillingPriceVersion
+    const [existing] = await tx.$queryRaw<BillingPriceRow[]>`SELECT id, contentHash FROM BillingPriceVersion
       WHERE productId = ${productId} AND version = ${price.version} FOR SHARE`;
     if (existing) {
       if (existing.contentHash !== price.contentHash) refuse("price_version_conflict");
@@ -108,7 +100,7 @@ export async function publishPriceVersion(client: PrismaClient, input: PublishPr
 }
 
 /** Charge for a quantity at a rational unit price: exact BigInt product, one half-up rounding to fen (ADR 3). */
-export function chargeFenForQuantity(price: Pick<PriceRow, "unitPriceFenNumerator" | "unitPriceDenominator">, quantity: bigint) {
+export function chargeFenForQuantity(price: Pick<BillingPriceRow, "unitPriceFenNumerator" | "unitPriceDenominator">, quantity: bigint) {
   if (typeof quantity !== "bigint" || quantity <= ZERO) refuse("price_input_invalid");
   const scaled = BigInt(price.unitPriceFenNumerator) * quantity, denominator = BigInt(price.unitPriceDenominator);
   const quotient = scaled / denominator, remainder = scaled % denominator;
@@ -157,9 +149,9 @@ async function lockPayerForGrantWrite(tx: Prisma.TransactionClient, actorUserId:
   if (payer.governingWorkspaceId !== head.governingWorkspaceId) refuse("payer_account_unavailable");
   return { ...payer, governingWorkspaceId: head.governingWorkspaceId };
 }
-const readPrice = async (tx: Prisma.TransactionClient, id: string) => (await tx.$queryRaw<PriceRow[]>`
-  SELECT id, productId, version, scopeKind, unitPriceFenNumerator, unitPriceDenominator, effectiveFrom, effectiveUntil,
-    contentHash FROM BillingPriceVersion WHERE id = ${id} FOR SHARE`)[0] ?? null;
+const readPrice = async (tx: Prisma.TransactionClient, id: string) => (await tx.$queryRaw<BillingPriceRow[]>`
+  SELECT id, productId, version, scopeKind, billingEventRef, meterUnit, unitPriceFenNumerator, unitPriceDenominator,
+    effectiveFrom, effectiveUntil, contentHash FROM BillingPriceVersion WHERE id = ${id} FOR SHARE`)[0] ?? null;
 export type SpendGrantRow = SpendGrantLimits & { id: string; payerAccountId: string; productId: string; priceVersionId: string;
   state: string; version: number; validFrom: Date; validUntil: Date; contentHash: string };
 const readGrant = async (tx: Prisma.TransactionClient, where: Prisma.Sql, lock: Prisma.Sql) => {
@@ -175,18 +167,15 @@ export type CreateSpendGrantInput = { actorUserId: string; payerAccountId: strin
 /** Creates a grant in state `disabled` (limits default 0). Same key + same content replays; other content conflicts. */
 export async function createSpendGrant(client: PrismaClient, input: CreateSpendGrantInput) {
   reference(input?.actorUserId, "grant_forbidden");
-  for (const value of [input.payerAccountId, input.priceVersionId, input.operationKey, input.evidenceRef]) {
-    reference(value, "grant_input_invalid");
-  }
-  date(input.validFrom, "grant_input_invalid"); date(input.validUntil, "grant_input_invalid");
-  if (input.validUntil <= input.validFrom) refuse("grant_input_invalid");
+  for (const ref of [input.payerAccountId, input.priceVersionId, input.operationKey, input.evidenceRef]) reference(ref, "grant_input_invalid");
+  date(input.validFrom, "grant_input_invalid"); date(input.validUntil, "grant_input_invalid"); if (input.validUntil <= input.validFrom) refuse("grant_input_invalid");
   const triggerKind = input.triggerKind ?? "user_initiated";
   // Scheduled (recurring) spending needs its own explicit enablement record (R03); fail closed until it exists.
   if (triggerKind !== "user_initiated") refuse("grant_trigger_not_enabled");
   const grantLimits = limits(input.limits ?? NO_LIMITS);
-  const contentHash = sha256(JSON.stringify({ v: 1, payerAccountId: input.payerAccountId, priceVersionId: input.priceVersionId,
-    operationKey: input.operationKey, evidenceRef: input.evidenceRef, validFrom: input.validFrom.toISOString(),
-    validUntil: input.validUntil.toISOString(), triggerKind, limits: limitStrings(grantLimits) }));
+  const contentHash = hashOf({ v: 1, payerAccountId: input.payerAccountId, priceVersionId: input.priceVersionId,
+    operationKey: input.operationKey, evidenceRef: input.evidenceRef, validFrom: input.validFrom, validUntil: input.validUntil,
+    triggerKind, grantLimits });
   return run(client, async tx => {
     const payer = await lockPayerForGrantWrite(tx, input.actorUserId, input.payerAccountId);
     const existing = await readGrant(tx, Prisma.sql`payerAccountId = ${input.payerAccountId}
@@ -219,69 +208,74 @@ const TRANSITIONS: Record<SpendGrantAction, { from: string[]; to: string | null 
   set_limits: { from: ["disabled", "active", "paused"], to: null },
 };
 export type ChangeSpendGrantInput = { actorUserId: string; grantId: string; expectedVersion: number; action: SpendGrantAction;
-  evidenceRef: string; limits?: SpendGrantLimits; now?: Date };
+  evidenceRef: string; limits?: SpendGrantLimits };
 
-/** Version-CAS state change. Tightening or revoking applies to every later use at once (the use path locks the same rows). */
-export async function changeSpendGrant(client: PrismaClient, input: ChangeSpendGrantInput) {
-  reference(input?.actorUserId, "grant_forbidden"); reference(input.grantId, "grant_unavailable");
-  reference(input.evidenceRef, "grant_input_invalid");
+/** Version-CAS state change on database UTC time. Tightening or revoking binds every later use (it locks the same rows). */
+export function changeSpendGrant(client: PrismaClient, input: ChangeSpendGrantInput) {
+  return run(client, tx => changeSpendGrantInTransaction(tx, input));
+}
+export async function changeSpendGrantInTransaction(tx: Prisma.TransactionClient, input: ChangeSpendGrantInput) {
+  reference(input?.actorUserId, "grant_forbidden"); reference(input.grantId, "grant_unavailable"); reference(input.evidenceRef, "grant_input_invalid");
   if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1) refuse("grant_input_invalid");
   if (!Object.prototype.hasOwnProperty.call(TRANSITIONS, input.action)) refuse("grant_transition_invalid");
   const rule = TRANSITIONS[input.action];
   if ((input.action === "set_limits") !== (input.limits !== undefined)) refuse("grant_input_invalid");
-  const now = input.now ?? new Date(); date(now, "grant_input_invalid");
-  return run(client, async tx => {
-    const head = await tx.spendGrant.findUnique({ where: { id: input.grantId }, select: { payerAccountId: true } });
-    if (!head) refuse("grant_unavailable");
-    const payer = await lockPayerForGrantWrite(tx, input.actorUserId, head.payerAccountId);
-    const grant = await readGrant(tx, Prisma.sql`id = ${input.grantId}`, Prisma.sql`FOR UPDATE`);
-    if (!grant || grant.id !== input.grantId || grant.payerAccountId !== payer.id) refuse("grant_unavailable");
-    if (grant.version !== input.expectedVersion) refuse("grant_version_conflict");
-    if (!rule.from.includes(grant.state)) refuse("grant_transition_invalid");
-    const next = rule.to ?? grant.state;
-    const nextLimits = input.limits ? limits(input.limits) : grant;
-    // Pause, revoke and limit changes stay possible on a suspended payer; turning spending on does not.
-    if (next === "active" && nextLimits.perChargeLimitFen === ZERO) refuse("grant_limits_zero");
-    if (rule.to === "active") {
-      assertPayerActive(payer);
-      if (now >= grant.validUntil) refuse("grant_outside_validity");
-      const price = await readPrice(tx, grant.priceVersionId);
-      if (!price || (price.effectiveUntil && now >= price.effectiveUntil)) refuse("price_version_not_effective");
-    }
-    const revoke = next === "revoked";
-    // CAS: the version and pre-state stay in the UPDATE's own WHERE; the trigger also requires version + 1.
-    const changed = await tx.$executeRaw`UPDATE SpendGrant SET state = ${next},
-      perChargeLimitFen = ${nextLimits.perChargeLimitFen}, dailyLimitFen = ${nextLimits.dailyLimitFen},
-      monthlyLimitFen = ${nextLimits.monthlyLimitFen}, version = version + 1, updatedAt = CURRENT_TIMESTAMP(3),
-      revokedAt = ${revoke ? now : null}, revokedByUserId = ${revoke ? input.actorUserId : null}
-      WHERE id = ${grant.id} AND version = ${grant.version} AND state = ${grant.state}`;
-    if (changed !== 1) refuse("grant_version_conflict");
-    const row = await tx.spendGrant.findUniqueOrThrow({ where: { id: grant.id } });
-    await writeAuditLog({ workspaceId: payer.governingWorkspaceId, userId: input.actorUserId, actor: input.actorUserId,
-      actorType: ActorType.USER, actionType: `BILLING_SPEND_GRANT_${input.action.toUpperCase()}`, targetType: "SpendGrant",
-      targetId: row.id, summary: `Spend grant ${input.action}`, sourcePage: SOURCE_PAGE, relatedObjectType: "PayerAccount",
-      relatedObjectId: payer.id, payload: { from: grant.state, to: row.state, version: row.version,
-        limits: limitStrings(nextLimits), evidenceRef: input.evidenceRef } }, { client: tx });
-    return row;
-  });
+  const head = await tx.spendGrant.findUnique({ where: { id: input.grantId }, select: { payerAccountId: true } });
+  if (!head) refuse("grant_unavailable");
+  const payer = await lockPayerForGrantWrite(tx, input.actorUserId, head.payerAccountId);
+  const grant = await readGrant(tx, Prisma.sql`id = ${input.grantId}`, Prisma.sql`FOR UPDATE`);
+  const [{ now }] = await tx.$queryRaw<Array<{ now: Date }>>`SELECT UTC_TIMESTAMP(3) AS now`;
+  if (!grant || grant.id !== input.grantId || grant.payerAccountId !== payer.id) refuse("grant_unavailable");
+  if (grant.version !== input.expectedVersion) refuse("grant_version_conflict");
+  if (!rule.from.includes(grant.state)) refuse("grant_transition_invalid");
+  const next = rule.to ?? grant.state;
+  const nextLimits = input.limits ? limits(input.limits) : grant;
+  // Pause, revoke and limit changes stay possible on a suspended payer; turning spending on does not.
+  if (next === "active" && nextLimits.perChargeLimitFen === ZERO) refuse("grant_limits_zero");
+  if (rule.to === "active") {
+    assertPayerActive(payer);
+    if (now >= grant.validUntil) refuse("grant_outside_validity");
+    const price = await readPrice(tx, grant.priceVersionId);
+    if (!price || (price.effectiveUntil && now >= price.effectiveUntil)) refuse("price_version_not_effective");
+  }
+  const revoke = next === "revoked";
+  // CAS: the version and pre-state stay in the UPDATE's own WHERE; the trigger also requires version + 1.
+  const changed = await tx.$executeRaw`UPDATE SpendGrant SET state = ${next},
+    perChargeLimitFen = ${nextLimits.perChargeLimitFen}, dailyLimitFen = ${nextLimits.dailyLimitFen},
+    monthlyLimitFen = ${nextLimits.monthlyLimitFen}, version = version + 1, updatedAt = CURRENT_TIMESTAMP(3),
+    revokedAt = ${revoke ? now : null}, revokedByUserId = ${revoke ? input.actorUserId : null}
+    WHERE id = ${grant.id} AND version = ${grant.version} AND state = ${grant.state}`;
+  if (changed !== 1) refuse("grant_version_conflict");
+  const row = await tx.spendGrant.findUniqueOrThrow({ where: { id: grant.id } });
+  await writeAuditLog({ workspaceId: payer.governingWorkspaceId, userId: input.actorUserId, actor: input.actorUserId,
+    actorType: ActorType.USER, actionType: `BILLING_SPEND_GRANT_${input.action.toUpperCase()}`, targetType: "SpendGrant",
+    targetId: row.id, summary: `Spend grant ${input.action}`, sourcePage: SOURCE_PAGE, relatedObjectType: "PayerAccount",
+    relatedObjectId: payer.id, payload: { from: grant.state, to: row.state, version: row.version,
+      limits: limitStrings(nextLimits), evidenceRef: input.evidenceRef } }, { client: tx });
+  return row;
 }
 
-export type SpendGrantUse = { priceVersionId: string; chargeFen: bigint; at: Date;
+/** The use names what it meters; the gate prices it from the grant's locked price row, never from a caller amount. */
+export type SpendGrantUse = { priceVersionId: string; billingEventRef: string; meterUnit: string; quantity: bigint; at: Date;
   /** Settled plus pending-held fen already counted in this grant's day/month buckets (S3-b reads them under lock). */
   usedFen: { day: bigint; month: bigint } };
 
-/** Pure admission check against one grant and its bound price version; throws the first violated limit. */
-export function evaluateSpendGrant(grant: SpendGrantRow, price: Pick<PriceRow, "id" | "effectiveFrom" | "effectiveUntil">, use: SpendGrantUse) {
+/** Pure admission check against one grant and its bound price version; returns the charge or throws the first violation. */
+export function evaluateSpendGrant(grant: SpendGrantRow, price: BillingPriceRow, use: SpendGrantUse) {
   date(use.at, "grant_input_invalid");
-  fen(use.chargeFen, ONE, "grant_input_invalid");
+  if (typeof use.quantity !== "bigint" || use.quantity <= ZERO) refuse("grant_input_invalid");
   fen(use.usedFen?.day, ZERO, "grant_input_invalid"); fen(use.usedFen.month, ZERO, "grant_input_invalid");
   if (grant.state !== "active") refuse("grant_not_active");
   if (use.at < grant.validFrom || use.at >= grant.validUntil) refuse("grant_outside_validity");
   if (use.priceVersionId !== grant.priceVersionId || price.id !== grant.priceVersionId) refuse("grant_price_version_mismatch");
+  if (use.billingEventRef !== price.billingEventRef || use.meterUnit !== price.meterUnit) refuse("grant_meter_mismatch");
   if (use.at < price.effectiveFrom || (price.effectiveUntil && use.at >= price.effectiveUntil)) refuse("price_version_not_effective");
-  if (use.chargeFen > grant.perChargeLimitFen) refuse("grant_per_charge_exceeded");
-  if (use.usedFen.day + use.chargeFen > grant.dailyLimitFen) refuse("grant_daily_limit_exceeded");
-  if (use.usedFen.month + use.chargeFen > grant.monthlyLimitFen) refuse("grant_monthly_limit_exceeded");
+  const chargeFen = chargeFenForQuantity(price, use.quantity);
+  if (chargeFen === ZERO) refuse("grant_charge_zero"); // S3-b decides whether a zero line is free usage or refused
+  if (chargeFen > grant.perChargeLimitFen) refuse("grant_per_charge_exceeded");
+  if (use.usedFen.day + chargeFen > grant.dailyLimitFen) refuse("grant_daily_limit_exceeded");
+  if (use.usedFen.month + chargeFen > grant.monthlyLimitFen) refuse("grant_monthly_limit_exceeded");
+  return chargeFen;
 }
 
 /**
@@ -298,7 +292,8 @@ export async function lockSpendGrantForUseInTransaction(tx: Prisma.TransactionCl
   if (!grant || grant.id !== input.grantId || grant.payerAccountId !== payer.id) refuse("grant_unavailable");
   const price = await readPrice(tx, grant.priceVersionId);
   if (!price) refuse("price_version_unavailable");
-  evaluateSpendGrant(grant, price, input);
-  return { grantId: grant.id, grantVersion: grant.version, priceVersionId: price.id, productId: grant.productId,
+  const chargeFen = evaluateSpendGrant(grant, price, input);
+  return { grantId: grant.id, grantVersion: grant.version, priceVersionId: price.id, priceContentHash: price.contentHash,
+    productId: grant.productId, chargeFen,
     periodKeys: billingPeriodKeys(input.at), billingMode: payer.billingMode as "shadow" | "enforce" };
 }

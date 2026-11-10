@@ -2026,8 +2026,7 @@ model BillingPriceVersion {
   meterUnit             String               @db.VarChar(32)
   acceptanceRef         String               @db.VarChar(191)
   scopeKind             PayerScopeKind
-  // Unit price = numerator / denominator fen; a charge line rounds once, half-up.
-  unitPriceFenNumerator BigInt
+  unitPriceFenNumerator BigInt // unit price = numerator / denominator fen, rounded once per line
   unitPriceDenominator  BigInt
   rounding              BillingPriceRounding
   currency              String               @default("CNY") @db.VarChar(3)

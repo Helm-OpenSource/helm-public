@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { PrismaClient } from "@prisma/client";
+import { type Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createPayerAccount } from "../payer/payer-accounts";
-import { changeSpendGrant, createSpendGrant, lockSpendGrantForUseInTransaction, publishPriceVersion,
+import { changeSpendGrant, changeSpendGrantInTransaction, createSpendGrant, lockSpendGrantForUseInTransaction, publishPriceVersion,
   type PublishPriceVersionInput, type SpendGrantAction, type SpendGrantLimits } from "./price-grants";
 
 // Runs only against a fully migrated, explicitly isolated database; never DATABASE_URL or the app's connection.
@@ -32,8 +32,7 @@ describe.skipIf(!url)("price versions and spend grants against MySQL", () => {
   const run = randomUUID().replaceAll("-", "").slice(0, 16);
   const ws = `grant-ws-${run}`, owner = `grant-owner-${run}`, admin = `grant-admin-${run}`, member = `grant-member-${run}`;
   const fen = (value: number) => BigInt(value);
-  const limits = (per: number, day: number, month: number): SpendGrantLimits =>
-    ({ perChargeLimitFen: fen(per), dailyLimitFen: fen(day), monthlyLimitFen: fen(month) });
+  const limits = (per: number, day: number, month: number): SpendGrantLimits => ({ perChargeLimitFen: fen(per), dailyLimitFen: fen(day), monthlyLimitFen: fen(month) });
   const validFrom = new Date("2026-11-01T00:00:00Z"), validUntil = new Date("2027-01-01T00:00:00Z"), at = new Date("2026-11-10T04:00:00Z");
   let a: PrismaClient, b: PrismaClient;
   beforeAll(async () => {
@@ -68,10 +67,20 @@ describe.skipIf(!url)("price versions and spend grants against MySQL", () => {
     createSpendGrant(a, { actorUserId, payerAccountId, priceVersionId: v1Id, operationKey, evidenceRef: "consent:synthetic",
       validFrom, validUntil, ...extra });
   const change = (grantId: string, expectedVersion: number, action: SpendGrantAction, extra: Record<string, unknown> = {}, client = a) =>
-    changeSpendGrant(client, { actorUserId: owner, grantId, expectedVersion, action, evidenceRef: "consent:change", now: at, ...extra });
-  const use = (payerAccountId: string, grantId: string, chargeFen: number, extra: Record<string, unknown> = {}, client = a) =>
-    client.$transaction(tx => lockSpendGrantForUseInTransaction(tx, { payerAccountId, grantId, priceVersionId: v1Id,
-      chargeFen: fen(chargeFen), at, usedFen: { day: fen(0), month: fen(0) }, ...extra }));
+    changeSpendGrant(client, { actorUserId: owner, grantId, expectedVersion, action, evidenceRef: "consent:change", ...extra });
+  const gateInput = (payerAccountId: string, grantId: string, quantity: number, extra: Record<string, unknown> = {}) => ({ payerAccountId,
+    grantId, priceVersionId: v1Id, billingEventRef: "service-billing-event-v1:synthetic", meterUnit: "document", quantity: fen(quantity),
+    at, usedFen: { day: fen(0), month: fen(0) }, ...extra });
+  const use = (payerAccountId: string, grantId: string, quantity: number, extra: Record<string, unknown> = {}, client = a) =>
+    client.$transaction(tx => lockSpendGrantForUseInTransaction(tx, gateInput(payerAccountId, grantId, quantity, extra)));
+  /** Runs `body` in a transaction and keeps it (and its locks) open until released. */
+  function hold(client: PrismaClient, body: (tx: Prisma.TransactionClient) => Promise<unknown>) {
+    let release!: () => void, locked!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; }), isLocked = new Promise<void>(resolve => { locked = resolve; });
+    return { isLocked, release, done: client.$transaction(async tx => { const out = await body(tx); locked(); await held; return out; }, { timeout: 15000 }) };
+  }
+  const settlesWithin = (promise: Promise<unknown>) => Promise.race([promise.then(() => true, () => true),
+    new Promise<boolean>(resolve => setTimeout(() => resolve(false), 400))]);
   async function activeGrant(key: string) {
     const id = await payer();
     const { grant: row } = await grant(id, key, owner, { limits: limits(500, 1000, 3000) });
@@ -105,40 +114,48 @@ describe.skipIf(!url)("price versions and spend grants against MySQL", () => {
   });
   it("enforces per-charge, daily and monthly limits on an active grant", async () => {
     const { payerAccountId, grantId } = await activeGrant("grant:limits");
-    await expect(use(payerAccountId, grantId, 500)).resolves.toMatchObject({ grantId, grantVersion: 2, periodKeys: { day: "2026-11-10", month: "2026-11" } });
-    await expect(use(payerAccountId, grantId, 501)).rejects.toThrow("grant_per_charge_exceeded");
-    await expect(use(payerAccountId, grantId, 400, { usedFen: { day: fen(601), month: fen(601) } })).rejects.toThrow("grant_daily_limit_exceeded");
-    await expect(use(payerAccountId, grantId, 400, { usedFen: { day: fen(0), month: fen(2601) } })).rejects.toThrow("grant_monthly_limit_exceeded");
+    await expect(use(payerAccountId, grantId, 5)).resolves.toMatchObject({ grantId, grantVersion: 2, chargeFen: fen(500), periodKeys: { day: "2026-11-10", month: "2026-11" } });
+    await expect(use(payerAccountId, grantId, 6)).rejects.toThrow("grant_per_charge_exceeded");
+    await expect(use(payerAccountId, grantId, 4, { usedFen: { day: fen(601), month: fen(601) } })).rejects.toThrow("grant_daily_limit_exceeded");
+    await expect(use(payerAccountId, grantId, 4, { usedFen: { day: fen(0), month: fen(2601) } })).rejects.toThrow("grant_monthly_limit_exceeded");
     await change(grantId, 2, "set_limits", { limits: limits(100, 100, 100) }); // tightening applies to the next use
-    await expect(use(payerAccountId, grantId, 101)).rejects.toThrow("grant_per_charge_exceeded");
+    await expect(use(payerAccountId, grantId, 2)).rejects.toThrow("grant_per_charge_exceeded");
   });
-  it("never widens a grant to a newer price version", async () => {
+  it("never widens a grant to a newer price version and prices only from the bound version", async () => {
     const { payerAccountId, grantId } = await activeGrant("grant:price");
-    const v2 = await a.billingPriceVersion.findFirstOrThrow({ where: { version: 2, productId: (await a.billingPriceVersion.findUniqueOrThrow({ where: { id: v1Id } })).productId } });
-    await expect(use(payerAccountId, grantId, 150, { priceVersionId: v2.id })).rejects.toThrow("grant_price_version_mismatch");
+    const v1 = await a.billingPriceVersion.findUniqueOrThrow({ where: { id: v1Id } });
+    const v2 = await a.billingPriceVersion.findFirstOrThrow({ where: { version: 2, productId: v1.productId } }); // 150 fen
+    await expect(use(payerAccountId, grantId, 1, { priceVersionId: v2.id })).rejects.toThrow("grant_price_version_mismatch");
+    // A caller holding a v2 quote but naming v1 is still charged v1's 100 fen: the amount never comes from the caller.
+    await expect(use(payerAccountId, grantId, 1)).resolves.toMatchObject({ chargeFen: fen(100), priceContentHash: v1.contentHash });
+    await expect(a.$executeRaw`UPDATE SpendGrant SET state = 'disabled', version = version + 1 WHERE id = ${grantId}`).rejects.toThrow(/spend_grant_binding_immutable/);
+    await expect(a.$executeRaw`UPDATE SpendGrant SET evidenceRef = 'x', version = version + 1 WHERE id = ${grantId}`).rejects.toThrow(/spend_grant_binding_immutable/);
     await expect(a.$executeRaw`UPDATE SpendGrant SET priceVersionId = ${v2.id}, version = version + 1 WHERE id = ${grantId}`).rejects.toThrow(/spend_grant_binding_immutable/);
     await expect(a.$executeRaw`UPDATE SpendGrant SET dailyLimitFen = 999 WHERE id = ${grantId}`).rejects.toThrow(/spend_grant_binding_immutable/); // no version bump
     await expect(a.$executeRaw`DELETE FROM SpendGrant WHERE id = ${grantId}`).rejects.toThrow(/spend_grant_retained/);
   });
   it("serializes revocation behind an in-flight use and refuses every later use", async () => {
     const { payerAccountId, grantId } = await activeGrant("grant:race");
-    let release!: () => void, locked!: () => void, revoked = false;
-    const held = new Promise<void>(resolve => { release = resolve; }), isLocked = new Promise<void>(resolve => { locked = resolve; });
-    const inFlight = a.$transaction(async tx => {
-      const snapshot = await lockSpendGrantForUseInTransaction(tx, { payerAccountId, grantId, priceVersionId: v1Id, chargeFen: fen(10), at,
-        usedFen: { day: fen(0), month: fen(0) } });
-      locked(); await held; return snapshot;
-    }, { timeout: 15000 });
-    await isLocked;
-    const revoke = change(grantId, 2, "revoke", {}, b).then(row => { revoked = true; return row; });
-    await new Promise(resolve => setTimeout(resolve, 400));
-    expect(revoked).toBe(false); // waits on the PayerAccount lock held by the use
-    release();
-    await expect(inFlight).resolves.toMatchObject({ grantVersion: 2 });
+    const inFlight = hold(a, tx => lockSpendGrantForUseInTransaction(tx, gateInput(payerAccountId, grantId, 1)));
+    await inFlight.isLocked;
+    const revoke = change(grantId, 2, "revoke", {}, b);
+    expect(await settlesWithin(revoke)).toBe(false); // waits on the PayerAccount lock held by the use
+    inFlight.release();
+    await expect(inFlight.done).resolves.toMatchObject({ grantVersion: 2 });
     await expect(revoke).resolves.toMatchObject({ state: "revoked", version: 3, revokedByUserId: owner });
-    await expect(use(payerAccountId, grantId, 10, {}, b)).rejects.toThrow("grant_not_active");
+    await expect(use(payerAccountId, grantId, 1, {}, b)).rejects.toThrow("grant_not_active");
     await expect(change(grantId, 3, "resume")).rejects.toThrow("grant_transition_invalid");
     await expect(a.$executeRaw`UPDATE SpendGrant SET state = 'active', revokedAt = NULL, revokedByUserId = NULL, version = version + 1 WHERE id = ${grantId}`).rejects.toThrow(/spend_grant_binding_immutable/);
+  });
+  it("makes a use that waits behind an in-flight revoke see the revoked grant", async () => {
+    const { payerAccountId, grantId } = await activeGrant("grant:race-reverse");
+    const revoking = hold(b, tx => changeSpendGrantInTransaction(tx, { actorUserId: owner, grantId, expectedVersion: 2, action: "revoke", evidenceRef: "e" }));
+    await revoking.isLocked;
+    const pending = use(payerAccountId, grantId, 1);
+    expect(await settlesWithin(pending)).toBe(false); // waits on the PayerAccount lock held by the revoke
+    revoking.release();
+    await expect(revoking.done).resolves.toMatchObject({ state: "revoked" });
+    await expect(pending).rejects.toThrow("grant_not_active");
   });
   it("lets exactly one of two concurrent changes on the same version win", async () => {
     const { grantId } = await activeGrant("grant:cas");

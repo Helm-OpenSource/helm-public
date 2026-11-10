@@ -82,7 +82,7 @@ CREATE TRIGGER `BillingPriceVersion_no_delete` BEFORE DELETE ON `BillingPriceVer
 FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='billing_price_version_immutable';
 CREATE TRIGGER `SpendGrant_no_delete` BEFORE DELETE ON `SpendGrant`
 FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='spend_grant_retained';
--- A grant is bound to one price version for life: a price upgrade needs a new grant, never an edit (S0 §4).
+-- A grant binds one price version for life (an upgrade needs a new grant); state moves mirror the service TRANSITIONS.
 CREATE TRIGGER `SpendGrant_guard_update` BEFORE UPDATE ON `SpendGrant`
 FOR EACH ROW BEGIN
  IF NOT (BINARY NEW.id <=> BINARY OLD.id) OR NOT (BINARY NEW.payerAccountId <=> BINARY OLD.payerAccountId)
@@ -90,6 +90,8 @@ FOR EACH ROW BEGIN
  OR NOT (BINARY NEW.triggerKind <=> BINARY OLD.triggerKind) OR NOT (BINARY NEW.operationKey <=> BINARY OLD.operationKey)
  OR NOT (BINARY NEW.contentHash <=> BINARY OLD.contentHash) OR NOT (NEW.validFrom <=> OLD.validFrom) OR NOT (NEW.validUntil <=> OLD.validUntil)
  OR NOT (BINARY NEW.createdByUserId <=> BINARY OLD.createdByUserId) OR NOT (NEW.createdAt <=> OLD.createdAt)
- OR OLD.state IN ('revoked', 'expired') OR NEW.version <> OLD.version + 1 THEN
+ OR NOT (BINARY NEW.evidenceRef <=> BINARY OLD.evidenceRef) OR OLD.state IN ('revoked', 'expired') OR NEW.version <> OLD.version + 1
+ OR NOT (NEW.state = OLD.state OR NEW.state = 'revoked' OR (NEW.state = 'active' AND OLD.state IN ('disabled', 'paused'))
+   OR (NEW.state = 'paused' AND OLD.state = 'active')) THEN
  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='spend_grant_binding_immutable'; END IF;
 END;
