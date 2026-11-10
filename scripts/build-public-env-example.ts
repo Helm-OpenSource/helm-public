@@ -125,6 +125,12 @@ HELM_CAIO_ATTENTION_REMINDERS_ENABLED="false"
 HELM_QODERWORK_MCP_ENABLED="false"
 # Member MCP entry (/api/mcp/member): members connect their own AI clients; also needs workspace featureFlags.memberMcp.
 HELM_MEMBER_MCP_ENABLED="false"
+# Seat desktop device authorization (lib/seat-device): device sign-in for the seat
+# desktop client; also needs workspace featureFlags.seatDesktop. Off returns 404.
+HELM_SEAT_DEVICE_AUTH_ENABLED="false"
+# Proxies in front of the app that append to x-forwarded-for; the source is the
+# Nth entry from the right. 0 (default) treats the device source as untrusted.
+HELM_SEAT_DEVICE_TRUSTED_PROXY_HOPS="0"
 # CAIO review supplement: workspace-aggregated member feedback volume by type (counts only).
 HELM_CAIO_MEMBER_FEEDBACK_SUPPLEMENT_ENABLED="false"
 HELM_MCP_ALLOWED_ORIGINS=""

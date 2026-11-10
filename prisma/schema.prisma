@@ -1371,6 +1371,82 @@ model MemberAgentApproverGrant {
   @@index([workspaceId, groupTag, revokedAt], map: "MAApproverGrant_ws_group_revoked_idx")
 }
 
+/// Seat desktop device authorization (D1): a device-initiated request that a
+/// member approves on the website, then the device's rotating credential. id is
+/// both requestId and deviceId; identity columns stay null until approval.
+/// Tokens and the pairing code are stored as sha256 hashes only. Lifecycle
+/// writes are CAS on version; "expired" is derived (lib/seat-device/contract.ts).
+/// expiresAt is fixed at approval and never extended by a refresh.
+/// devicePublicKeyThumbprint is reserved for proof of possession: not read or
+/// written in D1. audiencePin is written once by the consuming extension.
+model SeatDeviceAuthorization {
+  id                        String    @id @default(cuid())
+  clientType                String    @db.VarChar(32)
+  deviceLabel               String    @db.VarChar(80)
+  clientVersion             String?   @db.VarChar(40)
+  status                    String    @db.VarChar(16)
+  version                   Int       @default(0)
+  pollTokenHash             String    @unique @db.Char(64)
+  pairingCodeHash           String?   @unique @db.Char(64)
+  sourceIp                  String?   @db.VarChar(64)
+  sourceBucket              String?   @db.VarChar(64)
+  requestedAt               DateTime
+  requestExpiresAt          DateTime
+  pollIntervalSec           Int       @default(5)
+  lastPolledAt              DateTime?
+  claimedAt                 DateTime?
+  reclaimed                 Boolean   @default(false)
+  workspaceId               String?
+  userId                    String?
+  membershipId              String?
+  userPasswordSetAt         DateTime?
+  approvalSource            String?   @db.VarChar(64)
+  approvedAuthSessionId     String?
+  decidedByUserId           String?
+  decidedAt                 DateTime?
+  audiencePin               String?
+  devicePublicKeyThumbprint String?   @db.Char(64)
+  accessTokenHash           String?   @unique @db.Char(64)
+  accessExpiresAt           DateTime?
+  previousAccessTokenHash   String?   @unique @db.Char(64)
+  previousAccessExpiresAt   DateTime?
+  refreshTokenHash          String?   @unique @db.Char(64)
+  refreshTokenUsed          Boolean   @default(false)
+  previousRefreshTokenHash  String?   @unique @db.Char(64)
+  rotatedAt                 DateTime?
+  rotationSource            String?   @db.VarChar(64)
+  graceUsed                 Boolean   @default(false)
+  issuedAt                  DateTime?
+  expiresAt                 DateTime?
+  refreshWindowStartedAt    DateTime?
+  refreshWindowCount        Int       @default(0)
+  lastUsedAt                DateTime?
+  lastIp                    String?   @db.VarChar(64)
+  revokedAt                 DateTime?
+  revokedByUserId           String?
+  revokeReason              String?   @db.VarChar(32)
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+
+  @@index([workspaceId, userId, status])
+  @@index([workspaceId, membershipId, status])
+  @@index([status, requestExpiresAt])
+  @@index([sourceBucket, requestedAt])
+}
+
+/// Seat desktop token history: append-only record of every token hash a
+/// device retired (kind: refresh | access | poll), so presenting a superseded
+/// token is recognised as reuse of that device's token family.
+model SeatDeviceTokenHistory {
+  id        String   @id @default(cuid())
+  deviceId  String
+  kind      String   @db.VarChar(8)
+  tokenHash String   @unique @db.Char(64)
+  retiredAt DateTime
+
+  @@index([deviceId, retiredAt])
+}
+
 /// Member MCP P1b: asynchronous prompt-response intake. The online MCP route
 /// only records the member's confirmed response here (it may not reach the
 /// CAIO governance validators); scripts/member-prompt-response-worker.ts
