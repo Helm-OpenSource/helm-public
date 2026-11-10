@@ -1,6 +1,5 @@
--- Rollback of 20261110160000_billing_topup_orders, only for an unused migration (application rollback: stop calling the
--- service). Refuses while any order or verified payment exists; stop all writers first. DROP TABLE removes the triggers;
--- the final DELETE lets `prisma migrate deploy` re-apply the migration. Roll this back before the funds journal.
+-- Rollback of 20261110160000_billing_topup_orders, only for an unused migration; refuses while any row exists (stop all writers
+-- first). DROP TABLE removes the triggers; the DELETE lets `prisma migrate deploy` re-apply. Roll back before the funds journal.
 DROP PROCEDURE IF EXISTS `rollback_empty_billing_topup_orders`;
 
 DELIMITER $$

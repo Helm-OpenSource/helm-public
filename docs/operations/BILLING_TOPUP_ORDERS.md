@@ -8,52 +8,39 @@ public_safety: Public source contract and synthetic test verification only. No d
 
 # Billing wallet top-up orders / 钱包充值订单与支付核验
 
-Billing V1 slice S2-b: server-created `wallet_topup` orders and one verification entry shared by provider callbacks and active queries.
-No route, UI, provider call or merchant credential. 本片只提供订单与核验原语；不接真实商户、不改旧订阅回调。
+Billing V1 slice S2-b: server-created `wallet_topup` orders and one private verification entry shared by provider callbacks and active
+queries. No route, UI, real provider call or merchant credential; legacy subscription notify routes are unchanged. 本片不接真实商户。
 
 ## Model / 模型（migration `20261110160000_billing_topup_orders`）
 
-- `PaymentOrder`: persisted `orderType` ENUM with the single value `wallet_topup` (legacy subscription orders live elsewhere and can
-  never be read as a top-up), `provider` (`wechat_pay` | `alipay`), UNIQUE byte-exact `providerOrderNo` (`tpw_`/`tpa_` + 28 hex, never the
-  legacy `helm_wx_`/`helm_ali_`), `amountFen` BIGINT, `CNY`, opaque `merchantRef`/`appRef` (server config refs, never secrets),
-  `state`, `version`, `expiresAt`, `createdBy`, plus the `payerAccountId`/`payerBindingId` snapshot it was created under.
-- `VerifiedPayment`: UNIQUE `(provider, providerTxnId)`, UNIQUE `paymentOrderId`, UNIQUE `fundsTransactionId`, `source` (`callback` |
-  `query`), `lateAfterClose`. Triggers reject UPDATE/DELETE.
+- `PaymentOrder`: persisted `orderType` ENUM with the single value `wallet_topup` (a subscription order can never be read as a top-up),
+  `provider`, UNIQUE byte-exact `providerOrderNo` (`tpw_`/`tpa_` + 28 hex, never legacy `helm_wx_`/`helm_ali_`), `amountFen` BIGINT, `CNY`,
+  opaque `merchantRef`/`appRef` (server config refs, never secrets), `state`, `version`, `expiresAt`, `createdBy`, payer/binding snapshot.
+- `VerifiedPayment`: UNIQUE `(provider, providerTxnId)`, `paymentOrderId` and `fundsTransactionId`; `source`, `lateAfterClose`; immutable by trigger.
 
 ## Service / 服务（`lib/billing/topup/`）
 
-- `createTopupOrder(client, input)`: OWNER or BILLING_ADMIN of the workspace (`topup_forbidden`); payer resolved server-side by
-  `resolvePayerForWorkspaceInTransaction`; `billingMode` must be `shadow` or `enforce` (`topup_billing_off`); amount 100 – 5 000 000 fen
-  (provisional bounds, `topup_amount_out_of_range`); merchant/app refs come from server config, not the client.
-- `verifyTopupPaymentInTransaction(tx, { provider, observed })` is the **only** entry; `verifyTopupCallback` and `verifyTopupByQuery`
-  call the injected `TopupProviderAdapter` outside the transaction and then this entry with `runFundsTransactionWithRetry`.
-- Checks, in order: signature flag set by the adapter (`topup_signature_invalid`, before any read), order exists (`topup_order_unknown`)
-  and is `wallet_topup`, provider, merchant **and** app ref, then for `paid`: currency and amount exact, provider txn unused by another
-  order (`topup_txn_conflict`), no other txn for this order (`topup_order_paid_by_other_txn`).
-- On success, in one Core transaction: order -> `paid_verified` (version CAS), `VerifiedPayment`, `FundsTransaction` kind `topup` with
-  operationKey `topup:<provider>:<providerTxnId>`, AuditLog `BILLING_TOPUP_VERIFIED`, outbox `topup.verified`. Any refusal rolls all back.
-- Lock order: `PayerAccount FOR UPDATE` -> `PaymentOrder FOR UPDATE` -> `VerifiedPayment` -> funds journal (S2-a). Duplicate callbacks and
-  the loser of a callback/query race replay (`outcome: "replayed"`), never a second credit.
-- Non-paid observations: `not_paid` moves `created` -> `pending`; `unknown` (including WeChat `REFUND` and any unlisted status) parks the
-  order in `unknown`; `closed` (provider confirms closed unpaid) -> `closed_unpaid`. Nothing changes state by time; a paid order never moves back.
-- **Late success decision**: a verified success for an order already `closed_unpaid` still credits exactly once (the money arrived) and is
-  flagged `lateAfterClose` in the payment, audit and outbox for reconciliation. 关单后迟到的已核验成功仍只入账一次并打标记。
-- A payer switched to `off` after ordering refuses `payer_billing_off`; the order stays unverified and is re-verified by retry or query.
-- Write conflicts: Prisma P2034, MySQL 1213 deadlocks and same-key insert races retry up to 3 times, then refuse `funds_write_conflict`.
-
-## Provider adapter / 支付渠道适配
-
-- `provider-observation.ts` maps a WeChat Pay v3 transaction (`amount.total` fen) or Alipay trade (`total_amount` yuan, exact two-place
-  parse, absent `trans_currency` = CNY) into `ObservedPayment`; merchant/app ids map to refs through a server lookup.
-- Production callbacks wrap `verifyWeChatPayNotifySignature` + `decryptWeChatPayNotifyPayload` / `verifyAlipayNotifyPayload`. The existing
-  query helpers drop amount and merchant fields, so an amount-returning query adapter is a later slice. Existing subscription notify routes
-  are unchanged; they may dispatch `isTopupProviderOrderNo` orders here once wired.
+- `createTopupOrder`: OWNER or BILLING_ADMIN (`topup_forbidden`); payer resolved server-side; `billingMode` `shadow`|`enforce`
+  (`topup_billing_off`); 100 – 5 000 000 fen (provisional). `lockBillingAuthority` now requires an explicit role rule.
+- Trust: only `defineTopupProviderAdapter(provider, io)` mints observations (frozen, registered in a module-private WeakSet); anything else
+  is `topup_observation_untrusted`. `io.verifyCallback` authenticates the raw notify itself and throws on failure (`topup_signature_invalid`);
+  no caller-supplied trust flag exists. Public entries: `verifyTopupCallback(client, adapter, request)` and
+  `verifyTopupByQuery(client, adapter, paymentOrderId)` (re-queries the original order number). Provider IO runs outside the transaction.
+- Checks: order exists and is `wallet_topup`, provider, merchant and app ref; for `paid`, exact currency and amount, txn not bound to another
+  order (`topup_txn_conflict`), no other txn for this order. Success in one transaction: order CAS -> `paid_verified`, `VerifiedPayment`,
+  `topup` funds transaction (`topup:<provider>:<providerTxnId>`), audit `BILLING_TOPUP_VERIFIED`, outbox `topup.verified`.
+- Lock order `PayerAccount` -> `PaymentOrder` -> `VerifiedPayment` -> funds journal. Duplicate callbacks and callback/query race losers replay.
+- Non-paid: `not_paid` `created`->`pending`; `unknown` (any unlisted status) -> `unknown`; `closed` -> `closed_unpaid`; nothing by time.
+- **Late success**: a verified success after `closed_unpaid` credits exactly once, flagged `lateAfterClose`. 关单后迟到成功仍只入账一次并打标。
+- **Payment exceptions** (outbox `aggregateType=PaymentException`, `eventType=payment_exception`, plus audit `BILLING_TOPUP_PAYMENT_EXCEPTION`;
+  idempotent per `reason:provider:txn`; never a balance change): `paid_then_closed` / `paid_then_unknown` (e.g. REFUND) for a credited order,
+  in the same transaction; `order_paid_by_other_txn`, `payer_billing_off`, `amount_mismatch`, `currency_mismatch` in a separate transaction
+  after the credit rolls back. A billing-off payment is credited by a later retry/query once the payer is re-enabled.
+- Write conflicts (P2034, MySQL 1213, same-key insert) retry up to 3 times, then `funds_write_conflict`.
 
 ## Verification and rollback / 验证与回滚
 
-- Unit `lib/billing/topup/topup-orders.test.ts`; `npm run test:billing:mysql` (CI `mysql:8.4`) with a synthetic HMAC adapter covers forged
-  signature, wrong merchant/app/amount/currency/provider, duplicate callback, concurrent callback/query, unknown/unpaid states, late
-  success, legacy order and reused txn refusal, rollback and DB immutability.
+- Unit `topup-orders.test.ts`; `npm run test:billing:mysql` (CI `mysql:8.4`) with a synthetic HMAC adapter covers the rules above,
+  concurrent callback/query and concurrent txns for one order, refund news, late success, rollback, legacy orders and DB immutability.
 - Application rollback: stop calling the service. Schema rollback `prisma/rollback/20261110_rollback_billing_topup_orders.sql` refuses while
-  any order or payment row exists; roll it back before the funds journal.
-- Not enabled: routes, real adapters, order expiry closing via provider, exception queue for refused paid observations, consumer payers.
+  any row exists; roll it back before the funds journal. Not enabled: routes, real adapters (existing query helpers drop amount fields).

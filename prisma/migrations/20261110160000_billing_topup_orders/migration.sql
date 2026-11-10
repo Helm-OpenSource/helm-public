@@ -1,9 +1,6 @@
--- Billing V1 S2-b (2026-11-10): wallet top-up orders and verified provider payments. New tables only; legacy subscription
--- orders (BillingAccount / PaymentWebhookCallbackEvent) are not touched or backfilled. orderType is persisted and has the
--- single value 'wallet_topup', so a subscription order can never be read as a top-up. Database invariants: UNIQUE
--- providerOrderNo, UNIQUE (provider, providerTxnId), one verified payment per order and per funds transaction, positive
--- bounded fen, CNY only, and triggers rejecting UPDATE/DELETE of VerifiedPayment. No FKs (relationMode "prisma").
--- Rollback: prisma/rollback/20261110_rollback_billing_topup_orders.sql (refuses while any row exists).
+-- Billing V1 S2-b (2026-11-10): wallet top-up orders and verified payments. New tables only; legacy subscription orders are untouched.
+-- orderType has the single value 'wallet_topup'. Invariants: UNIQUE providerOrderNo, (provider, providerTxnId), paymentOrderId and
+-- fundsTransactionId; positive bounded CNY fen; VerifiedPayment immutable by trigger. No FKs. Rollback: prisma/rollback/20261110_rollback_billing_topup_orders.sql.
 
 CREATE TABLE `PaymentOrder` (
     `id` VARCHAR(191) NOT NULL,

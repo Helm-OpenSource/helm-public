@@ -174,10 +174,8 @@ async function postLocked(tx: Prisma.TransactionClient, payer: PayerRow, posting
   return { transaction, entries, replayed: false };
 }
 
-/**
- * Conflicts that abort the whole transaction and are safe to re-run from the start: Prisma P2034 (write conflict or
- * deadlock), a MySQL 1213 deadlock surfaced by a raw query (P2010), or a concurrent same-key insert (`funds_write_conflict`).
- */
+/** Conflicts that abort the whole transaction and are safe to re-run: Prisma P2034, a MySQL 1213 deadlock from a raw query
+ * (P2010), or a concurrent same-key insert (`funds_write_conflict`). */
 export function isRetryableFundsConflict(error: unknown) {
   if (error instanceof FundsRefusal) return error.code === "funds_write_conflict";
   if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
