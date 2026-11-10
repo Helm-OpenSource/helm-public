@@ -1,7 +1,8 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
-import { FundsRefusal, postFundsTransactionInTransaction } from "../funds/funds-journal";
+import { availableCreditFen, CreditFacilityRefusal, drawCreditShortfallInTransaction } from "../credit/credit-facilities";
+import { chargeOperationKey, FundsRefusal, postFundsTransactionInTransaction, settleDrawSourceRef } from "../funds/funds-journal";
 import { MAX_FEN } from "../funds/money";
 import { resolvePayerForWorkspaceInTransaction } from "../payer/payer-accounts";
 import { type BillingPeriodKeys, chargeFenForQuantity, lockSpendGrantForUseInTransaction, SpendGrantRefusal,
@@ -10,8 +11,8 @@ import { type BillingPeriodKeys, chargeFenForQuantity, lockSpendGrantForUseInTra
 /**
  * Billing V1 S3-b reservations on the S3 internal protocol (docs/operations/BILLING_RESERVATIONS.md); nothing auto-releases and
  * shadow never moves money. Lock order: Membership -> PayerAccount FOR UPDATE (per-payer mutex) -> SpendGrant -> BudgetBucket
- * day, month -> BillingReservation -> FundsTransaction -> FundsAccountProjection; the bucket CAS and limit guard in the
- * UPDATE's own WHERE are the second line.
+ * day, month -> (reserve: CreditFacility) -> BillingReservation -> (settle: the S3-e credit draw's order) -> FundsTransaction ->
+ * FundsAccountProjection; the bucket CAS and limit guard in the UPDATE's own WHERE are the second line.
  */
 export type BillingRejectCode = "billing_mode_off" | "insufficient_funds" | "limit_exceeded" | "grant_not_active" |
   "grant_price_version_mismatch" | "grant_meter_mismatch" | "grant_charge_zero" | "idempotency_conflict" |
@@ -33,12 +34,17 @@ const GRANT_REJECTS: Partial<Record<SpendGrantRefusalCode, BillingRejectCode>> =
 };
 const FUNDS_REJECTS: Partial<Record<FundsRefusal["code"], BillingRejectCode>> = { funds_insufficient: "insufficient_funds",
   payer_billing_off: "billing_mode_off", payer_account_unavailable: "grant_not_active", funds_write_conflict: "core_unavailable" };
+// A settle shortfall the credit line cannot cover is insufficient_funds (retryable, never a release; protocol v3.5 §3).
+const CREDIT_REJECTS: Partial<Record<CreditFacilityRefusal["code"], BillingRejectCode>> = { credit_insufficient: "insufficient_funds",
+  credit_not_active: "insufficient_funds", payer_account_unavailable: "grant_not_active", credit_write_conflict: "core_unavailable",
+  credit_operation_conflict: "idempotency_conflict" }; // a recorded draw under this reservation's key that does not fit this settle
 /** Maps refusals to `{ ok: false, code }`. An invariant breach or unexpected error propagates (the S3-b3 route answers internal_error). */
 export async function asBillingResult<T extends object>(work: Promise<T>): Promise<({ ok: true } & T) | { ok: false; code: BillingRejectCode }> {
   try { return { ok: true, ...(await work) }; } catch (error) {
     if (error instanceof BillingReject) return { ok: false, code: error.code };
     const mapped = error instanceof SpendGrantRefusal ? GRANT_REJECTS[error.code]
-      : error instanceof FundsRefusal ? FUNDS_REJECTS[error.code] : undefined;
+      : error instanceof FundsRefusal ? FUNDS_REJECTS[error.code]
+        : error instanceof CreditFacilityRefusal ? CREDIT_REJECTS[error.code] : undefined;
     if (mapped) return { ok: false, code: mapped };
     // Write conflict (P2002 or raw 1062), serialization failure, deadlock (1213) or lock wait timeout (1205): nothing committed;
     // retry the same key, which replays or refuses precisely under the PayerAccount lock.
@@ -71,8 +77,12 @@ function positiveQuantity(value: unknown) {
 }
 function invariantBreach(): never { throw new Error("reservation_invariant_breach"); }
 // No automatic retry: a retried call with the same idempotencyKey replays or refuses, it never takes a second effect.
+// READ COMMITTED (S3-w review P1): under REPEATABLE READ the locking reads of a not-yet-existing key (funds `credit-draw:` /
+// `charge:` replay checks) gap-lock the unique index across payers, and the two inserts that follow deadlocked (1213) settles of
+// different payers. RC takes no gap locks; correctness rests on the PayerAccount FOR UPDATE mutex (every reservation, credit and
+// wallet writer of a payer takes it first) plus the unique keys, and every plain read sees the latest commit. Needs ROW binlog.
 const run = <T>(client: PrismaClient, body: (tx: Prisma.TransactionClient) => Promise<T>) =>
-  client.$transaction(body, { maxWait: 5000, timeout: 10000 });
+  client.$transaction(body, { maxWait: 5000, timeout: 10000, isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
 
 function idempotencyKey(value: unknown) { if (typeof value !== "string" || !/^[A-Za-z0-9:_-]{8,128}$/.test(value)) reject("request_invalid"); }
 export type ReserveRequest = { idempotencyKey: string; operationRef: string; payerRef: string; grantId: string;
@@ -100,11 +110,6 @@ async function lockPayerRow(tx: Prisma.TransactionClient, payerAccountId: string
   if (!payer) reject("grant_not_active"); // an unknown payer fails closed, never "unbilled"
 }
 
-/**
- * Seam for S3-e CreditFacility: remaining usable credit of the payer, read under the caller's PayerAccount lock. Fixed at 0
- * until S3-e lands. Settle still debits the wallet only (the journal keeps it non-negative): S3-e decides how a shortfall books.
- */
-export async function availableCreditFen(_tx: Prisma.TransactionClient, _payerAccountId: string): Promise<bigint> { return ZERO; }
 type Mode = "shadow" | "enforce";
 type BucketRow = { periodKind: "day" | "month"; periodKey: string; settledFen: bigint; reservedFen: bigint; version: number };
 /** Locks the mode's day, month buckets (creating zero rows); plain existence read under PayerAccount avoids cross-payer gap locks. */
@@ -164,13 +169,13 @@ async function reserveInTransaction(tx: Prisma.TransactionClient, actor: Service
   });
   const { grant, chargeFen, billingMode } = admitted;
   if (billingMode === "enforce") {
-    // Non-locking reads: every hold and wallet writer holds this PayerAccount lock, so the snapshot (first read after it) is
+    // Non-locking reads: every hold and wallet writer holds this PayerAccount lock, so each read (READ COMMITTED) is
     // current; FOR SHARE range locks here deadlocked first reserves across payers. Callers must not read before calling.
     const [{ held }] = await tx.$queryRaw<Array<{ held: bigint }>>`SELECT CAST(COALESCE(SUM(chargeFen), 0) AS SIGNED) AS held
       FROM BillingReservation WHERE payerAccountId = ${payerAccountId} AND billingMode = 'enforce' AND state IN ('held', 'unknown')`;
     const [wallet] = await tx.$queryRaw<Array<{ balanceFen: bigint }>>`SELECT balanceFen FROM FundsAccountProjection
       WHERE payerAccountId = ${payerAccountId} AND account = 'customer_wallet_available'`;
-    const credit = await availableCreditFen(tx, payerAccountId); // owner v3: wallet + remaining credit must cover the holds
+    const credit = await availableCreditFen(tx, payerAccountId); // owner v3: wallet + remaining credit (S3-e) must cover the holds
     if (BigInt(wallet?.balanceFen ?? ZERO) + credit - BigInt(held) < chargeFen) reject("insufficient_funds");
   }
   for (const bucket of buckets) {
@@ -190,7 +195,7 @@ function reserved(mode: Mode, reservationId: string, state: string, capFen: bigi
 }
 
 type LockedReservation = { id: string; payerAccountId: string; operationRef: string; grantId: string; billingMode: Mode; priceVersionId: string;
-  priceContentHash: string; quantity: bigint; chargeFen: bigint; state: string; version: number; unknownKey: string | null;
+  priceContentHash: string; quantity: bigint; chargeFen: bigint; reservedAt: Date; state: string; version: number; unknownKey: string | null;
   unknownEvidenceRef: string | null; resolutionKey: string | null; releaseReason: string | null; resolutionEvidenceRef: string | null;
   createdBy: string };
 /**
@@ -215,7 +220,7 @@ async function lockReservationForResolution(tx: Prisma.TransactionClient, reserv
   const buckets = await lockBuckets(tx, { id: head.grantId, payerAccountId: head.payerAccountId }, { day: head.dayKey, month: head.monthKey },
     head.billingMode);
   const [row] = await tx.$queryRaw<LockedReservation[]>`SELECT id, payerAccountId, operationRef, grantId, billingMode, priceVersionId,
-    priceContentHash, quantity, chargeFen, state, version, unknownKey, unknownEvidenceRef, resolutionKey, releaseReason,
+    priceContentHash, quantity, chargeFen, reservedAt, state, version, unknownKey, unknownEvidenceRef, resolutionKey, releaseReason,
     resolutionEvidenceRef, createdBy FROM BillingReservation WHERE id = ${reservationId} FOR UPDATE`;
   if (!row || row.id !== reservationId || row.grantId !== head.grantId || row.billingMode !== head.billingMode ||
       (owner !== null && ownerOf(row.createdBy) !== owner)) reject("reservation_state_conflict");
@@ -288,7 +293,8 @@ export type SettleRequest = { idempotencyKey: string; reservationId: string; ope
  * held|unknown -> settled, exactly once. The charge is repriced from the frozen price row for `quantityUsed` (<= the reserved
  * quantity, so <= capFen), moves from reserved to settled in the reservation's frozen-period buckets (not settle time), posts a
  * balanced `charge` funds transaction (wallet debit, charge revenue credit; its audit and funds outbox) and a charge outbox row,
- * all in this transaction. A refusal (e.g. billing turned off, wallet corrected below the hold) leaves the reservation held.
+ * all in this transaction. An enforce wallet shortfall is first borrowed from credit (S3-w). A refusal (e.g. wallet corrected
+ * below the hold and no credit left) leaves the reservation held.
  */
 export async function settleInTransaction(tx: Prisma.TransactionClient, actor: ServiceActor, req: SettleRequest) {
   return settleFrom(tx, actor, req, false);
@@ -318,9 +324,14 @@ async function settleFrom(tx: Prisma.TransactionClient, actor: ServiceActor, req
     await moveBucket(tx, reservation.grantId, reservation.billingMode, bucket, { reservedDelta: -reservation.chargeFen,
       settledDelta: chargeFen, ceiling: null });
   }
-  // Shadow records the would-be charge only, and a 0-fen settle (smaller quantity, v3.5) has nothing to post: no funds entry.
-  const funds = reservation.billingMode === "shadow" || chargeFen === ZERO ? null : await postFundsTransactionInTransaction(tx, {
-    payerAccountId: reservation.payerAccountId, kind: "charge", operationKey: `charge:${reservation.id}`, actor,
+  // Shadow records the would-be charge only, and a 0-fen settle (smaller quantity, v3.5) has nothing to post: no draw, no funds.
+  const posting = reservation.billingMode === "enforce" && chargeFen > ZERO;
+  // Owner v3: the wallet pays first and only the shortfall is borrowed (none when the wallet covers it), then the wallet is
+  // charged in full. Bound to this locked reservation and its frozen reservedAt; a replay returned above and never draws again.
+  if (posting) await drawCreditShortfallInTransaction(tx, { payerAccountId: reservation.payerAccountId, chargeFen,
+    sourceRef: settleDrawSourceRef(reservation.id), actor, reservedAt: reservation.reservedAt });
+  const funds = !posting ? null : await postFundsTransactionInTransaction(tx, {
+    payerAccountId: reservation.payerAccountId, kind: "charge", operationKey: chargeOperationKey(reservation.id), actor,
     evidenceRef: req.evidenceRef, entries: [{ account: "customer_wallet_available", direction: "debit", amountFen: chargeFen },
       { account: "charge_revenue", direction: "credit", amountFen: chargeFen }] });
   if (funds?.replayed) invariantBreach(); // a charge posting exists for an unsettled reservation

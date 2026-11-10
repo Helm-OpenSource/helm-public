@@ -3,6 +3,8 @@ import { lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { grantPlatformFinanceRole } from "../bank-receipts/bank-receipts";
+import { changeCreditFacility, drawCreditShortfallInTransaction, proposeCreditFacility } from "../credit/credit-facilities";
 import { postFundsTransactionInTransaction, recomputeFundsProjection, reverseFundsTransactionInTransaction } from "../funds/funds-journal";
 import { changeSpendGrant, createSpendGrant, publishPriceVersion } from "../grants/price-grants";
 import { bindScope, createPayerAccount } from "../payer/payer-accounts";
@@ -33,6 +35,7 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
   if (!url) { it.skip("requires an explicit synthetic target", () => {}); return; }
   const run = randomUUID().replaceAll("-", "").slice(0, 16);
   const ws = `resv-ws-${run}`, qws = `resv-qws-${run}`, owner = `resv-owner-${run}`;
+  const [admin, maker, checker] = ["admin", "maker", "checker"].map(role => `resv-${role}-${run}`);
   const fen = (value: number) => BigInt(value);
   const service = { type: "SYSTEM" as const, ref: "synthetic-metering" };
   // 2026-11-30 23:59:59.900 in Asia/Shanghai; the next instants below fall on 12-01.
@@ -50,6 +53,18 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
     await a.$executeRaw`INSERT INTO Membership (id,workspaceId,userId,role,status,updatedAt) VALUES (${`m-${owner}`},${ws},${owner},'OWNER','ACTIVE',NOW(3))`;
     await a.$executeRaw`INSERT INTO Workspace (id,name,slug,updatedAt) VALUES (${qws},'Synthetic quote',${qws},NOW(3))`;
     await a.$executeRaw`INSERT INTO Membership (id,workspaceId,userId,role,status,updatedAt) VALUES (${`mq-${owner}`},${qws},${owner},'OWNER','ACTIVE',NOW(3))`;
+    // Platform finance maker and checker (S2-c / S3-e) for credit facilities, in the reserved workspace.
+    const existing = await a.workspace.findUnique({ where: { systemKey: "helm_reserved_primary" }, select: { id: true } });
+    const reserved = existing?.id ?? `resv-reserved-${run}`;
+    if (!existing) await a.$executeRaw`INSERT INTO Workspace (id,name,slug,workspaceClass,systemKey,updatedAt)
+      VALUES (${reserved},'Synthetic reserved',${reserved},'HELM_RESERVED','helm_reserved_primary',NOW(3))`;
+    for (const [userId, role] of [[admin, "OWNER"], [maker, "MEMBER"], [checker, "MEMBER"]]) {
+      await a.$executeRaw`INSERT INTO User (id,name,email,updatedAt) VALUES (${userId},'Synthetic',${`${userId}@example.invalid`},NOW(3))`;
+      await a.$executeRaw`INSERT INTO Membership (id,workspaceId,userId,role,status,updatedAt) VALUES (${`m-${userId}`},${reserved},${userId},${role},'ACTIVE',NOW(3))`;
+    }
+    for (const [userId, role] of [[maker, "maker"], [checker, "checker"]] as const) {
+      await grantPlatformFinanceRole(a, { actorUserId: admin, userId, role, evidenceRef: "approval:finance-roster" });
+    }
     const publish = (code: string, numerator: number, denominator: number) => publishPriceVersion(a, {
       actor: { type: "SYSTEM", ref: "synthetic-catalog" }, productCode: `synthetic.${code}${run}`, version: 1, meterUnit: "document",
       billingEventRef: "service-billing-event-v1:synthetic", acceptanceRef: "acceptance:synthetic", scopeKind: "workspace",
@@ -334,6 +349,125 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
     await a.$executeRaw`UPDATE PayerAccount SET status = 'suspended' WHERE id = ${ids.payerAccountId}`;
     expect(await q()).toEqual(rejected("grant_not_active"));
     expect(await reserve(ids, "op:susp", 1)).toEqual(rejected("grant_not_active")); // suspended never runs unbilled
+  });
+  // S3-w: an active facility; reserve counts its remaining line, settle borrows only the wallet shortfall.
+  async function credit(payerAccountId: string, limit: number) {
+    const { facility } = await proposeCreditFacility(a, { actorUserId: maker, payerAccountId, limitFen: fen(limit), validUntil: null,
+      operationKey: `credit:${payerAccountId}`, evidenceRef: "owner-ruling:synthetic" });
+    await changeCreditFacility(a, { actorUserId: checker, facilityId: facility.id, action: "approve", expectedVersion: 1, evidenceRef: "review:approve" });
+    return changeCreditFacility(a, { actorUserId: maker, facilityId: facility.id, action: "activate", expectedVersion: 2, evidenceRef: "review:activate" });
+  }
+  const draws = (payerAccountId: string) => a.fundsTransaction.count({ where: { payerAccountId, kind: "credit_draw" } });
+  const usedFen = async (payerAccountId: string) => (await a.creditFacility.findFirstOrThrow({ where: { payerAccountId } })).usedFen;
+  const topup = (payerAccountId: string, amount: number, key: string) => a.$transaction(tx => postFundsTransactionInTransaction(tx, {
+    payerAccountId, kind: "topup", operationKey: key, actor: service, evidenceRef: "verified-payment:synthetic",
+    entries: [{ account: "topup_clearing", direction: "debit", amountFen: fen(amount) }, { account: "customer_wallet_available", direction: "credit", amountFen: fen(amount) }] }));
+
+  it("reserves against wallet plus remaining credit net of holds and borrows only the settle shortfall, once", async () => {
+    const ids = await setup("enforce", 100);
+    await credit(ids.payerAccountId, 300);
+    const big = await held(ids, "op:1", 3); // 100 wallet + 300 credit covers 300
+    expect(await reserve(ids, "op:2", 2)).toEqual(rejected("insufficient_funds")); // 400 - 300 held < 200
+    const small = await held(ids, "op:3", 1);
+    const first = await settle(big.reservationId, "set:1", "3");
+    expect(first).toMatchObject({ ok: true, state: "settled", chargeFen: "300" });
+    expect(await draws(ids.payerAccountId)).toBe(1); // exactly the 200 shortfall; the wallet nets to 0
+    expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(0), credit_receivable: fen(200), charge_revenue: fen(300) });
+    expect(await usedFen(ids.payerAccountId)).toBe(fen(200));
+    const drawn = await a.fundsTransaction.findFirstOrThrow({ where: { payerAccountId: ids.payerAccountId, kind: "credit_draw" } });
+    expect(drawn).toMatchObject({ operationKey: `credit-draw:reservation:${big.reservationId}`, createdBy: "SYSTEM:synthetic-metering" });
+    await topup(ids.payerAccountId, 500, "topup:later"); // the wallet changes before a replay
+    expect(await settle(big.reservationId, "set:1", "3")).toEqual(first);
+    expect(await draws(ids.payerAccountId)).toBe(1);
+    expect(await settle(small.reservationId, "set:3", "1")).toMatchObject({ ok: true, chargeFen: "100" }); // wallet covers: no draw
+    expect(await draws(ids.payerAccountId)).toBe(1);
+    expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(400), credit_receivable: fen(200), charge_revenue: fen(400) });
+    expect((await a.$transaction(tx => recomputeFundsProjection(tx, ids.payerAccountId))).consistent).toBe(true);
+  });
+  it("settles holds taken before a reduce or revoke within the approved limit; new reserves see the tightened line", async () => {
+    const ids = await setup("enforce", 0);
+    const facility = await credit(ids.payerAccountId, 500);
+    const one = await held(ids, "op:1", 3), two = await held(ids, "op:2", 2);
+    const later = await clocked(earlyDec, 5); // finance acts after reservedAt
+    await changeCreditFacility(later, { actorUserId: checker, facilityId: facility.id, action: "reduce", expectedVersion: 3, limitFen: fen(0), evidenceRef: "review:reduce" });
+    expect(await settle(one.reservationId, "set:1", "3")).toMatchObject({ ok: true, chargeFen: "300" });
+    await changeCreditFacility(later, { actorUserId: checker, facilityId: facility.id, action: "revoke", expectedVersion: 4, evidenceRef: "review:revoke" });
+    expect(await settle(two.reservationId, "set:2", "2")).toMatchObject({ ok: true, chargeFen: "200" });
+    expect(await a.creditFacility.findUniqueOrThrow({ where: { id: facility.id } })).toMatchObject({ state: "revoked", limitFen: fen(0),
+      approvedLimitFen: fen(500), usedFen: fen(500) });
+    expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(0), credit_receivable: fen(500) });
+    expect(await reserve(ids, "op:3", 1, 0, earlyDec)).toEqual(rejected("insufficient_funds"));
+  });
+  it("never draws for a 0-fen or a shadow settle", async () => {
+    const cheap = await setup("enforce", 0, undefined, () => cheapId);
+    await credit(cheap.payerAccountId, 100);
+    const tiny = await reserve(cheap, "op:c", 3, 0, lateNov, cheapId); // 1 fen cap, covered by credit
+    expect(await settle(tiny.ok ? tiny.reservationId : "", "set:c", "1")).toMatchObject({ ok: true, chargeFen: "0" });
+    const shadow = await setup("shadow", 0);
+    await credit(shadow.payerAccountId, 1000);
+    expect(await settle((await held(shadow, "op:s", 3)).reservationId, "set:s", "3")).toMatchObject({ ok: true, chargeFen: "300" });
+    for (const ids of [cheap, shadow]) {
+      expect(await a.fundsTransaction.count({ where: { payerAccountId: ids.payerAccountId } })).toBe(0);
+      expect(await usedFen(ids.payerAccountId)).toBe(fen(0));
+    }
+  });
+  it("settles held and unknown work of a suspended, off payer with its shortfall; other draws stay refused", async () => {
+    const ids = await setup("enforce", 0);
+    await credit(ids.payerAccountId, 1000);
+    const one = await held(ids, "op:1", 3), two = await held(ids, "op:2", 2), kept = await held(ids, "op:3", 1);
+    await unknown(two.reservationId, "unk:2");
+    await a.$executeRaw`UPDATE PayerAccount SET billingMode = 'off', status = 'suspended' WHERE id = ${ids.payerAccountId}`;
+    expect(await reserve(ids, "op:new", 1)).toEqual(rejected("grant_not_active"));
+    expect(await settle(one.reservationId, "set:1", "3")).toMatchObject({ ok: true, chargeFen: "300" });
+    expect(await resolve(two.reservationId, "res:2", "settled", "2")).toMatchObject({ ok: true, chargeFen: "200" });
+    expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(0), credit_receivable: fen(500), charge_revenue: fen(500) });
+    const foreign = await held(await setup("enforce", 1000), "op:f", 1); // another payer's open reservation
+    const draw = async (sourceRef: string, reservedAt = lateNov, chargeFen = fen(1)) => (await clocked(earlyDec, 0)).$transaction(tx =>
+      drawCreditShortfallInTransaction(tx, { payerAccountId: ids.payerAccountId, chargeFen, sourceRef, actor: service, reservedAt }));
+    await expect(draw("manual:topup-gap")).rejects.toThrow("payer_account_unavailable"); // free-standing
+    await expect(draw(`reservation:${one.reservationId}`)).rejects.toThrow("credit_input_invalid"); // no longer open
+    await expect(draw(`reservation:${kept.reservationId}`, earlyDec)).rejects.toThrow("credit_input_invalid"); // not its reservedAt
+    await expect(draw(`reservation:${kept.reservationId}`, lateNov, fen(101))).rejects.toThrow("credit_input_invalid"); // above its cap
+    await expect(draw(`reservation:${foreign.reservationId}`)).rejects.toThrow("credit_input_invalid");
+    expect(await draws(ids.payerAccountId)).toBe(2);
+    expect(await settle(kept.reservationId, "set:3", "1")).toMatchObject({ ok: true, chargeFen: "100" });
+    expect(await usedFen(ids.payerAccountId)).toBe(fen(600));
+  });
+  it("lets only the in-line share of two concurrent settles borrow", async () => {
+    const ids = await setup("enforce", 100);
+    await credit(ids.payerAccountId, 100);
+    const one = await held(ids, "op:1", 1), two = await held(ids, "op:2", 1); // 100 wallet + 100 credit covers both
+    await a.$transaction(tx => postFundsTransactionInTransaction(tx, { payerAccountId: ids.payerAccountId, kind: "correction", operationKey: "corr:all",
+      actor: service, evidenceRef: "correction:synthetic", entries: [{ account: "customer_wallet_available", direction: "debit", amountFen: fen(100) },
+        { account: "correction_suspense", direction: "credit", amountFen: fen(100) }] }));
+    const pair = await Promise.all([settle(one.reservationId, "set:1", "1", "e", 0), settle(two.reservationId, "set:2", "1", "e", 1)]);
+    expect(pair.filter(result => result.ok)).toHaveLength(1);
+    expect(pair).toContainEqual(rejected("insufficient_funds"));
+    expect(await draws(ids.payerAccountId)).toBe(1);
+    expect(await usedFen(ids.payerAccountId)).toBe(fen(100));
+    expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(0), credit_receivable: fen(100), charge_revenue: fen(100) });
+    expect(await a.billingReservation.count({ where: { payerAccountId: ids.payerAccountId, state: "held" } })).toBe(1); // retryable
+  });
+  it("never deadlocks settles across 16 payers on 8 connections, half of them borrowing every charge", async () => {
+    const payers = [];
+    for (let i = 0; i < 16; i++) {
+      const ids = await setup("enforce", i % 2 ? 0 : 100000, [1000, 100000, 100000]);
+      if (i % 2) await credit(ids.payerAccountId, 100000);
+      payers.push(ids);
+    }
+    let open: string[] = [];
+    for (let round = 0; round < 8; round++) { // each payer reserves a new hold while its previous one settles
+      const reserving = Promise.all(payers.map((ids, i) => reserve(ids, `op:x${i}-${round}`, 1, (i + round) % 8)));
+      const settling = Promise.all(open.map((reservationId, i) => settle(reservationId, `set:x${i}-${round}`, "1", "e", (i + round + 3) % 8)));
+      const [reserved, settled] = await Promise.all([reserving, settling]);
+      expect([...reserved, ...settled].filter(result => !result.ok)).toEqual([]);
+      open = reserved.map(result => (result.ok ? result.reservationId : ""));
+    }
+    for (const [i, ids] of payers.entries()) { // 7 settles of 100 fen each: borrowed in full, or paid from the wallet
+      expect(await draws(ids.payerAccountId)).toBe(i % 2 ? 7 : 0);
+      expect(await balances(ids.payerAccountId)).toMatchObject(i % 2 ? { charge_revenue: fen(700), credit_receivable: fen(700) }
+        : { charge_revenue: fen(700), customer_wallet_available: fen(100000 - 700) });
+    }
   });
   it("refuses the S2-c and S2-a rollbacks while the charges migration is applied", async () => {
     // CREATE PROCEDURE cannot run over the prepared-statement protocol, so evaluate each file's first guard (the one that must
