@@ -13,6 +13,7 @@ import { MAX_FEN } from "../funds/money";
  * no lifecycle path. AuditLog goes to the actor's reserved workspace in the same transaction (as S2-c).
  * Lock order everywhere: [PlatformFinanceGrant + reserved Membership FOR SHARE] -> PayerAccount FOR UPDATE -> CreditFacility
  * FOR UPDATE -> funds rows (S2-a). Reservation/settlement (S3-b) already holds the PayerAccount lock when it calls in.
+ * V1 has no separate freeze: freezing is reduce-to-used (irreversible); restoring credit needs a new facility.
  */
 export type CreditFacilityRefusalCode = "credit_input_invalid" | "credit_forbidden" | "credit_self_approval_forbidden" |
   "credit_operation_conflict" | "credit_unavailable" | "credit_version_conflict" | "credit_transition_invalid" |
@@ -55,12 +56,14 @@ async function lockPayer(tx: Prisma.TransactionClient, payerAccountId: string) {
   return payer;
 }
 type FacilityRow = { id: string; payerAccountId: string; state: CreditFacility["state"]; limitFen: bigint; usedFen: bigint;
-  version: number; proposedByUserId: string; validUntil: Date | null; inTerm: boolean; contentHash: string };
+  approvedLimitFen: bigint | null; version: number; proposedByUserId: string; validUntil: Date | null; lastReducedAt: Date | null;
+  inTerm: boolean; contentHash: string };
 async function lockFacility(tx: Prisma.TransactionClient, where: Prisma.Sql) {
-  const [row] = await tx.$queryRaw<FacilityRow[]>`SELECT id, payerAccountId, state, limitFen, usedFen, version, proposedByUserId,
-    validUntil, contentHash, (validUntil IS NULL OR validUntil > UTC_TIMESTAMP(3)) AS inTerm FROM CreditFacility WHERE ${where} FOR UPDATE`;
+  const [row] = await tx.$queryRaw<FacilityRow[]>`SELECT id, payerAccountId, state, limitFen, usedFen, approvedLimitFen, version,
+    proposedByUserId, validUntil, lastReducedAt, contentHash, (validUntil IS NULL OR validUntil > UTC_TIMESTAMP(3)) AS inTerm
+    FROM CreditFacility WHERE ${where} ORDER BY activatedAt DESC LIMIT 1 FOR UPDATE`;
   return row ? { ...row, limitFen: BigInt(row.limitFen), usedFen: BigInt(row.usedFen), version: Number(row.version),
-    inTerm: Number(row.inTerm) === 1 } : null;
+    approvedLimitFen: row.approvedLimitFen === null ? null : BigInt(row.approvedLimitFen), inTerm: Number(row.inTerm) === 1 } : null;
 }
 const lockDrawable = (tx: Prisma.TransactionClient, payerAccountId: string) =>
   lockFacility(tx, Prisma.sql`activePayerAccountId = ${payerAccountId}`);
@@ -161,6 +164,8 @@ export async function changeCreditFacilityInTransaction(tx: Prisma.TransactionCl
     approvedByUserId = IF(${input.action === "approve"}, ${input.actorUserId}, approvedByUserId),
     approvalRef = IF(${input.action === "approve"}, ${input.evidenceRef}, approvalRef),
     approvedAt = IF(${input.action === "approve"}, UTC_TIMESTAMP(3), approvedAt),
+    approvedLimitFen = IF(${input.action === "approve"}, limitFen, approvedLimitFen),
+    lastReducedAt = IF(${input.action === "reduce"}, UTC_TIMESTAMP(3), lastReducedAt),
     activatedAt = IF(${input.action === "activate"}, UTC_TIMESTAMP(3), activatedAt),
     closedAt = IF(${closing}, UTC_TIMESTAMP(3), closedAt), version = version + 1, updatedAt = UTC_TIMESTAMP(3)
     WHERE id = ${facility.id} AND version = ${facility.version} AND state = ${facility.state}`;
@@ -183,40 +188,58 @@ export async function availableCreditFen(tx: Prisma.TransactionClient, payerAcco
   return payer.status === "active" && facility?.inTerm ? facility.limitFen - facility.usedFen : ZERO;
 }
 
-export type DrawCreditInput = { payerAccountId: string; fen: bigint; sourceRef: string; actor: FundsActor };
+/** `reservedAt`: the held reservation's DB-time creation instant, read by S3-b from its locked row. */
+export type DrawCreditShortfallInput = { payerAccountId: string; chargeFen: bigint; sourceRef: string; actor: FundsActor; reservedAt: Date };
+export type CreditShortfallDraw = { borrowedFen: bigint; facilityId: string | null; fundsTransactionId: string | null;
+  walletCovered: boolean; replayed: boolean };
 const DRAW_PREFIX = "credit-draw:", FACILITY_PREFIX = "credit-facility:";
 
 /**
- * Draws `fen` from the active facility into the customer wallet: one balanced `credit_draw` (debit credit_receivable, credit
- * customer_wallet_available) plus usedFen += fen, in the caller's transaction (S3-b settle: draw the shortfall, then charge the
- * wallet). Fails closed beyond the remaining line. Operation key `credit-draw:<sourceRef>`: the same sourceRef and amount replays
- * without a second effect, even after the facility closed; another amount refuses `funds_operation_conflict`.
+ * S3-b settle seam, in the caller's transaction under the PayerAccount lock: borrows only `max(0, chargeFen - wallet available)`
+ * into the wallet (one balanced `credit_draw`: debit credit_receivable, credit customer_wallet_available; usedFen += shortfall), so
+ * the caller can then charge the wallet in full. A shortfall of 0 writes nothing. The facility is the one drawable at `reservedAt`
+ * (else the current one). If it was revoked, reduced or expired after `reservedAt`, the held reservation still settles: state and
+ * current limit are skipped and `usedFen + shortfall <= approvedLimitFen` applies instead (protocol v3.6, S0 §5). Fails closed
+ * otherwise. Key `credit-draw:<sourceRef>`: a repeat returns the recorded draw (a larger recorded draw refuses); a settle replay
+ * that found the wallet sufficient wrote nothing, so S3-b must not call this again when it replays a settled reservation.
  */
-export async function drawCreditInTransaction(tx: Prisma.TransactionClient, input: DrawCreditInput) {
-  reference(input?.payerAccountId, "payer_account_unavailable"); positiveFen(input.fen);
-  reference(input.sourceRef);
-  if (input.sourceRef.length > 191 - DRAW_PREFIX.length) refuse("credit_input_invalid");
-  await lockPayer(tx, input.payerAccountId);
+export async function drawCreditShortfallInTransaction(tx: Prisma.TransactionClient,
+  input: DrawCreditShortfallInput): Promise<CreditShortfallDraw> {
+  reference(input?.payerAccountId, "payer_account_unavailable"); positiveFen(input.chargeFen); reference(input.sourceRef);
+  if (input.sourceRef.length > 191 - DRAW_PREFIX.length || !(input.reservedAt instanceof Date) ||
+      Number.isNaN(input.reservedAt.getTime())) refuse("credit_input_invalid");
+  if ((await lockPayer(tx, input.payerAccountId)).status !== "active") refuse("payer_account_unavailable");
   const operationKey = `${DRAW_PREFIX}${input.sourceRef}`;
-  const posting = (facilityRef: string) => postCreditDrawFundsInTransaction(tx, { payerAccountId: input.payerAccountId,
-    kind: "credit_draw", operationKey, actor: input.actor, evidenceRef: facilityRef,
-    entries: [{ account: "credit_receivable", direction: "debit", amountFen: input.fen },
-      { account: "customer_wallet_available", direction: "credit", amountFen: input.fen }] });
-  const facility = await lockDrawable(tx, input.payerAccountId);
-  const [prior] = await tx.$queryRaw<Array<{ evidenceRef: string }>>`SELECT evidenceRef FROM FundsTransaction
-    WHERE payerAccountId = ${input.payerAccountId} AND operationKey = ${operationKey} FOR SHARE`;
+  const [prior] = await tx.$queryRaw<Array<{ id: string; evidenceRef: string; amountFen: bigint }>>`
+    SELECT t.id, t.evidenceRef, e.amountFen FROM FundsTransaction t JOIN FundsJournalEntry e ON e.transactionId = t.id
+      AND e.account = 'credit_receivable' WHERE t.payerAccountId = ${input.payerAccountId} AND t.operationKey = ${operationKey} FOR SHARE`;
   if (prior) {
-    const posted = await posting(prior.evidenceRef); // replays the identical draw or refuses a different one
-    return { facilityId: prior.evidenceRef.slice(FACILITY_PREFIX.length), fundsTransactionId: posted.transaction.id, replayed: true };
+    if (BigInt(prior.amountFen) > input.chargeFen) refuse("credit_operation_conflict");
+    return { borrowedFen: BigInt(prior.amountFen), facilityId: prior.evidenceRef.slice(FACILITY_PREFIX.length),
+      fundsTransactionId: prior.id, walletCovered: false, replayed: true };
   }
-  if (!facility || !facility.inTerm) refuse("credit_not_active");
-  if (input.fen > facility.limitFen - facility.usedFen) refuse("credit_insufficient");
+  // Lock order PayerAccount -> CreditFacility -> funds rows. Prefer the facility drawable when the reservation was taken.
+  const held = await lockFacility(tx, Prisma.sql`payerAccountId = ${input.payerAccountId} AND activatedAt <= ${input.reservedAt}
+    AND (closedAt IS NULL OR closedAt > ${input.reservedAt}) AND (validUntil IS NULL OR validUntil > ${input.reservedAt})`);
+  const facility = held ?? await lockDrawable(tx, input.payerAccountId);
+  const [wallet] = await tx.$queryRaw<Array<{ balanceFen: bigint }>>`SELECT balanceFen FROM FundsAccountProjection
+    WHERE payerAccountId = ${input.payerAccountId} AND account = 'customer_wallet_available' FOR UPDATE`;
+  const shortfall = input.chargeFen - (wallet ? BigInt(wallet.balanceFen) : ZERO);
+  if (shortfall <= ZERO) return { borrowedFen: ZERO, facilityId: null, fundsTransactionId: null, walletCovered: true, replayed: false };
+  if (!facility || facility.approvedLimitFen === null || (!held && !facility.inTerm)) refuse("credit_not_active");
+  // Tightened after reservedAt: only possible for the facility that was drawable then; it falls back to the approved cap.
+  const tightened = (facility.state !== "active" && facility.state !== "reduced") || !facility.inTerm ||
+    (facility.lastReducedAt !== null && facility.lastReducedAt > input.reservedAt);
+  const cap = tightened ? facility.approvedLimitFen : facility.limitFen;
+  if (facility.usedFen + shortfall > cap) refuse("credit_insufficient");
   // Guarded by its own predicate under the row lock; `version` stays (it versions configuration, not usage).
-  const changed = await tx.$executeRaw`UPDATE CreditFacility SET usedFen = usedFen + ${input.fen},
-    updatedAt = UTC_TIMESTAMP(3) WHERE id = ${facility.id} AND state IN ('active', 'reduced')
-      AND usedFen + ${input.fen} <= limitFen AND (validUntil IS NULL OR validUntil > UTC_TIMESTAMP(3))`;
+  const changed = await tx.$executeRaw`UPDATE CreditFacility SET usedFen = usedFen + ${shortfall}, updatedAt = UTC_TIMESTAMP(3)
+    WHERE id = ${facility.id} AND usedFen + ${shortfall} <= ${cap} AND usedFen + ${shortfall} <= approvedLimitFen`;
   if (changed !== 1) refuse("credit_insufficient");
-  const posted = await posting(`${FACILITY_PREFIX}${facility.id}`);
+  const posted = await postCreditDrawFundsInTransaction(tx, { payerAccountId: input.payerAccountId, kind: "credit_draw", operationKey,
+    actor: input.actor, evidenceRef: `${FACILITY_PREFIX}${facility.id}`,
+    entries: [{ account: "credit_receivable", direction: "debit", amountFen: shortfall },
+      { account: "customer_wallet_available", direction: "credit", amountFen: shortfall }] });
   if (posted.replayed) refuse("credit_write_conflict"); // checked absent above under the same locks
-  return { facilityId: facility.id, fundsTransactionId: posted.transaction.id, replayed: false };
+  return { borrowedFen: shortfall, facilityId: facility.id, fundsTransactionId: posted.transaction.id, walletCovered: false, replayed: false };
 }

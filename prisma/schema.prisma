@@ -2209,6 +2209,7 @@ model CreditFacility {
   payerAccountId       String              @db.VarChar(191)
   state                CreditFacilityState @default(draft)
   limitFen             BigInt              @default(0)
+  approvedLimitFen     BigInt? // frozen at approval: the exposure cap, also for reservations held before a tightening
   usedFen              BigInt              @default(0)
   validUntil           DateTime?
   // Equals payerAccountId while active or reduced, NULL otherwise: the unique key admits one drawable facility per payer.
@@ -2221,6 +2222,7 @@ model CreditFacility {
   approvalRef          String?             @db.VarChar(191)
   approvedAt           DateTime?
   activatedAt          DateTime?
+  lastReducedAt        DateTime?
   closedAt             DateTime?
   version              Int                 @default(1)
   createdAt            DateTime            @default(now())

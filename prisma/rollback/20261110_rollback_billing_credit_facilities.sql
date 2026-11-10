@@ -1,8 +1,7 @@
--- Rollback of 20261110200100_billing_credit_funds_enums and 20261110200000_billing_credit_facilities, unused migrations only;
--- stop all writers first. Refuses while any facility, `credit_draw` or `credit_receivable` row exists; shrinks the ENUMs back;
--- run before the S2-c/S2-a rollbacks.
--- DROP TABLE removes the triggers; the final DELETE lets `prisma migrate deploy` re-apply both migrations.
--- The ENUM lists below are the pre-S3-e values on the integration branch; if another slice appended values since, keep those.
+-- Rollback of 20261110220000_billing_credit_funds_enums and 20261110215000_billing_credit_facilities, unused migrations only;
+-- stop all writers first. Refuses while any facility, `credit_draw` or `credit_receivable` row exists. Shrinks the funds ENUMs to
+-- the current union minus this slice's two values (protocol v3.6). Order: this S3-e rollback first, then S3-b2 charges, then
+-- reservations / S2-c. DROP TABLE removes the triggers; the final DELETE lets `prisma migrate deploy` re-apply both migrations.
 DROP PROCEDURE IF EXISTS `rollback_empty_billing_credit_facilities`;
 
 DELIMITER $$
@@ -17,11 +16,11 @@ BEGIN
   END IF;
 
   DROP TABLE `CreditFacility`;
-  ALTER TABLE `FundsAccountProjection` MODIFY `account` ENUM('customer_wallet_available', 'topup_clearing', 'correction_suspense', 'bank_clearing') NOT NULL;
-  ALTER TABLE `FundsJournalEntry` MODIFY `account` ENUM('customer_wallet_available', 'topup_clearing', 'correction_suspense', 'bank_clearing') NOT NULL;
-  ALTER TABLE `FundsTransaction` MODIFY `kind` ENUM('topup', 'correction', 'bank_topup') NOT NULL;
-  DELETE FROM `_prisma_migrations` WHERE `migration_name` IN ('20261110200100_billing_credit_funds_enums',
-    '20261110200000_billing_credit_facilities');
+  ALTER TABLE `FundsAccountProjection` MODIFY `account` ENUM('customer_wallet_available', 'topup_clearing', 'correction_suspense', 'bank_clearing', 'charge_revenue') NOT NULL;
+  ALTER TABLE `FundsJournalEntry` MODIFY `account` ENUM('customer_wallet_available', 'topup_clearing', 'correction_suspense', 'bank_clearing', 'charge_revenue') NOT NULL;
+  ALTER TABLE `FundsTransaction` MODIFY `kind` ENUM('topup', 'correction', 'bank_topup', 'charge') NOT NULL;
+  DELETE FROM `_prisma_migrations` WHERE `migration_name` IN ('20261110220000_billing_credit_funds_enums',
+    '20261110215000_billing_credit_facilities');
 END$$
 
 DELIMITER ;

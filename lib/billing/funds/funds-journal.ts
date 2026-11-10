@@ -53,9 +53,7 @@ export function normalizeFundsPosting(input: PostFundsInput, reversalOfId: strin
   reference(input.payerAccountId); reference(input.operationKey); reference(input.evidenceRef);
   if (!input.actor || (input.actor.type !== "USER" && input.actor.type !== "SYSTEM")) refuse("funds_input_invalid");
   reference(input.actor.ref);
-  if (input.kind !== "topup" && input.kind !== "correction" && input.kind !== "bank_topup" && input.kind !== "credit_draw") {
-    refuse("funds_input_invalid");
-  }
+  if (!["topup", "correction", "bank_topup", "credit_draw"].includes(input.kind)) refuse("funds_input_invalid");
   // S3-e: a credit draw must move the facility's usedFen in the same transaction, so only the credit module may post one.
   if ((input.kind === "credit_draw") !== creditDraw) refuse("funds_accounts_not_allowed");
   if (reversalOfId !== null && input.kind !== "correction") refuse("funds_input_invalid");

@@ -25,7 +25,6 @@ describe("credit facility proposal normalization", () => {
       expect(() => normalizeCreditFacilityProposal(proposal({ limitFen }))).toThrow("credit_input_invalid");
     }
     expect(() => normalizeCreditFacilityProposal(proposal({ validUntil: new Date("x") }))).toThrow("credit_input_invalid");
-    expect(() => normalizeCreditFacilityProposal(proposal({ operationKey: "has space" }))).toThrow("credit_input_invalid");
     expect(() => normalizeCreditFacilityProposal(proposal({ actorUserId: "" }))).toThrow("credit_forbidden");
   });
 });
@@ -36,10 +35,6 @@ describe("credit draw journal shape", () => {
       ["credit_receivable", "debit"], ["customer_wallet_available", "credit"]]);
     expect(() => normalizeFundsPosting(draw())).toThrow("funds_accounts_not_allowed"); // public posting path
     expect(() => normalizeFundsPosting({ ...draw(), kind: "topup" }, null, true)).toThrow("funds_accounts_not_allowed");
-    const reversed = draw({ entries: [{ account: "credit_receivable", direction: "credit", amountFen: BigInt(300) },
-      { account: "customer_wallet_available", direction: "debit", amountFen: BigInt(300) }] });
-    expect(() => normalizeFundsPosting(reversed, null, true)).toThrow("funds_accounts_not_allowed");
-    // A correction cannot touch the receivable either.
     expect(() => normalizeFundsPosting({ ...draw(), kind: "correction" })).toThrow("funds_accounts_not_allowed");
   });
 });

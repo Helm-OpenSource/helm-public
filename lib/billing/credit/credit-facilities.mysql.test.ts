@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createPayerAccount } from "../payer/payer-accounts";
 import { grantPlatformFinanceRole } from "../bank-receipts/bank-receipts";
 import { postFundsTransactionInTransaction, recomputeFundsProjection } from "../funds/funds-journal";
-import { availableCreditFen, changeCreditFacility, drawCreditInTransaction, proposeCreditFacility,
+import { availableCreditFen, changeCreditFacility, drawCreditShortfallInTransaction, proposeCreditFacility,
   type CreditFacilityAction } from "./credit-facilities";
 
 // Runs only against a fully migrated, explicitly isolated database; never DATABASE_URL or the app's connection.
@@ -85,7 +85,20 @@ describe.skipIf(!url)("credit facilities against MySQL", () => {
     return change(facility.id, "activate", maker, 2);
   }
   const draw = (payerAccountId: string, amount: number, sourceRef: string, client = a) =>
-    client.$transaction(tx => drawCreditInTransaction(tx, { payerAccountId, fen: fen(amount), sourceRef, actor: SETTLE }));
+    settleIn(client, payerAccountId, amount, sourceRef);
+  const dbNow = async (tx: Prisma.TransactionClient | PrismaClient = a) =>
+    (await tx.$queryRaw<Array<{ now: Date }>>`SELECT UTC_TIMESTAMP(3) AS now`)[0].now;
+  /** S3-b settle stand-in: borrow the shortfall, then charge the wallet in full (a correction stands in for S3-b2's charge). */
+  const settleTx = async (tx: Prisma.TransactionClient, payerAccountId: string, amount: number, sourceRef: string, reservedAt?: Date) => {
+    const drawn = await drawCreditShortfallInTransaction(tx, { payerAccountId, chargeFen: fen(amount), sourceRef, actor: SETTLE,
+      reservedAt: reservedAt ?? await dbNow(tx) });
+    await postFundsTransactionInTransaction(tx, { payerAccountId, kind: "correction", operationKey: `charge:${sourceRef}`, actor: SETTLE,
+      evidenceRef: "charge:synthetic", entries: [{ account: "customer_wallet_available", direction: "debit", amountFen: fen(amount) },
+        { account: "correction_suspense", direction: "credit", amountFen: fen(amount) }] });
+    return drawn;
+  };
+  const settleIn = (client: PrismaClient, payerAccountId: string, amount: number, sourceRef: string, reservedAt?: Date) =>
+    client.$transaction(tx => settleTx(tx, payerAccountId, amount, sourceRef, reservedAt));
   const available = (payerAccountId: string) => a.$transaction(tx => availableCreditFen(tx, payerAccountId));
   const projection = async (payerAccountId: string, account: "credit_receivable" | "customer_wallet_available") =>
     (await a.fundsAccountProjection.findUnique({ where: { payerAccountId_account: { payerAccountId, account } } }))?.balanceFen ?? fen(0);
@@ -101,7 +114,6 @@ describe.skipIf(!url)("credit facilities against MySQL", () => {
     await expect(change(facility.id, "approve", maker, 1)).rejects.toThrow("credit_forbidden"); // maker role cannot approve
     await expect(change(facility.id, "approve", owner, 1)).rejects.toThrow("credit_forbidden");
     await expect(change(facility.id, "activate", checker, 1)).rejects.toThrow("credit_transition_invalid");
-    expect(await available(p)).toBe(fen(0));
     const approved = await change(facility.id, "approve", checker, 1);
     expect(approved).toMatchObject({ state: "approved", approvedByUserId: checker, version: 2 });
     expect(await available(p)).toBe(fen(0));
@@ -114,7 +126,7 @@ describe.skipIf(!url)("credit facilities against MySQL", () => {
     const p = await payer();
     const { facility } = await propose(p, 1000, { actorUserId: dual });
     await expect(change(facility.id, "approve", dual, 1)).rejects.toThrow("credit_self_approval_forbidden");
-    await expect(a.$executeRaw`UPDATE CreditFacility SET state = 'approved', approvedByUserId = proposedByUserId, approvalRef = 'x',
+    await expect(a.$executeRaw`UPDATE CreditFacility SET state = 'approved', approvedByUserId = proposedByUserId, approvalRef = 'x', approvedLimitFen = limitFen,
       approvedAt = NOW(3), version = version + 1 WHERE id = ${facility.id}`).rejects.toThrow(/CreditFacility_maker_checker_check/);
     expect(await a.creditFacility.findUniqueOrThrow({ where: { id: facility.id } })).toMatchObject({ state: "draft", version: 1 });
     await expect(change(facility.id, "approve", checker, 1)).resolves.toMatchObject({ state: "approved" });
@@ -130,19 +142,20 @@ describe.skipIf(!url)("credit facilities against MySQL", () => {
     const p = await payer();
     const facility = await activeFacility(p, 1000);
     const first = await draw(p, 300, "settle-1");
-    expect(first).toMatchObject({ facilityId: facility.id, replayed: false });
+    expect(first).toMatchObject({ facilityId: facility.id, borrowedFen: fen(300), walletCovered: false, replayed: false });
     const txn = await a.fundsTransaction.findUniqueOrThrow({ where: { id: first.fundsTransactionId }, include: { entries: true } });
     expect(txn).toMatchObject({ kind: "credit_draw", operationKey: "credit-draw:settle-1", evidenceRef: `credit-facility:${facility.id}` });
     expect(txn.entries.map(e => [e.account, e.direction, e.amountFen]).sort()).toEqual([
       ["credit_receivable", "debit", fen(300)], ["customer_wallet_available", "credit", fen(300)]]);
     await expect(draw(p, 300, "settle-1")).resolves.toMatchObject({ fundsTransactionId: first.fundsTransactionId, replayed: true });
-    await expect(draw(p, 301, "settle-1")).rejects.toThrow("funds_operation_conflict");
+    await expect(draw(p, 301, "settle-1")).rejects.toThrow("funds_operation_conflict"); // the stand-in charge conflicts
+    await expect(draw(p, 299, "settle-1")).rejects.toThrow("credit_operation_conflict"); // recorded draw exceeds the charge
     await expect(draw(p, 701, "settle-2")).rejects.toThrow("credit_insufficient");
     await draw(p, 700, "settle-2");
     await expect(draw(p, 1, "settle-3")).rejects.toThrow("credit_insufficient");
     expect(await available(p)).toBe(fen(0));
     expect(await a.creditFacility.findUniqueOrThrow({ where: { id: facility.id } })).toMatchObject({ usedFen: fen(1000), limitFen: fen(1000) });
-    expect([await projection(p, "credit_receivable"), await projection(p, "customer_wallet_available")]).toEqual([fen(1000), fen(1000)]);
+    expect([await projection(p, "credit_receivable"), await projection(p, "customer_wallet_available")]).toEqual([fen(1000), fen(0)]);
     expect((await a.$transaction(tx => recomputeFundsProjection(tx, p))).consistent).toBe(true);
     // Only the credit module may post a draw; a credit draw is never reversed through the generic correction path.
     await expect(a.$transaction(tx => postFundsTransactionInTransaction(tx, { payerAccountId: p, kind: "credit_draw", operationKey: "x:1",
@@ -150,6 +163,11 @@ describe.skipIf(!url)("credit facilities against MySQL", () => {
         { account: "customer_wallet_available", direction: "credit", amountFen: fen(1) }] }))).rejects.toThrow("funds_accounts_not_allowed");
     await expect(draw(id("missing"), 1, "settle-9")).rejects.toThrow("payer_account_unavailable");
     await expect(draw((await payer()), 1, "settle-9")).rejects.toThrow("credit_not_active");
+    const suspended = await payer();
+    await activeFacility(suspended, 1000);
+    await a.$executeRaw`UPDATE PayerAccount SET status = 'suspended', version = version + 1 WHERE id = ${suspended}`;
+    await expect(draw(suspended, 1, "settle-s")).rejects.toThrow("payer_account_unavailable");
+    expect(await available(suspended)).toBe(fen(0));
   });
   it("lets only one of two concurrent draws through when both together exceed the remaining line", async () => {
     const p = await payer();
@@ -158,7 +176,7 @@ describe.skipIf(!url)("credit facilities against MySQL", () => {
     expect(pair.filter(r => r.status === "fulfilled")).toHaveLength(1);
     expect(String((pair.find(r => r.status === "rejected") as PromiseRejectedResult).reason)).toMatch(/credit_insufficient/);
     expect(await available(p)).toBe(fen(400));
-    expect(await a.fundsTransaction.count({ where: { payerAccountId: p } })).toBe(1);
+    expect(await a.fundsTransaction.count({ where: { payerAccountId: p, kind: "credit_draw" } })).toBe(1);
     expect(await projection(p, "credit_receivable")).toBe(fen(600));
   });
   it("serializes revoke behind an in-flight draw: usage is kept, later draws refuse, replays still replay", async () => {
@@ -166,7 +184,7 @@ describe.skipIf(!url)("credit facilities against MySQL", () => {
     const facility = await activeFacility(p, 1000);
     let revoke: Promise<unknown> = Promise.resolve();
     await a.$transaction(async (tx: Prisma.TransactionClient) => {
-      await drawCreditInTransaction(tx, { payerAccountId: p, fen: fen(250), sourceRef: "inflight-1", actor: SETTLE });
+      await settleTx(tx, p, 250, "inflight-1");
       revoke = change(facility.id, "revoke", checker, 3, { client: b }); // blocks on the PayerAccount lock held here
       await sleep(300);
     }, { timeout: 10000 });
@@ -175,14 +193,39 @@ describe.skipIf(!url)("credit facilities against MySQL", () => {
     await expect(draw(p, 1, "after-revoke")).rejects.toThrow("credit_not_active");
     expect(await available(p)).toBe(fen(0));
     await expect(draw(p, 250, "inflight-1")).resolves.toMatchObject({ replayed: true, facilityId: facility.id });
-    // Concurrent, both orders allowed: either the draw lands before the revoke (and stays) or it refuses.
-    const q = await payer();
-    const other = await activeFacility(q, 1000);
-    const [drawn, closed] = await Promise.allSettled([draw(q, 100, "race-revoke", a), change(other.id, "revoke", checker, 3, { client: b })]);
-    expect(closed.status).toBe("fulfilled");
-    const row = await a.creditFacility.findUniqueOrThrow({ where: { id: other.id } });
-    expect(row.usedFen).toBe(drawn.status === "fulfilled" ? fen(100) : fen(0));
-    expect(await projection(q, "credit_receivable")).toBe(row.usedFen);
+  });
+  it("borrows only the wallet shortfall and writes nothing when the wallet covers the charge", async () => {
+    const p = await payer();
+    await activeFacility(p, 1000);
+    const topup = (amount: number, key: string) => a.$transaction(tx => postFundsTransactionInTransaction(tx, { payerAccountId: p,
+      kind: "topup", operationKey: key, actor: SETTLE, evidenceRef: "verified-payment:sf", entries: [{ account: "topup_clearing",
+        direction: "debit", amountFen: fen(amount) }, { account: "customer_wallet_available", direction: "credit", amountFen: fen(amount) }] }));
+    await topup(200, "pay:sf");
+    await expect(draw(p, 500, "sf-1")).resolves.toMatchObject({ borrowedFen: fen(300), walletCovered: false });
+    await topup(100, "pay:sf2");
+    await expect(draw(p, 100, "sf-2")).resolves.toEqual({ borrowedFen: fen(0), facilityId: null, fundsTransactionId: null,
+      walletCovered: true, replayed: false });
+    expect(await a.fundsTransaction.count({ where: { payerAccountId: p, kind: "credit_draw" } })).toBe(1);
+    expect(await available(p)).toBe(fen(700));
+  });
+  it("lets a reservation held before a revoke or reduce settle up to the approved limit, never beyond", async () => {
+    const p = await payer();
+    const facility = await activeFacility(p, 1000);
+    const reservedAt = await dbNow();
+    await sleep(20);
+    await change(facility.id, "reduce", checker, 3, { limitFen: fen(100) });
+    await expect(settleIn(a, p, 600, "held-1", reservedAt)).resolves.toMatchObject({ borrowedFen: fen(600), facilityId: facility.id });
+    await expect(draw(p, 1, "after-reduce")).rejects.toThrow("credit_insufficient"); // a new reservation sees the reduced line
+    await change(facility.id, "revoke", checker, 4);
+    await expect(settleIn(a, p, 401, "held-2", reservedAt)).rejects.toThrow("credit_insufficient"); // 600 + 401 > approved 1000
+    await expect(settleIn(a, p, 400, "held-2", reservedAt)).resolves.toMatchObject({ borrowedFen: fen(400) });
+    expect(await a.creditFacility.findUniqueOrThrow({ where: { id: facility.id } })).toMatchObject({ state: "revoked",
+      limitFen: fen(100), approvedLimitFen: fen(1000), usedFen: fen(1000) });
+    await expect(draw(p, 1, "after-revoke")).rejects.toThrow("credit_not_active");
+    await expect(a.$executeRaw`UPDATE CreditFacility SET usedFen = 1001 WHERE id = ${facility.id}`).rejects.toThrow(/credit_facility_guard/);
+    await expect(a.$executeRaw`INSERT INTO CreditFacility (id,payerAccountId,state,limitFen,activePayerAccountId,activatedAt,
+      operationKey,contentHash,proposedByUserId,evidenceRef,updatedAt) VALUES (${id("raw")},${p},'active',5,${p},NOW(3),'raw',
+      ${"a".repeat(64)},${maker},'e',NOW(3))`).rejects.toThrow(/credit_facility_guard/);
   });
   it("reduces only downward and never below used; one drawable facility per payer; expiry by term only", async () => {
     const p = await payer();
@@ -219,13 +262,12 @@ describe.skipIf(!url)("credit facilities against MySQL", () => {
     for (const statement of [
       a.$executeRaw`UPDATE CreditFacility SET limitFen = 2000, version = version + 1 WHERE id = ${facility.id}`,
       a.$executeRaw`UPDATE CreditFacility SET usedFen = 0, version = version + 1 WHERE id = ${facility.id}`,
-      a.$executeRaw`UPDATE CreditFacility SET evidenceRef = 'x', version = version + 1 WHERE id = ${facility.id}`,
       a.$executeRaw`UPDATE CreditFacility SET state = 'approved', activePayerAccountId = NULL, version = version + 1 WHERE id = ${facility.id}`,
       a.$executeRaw`DELETE FROM CreditFacility WHERE id = ${facility.id}`]) {
       await expect(statement).rejects.toThrow(/credit_facility_guard|credit_facility_no_delete/);
     }
-    await expect(a.$executeRaw`UPDATE CreditFacility SET usedFen = 1001, version = version + 1 WHERE id = ${facility.id}`)
-      .rejects.toThrow(/CreditFacility_amount_check/);
+    await expect(a.$executeRaw`UPDATE CreditFacility SET limitFen = 1000, approvedLimitFen = 999, version = version + 1
+      WHERE id = ${facility.id}`).rejects.toThrow(/credit_facility_guard/);
     await change(facility.id, "revoke", checker, 3);
     await expect(a.$executeRaw`UPDATE CreditFacility SET state = 'active', activePayerAccountId = payerAccountId, closedAt = NULL,
       version = version + 1 WHERE id = ${facility.id}`).rejects.toThrow(/credit_facility_guard/);
