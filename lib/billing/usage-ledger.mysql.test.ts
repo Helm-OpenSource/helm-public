@@ -51,7 +51,11 @@ describe.skipIf(!socket && !ciUrl)("persisted usage observation concurrency", ()
         "CREATE TABLE Membership (id VARCHAR(191) PRIMARY KEY,workspaceId VARCHAR(191),userId VARCHAR(191),role VARCHAR(32),status VARCHAR(32) DEFAULT 'ACTIVE',accessScope VARCHAR(64) NULL,updatedAt DATETIME(3),UNIQUE KEY (workspaceId,userId))",
         `CREATE TABLE UsageLedger (id VARCHAR(191) PRIMARY KEY,workspaceId VARCHAR(191) NOT NULL,userId VARCHAR(191),usageType ENUM(${Object.values(UsageType).map(t => `'${t}'`).join(",")}) NOT NULL,quantity INT NOT NULL DEFAULT 1,metadata LONGTEXT,sourcePage VARCHAR(191),recordedAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3))`,
         "CREATE TABLE BriefingSnapshot (id VARCHAR(191) PRIMARY KEY,workspaceId VARCHAR(191),objectType VARCHAR(191),objectId VARCHAR(191),snapshotType VARCHAR(191),content LONGTEXT,sourceFactIds LONGTEXT,sourceCommitmentIds LONGTEXT,sourceBlockerIds LONGTEXT,generatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),expiresAt DATETIME(3),version INT DEFAULT 1)",
-        "CREATE TABLE LLMSpendLedgerEntry (id VARCHAR(191) PRIMARY KEY,workspaceId VARCHAR(191),periodKey VARCHAR(191),periodPolicyVersion VARCHAR(191),attemptRef VARCHAR(191),state VARCHAR(191),reservedMicros BIGINT,settledMicros BIGINT,provider VARCHAR(191),model VARCHAR(191),expiresAt DATETIME(3),updatedAt DATETIME(3))",
+        // Mirrors the settled/reserved shape CHECKs of 20260917200000_llm_spend_ledger_candidate so the
+        // socket target rejects the same fixture rows the fully migrated CI schema rejects.
+        "CREATE TABLE LLMSpendLedgerEntry (id VARCHAR(191) PRIMARY KEY,workspaceId VARCHAR(191),periodKey VARCHAR(191),periodPolicyVersion VARCHAR(191),attemptRef VARCHAR(191),state VARCHAR(191),reservedMicros BIGINT,settledMicros BIGINT,usageState VARCHAR(16) NULL,provider VARCHAR(191),model VARCHAR(191),settledAt DATETIME(3) NULL,expiresAt DATETIME(3),updatedAt DATETIME(3)," +
+          "CONSTRAINT LLMSpendLedgerEntry_settled_shape_check CHECK (state <> 'settled' OR (settledMicros IS NOT NULL AND settledAt IS NOT NULL))," +
+          "CONSTRAINT LLMSpendLedgerEntry_reserved_shape_check CHECK (state <> 'reserved' OR (settledMicros IS NULL AND settledAt IS NULL)))",
       ]) await a.$executeRawUnsafe(sql);
       await a.$executeRawUnsafe(readFileSync(new URL("../../prisma/migrations/20261109130000_usage_ledger_idempotency/migration.sql", import.meta.url), "utf8"));
       await a.$executeRawUnsafe(readFileSync(new URL("../../prisma/migrations/20261003190000_ordinary_llm_workflow_operation/migration.sql", import.meta.url), "utf8"));
@@ -168,9 +172,9 @@ describe.skipIf(!socket && !ciUrl)("persisted usage observation concurrency", ()
     const input = await briefing("rollback");
     const previous = await a.briefingSnapshot.create({ data: { ...input.data, content: "legacy" } });
     const costId = `cost-${run}`;
-    await a.$executeRaw`INSERT INTO LLMSpendLedgerEntry (id,workspaceId,periodKey,periodPolicyVersion,attemptRef,state,reservedMicros,settledMicros,provider,model,expiresAt,updatedAt)
-      VALUES (${costId},${workspace},'synthetic-period','v1',${costId},'settled',100,80,'synthetic','synthetic',NOW(3),NOW(3))`;
-    const costs = () => a.$queryRaw`SELECT id,state,reservedMicros,settledMicros FROM LLMSpendLedgerEntry WHERE id=${costId}`;
+    await a.$executeRaw`INSERT INTO LLMSpendLedgerEntry (id,workspaceId,periodKey,periodPolicyVersion,attemptRef,state,reservedMicros,settledMicros,usageState,provider,model,settledAt,expiresAt,updatedAt)
+      VALUES (${costId},${workspace},'synthetic-period','v1',${costId},'settled',100,80,'known','synthetic','synthetic',NOW(3),NOW(3),NOW(3))`;
+    const costs = () => a.$queryRaw`SELECT id,state,reservedMicros,settledMicros,usageState,settledAt FROM LLMSpendLedgerEntry WHERE id=${costId}`;
     const before = await costs();
     await expect(a.$transaction(async tx => {
       await persistAcceptedBriefingInTransaction(tx, input); throw new Error("synthetic_after_usage_failure");
