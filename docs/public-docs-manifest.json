@@ -33,6 +33,7 @@
     "docs/operations/BILLING_TOPUP_ORDERS.md",
     "docs/operations/BILLING_BANK_RECEIPTS.md",
     "docs/operations/BILLING_PRICE_GRANTS.md",
+    "docs/operations/BILLING_RESERVATIONS.md",
     "docs/operations/MEMBERSHIP_AUTO_ACTIVATION.md",
     "docs/operations/HELM_OPC_WEEKLY_PACKET_TEMPLATE.md",
     "docs/operations/HELM_OPEN_SOURCE_GROWTH_7_DAY_OPERATING_PLAN_2026-06-02.md",

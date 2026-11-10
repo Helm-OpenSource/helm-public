@@ -2068,6 +2068,86 @@ model SpendGrant {
   @@index([payerAccountId, state])
 }
 
+// Billing V1 budget buckets and reservations (S3-b): counters move only under the PayerAccount lock; reservation snapshots are
+// frozen (DB triggers). Shadow runs the full lifecycle in its own bucket counters and never moves money (protocol v2).
+enum BillingReservationMode {
+  shadow
+  enforce
+}
+
+enum BudgetPeriodKind {
+  day
+  month
+}
+
+enum BillingReservationState {
+  held
+  unknown
+  settled
+  released
+}
+
+enum BillingReleaseReason {
+  not_executed
+  failed
+  partial_unusable
+  unknown_released // resolveUnknown (reconciliation channel), S3-b2
+}
+
+model BudgetBucket {
+  grantId        String                 @db.VarChar(191)
+  billingMode    BillingReservationMode // shadow counts never consume enforce limits
+  periodKind     BudgetPeriodKind
+  periodKey      String           @db.VarChar(10) // Asia/Shanghai YYYY-MM-DD or YYYY-MM
+  payerAccountId String           @db.VarChar(191)
+  settledFen     BigInt           @default(0)
+  reservedFen    BigInt           @default(0) // held + unknown reservations
+  version        Int              @default(0)
+  updatedAt      DateTime         @updatedAt
+
+  @@id([grantId, billingMode, periodKind, periodKey])
+}
+
+model BillingReservation {
+  id                    String                  @id @default(cuid())
+  payerAccountId        String                  @db.VarChar(191)
+  idempotencyKey        String                  @db.VarChar(191)
+  operationRef          String                  @db.VarChar(191) // the business operation; one reservation per payer
+  contentHash           String                  @db.Char(64)
+  grantId               String                  @db.VarChar(191)
+  grantVersion          Int
+  productId             String                  @db.VarChar(191)
+  priceVersionId        String                  @db.VarChar(191)
+  priceContentHash      String                  @db.Char(64)
+  billingEventRef       String                  @db.VarChar(191)
+  meterUnit             String                  @db.VarChar(32)
+  quantity              BigInt
+  chargeFen             BigInt // the hold: priced from the bound price row at reserve time
+  billingMode           BillingReservationMode
+  reservedAt            DateTime // database UTC_TIMESTAMP(3) of the admission, never a caller value
+  dayKey                String                  @db.VarChar(10)
+  monthKey              String                  @db.VarChar(7)
+  state                 BillingReservationState @default(held)
+  version               Int                     @default(1)
+  createdBy             String                  @db.VarChar(191)
+  unknownKey            String?                 @db.VarChar(191)
+  unknownEvidenceRef    String?                 @db.VarChar(191)
+  unknownAt             DateTime?
+  resolutionKey         String?                 @db.VarChar(191)
+  releaseReason         BillingReleaseReason?
+  resolutionEvidenceRef String?                 @db.VarChar(191)
+  resolvedBy            String?                 @db.VarChar(191)
+  resolvedAt            DateTime?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  @@unique([payerAccountId, idempotencyKey])
+  @@unique([payerAccountId, operationRef])
+  @@unique([payerAccountId, unknownKey])
+  @@unique([payerAccountId, resolutionKey])
+  @@index([payerAccountId, state])
+}
+
 // Billing V1 wallet top-up orders (S2-b). The persisted orderType keeps top-ups apart from legacy subscription orders.
 enum PaymentOrderType {
   wallet_topup
