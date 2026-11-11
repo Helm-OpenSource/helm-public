@@ -22,7 +22,7 @@ import "server-only";
 //
 // No plaintext token is stored, logged or put in an error or audit payload.
 
-import { MembershipStatus, Prisma, WorkspaceRole } from "@prisma/client";
+import { MembershipStatus, Prisma, WorkspaceRole, WorkspaceStatus } from "@prisma/client";
 import { externalScopeOf } from "@/lib/auth/external-member-scope";
 import { db } from "@/lib/db";
 import {
@@ -319,10 +319,11 @@ const REFRESH_WINDOW_MS = 60 * 1000;
 
 // What the bound member allows, read outside the transaction (P2-7) with
 // the same checks as the extension's device branch (design §6.2, §15.6.4):
-// the same ACTIVE, internal membership and an unchanged password. A member
-// who fails them is revoked for good; a missing workspace cannot carry an
-// audit row and is refused without a write; a workspace whose flag is off is
-// refused and keeps the device (design §15.2: switched off is not revoked).
+// an ACTIVE workspace, the same ACTIVE, internal membership and an unchanged
+// password. A member who fails them is revoked for good. A workspace that is
+// missing (it could not carry the audit row) or not ACTIVE (a suspension can
+// be lifted) is refused without revoking, as is one whose flag is off
+// (design §15.2: switched off is not revoked).
 type RefreshStanding =
   | { ok: true }
   | { ok: false; revoke: "membership_inactive" | "password_reset" }
@@ -336,14 +337,14 @@ async function loadRefreshStanding(row: {
 }): Promise<RefreshStanding> {
   if (!row.workspaceId || !row.userId) return { ok: false, code: "account_disabled" };
   const [workspace, membership, user] = await Promise.all([
-    db.workspace.findUnique({ where: { id: row.workspaceId }, select: { featureFlagsJson: true } }),
+    db.workspace.findUnique({ where: { id: row.workspaceId }, select: { status: true, featureFlagsJson: true } }),
     db.membership.findUnique({
       where: { workspaceId_userId: { workspaceId: row.workspaceId, userId: row.userId } },
       select: { id: true, status: true, accessScope: true },
     }),
     db.user.findUnique({ where: { id: row.userId }, select: { passwordSetAt: true } }),
   ]);
-  if (!workspace) return { ok: false, code: "account_disabled" };
+  if (!workspace || workspace.status !== WorkspaceStatus.ACTIVE) return { ok: false, code: "account_disabled" };
   if (
     !membership ||
     !user ||

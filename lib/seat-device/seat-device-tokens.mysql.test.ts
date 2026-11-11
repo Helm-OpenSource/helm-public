@@ -11,7 +11,7 @@
 // file never clears a table: its clock starts years after the authorize
 // file's, so rows left by either never count toward the other's limits.
 
-import { MembershipStatus, WorkspaceRole } from "@prisma/client";
+import { MembershipStatus, WorkspaceRole, WorkspaceStatus } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { db } from "@/lib/db";
@@ -537,6 +537,19 @@ describeMysql("seat device credentials (classify, pin, revoke) on MySQL", () => 
       expect(await row(live.deviceId)).toMatchObject({ status: "revoked", revokeReason: reason, accessTokenHash: hashSeatDeviceToken(live.accessToken) });
       await expect(classifySeatDeviceAccessToken(live.accessToken, at(now, 101))).resolves.toEqual({ ok: false, code: "device_revoked" });
     }
+  });
+
+  it("refuses a suspended workspace without revoking, like the device channel", async () => {
+    const now = nextClock();
+    const live = await device(now);
+    await db.workspace.update({ where: { id: workspaceId }, data: { status: WorkspaceStatus.SUSPENDED } });
+    try {
+      await expectCode(refreshAt(live.refreshToken, at(now, 100), live.source), "account_disabled");
+    } finally {
+      await db.workspace.update({ where: { id: workspaceId }, data: { status: WorkspaceStatus.ACTIVE } });
+    }
+    expect(await row(live.deviceId)).toMatchObject({ status: "active", refreshTokenUsed: true, revokedAt: null });
+    await expect(refreshAt(live.refreshToken, at(now, 110), live.source)).resolves.toMatchObject({ expiresInSeconds: 900 });
   });
 
   it("keeps the device while the workspace is not enabled", async () => {
