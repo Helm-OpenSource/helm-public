@@ -62,6 +62,10 @@ describeMysql("seat device authorization (request, cancel) on MySQL", () => {
       throw new Error("DATABASE_URL must equal SEAT_DEVICE_DATABASE_URL for the isolated integration test.");
     }
     process.env.HELM_SEAT_DEVICE_AUTH_ENABLED = "true";
+    // The limits count rows across the whole table, so a re-run on the same
+    // disposable database starts from an empty one. This run's rows are kept:
+    // CI then checks that the rollback refuses to drop them.
+    await db.seatDeviceAuthorization.deleteMany({});
   });
 
   afterAll(async () => {
@@ -90,6 +94,10 @@ describeMysql("seat device authorization (request, cancel) on MySQL", () => {
     const stored = JSON.stringify(row);
     expect(stored).not.toContain(grant.pollToken);
     expect(stored).not.toContain(normalizeSeatDevicePairingCode(grant.pairingCode));
+
+    // Without a trusted source nothing about the address is kept.
+    const untrusted = await request(now, null);
+    expect(await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: untrusted.requestId } })).toMatchObject({ sourceIp: null, sourceBucket: null });
   });
 
   it("is unreachable while the deployment switch is off", async () => {
