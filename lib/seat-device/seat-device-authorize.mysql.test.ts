@@ -11,11 +11,12 @@
 import { MembershipStatus, WorkspaceRole } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { LOGIN_RATE_LIMIT, hashLoginIdentifier } from "@/lib/auth/login-rate-limit";
+import { hashLoginIdentifier } from "@/lib/auth/login-rate-limit";
 import { db } from "@/lib/db";
 import { classifyResetTarget } from "@/lib/db-url";
 import {
   SEAT_DEVICE_CODE_ENTRY_MAX_FAILURES,
+  SEAT_DEVICE_CODE_ENTRY_MAX_FAILURES_PER_SOURCE_BUCKET,
   SEAT_DEVICE_CODE_ENTRY_WINDOW_SECONDS,
   SEAT_DEVICE_PENDING_LIMIT_GLOBAL,
   hashSeatDevicePairingCode,
@@ -277,8 +278,8 @@ describeMysql("seat device authorization (request, decide, cancel) on MySQL", ()
 
   it("locks pairing-code entry after eight failures, before looking at the code", async () => {
     const now = nextClock();
-    expect(LOGIN_RATE_LIMIT.maxAttempts).toBe(SEAT_DEVICE_CODE_ENTRY_MAX_FAILURES);
-    expect(LOGIN_RATE_LIMIT.windowMs).toBe(SEAT_DEVICE_CODE_ENTRY_WINDOW_SECONDS * 1000);
+    expect(SEAT_DEVICE_CODE_ENTRY_MAX_FAILURES).toBe(8);
+    expect(SEAT_DEVICE_CODE_ENTRY_WINDOW_SECONDS).toBe(900);
     const source = freshSource();
     const grant = await request(now, source);
     const who = await member();
@@ -308,21 +309,44 @@ describeMysql("seat device authorization (request, decide, cancel) on MySQL", ()
     });
     expect(counter.attemptCount).toBe(SEAT_DEVICE_CODE_ENTRY_MAX_FAILURES);
 
-    // With a trusted source the address bucket locks as well, across accounts.
+  });
+
+  // Owner ruling 2026-11-11: one office shares an address bucket, so the
+  // bucket locks at 30 wrong codes in 15 minutes, for 15 minutes; each
+  // account still locks at 8, so it takes several accounts to get there.
+  it("locks a trusted address bucket after thirty failures across accounts", async () => {
+    const now = at(nextClock(), 5);
+    expect(SEAT_DEVICE_CODE_ENTRY_MAX_FAILURES_PER_SOURCE_BUCKET).toBe(30);
     const bucketSource = freshSource();
-    const first = await member();
-    const firstSession = await session(first, at(now, -60));
-    for (let index = 0; index < SEAT_DEVICE_CODE_ENTRY_MAX_FAILURES; index += 1) {
-      await expectCode(
-        lookupSeatDeviceAuthorization({ authSessionId: firstSession, userId: first.userId, pairingCode: "ZZZZZZZZ", source: bucketSource, now: at(now, 5) }),
-        "pairing_code_invalid",
-      );
-    }
-    const second = await member();
-    await expectCode(
-      lookupSeatDeviceAuthorization({ authSessionId: await session(second, at(now, -60)), userId: second.userId, pairingCode: "ZZZZZZZZ", source: bucketSource.replace(/10$/, "99"), now: at(now, 5) }),
+    const grant = await request(now, bucketSource);
+    const wrongCodes = async (count: number, from: string | null = bucketSource) => {
+      const who = await member();
+      const sessionId = await session(who, at(now, -60));
+      for (let index = 0; index < count; index += 1) {
+        await expectCode(
+          lookupSeatDeviceAuthorization({ authSessionId: sessionId, userId: who.userId, pairingCode: "ZZZZZZZZ", source: from, now }),
+          "pairing_code_invalid",
+        );
+      }
+      return { who, sessionId };
+    };
+    const bucketCounter = () =>
+      db.failedLoginAttempt.findUniqueOrThrow({ where: { identifierHash: hashLoginIdentifier(`seat-device-code:ip:${bucketSource.replace(/10$/, "0")}/24`) } });
+    // 29 failures from four accounts: the bucket is still open.
+    for (const count of [8, 8, 8, 5]) await wrongCodes(count);
+    expect(await bucketCounter()).toMatchObject({ attemptCount: 29, lockedUntil: null });
+    // The 30th, from another address in the same /24, locks the bucket.
+    await wrongCodes(1, bucketSource.replace(/10$/, "99"));
+    expect(await bucketCounter()).toMatchObject({ attemptCount: 30, lockedUntil: at(now, 900) });
+    const fresh = await member();
+    const locked = await expectCode(
+      lookupSeatDeviceAuthorization({ authSessionId: await session(fresh, at(now, -60)), userId: fresh.userId, pairingCode: normalizeSeatDevicePairingCode(grant.pairingCode)!, source: bucketSource, now }),
       "rate_limited",
     );
+    expect(locked.retryAfterSeconds).toBe(900);
+    // Another bucket and an untrusted source are not affected.
+    await wrongCodes(1, freshSource());
+    await wrongCodes(1, null);
   });
 
   it("counts concurrent wrong codes against the limit, never past it", async () => {
