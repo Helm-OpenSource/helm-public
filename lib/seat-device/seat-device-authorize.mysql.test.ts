@@ -1,7 +1,7 @@
 // lib/seat-device/seat-device-authorize.mysql.test.ts
 // Seat desktop device authorization (D1) request side on an isolated MySQL
 // database: request (hash-only storage, pairing collisions, pending limits),
-// pairing-code lookup with its lockout, approve (step-up, binding, device cap,
+// pairing-code lookup with its lockout, approve (password step-up, binding, device cap,
 // audit and notification) and reject, and the device's cancel.
 //
 //   SEAT_DEVICE_DATABASE_URL=<disposable db> DATABASE_URL=<same>
@@ -109,13 +109,23 @@ describeMysql("seat device authorization (request, decide, cancel) on MySQL", ()
   const request = (now: Date, source: string | null = freshSource(), generatePairingCode?: () => string) =>
     requestSeatDeviceAuthorization({ ...device, source, now, generatePairingCode });
 
-  async function decide(who: Member, grant: { requestId: string; pairingCode: string }, now: Date, decision: "approve" | "reject" = "approve", sessionId?: string) {
+  // `passwordVerifiedAt` is the caller's proof that it just re-checked the
+  // member's password; by default 30 seconds before `now`.
+  async function decide(
+    who: Member,
+    grant: { requestId: string; pairingCode: string },
+    now: Date,
+    decision: "approve" | "reject" = "approve",
+    sessionId?: string,
+    passwordVerifiedAt: Date | null = at(now, -30),
+  ) {
     return decideSeatDeviceAuthorization({
       authSessionId: sessionId ?? (await session(who, at(now, -60))),
       userId: who.userId,
       requestId: grant.requestId,
       pairingCode: normalizeSeatDevicePairingCode(grant.pairingCode) ?? grant.pairingCode,
       decision,
+      passwordVerifiedAt,
       source: null,
       now,
     });
@@ -188,6 +198,9 @@ describeMysql("seat device authorization (request, decide, cancel) on MySQL", ()
       await expect(cancelSeatDeviceAuthorization({ ...grant, now })).rejects.toBeInstanceOf(SeatDeviceAuthDisabledError);
       const who = await member();
       await expect(decide(who, grant, now)).rejects.toBeInstanceOf(SeatDeviceAuthDisabledError);
+      await expect(
+        lookupSeatDeviceAuthorization({ authSessionId: await session(who, at(now, -60)), userId: who.userId, pairingCode: normalizeSeatDevicePairingCode(grant.pairingCode)!, source: null, now }),
+      ).rejects.toBeInstanceOf(SeatDeviceAuthDisabledError);
     } finally {
       process.env.HELM_SEAT_DEVICE_AUTH_ENABLED = "true";
     }
@@ -310,6 +323,30 @@ describeMysql("seat device authorization (request, decide, cancel) on MySQL", ()
     );
   });
 
+  it("counts concurrent wrong codes against the limit, never past it", async () => {
+    const now = nextClock();
+    const who = await member();
+    const sessionId = await session(who, at(now, -60));
+    const results = await Promise.allSettled(
+      Array.from({ length: 40 }, () =>
+        lookupSeatDeviceAuthorization({ authSessionId: sessionId, userId: who.userId, pairingCode: "ZZZZZZZZ", source: null, now }),
+      ),
+    );
+    const codes = results.map((result) => {
+      expect(result.status).toBe("rejected");
+      const reason = (result as PromiseRejectedResult).reason;
+      expect(reason).toBeInstanceOf(SeatDeviceAuthError);
+      return (reason as SeatDeviceAuthError).code;
+    });
+    const invalid = codes.filter((code) => code === "pairing_code_invalid").length;
+    expect(codes.filter((code) => code !== "pairing_code_invalid" && code !== "rate_limited")).toEqual([]);
+    expect(invalid).toBeLessThanOrEqual(SEAT_DEVICE_CODE_ENTRY_MAX_FAILURES);
+    const counter = await db.failedLoginAttempt.findUniqueOrThrow({
+      where: { identifierHash: hashLoginIdentifier(`seat-device-code:user:${who.userId}`) },
+    });
+    expect(counter.attemptCount).toBe(invalid);
+  });
+
   it("hides the source when it is not trusted and refuses lapsed codes", async () => {
     const now = nextClock();
     const grant = await request(now, null);
@@ -326,11 +363,17 @@ describeMysql("seat device authorization (request, decide, cancel) on MySQL", ()
     expect((await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: grant.requestId } })).pairingCodeHash).toBeNull();
   });
 
-  it("requires a recent PASSWORD session of an active, internal member in an enabled workspace", async () => {
+  it("requires a fresh password proof on a PASSWORD session of an active, internal member in an enabled workspace", async () => {
     const now = nextClock();
     const grant = await request(now);
     const who = await member();
-    await expectCode(decide(who, grant, now, "approve", await session(who, at(now, -601))), "reauthentication_required");
+    // A rotated session is a brand-new row (createdAt = now) whose holder never
+    // typed the password: its age is no proof, only passwordVerifiedAt is.
+    const rotated = await session(who, now);
+    await expectCode(decide(who, grant, now, "approve", rotated, null), "reauthentication_required");
+    await expectCode(decide(who, grant, now, "approve", rotated, at(now, -601)), "reauthentication_required");
+    await expectCode(decide(who, grant, now, "approve", rotated, at(now, 1)), "reauthentication_required");
+    await expectCode(decide(who, grant, now, "approve", rotated, new Date(Number.NaN)), "reauthentication_required");
     await expectCode(decide(who, grant, now, "approve", await session(who, at(now, -60), { providerType: "PHONE_CODE" })), "reauthentication_required");
     const stranger = await member();
     await expectCode(decide(who, grant, now, "approve", await session(stranger, at(now, -60))), "reauthentication_required");
@@ -347,6 +390,8 @@ describeMysql("seat device authorization (request, decide, cancel) on MySQL", ()
     const row = await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: grant.requestId } });
     expect(row).toMatchObject({ status: "pending", version: 0, workspaceId: null });
     expect(await db.failedLoginAttempt.count({ where: { identifierHash: hashLoginIdentifier(`seat-device-code:user:${who.userId}`) } })).toBe(0);
+    // The session's age does not matter: a days-old session with a fresh proof approves.
+    await expect(decide(who, grant, now, "approve", await session(who, at(now, -3 * 24 * 3600)), at(now, -600))).resolves.toMatchObject({ status: "approved" });
   });
 
   it("approves once: binds member, workspace and password snapshot, audits and notifies", async () => {
@@ -354,7 +399,7 @@ describeMysql("seat device authorization (request, decide, cancel) on MySQL", ()
     const grant = await request(now, freshSource());
     const who = await member();
     const sessionId = await session(who, at(now, -30));
-    await expectCode(decideSeatDeviceAuthorization({ authSessionId: sessionId, userId: who.userId, requestId: grant.requestId, pairingCode: "ZZZZZZZZ", decision: "approve", source: null, now }), "pairing_code_invalid");
+    await expectCode(decideSeatDeviceAuthorization({ authSessionId: sessionId, userId: who.userId, requestId: grant.requestId, pairingCode: "ZZZZZZZZ", decision: "approve", passwordVerifiedAt: at(now, -30), source: null, now }), "pairing_code_invalid");
     const failures = await db.failedLoginAttempt.findUniqueOrThrow({ where: { identifierHash: hashLoginIdentifier(`seat-device-code:user:${who.userId}`) } });
     expect(failures.attemptCount).toBe(1);
     await expect(decide(who, grant, now, "approve", sessionId)).resolves.toEqual({ requestId: grant.requestId, status: "approved" });
