@@ -55,7 +55,7 @@ export function SelectContent({
       <SelectPrimitive.Content
         position={position}
         className={cn(
-          "z-50 min-w-[8rem] overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:color-mix(in_oklab,var(--surface)_88%,white_12%)] p-1.5 shadow-xl",
+          "z-50 min-w-[8rem] max-h-[var(--radix-select-content-available-height)] overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:color-mix(in_oklab,var(--surface)_88%,white_12%)] p-1.5 shadow-xl",
           className,
         )}
         {...props}

@@ -182,7 +182,7 @@ None of these schedulers affects a first run; leave them blank / `false`.
 | `HELM_DEPLOYMENT_ENTRY_PROFILE` | Entry type: `public`, `cloud`, `tenant`, or `first-party` |
 | `HELM_DEPLOYMENT_ENTRY_DISPLAY_NAME` | Product or workspace entry name |
 | `HELM_DEPLOYMENT_ENTRY_COMPANY_NAME` | Optional owning-company label; Core reads generic configuration and embeds no company |
-| `HELM_DEPLOYMENT_ENTRY_HOME_PATH` | Same-origin path used after successful sign-in |
+| `HELM_DEPLOYMENT_ENTRY_HOME_PATH` | Default same-origin path after successful sign-in |
 | `HELM_DEPLOYMENT_ALLOWED_WORKSPACE_SLUGS` | One required allowlist option for `tenant` / `first-party` |
 | `HELM_DEPLOYMENT_ALLOWED_WORKSPACE_SYSTEM_KEYS` | System-key allowlist that can replace or supplement slugs |
 | `HELM_DEPLOYMENT_SELF_SERVE_SIGNUP` | Available only to `public` / `cloud`; private entries always disable it |
@@ -208,6 +208,14 @@ Style composition does not change signup, SSO, cookies, tabs or redirects.
 The build may supply a public logo at `public/assets/logo.svg`. Only the exact
 `/assets/logo.svg` path bypasses login and identity-setup redirects; the asset
 directory and child paths are not exempted.
+
+When a visitor opens a protected workspace link, the sign-in page carries the
+original local destination in `callback`. After sign-in and any required
+workspace selection or identity setup, the browser returns to the original
+path and query. It also restores the fragment when the browser retains it
+through the sign-in redirect. The destination still checks the active workspace
+and access permissions. External members use their registered entry, and a
+missing or invalid callback uses the default entry.
 
 ### RUNTIME_ATTESTATION (optional source-built release binding)
 

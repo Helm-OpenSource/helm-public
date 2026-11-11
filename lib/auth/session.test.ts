@@ -527,6 +527,64 @@ describe("auth session substrate", () => {
     expect(dbMock.authSession.updateMany).toHaveBeenCalled();
   });
 
+  // The storage double enforces the MySQL baseline's VARCHAR(191), rather
+  // than accepting the oversized metadata that used to abort valid logins.
+  it.each([190, 191, 192, 512, 1024])(
+    "creates a usable session with a %i-character user agent",
+    async (length) => {
+      const cookieStore = createCookieStore();
+      cookiesMock.mockResolvedValue(cookieStore);
+      headersMock.mockResolvedValue(createHeaderStore({ "user-agent": `  ${"a".repeat(length)}  ` }));
+      dbMock.authSession.create.mockImplementationOnce(async ({ data }) => {
+        if (data.userAgent.length > 191) throw new Error("P2000: AuthSession.userAgent");
+        return { id: "bounded-session" };
+      });
+
+      await expect(createSession({ userId: "user-1", email: "owner@example.com" }))
+        .resolves.toEqual({ id: "bounded-session" });
+
+      expect(dbMock.authSession.create.mock.calls[0][0].data.userAgent)
+        .toBe("a".repeat(Math.min(length, 191)));
+      expect(cookieStore.values.get(SESSION_ID_COOKIE)).toEqual(expect.any(String));
+    },
+  );
+
+  it.each([
+    ["a".repeat(191), "previous", "a".repeat(191)],
+    ["a".repeat(192), "previous", "a".repeat(191)],
+    ["a".repeat(1024), "previous", "a".repeat(191)],
+    [undefined, "b".repeat(512), "b".repeat(191)],
+    ["  ", "b".repeat(512), "b".repeat(191)],
+    [undefined, null, undefined],
+  ])("rotates a session with bounded current or fallback user-agent metadata (%#)", async (current, previous, expected) => {
+    const cookieStore = createCookieStore({ [SESSION_ID_COOKIE]: "current-session" });
+    cookiesMock.mockResolvedValue(cookieStore);
+    headersMock.mockResolvedValue(createHeaderStore(current ? { "user-agent": current } : {}));
+    dbMock.authSession.findUnique.mockResolvedValueOnce(buildAuthSessionRecord({ userAgent: previous }));
+    dbMock.authSession.create.mockImplementationOnce(async ({ data }) => {
+      if (data.userAgent && data.userAgent.length > 191) throw new Error("P2000: AuthSession.userAgent");
+      return buildAuthSessionRecord({ ...data, id: "bounded-rotation" });
+    });
+    dbMock.authSession.update.mockResolvedValue({});
+
+    await expect(rotateCurrentAuthSession()).resolves.toEqual({ ok: true, sessionId: "bounded-rotation" });
+
+    expect(dbMock.authSession.create.mock.calls[0][0].data.userAgent).toBe(expected);
+    expect(cookieStore.values.get(SESSION_ID_COOKIE)).not.toBe("current-session");
+    expect(dbMock.authSession.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ revokedAt: expect.any(Date) }),
+    }));
+  });
+
+  it.each([undefined, "  "])("creates a session without user-agent metadata (%#)", async (current) => {
+    cookiesMock.mockResolvedValue(createCookieStore());
+    headersMock.mockResolvedValue(createHeaderStore(current ? { "user-agent": current } : {}));
+    dbMock.authSession.create.mockResolvedValueOnce({ id: "no-agent-session" });
+    await expect(createSession({ userId: "user-1", email: "owner@example.com" }))
+      .resolves.toEqual({ id: "no-agent-session" });
+    expect(dbMock.authSession.create.mock.calls[0][0].data.userAgent).toBeUndefined();
+  });
+
   it("creates a session record, revokes the previous session, and stores only opaque cookies", async () => {
     const cookieStore = createCookieStore({
       [SESSION_ID_COOKIE]: "stale-session",

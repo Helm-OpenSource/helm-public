@@ -20,6 +20,7 @@ export async function GET(request: Request) {
     provider: "feishu",
     state,
     locale,
+    callback: url.searchParams.get("callback"),
     organizationName: url.searchParams.get("org"),
     workspaceId: url.searchParams.get("ws"),
     title: url.searchParams.get("title"),

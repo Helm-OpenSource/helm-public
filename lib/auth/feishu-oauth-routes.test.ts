@@ -120,6 +120,8 @@ vi.mock("@/lib/db", () => ({
 
 import { GET as startFeishuOauthRoute } from "@/app/api/auth/feishu/start/route";
 import { GET as feishuCallbackRoute } from "@/app/api/auth/feishu/callback/route";
+import { GET as publicFeishuCallbackRoute } from "@/app/api/public-auth/feishu/callback/route";
+import { FEISHU_PUBLIC_AUTH_STATE_COOKIE } from "@/lib/auth/public-oauth";
 
 function createCookieStore(initial: Record<string, string> = {}) {
   const values = new Map(Object.entries(initial));
@@ -345,5 +347,33 @@ describe("feishu oauth routes", () => {
       }),
     );
     expect(auditMock.writeAuditLog.mock.calls.some((call) => call[0]?.actionType === "FEISHU_OAUTH_CALLBACK_MISMATCH")).toBe(true);
+  });
+});
+
+
+describe("public Feishu authorization denial", () => {
+  const callback = "/tenant-alpha/workspace?view=summary#selected=example";
+
+  it.each([
+    ["verified-state", callback],
+    ["different-state", null],
+    [null, null],
+  ])("returns the appropriate retry destination for state %s", async (state, expected) => {
+    feishuMock.exchangeFeishuAuthCode.mockClear();
+    const cookieStore = createCookieStore({
+      [FEISHU_PUBLIC_AUTH_STATE_COOKIE]: JSON.stringify({ state: "verified-state", callback }),
+    });
+    cookiesMock.mockResolvedValue(cookieStore);
+    const requestUrl = new URL("https://example.test/api/public-auth/feishu/callback");
+    requestUrl.searchParams.set("error", "access_denied");
+    if (state) requestUrl.searchParams.set("state", state);
+
+    const response = await publicFeishuCallbackRoute(new Request(requestUrl));
+    expect(response.status).toBe(307);
+    const destination = new URL(response.headers.get("location")!);
+    expect(destination.pathname).toBe("/login");
+    expect(destination.searchParams.get("callback")).toBe(expected);
+    expect(cookieStore.delete).toHaveBeenCalledWith(FEISHU_PUBLIC_AUTH_STATE_COOKIE);
+    expect(feishuMock.exchangeFeishuAuthCode).not.toHaveBeenCalled();
   });
 });

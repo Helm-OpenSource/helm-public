@@ -1,5 +1,7 @@
 "use client";
 
+import { readBrowserLoginCallback } from "@/lib/auth/login-callback";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -82,7 +84,7 @@ export function SimplifiedLoginPanel({ locale }: SimplifiedLoginPanelProps) {
           phone,
           code: phoneCode,
           locale,
-        });
+        }, readBrowserLoginCallback());
 
         if (!result.ok || !("redirectTo" in result)) {
           toast.error(result.error || (english ? "Login failed" : "登录失败"));
@@ -137,7 +139,7 @@ export function SimplifiedLoginPanel({ locale }: SimplifiedLoginPanelProps) {
         identifier: email,
         password,
         locale,
-      });
+      }, readBrowserLoginCallback());
 
       if (!result.ok || !("redirectTo" in result)) {
         toast.error(result.error || (english ? "Login failed" : "登录失败"));

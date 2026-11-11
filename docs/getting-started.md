@@ -178,7 +178,7 @@ DingTalk · WeCom · HubSpot · Salesforce · Stripe · 支付宝 · 微信支�
 | `HELM_DEPLOYMENT_ENTRY_PROFILE` | 入口类型：`public`、`cloud`、`tenant` 或 `first-party` |
 | `HELM_DEPLOYMENT_ENTRY_DISPLAY_NAME` | 产品或工作区入口名称 |
 | `HELM_DEPLOYMENT_ENTRY_COMPANY_NAME` | 可选的所属公司展示名称；Core 只读取通用配置，不内置任何公司 |
-| `HELM_DEPLOYMENT_ENTRY_HOME_PATH` | 登录成功后的同源站内路径 |
+| `HELM_DEPLOYMENT_ENTRY_HOME_PATH` | 登录成功后的默认同源站内路径 |
 | `HELM_DEPLOYMENT_ALLOWED_WORKSPACE_SLUGS` | `tenant` / `first-party` 必填的工作区白名单之一 |
 | `HELM_DEPLOYMENT_ALLOWED_WORKSPACE_SYSTEM_KEYS` | 可替代或补充 slug 的 system key 白名单 |
 | `HELM_DEPLOYMENT_SELF_SERVE_SIGNUP` | 仅 `public` / `cloud` 可开启；私有入口始终关闭 |
@@ -200,6 +200,11 @@ DingTalk · WeCom · HubSpot · Salesforce · Stripe · 支付宝 · 微信支�
 样式组合不改变注册、SSO、cookie、tab 或登录跳转。
 构建可提供公开 Logo `public/assets/logo.svg`；仅 `/assets/logo.svg` 精确路径免于
 登录及身份补全跳转，不开放整个 `/assets` 目录或该路径的子级。
+
+直接打开受保护的工作区链接时，登录页用 `callback` 保留原站内地址。完成登录及
+所需的工作区选择、身份补全后，系统返回原路径和查询参数。如果浏览器在登录跳转后仍保留锚点，回跳也会带上锚点。目标
+页面照常校验当前工作区和访问权限。外部成员使用其注册入口，缺失或无效的
+`callback` 使用默认入口。
 
 ### RUNTIME_ATTESTATION（可选，source-built 发布绑定）
 
@@ -390,6 +395,16 @@ npm run quality:regression
 - 微信公众号 `Helm开源经营系统`（微信号 `HelmCoreCN`）— 信息发布入口，非默认支持工单入口
 - 安全漏洞——**不要**走公开议题，见 [../SECURITY.md](../SECURITY.md)
 
+
+## 登录会话元数据边界
+
+登录创建和会话刷新均将 `User-Agent` 去除首尾空白并限制为 191 字符，以匹配
+MySQL baseline 的 `AuthSession.userAgent VARCHAR(191)`；缺失或空白值保持为空。
+刷新复用旧会话标识时也应用相同边界。该字段只记录浏览器元数据，不参与身份认证或授权。
+修复不需要数据库迁移，不重置密码，不调整成员角色、租户或案件权限。
+
+可运行 `npx vitest run lib/auth/session.test.ts --config vitest.public.config.ts`
+复核 191 字符边界、超长标识、空值及刷新回退路径。测试替换数据库边界，不需真实数据库。
 
 ## 工作区切换
 

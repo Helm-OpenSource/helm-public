@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { normalizeLoginCallback } from "@/lib/auth/login-callback";
 import { cookies } from "next/headers";
 import { AUTH_SESSION_PROVIDER_TYPES } from "@/lib/auth/provider-seam";
 import {
@@ -57,6 +58,7 @@ export async function GET(request: Request) {
     return redirectPublicUrl(fallbackUrl);
   }
   const resolution = consumed.resolution;
+  const callback = normalizeLoginCallback(url.searchParams.get("callback"));
 
   if (resolution.status === "matched") {
     const user = await findActivePublicOauthUserById(resolution.userId);
@@ -74,6 +76,7 @@ export async function GET(request: Request) {
       preferredLocale: resolution.preferredLocale,
       profile: resolution.profile,
       preferredWorkspaceId: resolution.preferredWorkspaceId ?? null,
+      ...(callback ? { callback } : {}),
     });
 
     if (!result.ok) {
