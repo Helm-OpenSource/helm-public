@@ -39,7 +39,8 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
   operation failed (a retry signs a new nonce; the idempotencyKey replays). Expired nonces are purged (100 per request, 60 s margin). Every refusal is `service_unauthorized` (401; missing
   scope 403); logs carry only a fixed reason, never signatures, ids or bodies.
 - **Issuer isolation** (v3.8, bound to `issuerRef` by v3.9): the actor is `SYSTEM:billing-service:<issuerRef>/<grantId>`
-  (`createdBy`/`resolvedBy`; `issuerRef` matches `[a-z0-9][a-z0-9._-]{0,63}`, DB CHECK). A reservation belongs to its issuer:
+  (`createdBy`/`resolvedBy`; `issuerRef` matches `[a-z0-9][a-z0-9._-]{0,63}`, DB CHECK, which since migration
+  `20261111100000_billing_service_grant_issuer_check` also refuses a trailing line terminator that ICU `$` let through). A reservation belongs to its issuer:
   settle/release/markUnknown from another issuer see it as absent (`reservation_state_conflict`, before any operationRef
   check); a reserve key replays only within its issuer (`idempotency_conflict` otherwise). `resolveUnknown` (reconciliation
   grants only) works across issuers.
@@ -62,8 +63,10 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
 - **Verify / rollback**: `npm run test:billing:mysql` (`internal-routes.mysql.test.ts`: gate, signature/expiry/replay/scope/
   revocation/pin/validity/content hash/scope canonicality/public key, bounded and exact body bytes, shape and refusal
   mapping, expectedMode, issuer isolation and rotation, connection-error mapping, every operation, separate reconciliation
-  grant, invariant alert). Roll back: unset the gate, then
-  `prisma/rollback/20261110_rollback_billing_service_grants.sql` (refuses while any grant or nonce row exists). Run it before the
+  grant, invariant alert, trailing-terminator issuerRef). Roll back: unset the gate, then
+  `prisma/rollback/20261111_rollback_billing_service_grant_issuer_check.sql` (restores the original CHECK), then
+  `prisma/rollback/20261110_rollback_billing_service_grants.sql` (refuses while any grant or nonce row exists or a later billing
+  migration is applied). Run them before the
   S2-c and S2-a rollbacks (their guards refuse while any later billing migration is applied); it does not depend on the
   charges, credit or reservations rollbacks.
 - **Not here**: `claim-verify`, reconcile (S5), the caller

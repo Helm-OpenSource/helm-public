@@ -1,5 +1,5 @@
 import { generateKeyPairSync, type KeyObject, randomBytes, randomUUID } from "node:crypto";
-import { lstatSync, realpathSync, statSync } from "node:fs";
+import { lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -373,5 +373,19 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
       }
     } finally { holder.client = a; logged.mockRestore(); }
     expect(await reservations(ids.payerRef)).toBe(0);
+  });
+
+  it("refuses an issuerRef with a trailing line terminator (ICU `$` matches before it) and orders the rollbacks", async () => {
+    for (const [name, terminator] of [["nl", "\n"], ["cr", "\r"], ["crlf", "\r\n"], ["ls", "\u2028"], ["nel", "\u0085"]]) {
+      await expect(grant(`term-${name}`, ["reserve"], { issuerRef: `issuer-t${terminator}` })).rejects.toThrow(/BillingServiceGrant_issuer/);
+    }
+    expect(await a.billingServiceGrant.count({ where: { id: { startsWith: "term-" } } })).toBe(0);
+    await grant("term-ok", ["reserve"], { issuerRef: "issuer-t.1_x-y" }); // the allowed set is unchanged
+    // CREATE PROCEDURE cannot run over the prepared-statement protocol: evaluate the grant-table rollback's first guard as written.
+    const sql = readFileSync(join(process.cwd(), "prisma/rollback/20261110_rollback_billing_service_grants.sql"), "utf8");
+    const body = sql.slice(sql.indexOf("BEGIN")), condition = body.slice(body.indexOf("IF ") + 3, body.indexOf(" THEN"));
+    expect(body.slice(body.indexOf(" THEN"), body.indexOf("END IF"))).toContain("later billing migration is applied");
+    const [row] = await a.$queryRawUnsafe<Array<{ refused: bigint }>>(`SELECT (${condition}) AS refused`);
+    expect(Number(row.refused)).toBe(1); // 20261111100000_billing_service_grant_issuer_check is applied
   });
 });
