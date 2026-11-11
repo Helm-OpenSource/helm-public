@@ -103,8 +103,8 @@ revoke the old grant and finally remove its pin.
 
 **Revocation**: `npm run billing:service-grant -- revoke --grant-id=<id> --revoked-by=<operator ref>` shows the current state;
 add `--apply` to set `revokedAt` (database time) and `revokedBy`. It is one-way and immediate (every request checks it);
-revoking again changes nothing (`alreadyRevoked: true`). Removing the pin also stops trust immediately and is the faster
-emergency switch; do both, pin removal first. Rows are never deleted. For a leaked key, revoke at once and rotate as above;
+revoking again changes nothing (`alreadyRevoked: true`). Revoke first; then remove the pin with the next configuration change
+(a pin change takes effect only when the deployment reloads its configuration). Rows are never deleted. For a leaked key, revoke at once and rotate as above;
 the replacement grant of the same issuer keeps settling and releasing the old grant's reservations.
 
 Verification: `npm run test:billing:mysql` includes `service-grant-issuance.mysql.test.ts` (CLI dry run writes nothing; the
