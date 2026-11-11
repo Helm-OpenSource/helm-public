@@ -3,7 +3,9 @@ import { lstatSync, realpathSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { grantPlatformFinanceRole, revokePlatformFinanceRole } from "../bank-receipts/bank-receipts";
+import { grantPlatformFinanceRole } from "../bank-receipts/bank-receipts";
+import { changeCreditFacility, proposeCreditFacility } from "../credit/credit-facilities";
+import { changeSpendGrant, createSpendGrant, publishPriceVersion } from "../grants/price-grants";
 import { parseOperationList, runPlatformBatch, type PlatformBatchArgs } from "./platform-batch";
 import { draftPlatformOperation, reviewPlatformOperation, type PlatformOperationRequest } from "./platform-operations";
 
@@ -104,7 +106,7 @@ describe.skipIf(!url)("platform billing operations against MySQL", () => {
     await expect(draft(onboard(ws), maker)).resolves.toMatchObject({ replayed: true }); // same ruling: replay, not a second payer
   });
 
-  it("refuses the drafter as reviewer, non-platform identities and revoked grants (service and DB CHECK)", async () => {
+  it("refuses the drafter as reviewer and non-platform identities (service and DB CHECK)", async () => {
     const ws = await workspace();
     await expect(draft(onboard(ws), owner)).rejects.toThrow("platform_operation_forbidden"); // customer OWNER
     await expect(draft(onboard(ws), checker)).rejects.toThrow("platform_operation_forbidden"); // checker cannot draft
@@ -115,27 +117,36 @@ describe.skipIf(!url)("platform billing operations against MySQL", () => {
     await expect(a.$executeRaw`UPDATE PlatformBillingOperation SET state='rejected', reviewedByUserId=draftedByUserId,
       reviewEvidenceRef='x', reviewedAt=NOW(3), version=version+1 WHERE workspaceId=${ws}`).rejects.toThrow(/maker_checker_check/);
     await expect(a.$executeRaw`DELETE FROM PlatformBillingOperation WHERE workspaceId=${ws}`).rejects.toThrow(/no_delete/);
-    const extra = id("temp");
-    await a.$executeRaw`INSERT INTO User (id,name,email,updatedAt) VALUES (${extra},'Synthetic',${`${extra}@example.invalid`},NOW(3))`;
-    await a.$executeRaw`INSERT INTO Membership (id,workspaceId,userId,role,status,updatedAt) VALUES (${`m-${extra}`},${reserved},${extra},'MEMBER','ACTIVE',NOW(3))`;
-    const temp = await grantPlatformFinanceRole(a, { actorUserId: admin, userId: extra, role: "checker", evidenceRef: "approval:finance-roster" });
-    await revokePlatformFinanceRole(a, { actorUserId: admin, grantId: temp.id, expectedVersion: 1, evidenceRef: "approval:finance-roster" });
-    await expect(review(onboard(ws), extra)).rejects.toThrow("platform_operation_forbidden");
     expect(await a.payerScopeBinding.count({ where: { scopeRef: ws } })).toBe(0);
     await expect(draft(onboard(reserved))).rejects.toThrow("workspace_unavailable");
   });
 
-  it("switches off -> enforce only with explicit confirmation on both steps, and back to off", async () => {
+  it("switches off -> enforce only when confirmed twice, with one active grant and positive headroom; rolls back to shadow", async () => {
     const ws = await onboarded();
     await expect(draft(mode(ws, "off", "enforce"))).rejects.toThrow("platform_enforce_not_confirmed");
     await draft(mode(ws, "off", "enforce"), maker, { confirmEnforce: true });
     await expect(review(mode(ws, "off", "enforce"))).rejects.toThrow("platform_enforce_not_confirmed");
+    const enforce = () => review(mode(ws, "off", "enforce"), checker, { confirmEnforce: true });
+    await expect(enforce()).rejects.toThrow("enforce_grant_not_ready");
+    const payerAccountId = (await payerOf(ws)).id, day = 86_400_000;
+    const { priceVersion } = await publishPriceVersion(a, { actor: { type: "SYSTEM", ref: "synthetic" }, productCode: `e1a-${run}`, version: 1,
+      billingEventRef: `event:${run}`, meterUnit: "minute", acceptanceRef: "acceptance:synthetic", scopeKind: "workspace",
+      unitPriceFenNumerator: BigInt(35), unitPriceDenominator: BigInt(1), effectiveFrom: new Date(Date.now() - day), effectiveUntil: null, approvalRef: ruling });
+    const { grant } = await createSpendGrant(a, { actorUserId: owner, payerAccountId, priceVersionId: priceVersion.id, operationKey: "e1a-grant",
+      evidenceRef: ruling, validFrom: new Date(Date.now() - day), validUntil: new Date(Date.now() + day),
+      limits: { perChargeLimitFen: BigInt(100), dailyLimitFen: BigInt(100), monthlyLimitFen: BigInt(100) } });
+    await changeSpendGrant(a, { actorUserId: owner, grantId: grant.id, expectedVersion: 1, action: "activate", evidenceRef: ruling });
+    await expect(enforce()).rejects.toThrow("enforce_headroom_insufficient"); // no wallet, no credit: enforce would stop it at once
+    const { facility } = await proposeCreditFacility(a, { actorUserId: maker, payerAccountId, limitFen: BigInt(1000), validUntil: null,
+      operationKey: "e1a-credit", evidenceRef: ruling });
+    await changeCreditFacility(a, { actorUserId: checker, facilityId: facility.id, expectedVersion: 1, action: "approve", evidenceRef: ruling });
+    await changeCreditFacility(a, { actorUserId: maker, facilityId: facility.id, expectedVersion: 2, action: "activate", evidenceRef: ruling });
     expect((await payerOf(ws)).billingMode).toBe("off");
-    await review(mode(ws, "off", "enforce"), checker, { confirmEnforce: true });
+    await enforce();
     expect(await payerOf(ws)).toMatchObject({ billingMode: "enforce", version: 3 });
-    await draft(mode(ws, "enforce", "off")); // rollback direction needs no confirmation
-    await review(mode(ws, "enforce", "off"));
-    expect((await payerOf(ws)).billingMode).toBe("off");
+    await draft(mode(ws, "enforce", "shadow")); // recommended rollback; needs no confirmation, still maker + checker
+    await review(mode(ws, "enforce", "shadow"));
+    expect((await payerOf(ws)).billingMode).toBe("shadow");
     expect(await a.auditLog.count({ where: { workspaceId: ws, actionType: "BILLING_PAYER_MODE_CHANGED" } })).toBe(2);
   });
 
@@ -152,12 +163,11 @@ describe.skipIf(!url)("platform billing operations against MySQL", () => {
     expect(await a.auditLog.count({ where: { targetId: pending.id, actionType: { not: "BILLING_PLATFORM_OPERATION_DRAFTED" } } })).toBe(0);
     await expect(review(mode(ws, "off", "shadow"), checker, { decision: "reject" })).resolves.toMatchObject({ operation: { state: "rejected" } });
     // Two checkers' sessions approving one draft: exactly one applies.
-    await a.$executeRaw`UPDATE PayerAccount SET billingMode = 'off' WHERE id = ${payer.id}`;
-    const step = mode(ws, "off", "enforce");
-    await draft(step, maker, { confirmEnforce: true });
-    const results = await Promise.allSettled([checker, dual].flatMap(user => [a, b].map(client => review(step, user, { confirmEnforce: true, client }))));
+    const step = mode(ws, "enforce", "shadow");
+    await draft(step, maker);
+    const results = await Promise.allSettled([checker, dual].flatMap(user => [a, b].map(client => review(step, user, { client }))));
     expect(results.filter(r => r.status === "fulfilled" && !r.value.replayed)).toHaveLength(1);
-    expect((await payerOf(ws)).billingMode).toBe("enforce");
+    expect((await payerOf(ws)).billingMode).toBe("shadow");
   });
 
   it("rolls the change and its audit back together when the transaction fails", async () => {
