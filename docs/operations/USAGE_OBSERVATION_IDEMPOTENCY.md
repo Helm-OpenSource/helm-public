@@ -1,0 +1,108 @@
+---
+status: active / formed-needs-next-layer
+owner: helm-core
+created: 2026-11-09
+review_after: 2026-12-10
+public_safety: Public source contract and synthetic test verification only. No deployment approval, payment, credential or customer data.
+---
+
+# Scoped usage observations / 工作区用量记录
+
+## Contract / 契约
+
+`recordUsageLedgerEntry` keeps its existing behavior when `operationKey` is omitted.
+Opt-in callers supply a stable, server-owned operation key after checking the source object's workspace and permission.
+The key identifies one logical observation, not a browser click or one provider retry. Callers migrate only through explicit integration.
+
+不传 `operationKey` 时保持原行为；选择启用的调用方须先校验业务对象归属和权限，再用服务端稳定操作键记账。
+同一逻辑操作、同一工作区、同一内容重放返回原行；不同内容拒绝。操作键允许 ASCII 引用字符，最长 191 字符；内容按规范化 JSON 比较。
+正向用量必须是 1..2147483647 的整数；零、小数、负数、越界均拒绝。历史无键行不回填，不改变原有校验语义。
+
+The existing `UsageLedger` owns the nullable operation key, content fingerprint and unique reversal reference.
+Unique database constraints arbitrate races; bounded retries handle only definite uniqueness or transaction-conflict failures.
+An unknown commit outcome is propagated. A later replay must use the same key and content, never invent a replacement charge.
+
+`reverseUsageLedgerEntry(input, client)` appends one full negative observation and never updates the original.
+The actor must be a server-authenticated user, not a user ID supplied by an untrusted request body. The transaction locks the actual
+Workspace, Membership and User, requires an active internal membership and the existing OWNER/BILLING_ADMIN billing capability.
+There is no HTTP endpoint, background correction job or caller-provided authorization boolean.
+This database capability recheck does not independently authenticate the caller; the existing server session remains authoritative.
+数据库复核成员和权限不等于认证调用者；`actorUserId` 必须取自现有服务端认证会话，不可信任客户端提交值。
+
+冲回仅适用于本契约的有键正向行，同一原行最多冲回一次；不能冲回跨工作区行、历史无键行或反向行。
+原因使用封闭代码；修改数值采用“全量冲回 + 新操作键的正确记录”，不修改历史。重复同键同内容可重放，不同原因或身份视为冲突。
+冲回的 `recordedAt` 继承原记录，表示原用量期间的净额调整；`createdAt` 保留真实更正时点。
+这不是关闭财务期间的重开、客户退款或历史账单改写。需要此类功能时必须另行定义会计及授权契约。
+
+## Boundary / 边界
+
+This is a usage-observation correction, not a financial reversal. It creates no invoice, payment, provider call or entitlement.
+Price versions, maximum charges, unknown consumption and provider attempts stay in the existing LLM spend contracts.
+`LLMSpendLedgerEntry` and its signed price/FX authority are not duplicated here; missing provider cost remains unknown, never zero.
+See [LLM spend contract](LLM_SPEND_RESERVATION_CONTRACT.md) and [trusted usage evidence](LLM_TRUSTED_USAGE_EVIDENCE.md).
+
+本片不新增金额表、价格表、客户字段、真实供应商调用或收费开关。调用方不得将用量行直接等同可收费事件。
+现有使用情况汇总按 `recordedAt` 加总 quantity；新增负数仅表达该期间净用量，不证明资金或回款变化。
+
+## Briefing consumer / 简报消费接线
+
+The first opt-in consumer is `generateObjectBriefingSnapshot`, only when an existing server-owned
+`LLMWorkflowOperation` of kind `briefing`, generation 1, produces accepted structured output without fallback.
+Provider SUCCESS/ACCEPTED, a token log or a settled spend row alone is not a completed business artifact.
+Only this opt-in path strictly validates the existing briefing schema, including required fields, string-array items and no extra fields.
+The stable key is `briefing:${LLMWorkflowOperation.id}`; quantity is one, recognized at the saved snapshot's `generatedAt`.
+`LLMSpendLedgerEntry.operationRef` is a route decision reference, not this workflow operation ID; provider attempts remain separate.
+
+`recordIdempotentUsageInTransaction(tx, input)` reuses the same validation and persistence primitive without starting a transaction.
+The briefing service owns one bounded transaction (5s acquisition, 10s execution): it locks the existing operation,
+expires prior snapshots, saves the accepted snapshot and appends its usage. Any failure rolls all these writes back.
+No automatic provider retry, new composition installation, price authority, entitlement or bill is introduced.
+
+首个选择启用的消费方仅为已有 ordinary 简报路径；结构化结果通过解析/隐私检查并成功保存业务产物后才记一次。
+原有普通路径和确定性回退保持旧语义，不自动成为新的有键履约。解析或隐私失败不回退供应商已真实发生的消耗。
+本片不修改 `LLMWorkflowOperation.status` 为虚构的完成态，也不将 provider 终态当成业务成功。
+
+The existing `BriefingSnapshot.content.llmMeta.usageObservation` stores a versioned server-owned operation pointer.
+`UsageLedger.metadata` binds the original actor, source, slot, generation, artifact ID and exact content SHA-256.
+Cache/restart reads verify these persisted bindings and recognition time; a changed actor visiting a cached briefing does not
+rewrite provenance. Missing or conflicting referenced evidence fails closed. The receipt is an internal service result,
+not client authorization. The meeting API and both existing memory actions suppress their legacy unkeyed observation only
+when this verified receipt is present. A `force` request cannot mint a new logical operation or another provider attempt.
+
+缓存/重启依赖已有持久槽，不依赖进程 Map 或客户端字段；同键异内容拒绝，原 sourcePage/actor/artifact 保留。
+冲回不会自动重新计量同一产物；需要修订时仍须新的受控逻辑操作，不把取消/退款/账单冲正混入本观察契约。
+No additional schema migration is needed beyond the existing keyed usage and ordinary-operation migrations.
+Rollback removes this consumer integration while retaining snapshots, usage evidence and schema; there is no historical backfill.
+
+## Verification / 验证
+
+Run `npm test -- lib/billing/usage-ledger.test.ts lib/billing/foundation-usage.test.ts` for pure behavior and legacy compatibility.
+The mandatory database command is `npm run test:usage-ledger:mysql`; without an explicitly isolated target it fails.
+Local tests accept only an owned, private synthetic socket directory, verify networking is disabled and the exact data directory,
+create a unique synthetic database, and drop only that database after disconnecting test clients. They never use `DATABASE_URL` as a fallback.
+CI uses the existing Model Egress MySQL job's prepared ephemeral database and explicit container identity; tests fail the job normally.
+Test-only inputs are `USAGE_LEDGER_MYSQL_SOCKET` locally, or `USAGE_LEDGER_MYSQL_DATABASE_URL` plus
+`USAGE_LEDGER_MYSQL_CI_CONTAINER` in CI. They are mutually exclusive, not runtime feature flags.
+`USAGE_LEDGER_MYSQL_REQUIRED=1` rejects a missing explicit target; an ordinary unit run skips the database suite.
+
+持久回归覆盖独立连接并发同键、同键异内容、大小写键、跨工作区、权限撤销、唯一反向行、事务回滚及SQL约束。
+简报回归还覆盖实际 workflow/registry 的解析及隐私拒绝、三个旧计数入口去重、缓存回读、独立连接同操作并发、
+产物/失效标记/usage 原子回滚和先前 settled 成本行不变。普通单测由现有 `npm test` 自动发现；实库用例沿用同一 mandatory CI job。
+合成验证不证明生产迁移、客户授权、真实计费或对账完成。临时数据库生命周期由外层有超时、空间限制和退出清理的runner负责。
+
+## Migration and rollback / 迁移与回滚
+
+Apply `20261109130000_usage_ledger_idempotency` before deploying this code, not only before enabling a keyed writer; no historical row is rewritten.
+This code must never run against a table without the new columns: Prisma reads every UsageLedger column back after each insert, so the
+shared usage write exit (`lib/billing/foundation.ts`) and the settings usage read (`features/settings/queries.ts`) both fail with an unknown-column error,
+even for unkeyed writes. The previous application version works against the migrated table.
+Rollback order: roll the application back first; the schema can then stay as it is. Application rollback retains added columns and evidence.
+The guarded SQL rollback in `prisma/rollback/20261109_rollback_usage_ledger_idempotency.sql` refuses when any keyed evidence exists; run it only
+after the application is rolled back, with the mysql command-line client. It also removes the migration's `_prisma_migrations` row so that
+`prisma migrate deploy` re-applies the migration later.
+Do not delete evidence to make rollback pass; schema removal is only for an unused migration and requires a controlled maintenance window.
+
+迁移是新增列和唯一约束；本地合成试验不代表获准在生产执行DDL。必须先迁移、后上新代码：新代码在插入后与设置页查询中会回读全部列，
+在没有新列的表上，记账出口与设置页读取都会报未知列错误（不带键的写入也一样）。回滚时必须先回退应用代码；旧代码与已迁移的表兼容，表结构可以不动。
+SQL 回滚脚本只能在应用回退之后用 mysql 命令行执行，会同时删除该迁移的 `_prisma_migrations` 记录，以便之后 `migrate deploy` 重新应用。
+使用过的新列保留；不得通过删历史记录完成回滚。

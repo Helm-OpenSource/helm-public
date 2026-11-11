@@ -112,6 +112,12 @@ HELM_OUTBOUND_VOICE_ASR_ENABLED="false"
 HELM_AUTOMATED_CUSTOMER_CALLS_ENABLED="false"
 HELM_SMS_SENDS_ENABLED="false"
 HELM_FINANCIAL_ACTIONS_ENABLED="false"
+# Billing internal service routes (/api/internal/billing/v1/*); off answers 404. Grant pins are non-secret JSON
+# {"<grantId>":"sha256:<contentHash>"} for reviewed BillingServiceGrant rows (Ed25519 public keys); empty trusts none.
+HELM_BILLING_INTERNAL_ROUTES_ENABLED="false"
+HELM_BILLING_SERVICE_GRANT_PINS=""
+# Alipay wallet top-up notify (/api/billing/v1/topup-notify/alipay); off answers 404. Uses ALIPAY_* below.
+HELM_BILLING_TOPUP_ALIPAY_ENABLED="false"
 
 SIGNAL_COLLECTION_SCHEDULER_ENABLED="false"
 LIGHT_CHAIN_FOLLOW_THROUGH_CRON_ENABLED="false"
@@ -159,6 +165,7 @@ STRIPE_WEBHOOK_SECRET=""
 ALIPAY_APP_ID=""
 ALIPAY_PRIVATE_KEY=""
 ALIPAY_PUBLIC_KEY=""
+HELM_BILLING_TOPUP_ALIPAY_SELLER_ID=""
 WECHAT_PAY_APP_ID=""
 WECHAT_PAY_MERCHANT_ID=""
 WECHAT_PAY_MERCHANT_SERIAL_NO=""

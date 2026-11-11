@@ -36,7 +36,7 @@ type AlipayTradeQueryResponse = {
   };
 };
 
-function normalizePem(value: string | null | undefined, type: "PRIVATE KEY" | "PUBLIC KEY") {
+export function normalizePem(value: string | null | undefined, type: "PRIVATE KEY" | "PUBLIC KEY") {
   if (!value) {
     return null;
   }
