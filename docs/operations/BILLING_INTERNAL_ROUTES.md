@@ -87,7 +87,10 @@ and kept on the caller host and never passed to this command. Output is one JSON
    --valid-from=<YYYY-MM-DDTHH:mm:ss.sssZ> --valid-until=<...>`. It prints the exact `row`, its `contentHash`
    (`billingServiceGrantHash`, the verifier's function) and `pin` (`{ "<id>": "sha256:..." }`); no database is opened.
    Instants are explicit UTC milliseconds (no default "now"), so the dry-run hash is the stored row's hash. The grant id must
-   match the request header format `[a-z0-9][a-z0-9_-]{2,63}`; `resolve-unknown` is only ever issued alone.
+   match the request header format `[a-z0-9][a-z0-9_-]{2,63}`; `resolve-unknown` is only ever issued alone. A grant may also
+   declare `balance-status`: it is accepted ahead of its operation (C-BAL) and has **no route until C-BAL merges**, so it
+   authorizes nothing yet. `scopesJson` is immutable, so **do not issue a production grant before the scope list (including
+   C-BAL) is final**; a later scope change means a new grant via rotation.
 2. **Review**: a second operator checks the dry-run output against the approval (`approvalRef`), issuer, scopes, validity and
    the public key fingerprint the caller reports.
 3. **Apply**: rerun with `--apply`. The row is inserted and re-read in one transaction; a readback whose hash differs rolls

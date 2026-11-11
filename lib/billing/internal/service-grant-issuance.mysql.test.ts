@@ -36,7 +36,7 @@ describe.skipIf(!url)("BillingServiceGrant issuance CLI against MySQL", () => {
   const dir = mkdtempSync(join(tmpdir(), "e1c-")), keyFile = join(dir, "public.pem");
   writeFileSync(keyFile, pair.publicKey.export({ type: "spki", format: "pem" }));
   let a: PrismaClient;
-  const issueArgs = ["issue", `--grant-id=${grantId}`, "--issuer=synthetic-e1c", "--scopes=reserve,quote",
+  const issueArgs = ["issue", `--grant-id=${grantId}`, "--issuer=synthetic-e1c", "--scopes=reserve,balance-status,quote",
     `--public-key-file=${keyFile}`, "--approval-ref=approval:synthetic", "--created-by=operator:synthetic",
     `--valid-from=${new Date(Date.now() - 3_600_000).toISOString()}`, `--valid-until=${new Date(Date.now() + 86_400_000).toISOString()}`];
   const cli = (args: string[]) => JSON.parse(execFileSync(process.execPath, ["--import", "tsx", "--import",
@@ -72,7 +72,7 @@ describe.skipIf(!url)("BillingServiceGrant issuance CLI against MySQL", () => {
     expect(applied).toMatchObject({ applied: true, alreadyIssued: false, contentHash: dry.contentHash, pin: dry.pin });
     pin = applied.pin;
     expect(await a.billingServiceGrant.findUnique({ where: { id: grantId } })).toMatchObject({ contentHash: dry.contentHash,
-      scopesJson: '["quote","reserve"]', revokedAt: null });
+      scopesJson: '["balance-status","quote","reserve"]', revokedAt: null });
     expect(await authenticate(pin)).toEqual({ grantId, actor: { type: "SYSTEM", ref: `billing-service:synthetic-e1c/${grantId}` } });
   });
 

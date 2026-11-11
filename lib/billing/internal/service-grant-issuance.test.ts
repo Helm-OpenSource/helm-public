@@ -42,6 +42,7 @@ describe("buildBillingServiceGrant", () => {
       expect(code(() => buildBillingServiceGrant(input(patch)))).toBe("input_invalid");
     }
     expect(buildBillingServiceGrant(input({ scopes: ["resolve-unknown"] })).row.scopesJson).toBe('["resolve-unknown"]');
+    expect(buildBillingServiceGrant(input({ scopes: ["quote", "balance-status"] })).row.scopesJson).toBe('["balance-status","quote"]');
   });
 });
 

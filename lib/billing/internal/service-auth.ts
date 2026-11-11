@@ -14,6 +14,9 @@ import type { ServiceActor } from "../reservations/reservations";
  */
 export const BILLING_SERVICE_SCOPES = ["quote", "reserve", "settle", "release", "mark-unknown", "resolve-unknown"] as const;
 export type BillingServiceScope = (typeof BILLING_SERVICE_SCOPES)[number];
+/** Scopes a grant row may declare. `balance-status` is declared ahead of its operation (C-BAL) so a grant need not be rotated
+ * when it lands; until that operation joins BILLING_SERVICE_SCOPES no route accepts it and it authorizes nothing. */
+export const BILLING_SERVICE_GRANT_SCOPES: readonly string[] = [...BILLING_SERVICE_SCOPES, "balance-status"];
 export const BILLING_SIGNATURE_WINDOW_MS = 300_000;
 /** Grant ids the request header accepts; a row with any other id can never authenticate. */
 export const BILLING_SERVICE_GRANT_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{2,63}$/;
@@ -115,7 +118,7 @@ export function billingServiceGrantPublicKey(grant: Pick<BillingServiceGrantRow,
 export function billingServiceGrantScopes(scopesJson: string): readonly string[] {
   let scopes: unknown;
   try { scopes = JSON.parse(scopesJson); } catch { return []; }
-  if (!Array.isArray(scopes) || scopes.some(s => !BILLING_SERVICE_SCOPES.includes(s)) ||
+  if (!Array.isArray(scopes) || scopes.some(s => !BILLING_SERVICE_GRANT_SCOPES.includes(s)) ||
       JSON.stringify([...new Set(scopes)].sort()) !== scopesJson) return [];
   return scopes;
 }
