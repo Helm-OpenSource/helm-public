@@ -46,6 +46,7 @@ const EXPECTED_BINDINGS = {
     "app/api/billing/wechat-pay/notify/route.ts",
   ],
   billing_internal_route: ["lib/billing/internal/internal-routes.ts"],
+  billing_topup_alipay: ["lib/billing/topup/alipay-topup.ts"],
 } as const;
 
 describe("deployment capability source bindings", () => {
