@@ -16,13 +16,14 @@ import type { BillingRejectCode, ServiceActor } from "../reservations/reservatio
  * overdraftUsed is always 0 until the overdraft slice (C-OD) adds its account; the field is reserved in the response now.
  */
 export const BALANCE_STATUS_MAX_WORKSPACES = 50;
-export type PayerBalanceSummary = { billingMode: "off" | "shadow" | "enforce"; walletFen: bigint; creditUsedFen: bigint;
+export type PayerStatus = "active" | "suspended" | "closed"; // PayerAccount.status ENUM
+export type PayerBalanceSummary = { billingMode: "off" | "shadow" | "enforce"; payerStatus: PayerStatus; walletFen: bigint; creditUsedFen: bigint;
   overdraftUsedFen: bigint; creditRemainingFen: bigint; heldFen: bigint; balanceFen: bigint; headroomFen: bigint; arrears: boolean;
   asOf: Date };
 
 const ZERO = BigInt(0);
 const REF = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,190}$/;
-type Row = { workspaceId: string; billingMode: PayerBalanceSummary["billingMode"]; walletFen: bigint | null;
+type Row = { workspaceId: string; billingMode: PayerBalanceSummary["billingMode"]; payerStatus: PayerStatus; walletFen: bigint | null;
   creditUsedFen: bigint | null; creditRemainingFen: bigint | null; heldFen: bigint; asOf: Date };
 
 /**
@@ -32,7 +33,7 @@ type Row = { workspaceId: string; billingMode: PayerBalanceSummary["billingMode"
  */
 export async function readPayerBalanceSummaries(client: PrismaClient | Prisma.TransactionClient, workspaceIds: readonly string[]) {
   if (workspaceIds.length === 0) return new Map<string, PayerBalanceSummary>();
-  const rows = await client.$queryRaw<Row[]>`SELECT b.scopeRef AS workspaceId, p.billingMode,
+  const rows = await client.$queryRaw<Row[]>`SELECT b.scopeRef AS workspaceId, p.billingMode, p.status AS payerStatus,
       (SELECT w.balanceFen FROM FundsAccountProjection w WHERE w.payerAccountId = p.id AND w.account = 'customer_wallet_available') AS walletFen,
       (SELECT r.balanceFen FROM FundsAccountProjection r WHERE r.payerAccountId = p.id AND r.account = 'credit_receivable') AS creditUsedFen,
       (SELECT IF(p.status = 'active' AND (f.validUntil IS NULL OR f.validUntil > UTC_TIMESTAMP(3)), GREATEST(f.limitFen - f.usedFen, 0), 0)
@@ -48,20 +49,22 @@ export async function readPayerBalanceSummaries(client: PrismaClient | Prisma.Tr
     const walletFen = BigInt(row.walletFen ?? ZERO), creditUsedFen = BigInt(row.creditUsedFen ?? ZERO), overdraftUsedFen = ZERO;
     const creditRemainingFen = BigInt(row.creditRemainingFen ?? ZERO), heldFen = BigInt(row.heldFen);
     const headroomFen = walletFen + creditRemainingFen - heldFen;
-    summaries.set(row.workspaceId, { billingMode: row.billingMode, walletFen, creditUsedFen, overdraftUsedFen, creditRemainingFen,
+    summaries.set(row.workspaceId, { billingMode: row.billingMode, payerStatus: row.payerStatus, walletFen, creditUsedFen, overdraftUsedFen, creditRemainingFen,
       heldFen, balanceFen: walletFen - creditUsedFen - overdraftUsedFen, headroomFen, arrears: headroomFen <= ZERO, asOf: row.asOf });
   }
   return summaries;
 }
 
 export type BalanceStatusRequest = { workspaceIds: string[] };
-export type BalanceStatusEntry = { workspaceId: string; ok: true; billingMode: PayerBalanceSummary["billingMode"]; balanceFen: string;
+export type BalanceStatusEntry = { workspaceId: string; ok: true; billingMode: PayerBalanceSummary["billingMode"]; payerStatus: PayerStatus;
+  balanceFen: string;
   headroomFen: string; overdraftUsedFen: string; arrears: boolean; asOf: string } | { workspaceId: string; ok: false; code: "billing_mode_off" };
 
 /**
  * `balance-status` (v3.10): 1-50 distinct workspace ids, answered in request order. A bound payer is reported whatever its mode
  * (off included, so balances can be checked before enforce); an unbound workspace is `billing_mode_off` (not billed). The
- * caller applies the arrears gate only to `billingMode: "enforce"`. The service identity is authenticated by the route; a read
+ * caller applies the arrears gate only to `billingMode: "enforce"`, and treats an enforce payer whose `payerStatus` is not
+ * `active` as stopped exactly like arrears (owner 11-12): Core refuses its new reserves, so work would run unbilled. The service identity is authenticated by the route; a read
  * leaves no per-identity trace beyond the auth nonce.
  */
 export async function balanceStatus(client: PrismaClient, _actor: ServiceActor, req: BalanceStatusRequest):
@@ -73,7 +76,7 @@ export async function balanceStatus(client: PrismaClient, _actor: ServiceActor, 
   return { ok: true, results: ids.map((workspaceId): BalanceStatusEntry => {
     const summary = summaries.get(workspaceId);
     if (!summary) return { workspaceId, ok: false, code: "billing_mode_off" };
-    return { workspaceId, ok: true, billingMode: summary.billingMode, balanceFen: fenToDecimalString(summary.balanceFen),
+    return { workspaceId, ok: true, billingMode: summary.billingMode, payerStatus: summary.payerStatus, balanceFen: fenToDecimalString(summary.balanceFen),
       headroomFen: fenToDecimalString(summary.headroomFen), overdraftUsedFen: fenToDecimalString(summary.overdraftUsedFen),
       arrears: summary.arrears, asOf: summary.asOf.toISOString() };
   }) };

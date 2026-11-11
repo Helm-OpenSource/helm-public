@@ -63,13 +63,15 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
 - **balance-status** (C-BAL, protocol v3.10; scope `balance-status`, read-only, `lib/billing/balance/balance-status.ts`): request
   `{ workspaceIds: [...] }`, 1-50 distinct ids (empty, more than 50, duplicates, bad formats or extra fields are
   `request_invalid`). Answer `{ ok: true, results: [...] }` in request order; per workspace either `{ workspaceId, ok: true,
-  billingMode, balanceFen, headroomFen, overdraftUsedFen, arrears, asOf }` or, with no active binding, `{ workspaceId, ok: false,
+  billingMode, payerStatus, balanceFen, headroomFen, overdraftUsedFen, arrears, asOf }` or, with no active binding, `{ workspaceId, ok: false,
   code: "billing_mode_off" }` (not billed). Signed integer fen strings: `balanceFen = wallet - creditUsed - overdraftUsed` (may
   be negative; creditUsed is the `credit_receivable` projection, so a closed facility's draws still count); `headroomFen = wallet +
   creditRemaining - held` is the reserve admission formula (remaining credit of the drawable, in-term facility, 0 for a payer
   that is not active; held = enforce `held`/`unknown` reservations); `arrears = headroomFen <= 0` (owner 11-12 Q8).
   `overdraftUsedFen` is always `"0"` until the overdraft slice adds its account. A bound payer is answered in every mode,
-  `off` included; callers apply the arrears gate only to `billingMode: "enforce"`. One lock-free statement per batch: a
+  `off` included; callers apply the arrears gate only to `billingMode: "enforce"`. `payerStatus` is the PayerAccount status
+  (`active|suspended|closed`); numbers are still returned for a non-active payer, and callers stop an enforce payer that is
+  not `active` exactly like arrears (owner 11-12: Core refuses its new reserves, so work would run unbilled). One lock-free statement per batch: a
   consistent read that never waits on, or delays, a reserve or settle. Writes only the auth nonce. The wallet read
   (`/api/billing/v1/wallet`) carries the same `balanceFen`, `headroomFen` and `arrears` next to `availableFen` (unchanged:
   wallet projection only).

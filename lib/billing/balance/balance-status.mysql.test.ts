@@ -114,7 +114,8 @@ describe.skipIf(!url)("balance-status and the balance summary against MySQL", ()
     settle(client, settler, { ...resolution(reservationId, key), quantityUsed: String(minutes) });
   const summary = async (p: Payer) => {
     const found = (await readPayerBalanceSummaries(a, [p.ws])).get(p.ws)!;
-    return { balance: Number(found.balanceFen), headroom: Number(found.headroomFen), arrears: found.arrears, mode: found.billingMode };
+    return { balance: Number(found.balanceFen), headroom: Number(found.headroomFen), arrears: found.arrears, mode: found.billingMode,
+      ...(found.payerStatus === "active" ? {} : { status: found.payerStatus }) };
   };
   const moneyRows = async () => [await a.fundsTransaction.count(), await a.billingReservation.count(), await a.creditFacility.count()];
 
@@ -170,7 +171,7 @@ describe.skipIf(!url)("balance-status and the balance summary against MySQL", ()
     const before = await moneyRows();
     const answer = await call({ workspaceIds: [p.ws] }, service);
     expect(answer.status).toBe(200);
-    expect(answer.body).toEqual({ ok: true, results: [{ workspaceId: p.ws, ok: true, billingMode: "enforce", balanceFen: "-490",
+    expect(answer.body).toEqual({ ok: true, results: [{ workspaceId: p.ws, ok: true, billingMode: "enforce", payerStatus: "active", balanceFen: "-490",
       headroomFen: String(MILLION_YUAN - 665), overdraftUsedFen: "0", arrears: false, asOf: expect.stringMatching(/^2\d{3}-.*Z$/) }] });
     expect(Math.abs(Date.parse(answer.body.results[0].asOf) - Date.now())).toBeLessThan(60_000);
     expect(await moneyRows()).toEqual(before); // read-only: no funds, reservation or credit row
@@ -205,9 +206,17 @@ describe.skipIf(!url)("balance-status and the balance summary against MySQL", ()
     await new Promise(resolve => setTimeout(resolve, 4_500)); // still the active row, now outside its term
     expect(await summary(lapsing)).toEqual({ balance: 50, headroom: 50, arrears: false, mode: "enforce" });
 
-    const suspended = await payer("enforce", 30, 1000);
+    // Non-active payers keep their numbers (credit remaining 0) and report payerStatus; Overlay stops them like arrears.
+    const service = await grant("status", ["balance-status"]);
+    const suspended = await payer("enforce", 30, 1000), closed = await payer("enforce", 0, 1000);
     await a.$executeRaw`UPDATE PayerAccount SET status = 'suspended' WHERE id = ${suspended.payerRef}`;
-    expect(await summary(suspended)).toEqual({ balance: 30, headroom: 30, arrears: false, mode: "enforce" });
+    await a.$executeRaw`UPDATE PayerAccount SET status = 'closed' WHERE id = ${closed.payerRef}`;
+    expect(await summary(suspended)).toEqual({ balance: 30, headroom: 30, arrears: false, mode: "enforce", status: "suspended" });
+    expect((await call({ workspaceIds: [suspended.ws, closed.ws] }, service)).body.results).toEqual([
+      { workspaceId: suspended.ws, ok: true, billingMode: "enforce", payerStatus: "suspended", balanceFen: "30", headroomFen: "30",
+        overdraftUsedFen: "0", arrears: false, asOf: expect.any(String) },
+      { workspaceId: closed.ws, ok: true, billingMode: "enforce", payerStatus: "closed", balanceFen: "0", headroomFen: "0",
+        overdraftUsedFen: "0", arrears: true, asOf: expect.any(String) }]);
   }, 20_000);
 
   it("answers every bound payer whatever its mode, unbound workspaces as billing_mode_off, in request order, per payer", async () => {
@@ -218,10 +227,10 @@ describe.skipIf(!url)("balance-status and the balance summary against MySQL", ()
     const unbound = `bal-unbound-${run}`;
     const answer = await call({ workspaceIds: [shadow.ws, unbound, off.ws, enforce.ws] }, service);
     expect(answer).toEqual({ status: 200, body: { ok: true, results: [
-      { workspaceId: shadow.ws, ok: true, billingMode: "shadow", balanceFen: "500", headroomFen: "500", overdraftUsedFen: "0", arrears: false, asOf: expect.any(String) },
+      { workspaceId: shadow.ws, ok: true, billingMode: "shadow", payerStatus: "active", balanceFen: "500", headroomFen: "500", overdraftUsedFen: "0", arrears: false, asOf: expect.any(String) },
       { workspaceId: unbound, ok: false, code: "billing_mode_off" },
-      { workspaceId: off.ws, ok: true, billingMode: "off", balanceFen: "0", headroomFen: String(MILLION_YUAN), overdraftUsedFen: "0", arrears: false, asOf: expect.any(String) },
-      { workspaceId: enforce.ws, ok: true, billingMode: "enforce", balanceFen: "0", headroomFen: "930", overdraftUsedFen: "0", arrears: false, asOf: expect.any(String) },
+      { workspaceId: off.ws, ok: true, billingMode: "off", payerStatus: "active", balanceFen: "0", headroomFen: String(MILLION_YUAN), overdraftUsedFen: "0", arrears: false, asOf: expect.any(String) },
+      { workspaceId: enforce.ws, ok: true, billingMode: "enforce", payerStatus: "active", balanceFen: "0", headroomFen: "930", overdraftUsedFen: "0", arrears: false, asOf: expect.any(String) },
     ] } });
     const fresh = await payer("off", 0); // bound, no wallet, no credit: arrears is reported; the caller gates only enforce payers
     expect((await call({ workspaceIds: [fresh.ws] }, service)).body.results[0]).toMatchObject({ billingMode: "off", balanceFen: "0", headroomFen: "0", arrears: true });
