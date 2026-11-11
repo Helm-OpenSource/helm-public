@@ -3,8 +3,8 @@ import "server-only";
 // lib/seat-device/store-authorize.ts
 // Seat desktop device authorization (D1), request side: a device asks for
 // authorization, a member looks the pairing code up on the website and
-// approves or rejects it, and the device may cancel its own request. (The
-// device's claim follows in the next slice.)
+// approves or rejects it, and the device polls to claim its tokens (once
+// more within 60 seconds if the answer was lost) or cancels its request.
 //
 // Consistency (design v0.3 §6.2, P2-7): Workspace, Membership, User and
 // AuthSession are read OUTSIDE the Serializable transaction (InnoDB turns
@@ -30,6 +30,7 @@ import { AUTH_SESSION_PROVIDER_TYPES } from "@/lib/auth/provider-seam";
 import { db } from "@/lib/db";
 import { isWriteConflictError } from "@/lib/db/conflict-aware-write";
 import {
+  SEAT_DEVICE_ACCESS_TOKEN_TTL_SECONDS,
   SEAT_DEVICE_MAX_ACTIVE_PER_MEMBER,
   SEAT_DEVICE_PAIRING_CODE_MAX_ATTEMPTS,
   SEAT_DEVICE_PENDING_BUCKET_WINDOW_SECONDS,
@@ -38,6 +39,7 @@ import {
   SEAT_DEVICE_PENDING_LIMIT_PER_BUCKET_WINDOW,
   SEAT_DEVICE_POLL_INTERVAL_SECONDS,
   SEAT_DEVICE_REQUEST_TTL_SECONDS,
+  SEAT_DEVICE_ROTATION_GRACE_SECONDS,
   SEAT_DEVICE_STEP_UP_MAX_SESSION_AGE_SECONDS,
   effectiveSeatDeviceStatus,
   formatSeatDevicePairingCode,
@@ -49,10 +51,13 @@ import {
   mintSeatDeviceToken,
   seatDeviceCredentialExpiresAt,
   seatDeviceHashesEqual,
+  seatDeviceIdentity,
   seatDeviceSourceBucket,
+  seatDeviceUnclaimedPollStatus,
   type SeatDeviceCancelStatus,
   type SeatDeviceClientType,
   type SeatDeviceErrorCode,
+  type SeatDeviceIdentity,
 } from "@/lib/seat-device/contract";
 
 const TX = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
@@ -253,9 +258,11 @@ async function secondsUntilFirstPendingLapses(
 // Device: cancel
 // ---------------------------------------------------------------------------
 
-// Design v0.3.1 §15.1: a pending or approved-but-unclaimed request becomes
-// cancelled; a claimed device reads "claimed" and is left alone. A wrong poll
-// token reads "expired" so the call never says whether a request exists.
+// Design v0.3.1 §15.1 / v0.3.2 §15.6: a pending or approved-but-unclaimed
+// request becomes cancelled; a claimed device whose pair was never used is
+// revoked (client_cancelled) and also reads "cancelled"; a used one reads
+// "claimed". A wrong poll token reads "expired" so the call never says whether
+// a request exists.
 export async function cancelSeatDeviceAuthorization(input: {
   requestId: string;
   pollToken: string;
@@ -285,9 +292,23 @@ export async function cancelSeatDeviceAuthorization(input: {
       }
       return { status: "cancelled" as const };
     }
-    // A claimed device is left alone here; the client revokes it with its
-    // refresh token (device-tokens/revoke, reason client_cancelled).
-    if (status === "active") return { status: "claimed" as const };
+    // A claimed device whose pair was never used is revoked here (design
+    // v0.3.2 §15.6, no time limit); a used one is left alone and the client
+    // revokes it with its refresh token. See claimSeatDeviceAuthorization for
+    // what "never used" can and cannot mean here.
+    if (status === "active") {
+      if (row.refreshTokenUsed || row.rotatedAt) return { status: "claimed" as const };
+      const result = await tx.seatDeviceAuthorization.updateMany({
+        where: { ...cas, refreshTokenUsed: false, rotatedAt: null, expiresAt: { gt: now } },
+        data: { status: "revoked", revokedAt: now, revokeReason: "client_cancelled", sourceIp: null, version: { increment: 1 } },
+      });
+      if (result.count !== 1) casLost();
+      await auditDevice(tx, row, "SEAT_DEVICE_REVOKED", `坐席客户端取消并撤销未使用的设备：${row.deviceLabel}`, {
+        reason: "client_cancelled",
+        refreshTokenPresented: false,
+      });
+      return { status: "cancelled" as const };
+    }
     if (status === "expired") {
       await clearLapsedPairingCode(tx, row);
       return { status: "expired" as const };
@@ -339,6 +360,165 @@ async function auditDevice(
     },
     { client: tx },
   );
+}
+
+// ---------------------------------------------------------------------------
+// Device: claim (poll), one re-claim
+// ---------------------------------------------------------------------------
+
+export type SeatDeviceClaimAnswer =
+  | { status: "pending" | "rejected" | "expired" }
+  | {
+      status: "approved";
+      accessToken: string;
+      refreshToken: string;
+      expiresInSeconds: number;
+      refreshExpiresInSeconds: number;
+      deviceId: string;
+      identity: SeatDeviceIdentity;
+    };
+
+// The bound member must still be the one approved: same ACTIVE, internal
+// membership and unchanged password. Read outside the transaction (P2-7).
+async function loadClaimIdentity(row: {
+  workspaceId: string | null;
+  userId: string | null;
+  membershipId: string | null;
+  userPasswordSetAt: Date | null;
+}): Promise<SeatDeviceIdentity | null> {
+  if (!row.workspaceId || !row.userId) return null;
+  const [workspace, membership, user] = await Promise.all([
+    db.workspace.findUnique({ where: { id: row.workspaceId }, select: { id: true, name: true } }),
+    db.membership.findUnique({
+      where: { workspaceId_userId: { workspaceId: row.workspaceId, userId: row.userId } },
+      select: { id: true, role: true, status: true, accessScope: true },
+    }),
+    db.user.findUnique({ where: { id: row.userId }, select: { name: true, passwordSetAt: true } }),
+  ]);
+  if (
+    !workspace ||
+    !membership ||
+    !user ||
+    membership.id !== row.membershipId ||
+    membership.status !== MembershipStatus.ACTIVE ||
+    externalScopeOf(membership) !== null ||
+    (user.passwordSetAt?.getTime() ?? null) !== (row.userPasswordSetAt?.getTime() ?? null)
+  ) {
+    return null;
+  }
+  return seatDeviceIdentity({ userId: row.userId, displayName: user.name, workspace, role: membership.role });
+}
+
+// "The pair was never used" is read from two columns this slice never sets:
+// rotatedAt (any refresh rotation) and refreshTokenUsed (the current pair was
+// used). Until their writers land, the server only knows that the refresh
+// token was never presented; it does not know whether an access token was
+// accepted. Writer obligations: 1b sets rotatedAt on every rotation and
+// refreshTokenUsed when a refresh token is presented; 3a sets
+// refreshTokenUsed when the device channel first accepts an access token.
+// A claim and a re-claim always hand out an unused pair. rotationSource
+// records the trusted source the current pair was issued to; a re-claim must
+// come from that same source.
+export async function claimSeatDeviceAuthorization(input: {
+  requestId: string;
+  pollToken: string;
+  source: string | null;
+  now?: Date;
+}): Promise<SeatDeviceClaimAnswer> {
+  assertDeploymentEnabled();
+  const now = input.now ?? new Date();
+  const pollTokenHash = hashSeatDeviceToken(input.pollToken);
+  const peek = await db.seatDeviceAuthorization.findUnique({ where: { id: input.requestId } });
+  if (!peek || !seatDeviceHashesEqual(peek.pollTokenHash, pollTokenHash)) throw new SeatDeviceAuthError("poll_token_invalid");
+  const bindsTokens = peek.status === "approved" || peek.status === "active";
+  const identity = bindsTokens ? await loadClaimIdentity(peek) : null;
+  const access = mintSeatDeviceToken("access");
+  const refresh = mintSeatDeviceToken("refresh");
+
+  return retried(() => db.$transaction(async (tx): Promise<SeatDeviceClaimAnswer> => {
+    const row = await tx.seatDeviceAuthorization.findUnique({ where: { id: input.requestId } });
+    if (!row || !seatDeviceHashesEqual(row.pollTokenHash, pollTokenHash)) throw new SeatDeviceAuthError("poll_token_invalid");
+    if (row.lastPolledAt) {
+      const nextAt = new Date(row.lastPolledAt.getTime() + row.pollIntervalSec * 1000);
+      if (nextAt > now) throw new SeatDeviceAuthError("slow_down", secondsUntil(nextAt, now));
+    }
+    const status = effectiveSeatDeviceStatus(row, now);
+    const cas = { id: row.id, status: row.status, version: row.version };
+    const unclaimed = seatDeviceUnclaimedPollStatus(status);
+    // Bound to a row read before the transaction: if it changed status in
+    // between, answer "pending" and let the next poll pick it up.
+    const stale = row.status !== peek.status || row.userId !== peek.userId;
+    if (unclaimed || stale) {
+      await tx.seatDeviceAuthorization.update({
+        where: { id: row.id },
+        data: status === "expired" && row.pairingCodeHash
+          ? { lastPolledAt: now, pairingCodeHash: null, sourceIp: null }
+          : { lastPolledAt: now },
+      });
+      return { status: unclaimed ?? "pending" };
+    }
+    if (status !== "approved" && status !== "active") throw new SeatDeviceAuthError("poll_token_invalid");
+    const reclaim = status === "active";
+    if (
+      reclaim &&
+      (row.reclaimed ||
+        row.refreshTokenUsed ||
+        row.rotatedAt ||
+        !row.claimedAt ||
+        now.getTime() - row.claimedAt.getTime() > SEAT_DEVICE_ROTATION_GRACE_SECONDS * 1000 ||
+        !input.source ||
+        row.rotationSource !== input.source)
+    ) {
+      throw new SeatDeviceAuthError("poll_token_invalid");
+    }
+    // Design §4.2: every other claim refusal is poll_token_invalid, including
+    // a member who changed since approval.
+    if (!identity) throw new SeatDeviceAuthError("poll_token_invalid");
+    const pair = {
+      accessTokenHash: access.tokenHash,
+      accessExpiresAt: new Date(now.getTime() + SEAT_DEVICE_ACCESS_TOKEN_TTL_SECONDS * 1000),
+      refreshTokenHash: refresh.tokenHash,
+      refreshTokenUsed: false,
+      rotationSource: input.source,
+      lastPolledAt: now,
+      version: { increment: 1 },
+    };
+    const result = reclaim
+      ? await tx.seatDeviceAuthorization.updateMany({
+          where: { ...cas, reclaimed: false, refreshTokenUsed: false, rotatedAt: null },
+          data: { ...pair, reclaimed: true },
+        })
+      : await tx.seatDeviceAuthorization.updateMany({
+          where: { ...cas, requestExpiresAt: { gt: now } },
+          data: { ...pair, status: "active", issuedAt: now, claimedAt: now, lastIp: input.source },
+        });
+    if (result.count !== 1) casLost();
+    if (reclaim && row.accessTokenHash && row.refreshTokenHash) {
+      // The first pair is retired for good: presenting it later is reuse.
+      await tx.seatDeviceTokenHistory.createMany({
+        data: [
+          { deviceId: row.id, kind: "refresh", tokenHash: row.refreshTokenHash, retiredAt: now },
+          { deviceId: row.id, kind: "access", tokenHash: row.accessTokenHash, retiredAt: now },
+        ],
+      });
+    }
+    await auditDevice(
+      tx,
+      row,
+      reclaim ? "SEAT_DEVICE_RECLAIMED" : "SEAT_DEVICE_CLAIMED",
+      `${reclaim ? "坐席客户端重领设备凭据" : "坐席客户端领取设备凭据"}：${row.deviceLabel}`,
+      { tokenStoredAsHashOnly: true, sourceTrusted: input.source !== null },
+    );
+    return {
+      status: "approved" as const,
+      accessToken: access.token,
+      refreshToken: refresh.token,
+      expiresInSeconds: SEAT_DEVICE_ACCESS_TOKEN_TTL_SECONDS,
+      refreshExpiresInSeconds: Math.max(0, Math.floor(((row.expiresAt ?? now).getTime() - now.getTime()) / 1000)),
+      deviceId: row.id,
+      identity,
+    };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), "slow_down");
 }
 
 // ---------------------------------------------------------------------------
