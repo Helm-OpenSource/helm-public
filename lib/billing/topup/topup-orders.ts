@@ -180,8 +180,11 @@ async function verifyInTransaction(tx: Prisma.TransactionClient, provider: Topup
       const recorded = await recordPaymentException(tx, exception(`paid_then_${observed.status}`, observed.providerOrderNo));
       return result(recorded ? "exception_recorded" : "unchanged", order.state);
     }
+    // Unknown news (e.g. a refund) before any credit is kept too: a later query may still credit the full amount.
+    const recorded = observed.status === "unknown" &&
+      await recordPaymentException(tx, exception("unknown_before_credit", observed.providerOrderNo));
     const next = nextUnpaidState(order.state, observed.status);
-    if (next === order.state) return result("unchanged", order.state);
+    if (next === order.state) return result(recorded ? "exception_recorded" : "unchanged", order.state);
     await recordState(tx, order, next, { source: observed.source, observed: observed.status });
     return result("state_recorded", next);
   }
@@ -221,8 +224,30 @@ async function verifyInTransaction(tx: Prisma.TransactionClient, provider: Topup
   return result("credited", "paid_verified", { lateAfterClose, verifiedPaymentId: payment.id, fundsTransactionId: funds.transaction.id });
 }
 
+/** A trusted, identity-matched "paid" report that cannot be parsed (txn id, amount): money may have arrived, so keep it. */
+async function recordUnparseablePaid(client: PrismaClient, provider: TopupProvider, observed: ObservedPayment) {
+  return runFundsTransactionWithRetry(client, async tx => {
+    const order = await tx.paymentOrder.findUnique({ where: { providerOrderNo: observed.providerOrderNo } });
+    if (!order || order.orderType !== "wallet_topup" || order.provider !== provider || order.merchantRef !== observed.merchantRef ||
+        order.appRef !== observed.appRef) return undefined;
+    const pending: PaymentException = { key: `observation_invalid:${provider}:${order.providerOrderNo}`, reason: "observation_invalid",
+      paymentOrderId: order.id, workspaceId: order.workspaceId, payerAccountId: order.payerAccountId, provider,
+      providerTxnId: typeof observed.providerTxnId === "string" ? observed.providerTxnId.slice(0, 64) : null,
+      amountFen: typeof observed.amountFen === "bigint" ? observed.amountFen.toString() : null, source: observed.source, observed: "paid" };
+    await recordPaymentException(tx, pending);
+    return pending;
+  });
+}
+
 async function verifyObserved(client: PrismaClient, provider: TopupProvider, observed: ObservedPayment) {
-  checkObservation(provider, observed); // untrusted or malformed observations open no transaction
+  try { checkObservation(provider, observed); } catch (error) { // untrusted or malformed observations open no credit transaction
+    if (error instanceof TopupRefusal && error.code === "topup_observation_invalid" && observed.status === "paid" &&
+        isTopupProviderOrderNo(observed.providerOrderNo)) {
+      const pending = await recordUnparseablePaid(client, provider, observed);
+      if (pending) refuse("topup_observation_invalid", pending);
+    }
+    throw error;
+  }
   try {
     return await runFundsTransactionWithRetry(client, tx => verifyInTransaction(tx, provider, observed));
   } catch (error) {

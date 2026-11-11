@@ -107,6 +107,17 @@ describe.skipIf(!url)("Alipay wallet top-up notify against MySQL", () => {
     expect(await a.billingOutbox.count({ where: { payload: { contains: o.id } } })).toBe(0);
   });
 
+  it("keeps a signed, identity-matched paid notify it cannot parse once, locatable to the order", async () => {
+    const o = await order(1500);
+    const { trade_no: _txn, ...noTxn } = trade(o);
+    for (const body of [noTxn, trade(o, { total_amount: "15.000" }), trade(o, { trade_no: "has space" })]) {
+      expect(await notify(double.notify(body))).toEqual([200, "success"]);
+    }
+    expect(await exceptions(`observation_invalid:alipay:${o.providerOrderNo}`)).toBe(1);
+    expect(await notify(double.notify({ ...noTxn, app_id: "2021000000000002" }))).toEqual([400, "fail"]); // other app: nothing kept
+    expect(await effects(o)).toEqual(untouched);
+  });
+
   it("keeps a signed amount mismatch once for reconciliation and acknowledges it", async () => {
     const o = await order(800);
     for (let i = 0; i < 2; i += 1) expect(await notify(double.notify(trade(o, { total_amount: "7.99" })))).toEqual([200, "success"]);
@@ -136,10 +147,13 @@ describe.skipIf(!url)("Alipay wallet top-up notify against MySQL", () => {
     expect(await effects(o)).toEqual({ state: "paid_verified", payments: 1, funds: 1, wallet: BigInt(900) });
   });
 
-  it("never credits a first refund notify; a not-yet-existing trade queries as pending", async () => {
+  it("never credits a first refund notify but keeps it before a later query credit; a missing trade queries as pending", async () => {
     const o = await order(500);
-    expect(await notify(double.notify(trade(o, { refund_fee: "5.00" })))).toEqual([200, "success"]);
+    for (let i = 0; i < 2; i += 1) expect(await notify(double.notify(trade(o, { refund_fee: "5.00" })))).toEqual([200, "success"]);
     expect(await effects(o)).toEqual({ ...untouched, state: "unknown" });
+    double.trades.set(o.providerOrderNo, { code: "10000", msg: "Success", ...trade(o) });
+    expect((await query(o)).outcome).toBe("credited");
+    expect(await exceptions(`unknown_before_credit:alipay:${o.providerOrderNo}`)).toBe(1); // the refund clue survives the credit
     const fresh = await order(500);
     expect(await query(fresh)).toMatchObject({ outcome: "state_recorded", state: "pending" });
   });

@@ -20,7 +20,7 @@ export function alipayDouble() {
   };
   const trades = new Map<string, Record<string, unknown>>();
   const requests: Array<Record<string, string>> = [];
-  let tamper = false;
+  let tamper = false, mode: "ok" | "no_sign" | "empty_sign" | "http_500" = "ok";
   const fetch = (async (url: string | URL | Request, init?: RequestInit) => {
     if (String(url) !== env.ALIPAY_GATEWAY_URL) throw new Error("unexpected_gateway");
     const form = Object.fromEntries(new URLSearchParams(String(init?.body)));
@@ -32,8 +32,11 @@ export function alipayDouble() {
     const outTradeNo = (JSON.parse(form.biz_content) as { out_trade_no: string }).out_trade_no;
     const node = JSON.stringify(trades.get(outTradeNo) ?? { code: "40004", msg: "Business Failed", sub_code: "ACQ.TRADE_NOT_EXIST" });
     const signature = sign(node);
-    const text = `{"alipay_trade_query_response":${tamper ? node.replace(/"total_amount":"[^"]*"/, "\"total_amount\":\"0.01\"") : node},"sign":"${signature}"}`;
-    return new Response(text, { status: 200, headers: { "Content-Type": "application/json;charset=utf-8" } });
+    const body = tamper ? node.replace(/"total_amount":"[^"]*"/, "\"total_amount\":\"0.01\"") : node;
+    const text = mode === "no_sign" ? `{"alipay_trade_query_response":${body}}`
+      : `{"alipay_trade_query_response":${body},"sign":"${mode === "empty_sign" ? "" : signature}"}`;
+    return new Response(text, { status: mode === "http_500" ? 500 : 200, headers: { "Content-Type": "application/json;charset=utf-8" } });
   }) as typeof globalThis.fetch;
-  return { env, notify, fetch, trades, requests, strangerPrivateKey: stranger.privateKey, setTamper(value: boolean) { tamper = value; } };
+  return { env, notify, fetch, trades, requests, strangerPrivateKey: stranger.privateKey, setTamper(value: boolean) { tamper = value; },
+    setMode(value: typeof mode) { mode = value; } };
 }

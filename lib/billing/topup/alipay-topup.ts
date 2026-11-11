@@ -57,7 +57,11 @@ function verifyNotifyForm(config: AlipayTopupConfig, rawBody: string): Record<st
   if (!sign || signType !== "RSA2") throw new Error("signature_missing");
   if (unsigned.charset !== undefined && unsigned.charset.toLowerCase() !== "utf-8") throw new Error("charset_invalid");
   if (!rsaVerify(buildAlipaySignContent(unsigned), sign, config.alipayPublicKey)) throw new Error("signature_invalid");
-  return isRefundNews(unsigned) ? { ...unsigned, trade_status: REFUND_NEWS } : unsigned;
+  // Empty values are outside the signature (anyone may append them), so they are dropped; signed return-page params carry
+  // no trade_status and are refused here rather than parked as unknown.
+  const signed = Object.fromEntries(Object.entries(unsigned).filter(([, value]) => value !== ""));
+  if (!signed.trade_status) throw new Error("trade_status_missing");
+  return isRefundNews(signed) ? { ...signed, trade_status: REFUND_NEWS } : signed;
 }
 
 /** The exact raw text of a top-level response node: Alipay signs these bytes, so they are verified before being parsed. */
@@ -86,7 +90,7 @@ async function queryTrade(config: AlipayTopupConfig, fetchImpl: typeof fetch, pr
   const params: Record<string, string> = { app_id: config.appId, method: "alipay.trade.query", charset: "utf-8", sign_type: "RSA2",
     timestamp: beijingTimestamp(), version: "1.0", biz_content: JSON.stringify({ out_trade_no: providerOrderNo }) };
   params.sign = createSign("RSA-SHA256").update(buildAlipaySignContent(params), "utf8").sign(config.privateKey, "base64");
-  const response = await fetchImpl(config.gatewayUrl, { method: "POST", cache: "no-store", signal: AbortSignal.timeout(QUERY_TIMEOUT_MS),
+  const response = await fetchImpl(config.gatewayUrl, { method: "POST", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(QUERY_TIMEOUT_MS),
     headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" }, body: new URLSearchParams(params).toString() });
   const raw = await response.text();
   if (!response.ok || raw.length > MAX_QUERY_RESPONSE_CHARS) throw new Error("query_unavailable");

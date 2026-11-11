@@ -44,9 +44,11 @@ describe("top-up trust boundary", () => {
     await expect(verifyTopupCallback(db(client), forged, request)).rejects.toThrow("topup_observation_untrusted");
     await expect(verifyTopupCallback(db(client), adapter(async () => { throw new Error("bad signature"); }), request)).rejects.toThrow("topup_signature_invalid");
     await expect(verifyTopupCallback(db(client), adapter(async () => ({ ...trade, out_trade_no: "helm_wx_ws_1" })), request)).rejects.toThrow("topup_order_unknown");
-    await expect(verifyTopupCallback(db(client), adapter(async () => ({ ...trade, transaction_id: "" })), request)).rejects.toThrow("topup_observation_invalid");
     await expect(verifyTopupCallback(db(client), adapter(async () => "text"), request)).rejects.toThrow("topup_observation_invalid");
     expect(client.$transaction).not.toHaveBeenCalled();
+    // An authenticated but unparseable "paid" report only opens the lookup that records it (S2-d1), never a credit.
+    await expect(verifyTopupCallback(db(client), adapter(async () => ({ ...trade, transaction_id: "" })), request)).rejects.toThrow("topup_observation_invalid");
+    expect(client.$transaction).toHaveBeenCalledTimes(1);
     const minted = await adapter(async () => trade).observeCallback(request);
     expect(() => { (minted as { amountFen: bigint | null }).amountFen = BigInt(1); }).toThrow(TypeError); // frozen
   });
