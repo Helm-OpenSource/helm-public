@@ -5,6 +5,7 @@ import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { buildGettingStartedEntryContract } from "@/lib/auth/public-entry";
 import { getCurrentUser } from "@/lib/auth/session";
+import { withLoginCallback } from "@/lib/auth/login-callback";
 import { FIRST_LOGIN_IDENTITY_SETUP_COOKIE } from "@/lib/auth/session-cookies";
 import { normalizeEmailAddress, normalizePhoneNumber } from "@/lib/auth/formal-auth";
 import { resolveUiLocale } from "@/lib/i18n/config";
@@ -32,11 +33,11 @@ export default async function GettingStartedPage({
   const english = locale === "en-US";
   const entryContract = buildGettingStartedEntryContract({ locale });
 
+  const params = (await searchParams) ?? {};
   if (!user) {
-    redirect("/login");
+    redirect(withLoginCallback("/login", readSearchParam(params, "callback")));
   }
 
-  const params = (await searchParams) ?? {};
   const mode = readSearchParam(params, "mode");
   const hasPendingIdentitySetup = Boolean(
     cookieStore.get(FIRST_LOGIN_IDENTITY_SETUP_COOKIE)?.value,

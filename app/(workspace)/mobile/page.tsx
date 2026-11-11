@@ -26,7 +26,7 @@ import {
   Mic,
   Network,
 } from "lucide-react";
-import { getCurrentWorkspaceSession } from "@/lib/auth/session";
+import { getWorkspaceLoginPath, getCurrentWorkspaceSession } from "@/lib/auth/session";
 import { resolveWorkspaceUiLocaleForRequest } from "@/lib/i18n/request-locale.server";
 import { interpretAskHelmQuery } from "@/features/search/ask-helm-interpreter";
 import { resolveAskHelmAccessScope } from "@/features/search/ask-helm-access-scope";
@@ -64,7 +64,7 @@ interface MobilePageProps {
 export default async function MobilePage({ searchParams }: MobilePageProps) {
   const session = await getCurrentWorkspaceSession();
   if (!session.workspace) {
-    redirect("/login");
+    redirect(await getWorkspaceLoginPath());
   }
 
   const { workspace, membership, user } = session;
