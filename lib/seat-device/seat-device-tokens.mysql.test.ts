@@ -51,11 +51,14 @@ async function expectCode(promise: Promise<unknown>, code: SeatDeviceAuthError["
   expect((error as SeatDeviceAuthError).code).toBe(code);
 }
 
-const runOctet = Math.floor(Math.random() * 256);
+// Request limits count per address bucket and the clock repeats on every
+// run, so each run draws its own /24s: a re-run on the same database never
+// lands in a bucket an earlier run already used at the same instant.
+const runOctets = [Math.floor(Math.random() * 256), Math.floor(Math.random() * 256)];
 let sourceCounter = 0;
 function freshSource() {
   sourceCounter += 1;
-  return `172.${16 + (runOctet % 16)}.${sourceCounter}.10`;
+  return `11.${runOctets[0]}.${(runOctets[1] + sourceCounter) % 256}.10`;
 }
 
 describeMysql("seat device credentials (classify, pin, revoke) on MySQL", () => {
