@@ -24,6 +24,7 @@ export async function GET(request: Request) {
     provider: "dingtalk",
     state,
     locale,
+    callback: url.searchParams.get("callback"),
     flowId,
     organizationName,
     workspaceId,

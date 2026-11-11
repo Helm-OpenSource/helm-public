@@ -252,6 +252,7 @@ describe("dingtalk oauth routes", () => {
           locale?: string;
           flowId?: string;
           workspaceId?: string;
+          callback?: string;
         };
 
         return {
@@ -259,6 +260,7 @@ describe("dingtalk oauth routes", () => {
           locale: parsed.locale ?? "zh-CN",
           flowId: parsed.flowId ?? null,
           workspaceId: parsed.workspaceId ?? null,
+          callback: parsed.callback,
         };
       } catch {
         return null;
@@ -438,11 +440,14 @@ describe("dingtalk oauth routes", () => {
     );
   });
 
-  it("completes public DingTalk callback for matched users and redirects to workspace", async () => {
+  it("completes public DingTalk callback for matched users and restores the requested workspace URL", async () => {
+    const callback = "/tenant-alpha/workspace?view=summary#selected=example";
+    publicOauthMock.finalizePublicOauthLogin.mockResolvedValueOnce({ ok: true, redirectTo: callback });
     const cookieStore = createCookieStore({
       "helm-dingtalk-public-auth-state": JSON.stringify({
         state: "public-state-1",
         locale: "zh-CN",
+        callback,
       }),
     });
     cookiesMock.mockResolvedValue(cookieStore);
@@ -454,7 +459,7 @@ describe("dingtalk oauth routes", () => {
     );
 
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe("http://localhost/dashboard");
+    expect(response.headers.get("location")).toBe("http://localhost" + callback);
     expect(publicOauthMock.resolvePublicOauthUserMatch).toHaveBeenCalledWith({
       email: "owner@helm.so",
       phone: null,
@@ -462,6 +467,7 @@ describe("dingtalk oauth routes", () => {
     });
     expect(publicOauthMock.finalizePublicOauthLogin).toHaveBeenCalledWith(
       expect.objectContaining({
+        callback,
         sourcePage: "/api/auth/dingtalk/callback",
       }),
     );

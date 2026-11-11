@@ -1,5 +1,7 @@
 "use client";
 
+import { readBrowserLoginCallback } from "@/lib/auth/login-callback";
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -144,7 +146,7 @@ export function FirstLoginIdentityCompletionPanel({
                 password: requiresPasswordSetup ? form.password : undefined,
                 confirmPassword: requiresPasswordSetup ? form.confirmPassword : undefined,
                 locale,
-              });
+              }, readBrowserLoginCallback());
 
               if (!result.ok) {
                 const errorMessage =

@@ -245,6 +245,7 @@ async function handlePublicCallback(input: {
   error: string | null;
   preferredLocale: UiLocale;
   flowId?: string | null;
+  callback?: string;
   invitedOrganizationName?: string | null;
   invitedWorkspaceId?: string | null;
   invitedTitle?: string | null;
@@ -252,7 +253,7 @@ async function handlePublicCallback(input: {
   const cookieStore = await cookies();
   const hasQrFlow = Boolean(input.flowId?.trim());
   const buildFailureRedirect = (reason: string) => {
-    const url = buildPublicOauthFallbackUrl(input.request, "dingtalk", "failure");
+    const url = buildPublicOauthFallbackUrl(input.request, "dingtalk", "failure", input.callback);
     url.searchParams.set("reason", reason);
     return redirectPublicUrl(url);
   };
@@ -273,7 +274,7 @@ async function handlePublicCallback(input: {
       });
     }
     return redirectPublicUrl(
-      buildPublicOauthFallbackUrl(input.request, "dingtalk", "oauth-error"),
+      buildPublicOauthFallbackUrl(input.request, "dingtalk", "oauth-error", input.callback),
     );
   }
 
@@ -353,6 +354,7 @@ async function handlePublicCallback(input: {
         providerType: AUTH_SESSION_PROVIDER_TYPES.DINGTALK_OAUTH,
         preferredLocale: input.preferredLocale,
         preferredWorkspaceId: input.invitedWorkspaceId ?? null,
+        ...(input.callback && !hasQrFlow ? { callback: input.callback } : {}),
         profile: {
           name: profile.nick,
           phone: profile.mobile,
@@ -482,7 +484,7 @@ async function handlePublicCallback(input: {
         });
       }
       return redirectPublicUrl(
-        buildPublicOauthFallbackUrl(input.request, "dingtalk", "identity-conflict"),
+        buildPublicOauthFallbackUrl(input.request, "dingtalk", "identity-conflict", input.callback),
       );
     }
 
@@ -501,7 +503,7 @@ async function handlePublicCallback(input: {
       });
     }
     return redirectPublicUrl(
-      buildPublicOauthFallbackUrl(input.request, "dingtalk", "missing-identity"),
+      buildPublicOauthFallbackUrl(input.request, "dingtalk", "missing-identity", input.callback),
     );
   } catch (error) {
     console.error("[dingtalk-public-oauth] callback resolution failed", error);
@@ -562,6 +564,7 @@ export async function GET(request: Request) {
       error,
       preferredLocale: effectivePublicState?.locale ?? "zh-CN",
       flowId: effectivePublicState?.flowId ?? null,
+      callback: effectivePublicState?.callback,
       invitedOrganizationName: effectivePublicState?.organizationName ?? null,
       invitedWorkspaceId: effectivePublicState?.workspaceId ?? null,
       invitedTitle: effectivePublicState?.title ?? null,
