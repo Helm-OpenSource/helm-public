@@ -8,11 +8,16 @@ import "server-only";
 //
 // Consistency (design v0.3 §6.2, P2-7): Workspace, Membership, User and
 // AuthSession are read OUTSIDE the Serializable transaction (InnoDB turns
-// reads inside it into locking reads); inside it only device rows, audit and
-// notification rows are touched, so these writes never lock in an order that
-// could cycle with the extension's Workspace -> device -> Membership -> User.
+// reads inside it into locking reads). Inside it the writes are device rows
+// plus AuditLog and Notification rows; those two have foreign keys to
+// Workspace and User, so inserting them takes shared locks on the parent
+// rows. A transaction holding Workspace FOR UPDATE (the extension's
+// Workspace -> device -> Membership -> User order) can therefore block or
+// deadlock with these writes. A deadlock is a retried conflict and, once the
+// retries run out, a closed error code; the cross-path concurrency test with
+// refresh/revoke (1b) and the extension belongs to slice 3a-2.
 // Every lifecycle write is a CAS on (id, status, version) after re-reading the
-// row in the same transaction; a serialization failure is retried.
+// row in the same transaction.
 //
 // No plaintext token or pairing code is stored, logged or put in an error or
 // audit payload: only sha256 hashes reach the database.
@@ -23,7 +28,7 @@ import { externalScopeOf } from "@/lib/auth/external-member-scope";
 import { evaluateLock, hashLoginIdentifier, nextStateOnFailure } from "@/lib/auth/login-rate-limit";
 import { AUTH_SESSION_PROVIDER_TYPES } from "@/lib/auth/provider-seam";
 import { db } from "@/lib/db";
-import { isWriteConflictError, runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
+import { isWriteConflictError } from "@/lib/db/conflict-aware-write";
 import {
   SEAT_DEVICE_ACCESS_TOKEN_TTL_SECONDS,
   SEAT_DEVICE_MAX_ACTIVE_PER_MEMBER,
@@ -56,7 +61,13 @@ import {
 } from "@/lib/seat-device/contract";
 
 const TX = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
-const RETRY = { maxAttempts: 8, retryDelayMs: 50 } as const;
+// Concurrent writers on the counted index ranges deadlock under Serializable
+// and InnoDB rolls one back. Retries back off exponentially with full jitter
+// so they spread out instead of colliding again in lockstep.
+const RETRY_ATTEMPTS = 8;
+const RETRY_BASE_DELAY_MS = 20;
+const RETRY_MAX_DELAY_MS = 320;
+const CONTENDED_RETRY_AFTER_SECONDS = 1;
 const TARGET_TYPE = "SeatDeviceAuthorization";
 const SOURCE_PAGE = "/device";
 
@@ -88,8 +99,36 @@ function secondsUntil(at: Date, now: Date) {
   return Math.max(1, Math.ceil((at.getTime() - now.getTime()) / 1000));
 }
 
-function retried<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>, isConflict = isWriteConflictError) {
-  return runWithWriteConflictRetry(() => db.$transaction(fn, TX), { ...RETRY, isConflict });
+// Prisma P2024: no pooled connection in time; P2028: the interactive
+// transaction could not start or ran out of time. Both mean contention.
+function isContentionError(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2024" || error.code === "P2028");
+}
+
+// Runs `transaction` (a Serializable `db.$transaction`, written at the call
+// site so the CAS guard can see its isolation) and retries write conflicts. A
+// conflict that outlasts the retries, or contention for a connection, never
+// leaves as a raw database error: it becomes `exhausted`, a closed code with a
+// Retry-After, so callers answer it like any other refusal.
+async function retried<T>(
+  transaction: () => Promise<T>,
+  exhausted: SeatDeviceErrorCode,
+  isConflict: (error: unknown) => boolean = isWriteConflictError,
+): Promise<T> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await transaction();
+    } catch (error) {
+      const conflict = isConflict(error);
+      if (conflict && attempt < RETRY_ATTEMPTS) {
+        const ceiling = Math.min(RETRY_MAX_DELAY_MS, RETRY_BASE_DELAY_MS * 2 ** attempt);
+        await new Promise((resolve) => setTimeout(resolve, Math.random() * ceiling));
+        continue;
+      }
+      if (conflict || isContentionError(error)) throw new SeatDeviceAuthError(exhausted, CONTENDED_RETRY_AFTER_SECONDS);
+      throw error;
+    }
+  }
 }
 
 function isUniqueViolation(error: unknown, field?: string) {
@@ -127,10 +166,12 @@ export async function requestSeatDeviceAuthorization(input: {
   // "expired" is derived from the clock and has no write of its own: clear
   // the code hash (and source) of lapsed pending rows here, so a pairing hash
   // does not outlive its request and the unique space is freed. Idempotent.
-  await db.seatDeviceAuthorization.updateMany({
-    where: { status: "pending", requestExpiresAt: { lte: now }, pairingCodeHash: { not: null } },
-    data: { pairingCodeHash: null, sourceIp: null },
-  });
+  await retried(async () => {
+    await db.seatDeviceAuthorization.updateMany({
+      where: { status: "pending", requestExpiresAt: { lte: now }, pairingCodeHash: { not: null } },
+      data: { pairingCodeHash: null, sourceIp: null },
+    });
+  }, "rate_limited");
 
   for (let attempt = 1; attempt <= SEAT_DEVICE_PAIRING_CODE_MAX_ATTEMPTS; attempt += 1) {
     const pairingCode = generate();
@@ -138,7 +179,7 @@ export async function requestSeatDeviceAuthorization(input: {
     if (pairingCodeHash === null) throw new Error("seat device pairing code generator produced an invalid code");
     const poll = mintSeatDeviceToken("poll");
     try {
-      const requestId = await retried(async (tx) => {
+      const requestId = await retried(() => db.$transaction(async (tx) => {
         await assertPendingCapacity(tx, bucket, now);
         const row = await tx.seatDeviceAuthorization.create({
           data: {
@@ -157,7 +198,7 @@ export async function requestSeatDeviceAuthorization(input: {
           select: { id: true },
         });
         return row.id;
-      });
+      }, TX), "rate_limited");
       return {
         requestId,
         pollToken: poll.token,
@@ -230,7 +271,7 @@ export async function cancelSeatDeviceAuthorization(input: {
   assertDeploymentEnabled();
   const now = input.now ?? new Date();
   const pollTokenHash = hashSeatDeviceToken(input.pollToken);
-  return runWithWriteConflictRetry(() => db.$transaction(async (tx) => {
+  return retried(() => db.$transaction(async (tx): Promise<{ status: SeatDeviceCancelStatus }> => {
     const row = await tx.seatDeviceAuthorization.findUnique({ where: { id: input.requestId } });
     if (!row || !seatDeviceHashesEqual(row.pollTokenHash, pollTokenHash)) return { status: "expired" as const };
     const status = effectiveSeatDeviceStatus(row, now);
@@ -273,11 +314,12 @@ export async function cancelSeatDeviceAuthorization(input: {
     }
     if (status === "cancelled" || status === "rejected" || status === "revoked") return { status };
     return { status: "expired" as const };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), RETRY);
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), "temporarily_unavailable");
 }
 
 // A CAS that loses after the row was re-read in the same transaction means a
-// concurrent writer slipped in; surface it as a write conflict so it is retried.
+// concurrent writer slipped in; the message matches isWriteConflictError, so
+// it is retried like any other conflict.
 function casLost(): never {
   throw new Error("seat device write conflict");
 }
@@ -386,7 +428,7 @@ export async function claimSeatDeviceAuthorization(input: {
   const access = mintSeatDeviceToken("access");
   const refresh = mintSeatDeviceToken("refresh");
 
-  return runWithWriteConflictRetry(() => db.$transaction(async (tx) => {
+  return retried(() => db.$transaction(async (tx): Promise<SeatDeviceClaimAnswer> => {
     const row = await tx.seatDeviceAuthorization.findUnique({ where: { id: input.requestId } });
     if (!row || !seatDeviceHashesEqual(row.pollTokenHash, pollTokenHash)) throw new SeatDeviceAuthError("poll_token_invalid");
     if (row.lastPolledAt) {
@@ -466,7 +508,7 @@ export async function claimSeatDeviceAuthorization(input: {
       deviceId: row.id,
       identity,
     };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), RETRY);
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), "slow_down");
 }
 
 // ---------------------------------------------------------------------------
@@ -476,7 +518,6 @@ export async function claimSeatDeviceAuthorization(input: {
 type MemberContext = {
   authSessionId: string;
   providerType: string | null;
-  sessionCreatedAt: Date;
   userId: string;
   userName: string;
   passwordSetAt: Date | null;
@@ -490,7 +531,7 @@ type MemberContext = {
 async function loadMemberContext(authSessionId: string, userId: string, now: Date): Promise<MemberContext> {
   const session = await db.authSession.findUnique({
     where: { id: authSessionId },
-    select: { userId: true, activeWorkspaceId: true, providerType: true, createdAt: true, revokedAt: true, expiresAt: true },
+    select: { userId: true, activeWorkspaceId: true, providerType: true, revokedAt: true, expiresAt: true },
   });
   if (!session || session.userId !== userId || session.revokedAt || session.expiresAt <= now || !session.activeWorkspaceId) {
     throw new SeatDeviceAuthError("reauthentication_required");
@@ -510,7 +551,6 @@ async function loadMemberContext(authSessionId: string, userId: string, now: Dat
   return {
     authSessionId,
     providerType: session.providerType,
-    sessionCreatedAt: session.createdAt,
     userId,
     userName: user.name,
     passwordSetAt: user.passwordSetAt,
@@ -521,9 +561,12 @@ async function loadMemberContext(authSessionId: string, userId: string, now: Dat
 
 // Code entry is limited per account and, with a trusted source, per address
 // bucket, in FailedLoginAttempt (15 minutes, 8 failures, then locked). The
-// lock is checked before the code is looked at, so a right guess during a
-// lock is not confirmed. A success never clears the count: anyone can mint a
-// valid code of their own, so clearing would let them reset it.
+// lock check, the look at the code and the failure count run in ONE
+// Serializable transaction: the counter rows read by the check stay locked
+// until the count is written, so concurrent wrong codes cannot all pass the
+// check before any of them is counted, and a right guess during a lock is
+// not confirmed. A success never clears the count: anyone can mint a valid
+// code of their own, so clearing would let them reset it.
 function codeEntryKeys(userId: string, source: string | null) {
   const bucket = source ? seatDeviceSourceBucket(source) : null;
   const keys = [`seat-device-code:user:${userId}`];
@@ -531,38 +574,34 @@ function codeEntryKeys(userId: string, source: string | null) {
   return keys.map(hashLoginIdentifier);
 }
 
-async function assertCodeEntryOpen(identifierHashes: string[], now: Date) {
-  const records = await db.failedLoginAttempt.findMany({
+type CodeEntryCounter = { identifierHash: string; attemptCount: number; windowStartedAt: Date; lockedUntil: Date | null };
+
+async function openCodeEntryInTx(tx: Prisma.TransactionClient, identifierHashes: string[], now: Date) {
+  const counters: CodeEntryCounter[] = await tx.failedLoginAttempt.findMany({
     where: { identifierHash: { in: identifierHashes } },
-    select: { lockedUntil: true },
+    select: { identifierHash: true, attemptCount: true, windowStartedAt: true, lockedUntil: true },
   });
-  const retryAfterMs = Math.max(0, ...records.map((record) => evaluateLock(record, now).retryAfterMs));
+  const retryAfterMs = Math.max(0, ...counters.map((counter) => evaluateLock(counter, now).retryAfterMs));
   if (retryAfterMs > 0) throw new SeatDeviceAuthError("rate_limited", Math.ceil(retryAfterMs / 1000));
+  return counters;
 }
 
-// Its own transaction, committed before the caller answers: the failure must
-// count even though the request it belongs to fails. Unlike the login helper
-// this fails closed (errors propagate) and is atomic under concurrency.
-async function recordCodeEntryFailure(identifierHashes: string[], now: Date) {
-  await retried(
-    async (tx) => {
-      for (const identifierHash of identifierHashes) {
-        const existing = await tx.failedLoginAttempt.findUnique({
-          where: { identifierHash },
-          select: { attemptCount: true, windowStartedAt: true, lockedUntil: true },
-        });
-        const next = nextStateOnFailure(existing, now);
-        await tx.failedLoginAttempt.upsert({
-          where: { identifierHash },
-          create: { identifierHash, ...next },
-          update: next,
-          select: { id: true },
-        });
-      }
-    },
-    (error) => isWriteConflictError(error) || isUniqueViolation(error),
-  );
+// Committed with the transaction that found the code wrong; the caller
+// answers pairing_code_invalid only after that commit.
+async function countCodeEntryFailureInTx(tx: Prisma.TransactionClient, identifierHashes: string[], counters: CodeEntryCounter[], now: Date) {
+  for (const identifierHash of identifierHashes) {
+    const next = nextStateOnFailure(counters.find((counter) => counter.identifierHash === identifierHash) ?? null, now);
+    await tx.failedLoginAttempt.upsert({
+      where: { identifierHash },
+      create: { identifierHash, ...next },
+      update: next,
+      select: { id: true },
+    });
+  }
 }
+
+// Two first failures racing to create the same counter row: retried.
+const isCodeEntryConflict = (error: unknown) => isWriteConflictError(error) || isUniqueViolation(error, "identifierHash");
 
 export type SeatDeviceLookup = {
   requestId: string;
@@ -588,16 +627,16 @@ export async function lookupSeatDeviceAuthorization(input: {
   const member = await loadMemberContext(input.authSessionId, input.userId, now);
   if (!member.workspace.enabled) throw new SeatDeviceAuthError("workspace_not_enabled");
   const keys = codeEntryKeys(input.userId, input.source);
-  await assertCodeEntryOpen(keys, now);
   const pairingCodeHash = hashSeatDevicePairingCode(input.pairingCode);
-  const row = pairingCodeHash
-    ? await db.seatDeviceAuthorization.findUnique({ where: { pairingCodeHash } })
-    : null;
-  if (!row || effectiveSeatDeviceStatus(row, now) !== "pending") {
-    if (row) await retried((tx) => clearLapsedPairingCode(tx, row));
-    await recordCodeEntryFailure(keys, now);
-    throw new SeatDeviceAuthError("pairing_code_invalid");
-  }
+  const row = await retried(() => db.$transaction(async (tx) => {
+    const counters = await openCodeEntryInTx(tx, keys, now);
+    const found = pairingCodeHash ? await tx.seatDeviceAuthorization.findUnique({ where: { pairingCodeHash } }) : null;
+    if (found && effectiveSeatDeviceStatus(found, now) === "pending") return found;
+    if (found) await clearLapsedPairingCode(tx, found);
+    await countCodeEntryFailureInTx(tx, keys, counters, now);
+    return null;
+  }, TX), "rate_limited", isCodeEntryConflict);
+  if (!row) throw new SeatDeviceAuthError("pairing_code_invalid");
   return {
     requestId: row.id,
     deviceName: row.deviceLabel,
@@ -613,15 +652,26 @@ export async function lookupSeatDeviceAuthorization(input: {
 type Decision = "approve" | "reject";
 
 // Approve binds the request to the member, the session's workspace and the
-// password snapshot; it needs both switches, a PASSWORD session created in the
-// last 10 minutes and room under the device cap. Reject needs a usable member
-// session only, so a phishing request can always be turned down.
+// password snapshot; it needs both switches, a PASSWORD session, a password
+// verified for this approval in the last 10 minutes and room under the device
+// cap. Reject needs a usable member session only (no step-up), so a phishing
+// request can be turned down from any session. Both go through the code-entry
+// lock: while the account or its address bucket is locked, reject waits out
+// the lock like approve (the request lapses in 10 minutes regardless).
+//
+// Step-up (design §4.3): rotating a session creates a fresh AuthSession row
+// without asking for the password, so the session's age proves nothing. The
+// caller re-verifies the member's password for this approval, under the login
+// failure limit, and passes `passwordVerifiedAt`, the moment that check
+// succeeded. The store never sees the password; it refuses a missing proof,
+// one older than 10 minutes and one later than `now`.
 export async function decideSeatDeviceAuthorization(input: {
   authSessionId: string;
   userId: string;
   requestId: string;
   pairingCode: string;
   decision: Decision;
+  passwordVerifiedAt: Date | null;
   source: string | null;
   now?: Date;
 }): Promise<{ requestId: string; status: "approved" | "rejected" }> {
@@ -630,23 +680,19 @@ export async function decideSeatDeviceAuthorization(input: {
   const member = await loadMemberContext(input.authSessionId, input.userId, now);
   if (input.decision === "approve") {
     if (!member.workspace.enabled) throw new SeatDeviceAuthError("workspace_not_enabled");
-    // NOTE: a session rotation creates a fresh AuthSession row, so createdAt
-    // alone is not proof of a recent password entry; the website slice must
-    // close that before the switch is turned on (design §4.3, §13 item 3).
-    const sessionAgeMs = now.getTime() - member.sessionCreatedAt.getTime();
+    const proofAgeMs = input.passwordVerifiedAt ? now.getTime() - input.passwordVerifiedAt.getTime() : Number.NaN;
     if (
       member.providerType !== AUTH_SESSION_PROVIDER_TYPES.PASSWORD ||
-      sessionAgeMs < 0 ||
-      sessionAgeMs > SEAT_DEVICE_STEP_UP_MAX_SESSION_AGE_SECONDS * 1000
+      !(proofAgeMs >= 0 && proofAgeMs <= SEAT_DEVICE_STEP_UP_MAX_SESSION_AGE_SECONDS * 1000)
     ) {
       throw new SeatDeviceAuthError("reauthentication_required");
     }
   }
   const keys = codeEntryKeys(input.userId, input.source);
-  await assertCodeEntryOpen(keys, now);
   const pairingCodeHash = hashSeatDevicePairingCode(input.pairingCode);
 
-  const outcome = await runWithWriteConflictRetry(() => db.$transaction(async (tx) => {
+  const outcome = await retried(() => db.$transaction(async (tx) => {
+    const counters = await openCodeEntryInTx(tx, keys, now);
     const row = await tx.seatDeviceAuthorization.findUnique({ where: { id: input.requestId } });
     if (
       !row ||
@@ -654,6 +700,7 @@ export async function decideSeatDeviceAuthorization(input: {
       !seatDeviceHashesEqual(row.pairingCodeHash, pairingCodeHash) ||
       effectiveSeatDeviceStatus(row, now) !== "pending"
     ) {
+      await countCodeEntryFailureInTx(tx, keys, counters, now);
       return "code_invalid" as const;
     }
     if (input.decision === "approve") await assertDeviceCap(tx, member, now);
@@ -697,11 +744,8 @@ export async function decideSeatDeviceAuthorization(input: {
       },
     });
     return "approved" as const;
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), RETRY);
-  if (outcome === "code_invalid") {
-    await recordCodeEntryFailure(keys, now);
-    throw new SeatDeviceAuthError("pairing_code_invalid");
-  }
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), "rate_limited", isCodeEntryConflict);
+  if (outcome === "code_invalid") throw new SeatDeviceAuthError("pairing_code_invalid");
   return { requestId: input.requestId, status: outcome };
 }
 
