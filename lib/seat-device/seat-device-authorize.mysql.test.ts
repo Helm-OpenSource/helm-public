@@ -202,6 +202,7 @@ describeMysql("seat device authorization (request, decide, cancel) on MySQL", ()
       await expect(
         lookupSeatDeviceAuthorization({ authSessionId: await session(who, at(now, -60)), userId: who.userId, pairingCode: normalizeSeatDevicePairingCode(grant.pairingCode)!, source: null, now }),
       ).rejects.toBeInstanceOf(SeatDeviceAuthDisabledError);
+      await expect(claimSeatDeviceAuthorization({ ...grant, source: null, now })).rejects.toBeInstanceOf(SeatDeviceAuthDisabledError);
     } finally {
       process.env.HELM_SEAT_DEVICE_AUTH_ENABLED = "true";
     }
@@ -562,11 +563,22 @@ describeMysql("seat device authorization (request, decide, cancel) on MySQL", ()
     const now = nextClock();
     const { grant, who } = await approved(now);
     await db.user.update({ where: { id: who.userId }, data: { passwordSetAt: at(now, 1) } });
-    await expectCode(claim(grant, at(now, 10)), "account_disabled");
+    await expectCode(claim(grant, at(now, 10)), "poll_token_invalid");
     const second = await approved(now);
     await db.membership.update({ where: { id: second.who.membershipId }, data: { status: MembershipStatus.INACTIVE } });
-    await expectCode(claim(second.grant, at(now, 10)), "account_disabled");
-    expect((await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: grant.requestId } })).status).toBe("approved");
+    await expectCode(claim(second.grant, at(now, 10)), "poll_token_invalid");
+    // Removed and re-added: ACTIVE and internal again, but not the membership approved.
+    const replaced = await approved(now);
+    const old = await db.membership.findUniqueOrThrow({ where: { id: replaced.who.membershipId } });
+    await db.membership.delete({ where: { id: old.id } });
+    await db.membership.create({ data: { workspaceId: old.workspaceId, userId: old.userId, role: old.role, status: MembershipStatus.ACTIVE } });
+    await expectCode(claim(replaced.grant, at(now, 10)), "poll_token_invalid");
+    const external = await approved(now);
+    await db.membership.update({ where: { id: external.who.membershipId }, data: { accessScope: "partner_portal" } });
+    await expectCode(claim(external.grant, at(now, 10)), "poll_token_invalid");
+    for (const refused of [grant, second.grant, replaced.grant, external.grant]) {
+      expect(await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: refused.requestId } })).toMatchObject({ status: "approved", accessTokenHash: null });
+    }
   });
 
   it("re-claims once within 60 seconds from the same trusted source and retires the first pair", async () => {
@@ -595,14 +607,20 @@ describeMysql("seat device authorization (request, decide, cancel) on MySQL", ()
     await claim(used.grant, at(now, 10), source);
     await db.seatDeviceAuthorization.update({ where: { id: used.grant.requestId }, data: { refreshTokenUsed: true } });
     await expectCode(claim(used.grant, at(now, 20), source), "poll_token_invalid"); // pair already used
+    const rotated = await approved(now, source);
+    await claim(rotated.grant, at(now, 10), source);
+    await db.seatDeviceAuthorization.update({ where: { id: rotated.grant.requestId }, data: { rotatedAt: at(now, 15) } });
+    await expectCode(claim(rotated.grant, at(now, 20), source), "poll_token_invalid"); // pair already refreshed
   });
 
   it("cancel revokes a claimed device whose pair was never used, and leaves a used one", async () => {
     const now = nextClock();
-    const unused = await approved(now);
+    const unused = await approved(now, freshSource());
     await claim(unused.grant, at(now, 10));
     await expect(cancelSeatDeviceAuthorization({ ...unused.grant, now: at(now, 3600) })).resolves.toEqual({ status: "cancelled" });
-    expect(await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: unused.grant.requestId } })).toMatchObject({ status: "revoked", revokeReason: "client_cancelled" });
+    expect(await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: unused.grant.requestId } })).toMatchObject({ status: "revoked", revokeReason: "client_cancelled", sourceIp: null });
+    const revokedAudit = await db.auditLog.findFirstOrThrow({ where: { targetId: unused.grant.requestId, actionType: "SEAT_DEVICE_REVOKED" } });
+    expect(JSON.parse(revokedAudit.payload ?? "{}")).toMatchObject({ reason: "client_cancelled", refreshTokenPresented: false });
     await expect(cancelSeatDeviceAuthorization({ ...unused.grant, now: at(now, 3601) })).resolves.toEqual({ status: "revoked" });
     await expectCode(claim(unused.grant, at(now, 3700)), "poll_token_invalid");
 
@@ -611,5 +629,10 @@ describeMysql("seat device authorization (request, decide, cancel) on MySQL", ()
     await db.seatDeviceAuthorization.update({ where: { id: used.grant.requestId }, data: { refreshTokenUsed: true } });
     await expect(cancelSeatDeviceAuthorization({ ...used.grant, now: at(now, 20) })).resolves.toEqual({ status: "claimed" });
     expect((await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: used.grant.requestId } })).status).toBe("active");
+    const rotated = await approved(now);
+    await claim(rotated.grant, at(now, 10));
+    await db.seatDeviceAuthorization.update({ where: { id: rotated.grant.requestId }, data: { rotatedAt: at(now, 15) } });
+    await expect(cancelSeatDeviceAuthorization({ ...rotated.grant, now: at(now, 20) })).resolves.toEqual({ status: "claimed" });
+    expect((await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: rotated.grant.requestId } })).status).toBe("active");
   });
 });

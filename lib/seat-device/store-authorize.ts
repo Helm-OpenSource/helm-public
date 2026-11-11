@@ -294,17 +294,18 @@ export async function cancelSeatDeviceAuthorization(input: {
     }
     // A claimed device whose pair was never used is revoked here (design
     // v0.3.2 §15.6, no time limit); a used one is left alone and the client
-    // revokes it with its refresh token.
+    // revokes it with its refresh token. See claimSeatDeviceAuthorization for
+    // what "never used" can and cannot mean here.
     if (status === "active") {
-      if (row.refreshTokenUsed) return { status: "claimed" as const };
+      if (row.refreshTokenUsed || row.rotatedAt) return { status: "claimed" as const };
       const result = await tx.seatDeviceAuthorization.updateMany({
-        where: { ...cas, refreshTokenUsed: false, expiresAt: { gt: now } },
-        data: { status: "revoked", revokedAt: now, revokeReason: "client_cancelled", version: { increment: 1 } },
+        where: { ...cas, refreshTokenUsed: false, rotatedAt: null, expiresAt: { gt: now } },
+        data: { status: "revoked", revokedAt: now, revokeReason: "client_cancelled", sourceIp: null, version: { increment: 1 } },
       });
       if (result.count !== 1) casLost();
       await auditDevice(tx, row, "SEAT_DEVICE_REVOKED", `坐席客户端取消并撤销未使用的设备：${row.deviceLabel}`, {
         reason: "client_cancelled",
-        tokenUsedAfterClaim: false,
+        refreshTokenPresented: false,
       });
       return { status: "cancelled" as const };
     }
@@ -408,10 +409,16 @@ async function loadClaimIdentity(row: {
   return seatDeviceIdentity({ userId: row.userId, displayName: user.name, workspace, role: membership.role });
 }
 
-// refreshTokenUsed means "the current pair has been used" (an access token
-// accepted or the refresh token presented); a claim and a re-claim always
-// hand out an unused pair. rotationSource records the trusted source the
-// current pair was issued to; a re-claim must come from that same source.
+// "The pair was never used" is read from two columns this slice never sets:
+// rotatedAt (any refresh rotation) and refreshTokenUsed (the current pair was
+// used). Until their writers land, the server only knows that the refresh
+// token was never presented; it does not know whether an access token was
+// accepted. Writer obligations: 1b sets rotatedAt on every rotation and
+// refreshTokenUsed when a refresh token is presented; 3a sets
+// refreshTokenUsed when the device channel first accepts an access token.
+// A claim and a re-claim always hand out an unused pair. rotationSource
+// records the trusted source the current pair was issued to; a re-claim must
+// come from that same source.
 export async function claimSeatDeviceAuthorization(input: {
   requestId: string;
   pollToken: string;
@@ -456,6 +463,7 @@ export async function claimSeatDeviceAuthorization(input: {
       reclaim &&
       (row.reclaimed ||
         row.refreshTokenUsed ||
+        row.rotatedAt ||
         !row.claimedAt ||
         now.getTime() - row.claimedAt.getTime() > SEAT_DEVICE_ROTATION_GRACE_SECONDS * 1000 ||
         !input.source ||
@@ -463,7 +471,9 @@ export async function claimSeatDeviceAuthorization(input: {
     ) {
       throw new SeatDeviceAuthError("poll_token_invalid");
     }
-    if (!identity) throw new SeatDeviceAuthError("account_disabled");
+    // Design §4.2: every other claim refusal is poll_token_invalid, including
+    // a member who changed since approval.
+    if (!identity) throw new SeatDeviceAuthError("poll_token_invalid");
     const pair = {
       accessTokenHash: access.tokenHash,
       accessExpiresAt: new Date(now.getTime() + SEAT_DEVICE_ACCESS_TOKEN_TTL_SECONDS * 1000),
@@ -475,7 +485,7 @@ export async function claimSeatDeviceAuthorization(input: {
     };
     const result = reclaim
       ? await tx.seatDeviceAuthorization.updateMany({
-          where: { ...cas, reclaimed: false, refreshTokenUsed: false },
+          where: { ...cas, reclaimed: false, refreshTokenUsed: false, rotatedAt: null },
           data: { ...pair, reclaimed: true },
         })
       : await tx.seatDeviceAuthorization.updateMany({
