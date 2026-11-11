@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   SEAT_DEVICE_ACCESS_TOKEN_PATTERN,
+  SEAT_DEVICE_CANCEL_STATUSES,
   SEAT_DEVICE_DECISION_REQUEST_SCHEMA,
   SEAT_DEVICE_ERROR_STATUS,
   SEAT_DEVICE_LOOKUP_REQUEST_SCHEMA,
@@ -27,6 +28,7 @@ import {
   readSeatDeviceTrustedProxyHops,
   resolveSeatDeviceTrustedSource,
   seatDeviceCredentialExpiresAt,
+  seatDeviceHashesEqual,
   seatDeviceIdentity,
   seatDevicePreviousAccessExpiresAt,
   seatDeviceSourceBucket,
@@ -54,6 +56,18 @@ describe("seat device tokens", () => {
   });
 });
 
+describe("seat device hash comparison", () => {
+  it("compares stored hashes exactly and refuses missing ones", () => {
+    const hash = hashSeatDeviceToken("hsdp_example");
+    expect(seatDeviceHashesEqual(hash, hashSeatDeviceToken("hsdp_example"))).toBe(true);
+    expect(seatDeviceHashesEqual(hash, hashSeatDeviceToken("hsdp_other"))).toBe(false);
+    expect(seatDeviceHashesEqual(hash, hash.slice(1))).toBe(false);
+    expect(seatDeviceHashesEqual(hash, null)).toBe(false);
+    expect(seatDeviceHashesEqual(null, null)).toBe(false);
+    expect(SEAT_DEVICE_CANCEL_STATUSES).toEqual(["cancelled", "claimed", "rejected", "expired", "revoked"]);
+  });
+});
+
 describe("seat device pairing code", () => {
   it("draws every letter of the consonant alphabet and nothing else", () => {
     const seen = new Map<string, number>();
@@ -62,8 +76,10 @@ describe("seat device pairing code", () => {
       expect(code).toMatch(/^[BCDFGHJKLMNPQRSTVWXZ]{8}$/);
       for (const letter of code) seen.set(letter, (seen.get(letter) ?? 0) + 1);
     }
-    // 16000 draws: each letter expects 800. A biased or truncated draw (for
-    // example randomInt(19) or a modulo of a byte) leaves a letter far off.
+    // 16000 draws: each letter expects 800. This catches a truncated draw
+    // (randomInt(19) never yields the last letter), not a subtle bias: the
+    // modulo of a byte skews letters only by about 8%, within this bound. The
+    // generator stays on randomInt for that reason, not because of this test.
     expect([...seen.keys()].sort().join("")).toBe(SEAT_DEVICE_PAIRING_CODE_ALPHABET);
     for (const count of seen.values()) expect(count).toBeGreaterThan(650);
     expect(SEAT_DEVICE_PAIRING_CODE_ALPHABET).toHaveLength(20);
@@ -219,11 +235,12 @@ describe("seat device request validation", () => {
     expect(SEAT_DEVICE_REVOKE_REASONS).toEqual(expect.arrayContaining(["client_cancelled", "device_logout", "refresh_reuse"]));
   });
 
-  it("closes the client revoke reason to device_logout (default) and client_cancelled", () => {
+  it("closes the client revoke reason to device_logout (default), client_cancelled and client_rejected", () => {
     const refreshToken = mintSeatDeviceToken("refresh").token;
     expect(parseSeatDeviceRevokeRequest({ refreshToken })).toEqual({ ok: true, value: { refreshToken, reason: "device_logout" } });
     expect(parseSeatDeviceRevokeRequest({ refreshToken, reason: "device_logout" })).toEqual({ ok: true, value: { refreshToken, reason: "device_logout" } });
     expect(parseSeatDeviceRevokeRequest({ refreshToken, reason: "client_cancelled" })).toMatchObject({ value: { reason: "client_cancelled" } });
+    expect(parseSeatDeviceRevokeRequest({ refreshToken, reason: "client_rejected" })).toMatchObject({ value: { reason: "client_rejected" } });
     for (const reason of ["admin", "refresh_reuse", "self", "DEVICE_LOGOUT", "", null, 1]) {
       expect(parseSeatDeviceRevokeRequest({ refreshToken, reason })).toEqual({ ok: false, code: "invalid_input" });
     }

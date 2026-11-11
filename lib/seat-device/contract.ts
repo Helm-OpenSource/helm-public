@@ -11,7 +11,7 @@
 // state. A stolen token equals a stolen device until it is revoked or the
 // credential reaches its absolute expiry; only hashes are ever stored.
 
-import { createHash, randomBytes, randomInt } from "node:crypto";
+import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { isIP } from "node:net";
 import type { WorkspaceRole } from "@prisma/client";
 import { z } from "zod";
@@ -67,6 +67,8 @@ export const SEAT_DEVICE_REVOKE_REASONS = [
   "password_reset",
   "membership_inactive",
   "seat_inactive",
+  // The client refused a claim answer it could not read (design v0.3.2).
+  "client_rejected",
 ] as const;
 export type SeatDeviceRevokeReason = (typeof SEAT_DEVICE_REVOKE_REASONS)[number];
 
@@ -75,9 +77,15 @@ export type SeatDeviceRevokeReason = (typeof SEAT_DEVICE_REVOKE_REASONS)[number]
 export const SEAT_DEVICE_CLIENT_REVOKE_REASONS = [
   "device_logout",
   "client_cancelled",
+  "client_rejected",
 ] as const satisfies readonly SeatDeviceRevokeReason[];
 export type SeatDeviceClientRevokeReason = (typeof SEAT_DEVICE_CLIENT_REVOKE_REASONS)[number];
 export const SEAT_DEVICE_DEFAULT_CLIENT_REVOKE_REASON: SeatDeviceClientRevokeReason = "device_logout";
+
+// Answer of the device's cancel call (design v0.3.2): never says whether a
+// request exists; a wrong poll token reads "expired".
+export const SEAT_DEVICE_CANCEL_STATUSES = ["cancelled", "claimed", "rejected", "expired", "revoked"] as const;
+export type SeatDeviceCancelStatus = (typeof SEAT_DEVICE_CANCEL_STATUSES)[number];
 
 export const SEAT_DEVICE_TOKEN_HISTORY_KINDS = ["refresh", "access", "poll"] as const;
 export type SeatDeviceTokenKind = (typeof SEAT_DEVICE_TOKEN_HISTORY_KINDS)[number];
@@ -95,6 +103,11 @@ export const SEAT_DEVICE_ERROR_STATUS = {
   too_many_devices: 409,
   slow_down: 429,
   rate_limited: 429,
+  // Website (member session) side.
+  pairing_code_invalid: 400,
+  forbidden: 403,
+  reauthentication_required: 403,
+  temporarily_unavailable: 503,
 } as const;
 export type SeatDeviceErrorCode = keyof typeof SEAT_DEVICE_ERROR_STATUS;
 
@@ -110,6 +123,12 @@ export const SEAT_DEVICE_REFRESH_TOKEN_PATTERN = /^hsdr_[A-Za-z0-9_-]{43}$/;
 
 export function hashSeatDeviceToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
+}
+
+// Constant-time comparison of two stored-form hashes (hex sha256).
+export function seatDeviceHashesEqual(left: string | null | undefined, right: string | null | undefined): boolean {
+  if (!left || !right || left.length !== right.length) return false;
+  return timingSafeEqual(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"));
 }
 
 export function mintSeatDeviceToken(kind: SeatDeviceTokenKind): { token: string; tokenHash: string } {

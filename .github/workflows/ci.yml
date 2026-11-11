@@ -1266,6 +1266,40 @@ jobs:
       - name: Verify the member MCP access chain against MySQL
         run: npm run test:member-mcp:mysql
 
+      - name: Roll back, re-apply and replay the seat device migration
+        env:
+          HELM_CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          MYSQL_PWD="$(node -e 'process.stdout.write(decodeURIComponent(new URL(process.env.DATABASE_URL).password))')"
+          export MYSQL_PWD
+          docker exec -e MYSQL_PWD -i "${HELM_CI_MYSQL_CONTAINER}" mysql --host=127.0.0.1 --protocol=tcp \
+            --user="${HELM_CI_MYSQL_USER}" --batch "${HELM_CI_MYSQL_DATABASE}" \
+            <prisma/rollback/20261111_rollback_seat_device_authorization.sql
+          unset MYSQL_PWD
+          npx tsx prisma/setup-db.ts migrate
+          npx tsx prisma/setup-db.ts migrate
+
+      - name: Verify the seat device authorization store against MySQL
+        env:
+          SEAT_DEVICE_DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: npm run test:seat-device:mysql
+
+      - name: The seat device rollback refuses while device rows exist
+        env:
+          HELM_CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -uo pipefail
+          MYSQL_PWD="$(node -e 'process.stdout.write(decodeURIComponent(new URL(process.env.DATABASE_URL).password))')"
+          export MYSQL_PWD
+          if output="$(docker exec -e MYSQL_PWD -i "${HELM_CI_MYSQL_CONTAINER}" mysql --host=127.0.0.1 --protocol=tcp \
+            --user="${HELM_CI_MYSQL_USER}" --batch "${HELM_CI_MYSQL_DATABASE}" \
+            <prisma/rollback/20261111_rollback_seat_device_authorization.sql 2>&1)"; then
+            echo "rollback ran although device rows exist" >&2
+            exit 1
+          fi
+          grep -q 'rollback refused: seat device authorization tables are not empty' <<<"${output}"
+
   quality-regression:
     name: Public Guard Regression
     runs-on: ubuntu-latest
