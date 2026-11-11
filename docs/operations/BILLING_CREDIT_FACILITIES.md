@@ -58,29 +58,34 @@ service above: finance roles, maker ≠ checker, version CAS, AuditLog in the sa
 |---|---|---|
 | `show` | `--workspace-id` or `--payer-account-id` | read only |
 | `propose` | `--actor-user-id --workspace-id/--payer-account-id --limit-fen --operation-key --evidence-ref [--valid-until] [--max-limit-fen]` | maker |
-| `approve` / `expire` / `revoke` | `--actor-user-id --facility-id --expected-version --evidence-ref` | checker / any finance |
+| `approve` | `--actor-user-id --facility-id --expected-version --evidence-ref [--max-limit-fen]` | checker |
+| `expire` / `revoke` | `--actor-user-id --facility-id --expected-version --evidence-ref` | any finance |
 | `reduce` | same + `--limit-fen` (lower, ≥ `usedFen`) | any finance |
 | `activate` | same + optional `--supersedes-facility-id --supersedes-version` | any finance |
 | `batch` | `--list-file [--maker-user-id --checker-user-id]`; to write `--step=propose\|approve\|activate --actor-user-id --expect-list-sha --apply` | per step |
 
 - **Amounts**: integer fen only (`100000000` = 1,000,000 CNY); no yuan or decimals. A proposal above `--max-limit-fen` (default
-  `100000000`) is refused `limit_over_cap`; equal passes.
+  `100000000`) is refused `limit_over_cap`; equal passes. `approve` applies the same cap, so a raised cap needs both people.
 - **Raising a line (调额，含 10 万 → 100 万)**: there is no increase step (`limitFen` only falls, `approvedLimitFen` is frozen). Propose
   and approve a new facility, then `activate --supersedes-facility-id=<old> --supersedes-version=<v>`: one transaction revokes the old
   line and activates the new one, so the payer is never without a line or with two. Refused `credit_supersede_in_use` (whole
   transaction rolled back) if the old line has `usedFen > 0`: that usage stays a receivable on the revoked row (Σ `usedFen` still
   equals `credit_receivable`) and would sit on top of the new line, so total exposure = old used + new limit; the owner decides
-  case by case. Reservations held before the swap settle against the old line up to its `approvedLimitFen`. Lowering uses `reduce`.
+  case by case. Reservations held before the swap still settle against the old line up to its `approvedLimitFen`, so its usage
+  can grow after the swap and exposure briefly exceeds the new limit. A payer's credit used is Σ `usedFen` over all its facilities,
+  closed ones included, not the current line's alone. Lowering uses `reduce`.
 - **Batch list** (operator-supplied; no payer or workspace is in code):
   `{"v":1,"batchRef":"<a-z0-9._->","evidenceRef":"<ruling ref>","validUntil":null,"entries":[{"workspaceId":"…","limitFen":"100000000"}]}`.
   Payers resolve through the workspace's active binding; a missing payer is a blocker (`payer_missing`), never created here. Plan per
   entry (current → target): `done` (drawable line equals target), `propose`, `approve`, `activate` (with supersede when a line
   exists), `reduce` (target below the current line, applied at the activate step), or `blocked`: `limit_over_cap`, `payer_missing`,
-  `payer_unavailable`, `payer_listed_twice`, `target_below_used`, `current_in_use`, `batch_key_conflict` (same `batchRef` already
-  used with other content), `batch_facility_closed`.
+  `payer_unavailable`, `payer_listed_twice`, `target_below_used`, `current_in_use`, `current_past_term` (expire it first),
+  `batch_key_conflict` (same `batchRef` already used with other content), `batch_facility_closed`; an unexpected read error fails
+  that entry (`plan_failed`).
 - **Idempotency / resume**: the operation key is `credit-batch:<batchRef>` per payer; every step re-reads state and acts only on
   entries at that step, so a rerun continues where it stopped. A propose replays only for the same maker and content
-  (`credit_operation_conflict` otherwise: resume with the same maker, or a new `batchRef`). Each entry is its own transaction; a
+  (`credit_operation_conflict` otherwise: resume with the same maker, or a new `batchRef` after revoking the old batch's draft or
+  approved facilities). Each entry is its own transaction; a
   refusal is recorded and the rest continue; the summary counts actions and results.
 
 ### Issuance runbook / 发放 runbook

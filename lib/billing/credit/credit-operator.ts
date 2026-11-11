@@ -23,7 +23,7 @@ const COMMANDS: Record<string, string[]> = {
   show: ["workspace-id", "payer-account-id"],
   propose: ["actor-user-id", "workspace-id", "payer-account-id", "limit-fen", "operation-key", "evidence-ref", "valid-until",
     "max-limit-fen"],
-  approve: [], expire: [], revoke: [], reduce: ["limit-fen"], activate: ["supersedes-facility-id", "supersedes-version"],
+  approve: ["max-limit-fen"], expire: [], revoke: [], reduce: ["limit-fen"], activate: ["supersedes-facility-id", "supersedes-version"],
   batch: ["list-file", "step", "actor-user-id", "expect-list-sha", "max-limit-fen", "maker-user-id", "checker-user-id"],
 };
 const CHANGE_FLAGS = ["actor-user-id", "facility-id", "expected-version", "evidence-ref"];
@@ -159,8 +159,11 @@ async function planEntry(client: PrismaClient, list: CreditBatchList, entry: Cre
   try {
     row.payerAccountId = (await transaction(client, tx => resolvePayerForWorkspaceInTransaction(tx, entry.workspaceId))).payerAccountId;
   } catch (error) {
-    // Payer accounts are created by their own operator command; this tool never creates one.
-    return blocked(error instanceof Error && error.message === "payer_account_unavailable" ? "payer_unavailable" : "payer_missing");
+    // Payer accounts are created by their own operator command; this tool never creates one. Other errors fail the entry.
+    const message = error instanceof Error ? error.message : "";
+    if (message === "payer_unresolved") return blocked("payer_missing");
+    if (message === "payer_account_unavailable") return blocked("payer_unavailable");
+    throw error;
   }
   const payerAccountId = row.payerAccountId;
   if (seenPayers.has(payerAccountId)) return blocked("payer_listed_twice");
@@ -169,6 +172,8 @@ async function planEntry(client: PrismaClient, list: CreditBatchList, entry: Cre
     client.creditFacility.findUnique({ where: { payerAccountId_operationKey: { payerAccountId, operationKey: list.operationKey } } })]);
   Object.assign(row, { current, batchFacility: mine });
   const target = entry.limitFen;
+  // Past its term a line lends nothing but still holds the per-payer key: expire it first (operator clock; the service re-checks).
+  if (current?.validUntil && current.validUntil <= new Date()) return blocked("current_past_term");
   if (current && current.limitFen === target) return Object.assign(row, { action: "done" as const });
   if (current && target < current.limitFen) return target < current.usedFen ? blocked("target_below_used") : Object.assign(row, { action: "reduce" as const });
   // A higher line needs a new facility; usage on the old one would stay owed on top of the new line.
@@ -226,7 +231,11 @@ async function batch(client: PrismaClient, args: Args, readFile: (path: string) 
   const rows: Array<Record<string, unknown> & { action: PlanAction; status: string }> = [];
   // One entry at a time, each write in its own transaction: a refusal is recorded and the next entry still runs.
   for (const entry of list.entries) {
-    const row = await planEntry(client, list, entry, cap, seenPayers);
+    let row: PlanRow;
+    try { row = await planEntry(client, list, entry, cap, seenPayers); } catch (error) {
+      rows.push({ workspaceId: entry.workspaceId, action: "blocked", blocker: "plan_failed", status: "failed", code: refusalCode(error) });
+      continue;
+    }
     let result: { status: "planned" | "skipped" | "applied" | "failed"; code?: string; detail?: unknown } = { status: "planned" };
     if (step && row.action !== "blocked" && row.action !== "done") {
       if (STEP_OF[row.action] !== step) result = { status: "skipped" };
@@ -273,6 +282,11 @@ export async function runCreditOperator(client: PrismaClient, argv: string[], re
         plan = input;
         write = () => activateCreditFacility(client, input);
       } else {
+        if (args.command === "approve") {
+          // Approval freezes approvedLimitFen: the per-payer cap binds the checker too, not only the maker's flag.
+          const facility = await client.creditFacility.findUnique({ where: { id: base.facilityId }, select: { limitFen: true } });
+          if (facility && facility.limitFen > maxLimit(args)) fail("limit_over_cap");
+        }
         const input = { ...base, action: args.command as CreditFacilityAction,
           ...(args.command === "reduce" ? { limitFen: fenFlag(flag(args, "limit-fen"), "limit-fen") } : {}) };
         plan = input;

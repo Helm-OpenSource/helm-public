@@ -85,8 +85,8 @@ describe.skipIf(!url)("credit operator CLI against MySQL", () => {
     await a.$executeRaw`UPDATE PayerAccount SET billingMode = 'enforce' WHERE id = ${account.id}`; // no mode API yet
     return { ws, payer: account.id };
   }
-  async function activeLine(payerAccountId: string, limit: number) {
-    const { facility } = await proposeCreditFacility(a, { actorUserId: maker, payerAccountId, limitFen: fen(limit), validUntil: null,
+  async function activeLine(payerAccountId: string, limit: number, validUntil: Date | null = null) {
+    const { facility } = await proposeCreditFacility(a, { actorUserId: maker, payerAccountId, limitFen: fen(limit), validUntil,
       operationKey: `legacy:${(seq += 1)}`, evidenceRef: "owner-ruling:legacy" });
     await changeCreditFacility(a, { actorUserId: checker, facilityId: facility.id, action: "approve", expectedVersion: 1, evidenceRef: "review:a" });
     return changeCreditFacility(a, { actorUserId: maker, facilityId: facility.id, action: "activate", expectedVersion: 2, evidenceRef: "review:b" });
@@ -175,6 +175,7 @@ describe.skipIf(!url)("credit operator CLI against MySQL", () => {
     expect(row((await cli("batch", `--list-file=${path}`)).out, ws)).toMatchObject({ action: "blocked", blocker: "current_in_use" });
     expect((await activate(`--supersedes-facility-id=${old.id}`, `--supersedes-version=${old.version}`)).out).toEqual({ ok: false, code: "credit_supersede_in_use" });
     expect(await drawable(payer)).toMatchObject({ id: old.id, state: "active", usedFen: fen(300) }); // revoke rolled back too
+    expect(await a.auditLog.count({ where: { targetId: old.id, actionType: "BILLING_CREDIT_FACILITY_REVOKE" } })).toBe(0); // and its audit row
     expect(await a.creditFacility.findUnique({ where: { id: facility.id } })).toMatchObject({ state: "approved", version: 2 });
   });
 
@@ -188,5 +189,18 @@ describe.skipIf(!url)("credit operator CLI against MySQL", () => {
     expect((await propose(MILLION_YUAN, "--max-limit-fen=50000000", "--apply")).out).toEqual({ ok: false, code: "limit_over_cap" });
     expect((await propose(MILLION_YUAN, "--apply")).out).toMatchObject({ ok: true, applied: true, result: { replayed: false, facility: { state: "draft" } } });
     expect((await cli("show", `--payer-account-id=${payer}`)).out.facilities).toHaveLength(1);
+    // The cap binds the checker: a line proposed under a raised cap is not approvable under the default one.
+    const { facility } = await proposeCreditFacility(a, { actorUserId: maker, payerAccountId: payer, limitFen: fen(MILLION_YUAN + 1),
+      validUntil: null, operationKey: `raised:${run}`, evidenceRef: "owner-ruling:raised" });
+    const approve = (...extra: string[]) => cli("approve", `--actor-user-id=${checker}`, `--facility-id=${facility.id}`, "--expected-version=1",
+      "--evidence-ref=review:raised", ...extra, "--apply");
+    expect((await approve()).out).toEqual({ ok: false, code: "limit_over_cap" });
+    expect((await approve(`--max-limit-fen=${MILLION_YUAN + 1}`)).out).toMatchObject({ ok: true, result: { state: "approved" } });
+    // A line past its term lends nothing: never reported done, the operator expires it first.
+    const lapsed = await workspace();
+    await activeLine(lapsed.payer, MILLION_YUAN, new Date(Date.now() + 1500));
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    expect(row((await cli("batch", `--list-file=${list([{ workspaceId: lapsed.ws, limitFen: String(MILLION_YUAN) }])}`)).out, lapsed.ws))
+      .toMatchObject({ action: "blocked", blocker: "current_past_term" });
   });
 });
