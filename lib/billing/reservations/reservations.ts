@@ -65,9 +65,14 @@ function reject(code: BillingRejectCode): never { throw new BillingReject(code);
 function reference(value: unknown): asserts value is string {
   if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,190}$/.test(value)) reject("request_invalid");
 }
+// v3.9 billing service actor `billing-service:<issuerRef>/<grantId>` (issuerRef as the BillingServiceGrant_issuer CHECK, grantId
+// as the route header). One pattern for both the format check and the owner, so a ref under this prefix either has exactly
+// this shape or is refused: it can never fall back to being owned by its literal ref.
+const BILLING_SERVICE_ACTOR = /^billing-service:([a-z0-9][a-z0-9._-]{0,63})\/[a-z0-9][a-z0-9_-]{2,63}$/;
 function serviceActor(actor: ServiceActor) {
   if (!actor || actor.type !== "SYSTEM") reject("request_invalid");
   reference(actor.ref);
+  if (actor.ref.startsWith("billing-service:") && !BILLING_SERVICE_ACTOR.test(actor.ref)) reject("request_invalid");
   return `SYSTEM:${actor.ref}`;
 }
 /** Positive integer decimal string (no sign, no leading zero) within the fen bound. */
@@ -203,7 +208,8 @@ type LockedReservation = { id: string; payerAccountId: string; operationRef: str
  * issuer, so a rotated grant of the same issuer keeps working; any other actor owns exactly its own ref.
  */
 function ownerOf(createdBy: string) {
-  return /^(SYSTEM:billing-service:[a-z0-9][a-z0-9._-]{0,63})\/[^/]+$/.exec(createdBy)?.[1] ?? createdBy;
+  const issuer = createdBy.startsWith("SYSTEM:") ? BILLING_SERVICE_ACTOR.exec(createdBy.slice(7))?.[1] : undefined;
+  return issuer === undefined ? createdBy : `SYSTEM:billing-service:${issuer}`;
 }
 /**
  * Locks PayerAccount, the frozen-period buckets, then the row; the plain head read only finds immutable keys. `owner` is the

@@ -43,7 +43,9 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
   `20261111100000_billing_service_grant_issuer_check` also refuses a trailing line terminator that ICU `$` let through). A reservation belongs to its issuer:
   settle/release/markUnknown from another issuer see it as absent (`reservation_state_conflict`, before any operationRef
   check); a reserve key replays only within its issuer (`idempotency_conflict` otherwise). `resolveUnknown` (reconciliation
-  grants only) works across issuers.
+  grants only) works across issuers, as release or settle. Issuers are compared whole (`issuer-a` never owns `issuer-a.b`), and
+  a library caller's actor ref under the `billing-service:` prefix that is not exactly `billing-service:<issuerRef>/<grantId>`
+  (grantId as the header format) is `request_invalid`, so it can never be owned by its literal ref.
 - **Status mapping**: ok 200; `request_invalid` 400 (unknown/extra fields, wrong JSON types, formats; body > 16 KiB is 413);
   `idempotency_conflict`, `reservation_state_conflict`, `unknown_resolution_conflict`, `mode_mismatch` 409; business refusals
   422; `core_unavailable` 503 (deadlock 1213, lock timeout 1205, write conflict P2002/raw 1062, a lost connection or
