@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { PrismaClient } from "@prisma/client";
+import { type Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { grantPlatformFinanceRole } from "../bank-receipts/bank-receipts";
 import { changeCreditFacility, drawCreditShortfallInTransaction, proposeCreditFacility } from "../credit/credit-facilities";
 import { postFundsTransactionInTransaction, recomputeFundsProjection, reverseFundsTransactionInTransaction } from "../funds/funds-journal";
 import { changeSpendGrant, createSpendGrant, publishPriceVersion } from "../grants/price-grants";
-import { bindScope, createPayerAccount } from "../payer/payer-accounts";
+import { bindScope, createPayerAccount, revokeBinding } from "../payer/payer-accounts";
 import { markUnknown as markUnknownSpend, quote as quoteSpend, release as releaseSpend, type ReleaseReasonCode, reserve as reserveSpend,
   resolveUnknown as resolveSpend, settle as settleSpend } from "./reservations";
 
@@ -80,8 +80,19 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
     await client.$executeRawUnsafe(`SET timestamp = ${(+at / 1000).toFixed(3)}`); return client; })()).get(`${+at}:${lane}`)!; // fixed dates
   afterAll(async () => { await Promise.all([a?.$disconnect(), ...[...clocks.values()].map(async c => (await c).$disconnect())]); });
 
+  let workspaces = 0;
+  const workspace = async () => {
+    const id = `resv-sw-${run}-${++workspaces}`;
+    await a.$executeRaw`INSERT INTO Workspace (id,name,slug,updatedAt) VALUES (${id},'Synthetic subject',${id},NOW(3))`;
+    await a.$executeRaw`INSERT INTO Membership (id,workspaceId,userId,role,status,updatedAt) VALUES (${`m-${id}`},${id},${owner},'OWNER','ACTIVE',NOW(3))`;
+    return id;
+  };
+  /** A payer governed by `ws` and bound to a fresh workspace of its own: reserve requires the subject's binding to name it. */
   async function setup(mode: "shadow" | "enforce", walletFen: number, limits = [500, 1000, 3000], price = () => priceId) {
+    const workspaceId = await workspace();
     const account = await createPayerAccount(a, { actorUserId: owner, workspaceId: ws, kind: "enterprise_contract", contractSubjectRef: "subject-resv" });
+    const binding = await bindScope(a, { actorUserId: owner, payerAccountId: account.id, expectedPayerVersion: 1, scopeKind: "workspace",
+      scopeRef: workspaceId, evidenceRef: "consent:bind" });
     await a.$executeRaw`UPDATE PayerAccount SET billingMode = ${mode} WHERE id = ${account.id}`; // no mode API yet
     if (walletFen > 0) await a.$transaction(tx => postFundsTransactionInTransaction(tx, { payerAccountId: account.id, kind: "topup", operationKey: `topup:${account.id}`,
       actor: service, evidenceRef: "verified-payment:synthetic", entries: [{ account: "topup_clearing", direction: "debit", amountFen: fen(walletFen) },
@@ -91,11 +102,13 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
       operationKey: "grant:resv", evidenceRef: "consent:synthetic", validFrom: new Date("2026-11-01T00:00:00Z"),
       validUntil: new Date("2027-02-01T00:00:00Z"), limits: { perChargeLimitFen: per, dailyLimitFen: day, monthlyLimitFen: month } });
     await changeSpendGrant(a, { actorUserId: owner, grantId: grant.id, expectedVersion: 1, action: "activate", evidenceRef: "consent:on" });
-    return { payerAccountId: account.id, grantId: grant.id };
+    return { payerAccountId: account.id, grantId: grant.id, workspaceId, bindingId: binding.id };
   }
   type Ids = Awaited<ReturnType<typeof setup>>;
-  const reserve = async (ids: Ids, key: string, quantity: number, lane = 0, at = lateNov, priceVersionId = priceId, operationRef = `ref:${key}`) =>
-    reserveSpend(await clocked(at, lane), service, { idempotencyKey: `idem:${key}`, operationRef, payerRef: ids.payerAccountId,
+  const reserve = async (ids: Pick<Ids, "payerAccountId" | "grantId" | "workspaceId">, key: string, quantity: number, lane = 0, at = lateNov,
+    priceVersionId = priceId, operationRef = `ref:${key}`) =>
+    reserveSpend(await clocked(at, lane), service, { idempotencyKey: `idem:${key}`, operationRef,
+      subjectScope: { kind: "workspace", workspaceId: ids.workspaceId }, payerRef: ids.payerAccountId,
       grantId: ids.grantId, priceVersionId, billingEventRef: "service-billing-event-v1:synthetic", meterUnit: "document", quantity: String(quantity) });
   const held = async (ids: Ids, key: string, quantity: number, lane = 0, at = lateNov) => {
     const result = await reserve(ids, key, quantity, lane, at); if (!result.ok) throw new Error(JSON.stringify(result)); return result; };
@@ -342,7 +355,7 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
     const q = async (meterUnit = "document") => quoteSpend(await clocked(midNov, 0), service, {
       subjectScope: { kind: "workspace", workspaceId: qws }, billingEventRef: "service-billing-event-v1:synthetic", meterUnit, quantity: "1" });
     expect(await q()).toEqual(rejected("billing_mode_off")); // unbound workspace: not billed (status quo)
-    await bindScope(a, { actorUserId: owner, payerAccountId: ids.payerAccountId, expectedPayerVersion: 1, scopeKind: "workspace",
+    await bindScope(a, { actorUserId: owner, payerAccountId: ids.payerAccountId, expectedPayerVersion: 2, scopeKind: "workspace",
       scopeRef: qws, evidenceRef: "consent:bind" });
     expect(await q()).toEqual({ ok: true, payerRef: ids.payerAccountId, grantId: ids.grantId, priceVersionId: priceId, mode: "enforce" });
     expect(await q("page")).toEqual(rejected("grant_not_active"));
@@ -468,6 +481,83 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
       expect(await balances(ids.payerAccountId)).toMatchObject(i % 2 ? { charge_revenue: fen(700), credit_receivable: fen(700) }
         : { charge_revenue: fen(700), customer_wallet_available: fen(100000 - 700) });
     }
+  });
+  // #528 review P1-1: the payer comes from the declared workspace's current binding, resolved under the PayerAccount lock.
+  const reservation = (id: string) => a.billingReservation.findUniqueOrThrow({ where: { id } });
+  it("reserves only for the payer the declared workspace is bound to now and freezes that binding", async () => {
+    const ids = await setup("enforce", 1000), other = await setup("enforce", 1000);
+    const first = await held(ids, "op:bind", 1);
+    expect(await reservation(first.reservationId)).toMatchObject({ subjectWorkspaceId: ids.workspaceId, payerBindingId: ids.bindingId,
+      payerBindingVersion: 1 });
+    // Another workspace's subject with this payer, an unbound workspace and a vault scope write nothing.
+    expect(await reserve({ ...ids, workspaceId: other.workspaceId }, "op:spoof", 1)).toEqual(rejected("grant_not_active"));
+    expect(await reserve({ ...ids, workspaceId: await workspace() }, "op:unbound", 1)).toEqual(rejected("grant_not_active"));
+    expect(await reserveSpend(a, service, { idempotencyKey: "idem:op:vault", operationRef: "ref:op:vault", subjectScope: { kind: "vault", vaultId: "v-1" },
+      payerRef: ids.payerAccountId, grantId: ids.grantId, priceVersionId: priceId, billingEventRef: "service-billing-event-v1:synthetic",
+      meterUnit: "document", quantity: "1" })).toEqual(rejected("request_invalid"));
+    expect(await reserve({ ...ids, workspaceId: other.workspaceId }, "op:bind", 1)).toEqual(rejected("idempotency_conflict")); // hash covers it
+    // Revoked: the cached payerRef and grantId no longer reserve; the recorded hold still replays and settles on its frozen payer (R05).
+    await revokeBinding(a, { actorUserId: owner, bindingId: ids.bindingId, expectedVersion: 1, evidenceRef: "consent:revoke" });
+    expect(await reserve(ids, "op:cached", 1)).toEqual(rejected("grant_not_active"));
+    expect(await reserve(ids, "op:bind", 1)).toEqual(first);
+    expect(await settle(first.reservationId, "set:bind", "1")).toMatchObject({ ok: true, state: "settled", chargeFen: "100" });
+    expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(900), charge_revenue: fen(100) });
+    // Rebound to another payer: the old payer is refused for this workspace; the new one reserves under the new binding.
+    const rebound = await bindScope(a, { actorUserId: owner, payerAccountId: other.payerAccountId, expectedPayerVersion: 2,
+      scopeKind: "workspace", scopeRef: ids.workspaceId, evidenceRef: "consent:rebind" });
+    expect(await reserve(ids, "op:old-payer", 1)).toEqual(rejected("grant_not_active"));
+    const moved = await held({ ...other, workspaceId: ids.workspaceId }, "op:moved", 1);
+    expect(await reservation(moved.reservationId)).toMatchObject({ payerAccountId: other.payerAccountId, subjectWorkspaceId: ids.workspaceId,
+      payerBindingId: rebound.id, payerBindingVersion: 1 });
+    expect(await a.billingReservation.count({ where: { payerAccountId: ids.payerAccountId } })).toBe(1);
+    for (const column of ["payerBindingId", "subjectWorkspaceId"]) {
+      await expect(a.$executeRawUnsafe(`UPDATE BillingReservation SET ${column} = 'x', state = 'unknown', unknownKey = 'x', unknownEvidenceRef = 'x',
+        unknownAt = NOW(3), version = version + 1 WHERE id = ?`, moved.reservationId)).rejects.toThrow(/billing_reservation_snapshot_immutable/);
+    }
+    await expect(a.$executeRaw`UPDATE BillingReservation SET payerBindingVersion = 2, state = 'unknown', unknownKey = 'x', unknownEvidenceRef = 'x',
+      unknownAt = NOW(3), version = version + 1 WHERE id = ${moved.reservationId}`).rejects.toThrow(/billing_reservation_snapshot_immutable/);
+  });
+  /** Holds `lock` in a side transaction until the returned release is called. */
+  async function holdLock(lock: (tx: Prisma.TransactionClient) => Promise<unknown>) {
+    let open!: () => void, locked!: () => void;
+    const gate = new Promise<void>(resolve => { open = resolve; }), ready = new Promise<void>(resolve => { locked = resolve; });
+    const side = a.$transaction(async tx => { await lock(tx); locked(); await gate; }, { maxWait: 5000, timeout: 30000 });
+    await ready;
+    return async () => { open(); await side; };
+  }
+  const lockWaits = async (count: number) => {
+    for (let i = 0; i < 200; i++) {
+      const [row] = await a.$queryRaw<Array<{ n: bigint }>>`SELECT COUNT(*) AS n FROM performance_schema.data_lock_waits`;
+      if (Number(row.n) >= count) return;
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    throw new Error("lock_wait_not_observed");
+  };
+  it("orders revoke and reserve on the binding row: a revoke committed first is seen, a reserve first keeps its binding", async () => {
+    // revokeBinding takes no PayerAccount lock: it commits while reserve waits for that lock, and reserve resolves after it.
+    const ids = await setup("enforce", 1000);
+    let release = await holdLock(tx => tx.$queryRaw`SELECT id FROM PayerAccount WHERE id = ${ids.payerAccountId} FOR UPDATE`);
+    const late = reserve(ids, "op:race-revoke", 1);
+    await lockWaits(1);
+    await revokeBinding(a, { actorUserId: owner, bindingId: ids.bindingId, expectedVersion: 1, evidenceRef: "consent:revoke" });
+    await release();
+    expect(await late).toEqual(rejected("grant_not_active"));
+    // Reserve holds the binding share lock while it waits for the grant row: the revoke waits for its commit.
+    const next = await setup("enforce", 1000);
+    release = await holdLock(tx => tx.$queryRaw`SELECT id FROM SpendGrant WHERE id = ${next.grantId} FOR UPDATE`);
+    const early = reserve(next, "op:race-hold", 1);
+    await lockWaits(1);
+    let revoked = false;
+    const revoke = revokeBinding(a, { actorUserId: owner, bindingId: next.bindingId, expectedVersion: 1, evidenceRef: "consent:revoke" })
+      .then(row => { revoked = true; return row; });
+    await lockWaits(2);
+    expect(revoked).toBe(false);
+    await release();
+    const hold = await early;
+    if (!hold.ok) throw new Error(JSON.stringify(hold));
+    expect((await revoke).state).toBe("revoked");
+    expect(await reservation(hold.reservationId)).toMatchObject({ payerBindingId: next.bindingId, payerBindingVersion: 1, state: "held" });
+    expect(await reserve(next, "op:after-revoke", 1)).toEqual(rejected("grant_not_active"));
   });
   it("refuses the S2-c and S2-a rollbacks while the charges migration is applied", async () => {
     // CREATE PROCEDURE cannot run over the prepared-statement protocol, so evaluate each file's first guard (the one that must
