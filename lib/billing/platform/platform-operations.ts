@@ -198,8 +198,8 @@ async function applyInTransaction(tx: Prisma.TransactionClient, request: Platfor
   return binding.payerAccountId;
 }
 
-/** Enforce must not stop the payer at once: one active grant per event and unit (at least one) and headroom = wallet + undrawn credit
- * - held/unknown enforce reservations > 0, under the payer lock as in reserve. Advisory for the switch; every use re-checks money. */
+/** Enforce must not stop the payer at once: one active grant per event and unit (at least one), headroom = wallet + undrawn credit -
+ * held/unknown enforce reservations > 0. Advisory: this snapshot may lag a concurrent writer (reserve reads under RC); every use re-checks. */
 async function assertEnforceReady(tx: Prisma.TransactionClient, payerAccountId: string) {
   const grants = await tx.$queryRaw<Array<{ n: bigint }>>`SELECT COUNT(*) AS n FROM SpendGrant g
     JOIN BillingPriceVersion v ON v.id = g.priceVersionId WHERE g.payerAccountId = ${payerAccountId} AND g.state = 'active'
