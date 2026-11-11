@@ -26,8 +26,12 @@ export async function GET(request: Request) {
   );
   cookieStore.delete(FEISHU_PUBLIC_AUTH_STATE_COOKIE);
 
-  if (!stored || !stateParam || stored.state !== stateParam || !code) {
+  if (!stored || !stateParam || stored.state !== stateParam) {
     return NextResponse.redirect(buildPublicOauthFallbackUrl(request, "feishu"));
+  }
+
+  if (!code || url.searchParams.has("error")) {
+    return NextResponse.redirect(buildPublicOauthFallbackUrl(request, "feishu", undefined, stored.callback));
   }
 
   try {
