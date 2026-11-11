@@ -2,8 +2,9 @@ import "server-only";
 
 // lib/seat-device/store-authorize.ts
 // Seat desktop device authorization (D1), request side: a device asks for
-// authorization and may cancel its own request. (Website lookup and decision
-// and the device's claim follow in the next slices.)
+// authorization, a member looks the pairing code up on the website and
+// approves or rejects it, and the device may cancel its own request. (The
+// device's claim follows in the next slice.)
 //
 // Consistency (design v0.3 §6.2, P2-7): Workspace, Membership, User and
 // AuthSession are read OUTSIDE the Serializable transaction (InnoDB turns
@@ -21,11 +22,15 @@ import "server-only";
 // No plaintext token or pairing code is stored, logged or put in an error or
 // audit payload: only sha256 hashes reach the database.
 
-import { ActorType, Prisma } from "@prisma/client";
+import { ActorType, MembershipStatus, Prisma } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
+import { externalScopeOf } from "@/lib/auth/external-member-scope";
+import { evaluateLock, hashLoginIdentifier, nextStateOnFailure } from "@/lib/auth/login-rate-limit";
+import { AUTH_SESSION_PROVIDER_TYPES } from "@/lib/auth/provider-seam";
 import { db } from "@/lib/db";
 import { isWriteConflictError } from "@/lib/db/conflict-aware-write";
 import {
+  SEAT_DEVICE_MAX_ACTIVE_PER_MEMBER,
   SEAT_DEVICE_PAIRING_CODE_MAX_ATTEMPTS,
   SEAT_DEVICE_PENDING_BUCKET_WINDOW_SECONDS,
   SEAT_DEVICE_PENDING_LIMIT_GLOBAL,
@@ -33,13 +38,16 @@ import {
   SEAT_DEVICE_PENDING_LIMIT_PER_BUCKET_WINDOW,
   SEAT_DEVICE_POLL_INTERVAL_SECONDS,
   SEAT_DEVICE_REQUEST_TTL_SECONDS,
+  SEAT_DEVICE_STEP_UP_MAX_SESSION_AGE_SECONDS,
   effectiveSeatDeviceStatus,
   formatSeatDevicePairingCode,
   generateSeatDevicePairingCode,
   hashSeatDevicePairingCode,
   hashSeatDeviceToken,
   isSeatDeviceAuthDeploymentEnabled,
+  isSeatDeviceWorkspaceEnabled,
   mintSeatDeviceToken,
+  seatDeviceCredentialExpiresAt,
   seatDeviceHashesEqual,
   seatDeviceSourceBucket,
   type SeatDeviceCancelStatus,
@@ -313,13 +321,14 @@ async function auditDevice(
   actionType: string,
   summary: string,
   payload: Record<string, unknown>,
+  actor: { userId: string; name: string } | null = null,
 ) {
   if (!row.workspaceId) return;
   await writeAuditLog(
     {
       workspaceId: row.workspaceId,
-      userId: row.userId,
-      actor: "seat_desktop",
+      userId: actor?.userId ?? row.userId,
+      actor: actor?.name ?? "seat_desktop",
       actorType: ActorType.USER,
       actionType,
       targetType: TARGET_TYPE,
@@ -330,4 +339,255 @@ async function auditDevice(
     },
     { client: tx },
   );
+}
+
+// ---------------------------------------------------------------------------
+// Website: pairing-code entry (lookup, approve, reject)
+// ---------------------------------------------------------------------------
+
+type MemberContext = {
+  authSessionId: string;
+  providerType: string | null;
+  userId: string;
+  userName: string;
+  passwordSetAt: Date | null;
+  workspace: { id: string; name: string; enabled: boolean };
+  membershipId: string;
+};
+
+// Re-reads the session row itself instead of trusting the caller's view of
+// it: usable, owned by the user, seated on a workspace where the user is an
+// ACTIVE, non-external member. The workspace bound later is this one.
+async function loadMemberContext(authSessionId: string, userId: string, now: Date): Promise<MemberContext> {
+  const session = await db.authSession.findUnique({
+    where: { id: authSessionId },
+    select: { userId: true, activeWorkspaceId: true, providerType: true, revokedAt: true, expiresAt: true },
+  });
+  if (!session || session.userId !== userId || session.revokedAt || session.expiresAt <= now || !session.activeWorkspaceId) {
+    throw new SeatDeviceAuthError("reauthentication_required");
+  }
+  const workspaceId = session.activeWorkspaceId;
+  const [workspace, membership, user] = await Promise.all([
+    db.workspace.findUnique({ where: { id: workspaceId }, select: { id: true, name: true, featureFlagsJson: true } }),
+    db.membership.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId } },
+      select: { id: true, status: true, accessScope: true },
+    }),
+    db.user.findUnique({ where: { id: userId }, select: { name: true, passwordSetAt: true } }),
+  ]);
+  if (!workspace || !membership || !user || membership.status !== MembershipStatus.ACTIVE || externalScopeOf(membership) !== null) {
+    throw new SeatDeviceAuthError("forbidden");
+  }
+  return {
+    authSessionId,
+    providerType: session.providerType,
+    userId,
+    userName: user.name,
+    passwordSetAt: user.passwordSetAt,
+    workspace: { id: workspace.id, name: workspace.name, enabled: isSeatDeviceWorkspaceEnabled(workspace.featureFlagsJson) },
+    membershipId: membership.id,
+  };
+}
+
+// Code entry is limited per account and, with a trusted source, per address
+// bucket, in FailedLoginAttempt (15 minutes, 8 failures, then locked). The
+// lock check, the look at the code and the failure count run in ONE
+// Serializable transaction: the counter rows read by the check stay locked
+// until the count is written, so concurrent wrong codes cannot all pass the
+// check before any of them is counted, and a right guess during a lock is
+// not confirmed. A success never clears the count: anyone can mint a valid
+// code of their own, so clearing would let them reset it.
+function codeEntryKeys(userId: string, source: string | null) {
+  const bucket = source ? seatDeviceSourceBucket(source) : null;
+  const keys = [`seat-device-code:user:${userId}`];
+  if (bucket) keys.push(`seat-device-code:ip:${bucket}`);
+  return keys.map(hashLoginIdentifier);
+}
+
+type CodeEntryCounter = { identifierHash: string; attemptCount: number; windowStartedAt: Date; lockedUntil: Date | null };
+
+async function openCodeEntryInTx(tx: Prisma.TransactionClient, identifierHashes: string[], now: Date) {
+  const counters: CodeEntryCounter[] = await tx.failedLoginAttempt.findMany({
+    where: { identifierHash: { in: identifierHashes } },
+    select: { identifierHash: true, attemptCount: true, windowStartedAt: true, lockedUntil: true },
+  });
+  const retryAfterMs = Math.max(0, ...counters.map((counter) => evaluateLock(counter, now).retryAfterMs));
+  if (retryAfterMs > 0) throw new SeatDeviceAuthError("rate_limited", Math.ceil(retryAfterMs / 1000));
+  return counters;
+}
+
+// Committed with the transaction that found the code wrong; the caller
+// answers pairing_code_invalid only after that commit.
+async function countCodeEntryFailureInTx(tx: Prisma.TransactionClient, identifierHashes: string[], counters: CodeEntryCounter[], now: Date) {
+  for (const identifierHash of identifierHashes) {
+    const next = nextStateOnFailure(counters.find((counter) => counter.identifierHash === identifierHash) ?? null, now);
+    await tx.failedLoginAttempt.upsert({
+      where: { identifierHash },
+      create: { identifierHash, ...next },
+      update: next,
+      select: { id: true },
+    });
+  }
+}
+
+// Two first failures racing to create the same counter row: retried.
+const isCodeEntryConflict = (error: unknown) => isWriteConflictError(error) || isUniqueViolation(error, "identifierHash");
+
+export type SeatDeviceLookup = {
+  requestId: string;
+  deviceName: string;
+  clientVersion: string | null;
+  clientReported: ["deviceName", "clientVersion"];
+  requestedAt: string;
+  source: string | null;
+  expiresInSeconds: number;
+  workspace: { name: string };
+};
+
+// `pairingCode` is the normalized code (SEAT_DEVICE_LOOKUP_REQUEST_SCHEMA).
+export async function lookupSeatDeviceAuthorization(input: {
+  authSessionId: string;
+  userId: string;
+  pairingCode: string;
+  source: string | null;
+  now?: Date;
+}): Promise<SeatDeviceLookup> {
+  assertDeploymentEnabled();
+  const now = input.now ?? new Date();
+  const member = await loadMemberContext(input.authSessionId, input.userId, now);
+  if (!member.workspace.enabled) throw new SeatDeviceAuthError("workspace_not_enabled");
+  const keys = codeEntryKeys(input.userId, input.source);
+  const pairingCodeHash = hashSeatDevicePairingCode(input.pairingCode);
+  const row = await retried(() => db.$transaction(async (tx) => {
+    const counters = await openCodeEntryInTx(tx, keys, now);
+    const found = pairingCodeHash ? await tx.seatDeviceAuthorization.findUnique({ where: { pairingCodeHash } }) : null;
+    if (found && effectiveSeatDeviceStatus(found, now) === "pending") return found;
+    if (found) await clearLapsedPairingCode(tx, found);
+    await countCodeEntryFailureInTx(tx, keys, counters, now);
+    return null;
+  }, TX), "rate_limited", isCodeEntryConflict);
+  if (!row) throw new SeatDeviceAuthError("pairing_code_invalid");
+  return {
+    requestId: row.id,
+    deviceName: row.deviceLabel,
+    clientVersion: row.clientVersion,
+    clientReported: ["deviceName", "clientVersion"],
+    requestedAt: row.requestedAt.toISOString(),
+    source: row.sourceIp,
+    expiresInSeconds: Math.max(0, Math.floor((row.requestExpiresAt.getTime() - now.getTime()) / 1000)),
+    workspace: { name: member.workspace.name },
+  };
+}
+
+type Decision = "approve" | "reject";
+
+// Approve binds the request to the member, the session's workspace and the
+// password snapshot; it needs both switches, a PASSWORD session, a password
+// verified for this approval in the last 10 minutes and room under the device
+// cap. Reject needs a usable member session only (no step-up), so a phishing
+// request can be turned down from any session. Both go through the code-entry
+// lock: while the account or its address bucket is locked, reject waits out
+// the lock like approve (the request lapses in 10 minutes regardless).
+//
+// Step-up (design §4.3): rotating a session creates a fresh AuthSession row
+// without asking for the password, so the session's age proves nothing. The
+// caller re-verifies the member's password for this approval, under the login
+// failure limit, and passes `passwordVerifiedAt`, the moment that check
+// succeeded. The store never sees the password; it refuses a missing proof,
+// one older than 10 minutes and one later than `now`.
+export async function decideSeatDeviceAuthorization(input: {
+  authSessionId: string;
+  userId: string;
+  requestId: string;
+  pairingCode: string;
+  decision: Decision;
+  passwordVerifiedAt: Date | null;
+  source: string | null;
+  now?: Date;
+}): Promise<{ requestId: string; status: "approved" | "rejected" }> {
+  assertDeploymentEnabled();
+  const now = input.now ?? new Date();
+  const member = await loadMemberContext(input.authSessionId, input.userId, now);
+  if (input.decision === "approve") {
+    if (!member.workspace.enabled) throw new SeatDeviceAuthError("workspace_not_enabled");
+    const proofAgeMs = input.passwordVerifiedAt ? now.getTime() - input.passwordVerifiedAt.getTime() : Number.NaN;
+    if (
+      member.providerType !== AUTH_SESSION_PROVIDER_TYPES.PASSWORD ||
+      !(proofAgeMs >= 0 && proofAgeMs <= SEAT_DEVICE_STEP_UP_MAX_SESSION_AGE_SECONDS * 1000)
+    ) {
+      throw new SeatDeviceAuthError("reauthentication_required");
+    }
+  }
+  const keys = codeEntryKeys(input.userId, input.source);
+  const pairingCodeHash = hashSeatDevicePairingCode(input.pairingCode);
+
+  const outcome = await retried(() => db.$transaction(async (tx) => {
+    const counters = await openCodeEntryInTx(tx, keys, now);
+    const row = await tx.seatDeviceAuthorization.findUnique({ where: { id: input.requestId } });
+    if (
+      !row ||
+      !pairingCodeHash ||
+      !seatDeviceHashesEqual(row.pairingCodeHash, pairingCodeHash) ||
+      effectiveSeatDeviceStatus(row, now) !== "pending"
+    ) {
+      await countCodeEntryFailureInTx(tx, keys, counters, now);
+      return "code_invalid" as const;
+    }
+    if (input.decision === "approve") await assertDeviceCap(tx, member, now);
+    const cas = { id: row.id, status: "pending", version: row.version, pairingCodeHash, requestExpiresAt: { gt: now } };
+    const decided = { decidedByUserId: member.userId, decidedAt: now, pairingCodeHash: null, version: { increment: 1 } };
+    const result = await tx.seatDeviceAuthorization.updateMany({
+      where: cas,
+      data:
+        input.decision === "approve"
+          ? {
+              ...decided,
+              status: "approved",
+              workspaceId: member.workspace.id,
+              userId: member.userId,
+              membershipId: member.membershipId,
+              userPasswordSetAt: member.passwordSetAt,
+              approvalSource: input.source,
+              approvedAuthSessionId: member.authSessionId,
+              expiresAt: seatDeviceCredentialExpiresAt(now),
+            }
+          : { ...decided, status: "rejected", workspaceId: member.workspace.id, sourceIp: null },
+    });
+    if (result.count !== 1) casLost();
+    const bound = { ...row, workspaceId: member.workspace.id, userId: input.decision === "approve" ? member.userId : null };
+    const actor = { userId: member.userId, name: member.userName };
+    if (input.decision === "reject") {
+      await auditDevice(tx, bound, "SEAT_DEVICE_AUTHORIZATION_REJECTED", `拒绝设备授权：${row.deviceLabel}`, {}, actor);
+      return "rejected" as const;
+    }
+    await auditDevice(tx, bound, "SEAT_DEVICE_AUTHORIZATION_APPROVED", `授权设备登录：${row.deviceLabel}`, {
+      clientVersion: row.clientVersion,
+      approvalSourceTrusted: input.source !== null,
+    }, actor);
+    await tx.notification.create({
+      data: {
+        workspaceId: member.workspace.id,
+        userId: member.userId,
+        type: "SYSTEM",
+        title: "新设备已获授权登录坐席客户端",
+        body: `设备「${row.deviceLabel}」（客户端自报）于 ${now.toISOString()} 获得授权，来源：${input.source ?? "未知"}。如果不是你本人操作，请立即在设备列表中撤销。`,
+      },
+    });
+    return "approved" as const;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), "rate_limited", isCodeEntryConflict);
+  if (outcome === "code_invalid") throw new SeatDeviceAuthError("pairing_code_invalid");
+  return { requestId: input.requestId, status: outcome };
+}
+
+// Approved-but-unclaimed requests count: each becomes a device on claim.
+async function assertDeviceCap(tx: Prisma.TransactionClient, member: MemberContext, now: Date) {
+  const rows = await tx.seatDeviceAuthorization.findMany({
+    where: { workspaceId: member.workspace.id, userId: member.userId, status: { in: ["approved", "active"] } },
+    select: { status: true, requestExpiresAt: true, expiresAt: true },
+  });
+  const live = rows.filter((row) => {
+    const status = effectiveSeatDeviceStatus(row, now);
+    return status === "approved" || status === "active";
+  });
+  if (live.length >= SEAT_DEVICE_MAX_ACTIVE_PER_MEMBER) throw new SeatDeviceAuthError("too_many_devices");
 }
