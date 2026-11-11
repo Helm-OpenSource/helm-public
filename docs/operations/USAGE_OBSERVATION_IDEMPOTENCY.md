@@ -92,9 +92,17 @@ Test-only inputs are `USAGE_LEDGER_MYSQL_SOCKET` locally, or `USAGE_LEDGER_MYSQL
 
 ## Migration and rollback / 迁移与回滚
 
-Apply `20261109130000_usage_ledger_idempotency` before enabling any keyed writer; no historical row is rewritten.
-Application rollback stops keyed writers/corrections and retains added columns and evidence. Do not call keyed writes against an old schema.
-The guarded SQL rollback in `prisma/rollback/20261109_rollback_usage_ledger_idempotency.sql` refuses when any keyed evidence exists.
+Apply `20261109130000_usage_ledger_idempotency` before deploying this code, not only before enabling a keyed writer; no historical row is rewritten.
+This code must never run against a table without the new columns: Prisma reads every UsageLedger column back after each insert, so the
+shared usage write exit (`lib/billing/foundation.ts`) and the settings usage read (`features/settings/queries.ts`) both fail with an unknown-column error,
+even for unkeyed writes. The previous application version works against the migrated table.
+Rollback order: roll the application back first; the schema can then stay as it is. Application rollback retains added columns and evidence.
+The guarded SQL rollback in `prisma/rollback/20261109_rollback_usage_ledger_idempotency.sql` refuses when any keyed evidence exists; run it only
+after the application is rolled back, with the mysql command-line client. It also removes the migration's `_prisma_migrations` row so that
+`prisma migrate deploy` re-applies the migration later.
 Do not delete evidence to make rollback pass; schema removal is only for an unused migration and requires a controlled maintenance window.
 
-迁移是新增列和唯一约束；本地合成试验不代表获准在生产执行DDL。使用过的新列保留，先回退应用接线；不得通过删历史记录完成回滚。
+迁移是新增列和唯一约束；本地合成试验不代表获准在生产执行DDL。必须先迁移、后上新代码：新代码在插入后与设置页查询中会回读全部列，
+在没有新列的表上，记账出口与设置页读取都会报未知列错误（不带键的写入也一样）。回滚时必须先回退应用代码；旧代码与已迁移的表兼容，表结构可以不动。
+SQL 回滚脚本只能在应用回退之后用 mysql 命令行执行，会同时删除该迁移的 `_prisma_migrations` 记录，以便之后 `migrate deploy` 重新应用。
+使用过的新列保留；不得通过删历史记录完成回滚。
