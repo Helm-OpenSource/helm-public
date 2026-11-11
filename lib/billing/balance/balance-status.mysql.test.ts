@@ -193,6 +193,13 @@ describe.skipIf(!url)("balance-status and the balance summary against MySQL", ()
     await changeCreditFacility(a, { actorUserId: checker, facilityId: revoked.facilityId!, action: "revoke", expectedVersion: 3, evidenceRef: "review:revoke" });
     expect(await summary(revoked)).toEqual({ balance: -350, headroom: 0, arrears: true, mode: "enforce" });
 
+    const reduced = await payer("enforce", 0, 1000); // v3.6: a hold settles past a later reduce, so used may exceed the limit
+    const held = await hold(reduced, "c2", 10);
+    await changeCreditFacility(a, { actorUserId: checker, facilityId: reduced.facilityId!, action: "reduce", expectedVersion: 3,
+      limitFen: BigInt(0), evidenceRef: "review:reduce" });
+    expect(await settleUsed(held, "c2", 10)).toMatchObject({ ok: true, chargeFen: "350" });
+    expect(await summary(reduced)).toEqual({ balance: -350, headroom: 0, arrears: true, mode: "enforce" }); // never negative credit
+
     const lapsing = await payer("enforce", 50, 1000, new Date(Date.now() + 4_000));
     expect(await summary(lapsing)).toMatchObject({ headroom: 1050, arrears: false });
     await new Promise(resolve => setTimeout(resolve, 4_500)); // still the active row, now outside its term
