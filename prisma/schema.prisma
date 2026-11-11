@@ -2473,6 +2473,42 @@ model PlatformBillingOperation {
   @@index([state, createdAt])
 }
 
+enum PlatformEmergencyRollbackState {
+  pending_review
+  confirmed
+}
+
+enum PlatformEmergencyRollbackFromMode {
+  enforce
+}
+
+enum PlatformEmergencyRollbackToMode {
+  shadow
+}
+
+// Owner 11-12: single-person enforce -> shadow, confirmed by a different person within 24 hours (never auto-reverted).
+model PlatformEmergencyRollback {
+  id                 String                            @id @default(cuid())
+  workspaceId        String                            @db.VarChar(191)
+  payerAccountId     String                            @db.VarChar(191)
+  fromMode           PlatformEmergencyRollbackFromMode
+  toMode             PlatformEmergencyRollbackToMode
+  state              PlatformEmergencyRollbackState    @default(pending_review)
+  executedByUserId   String                            @db.VarChar(191)
+  evidenceRef        String                            @db.VarChar(191)
+  executedAt         DateTime
+  reviewDueAt        DateTime // DB CHECK: executedAt + 24 hours
+  confirmedByUserId  String?                           @db.VarChar(191) // DB CHECK: differs from executedByUserId
+  confirmEvidenceRef String?                           @db.VarChar(191)
+  confirmedAt        DateTime?
+  version            Int                               @default(1)
+  createdAt          DateTime                          @default(now())
+  updatedAt          DateTime                          @updatedAt
+
+  @@unique([evidenceRef, workspaceId])
+  @@index([state, reviewDueAt])
+}
+
 model WorkerPublisherProfile {
   id                        String                     @id @default(cuid())
   workspaceId               String
