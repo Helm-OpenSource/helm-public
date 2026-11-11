@@ -1,7 +1,7 @@
 import { MembershipStatus, WorkspaceRole } from "@prisma/client";
 import { AppShell } from "@/components/layout/app-shell";
 import { getWorkspaceLayoutData } from "@/features/workspace/queries";
-import { getCurrentUser, getCurrentExternalMemberScope, getCurrentWorkspaceSessionOrNull } from "@/lib/auth/session";
+import { getWorkspaceLoginPath, getCurrentUser, getCurrentExternalMemberScope, getCurrentWorkspaceSessionOrNull } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
 import { getWorkspaceChoices, type WorkspaceChoice } from "@/lib/auth/workspace-choices";
 import { EXTERNAL_MEMBER_FALLBACK_PATH } from "@/lib/auth/external-member-scope";
@@ -89,7 +89,7 @@ export default async function WorkspaceLayout({
     if (external instanceof Error) {
       session = external;
     } else {
-      if (external === null) redirect("/login");
+      if (external === null) redirect(await getWorkspaceLoginPath());
       if (external === "unknown") redirect(EXTERNAL_MEMBER_FALLBACK_PATH);
       return <div className="min-h-screen bg-[color:var(--surface-subtle)] px-4 py-6 lg:px-8">{children}</div>;
     }

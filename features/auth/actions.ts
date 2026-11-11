@@ -26,6 +26,7 @@ import {
 } from "@/lib/auth/session";
 import { canSelfCreateOrganization } from "@/lib/auth/organization-creation-policy";
 import { isEmailEntryEnabled } from "@/lib/auth/email-entry-policy";
+import { resolveLoginCallbackDestination } from "@/lib/auth/login-callback";
 import { FIRST_LOGIN_IDENTITY_SETUP_COOKIE } from "@/lib/auth/session-cookies";
 import { AUTH_SESSION_PROVIDER_TYPES, type AuthSessionProviderType } from "@/lib/auth/provider-seam";
 import { createSelfServeTrialOrganization } from "@/lib/auth/trial-onboarding";
@@ -269,6 +270,7 @@ async function finalizeLoginForUser(
   sourcePage: string,
   providerType: AuthSessionProviderType,
   locale: UiLocale,
+  callback?: string,
 ) {
   const english = locale === "en-US";
   const cookieStore = await cookies();
@@ -348,13 +350,14 @@ async function finalizeLoginForUser(
     cookieStore.delete(FIRST_LOGIN_IDENTITY_SETUP_COOKIE);
   }
 
-  const redirectTo = externalMemberPostLoginPath(loginMembership, requiresWorkspaceSelection
-    ? LOGIN_WORKSPACE_SELECTOR_PATH
-    : requiresIdentityCompletion
-      ? FIRST_LOGIN_IDENTITY_SETUP_PATH
-      : resolveDeploymentPostLoginPath(
-          resolvePostLoginRedirectPath(loginMembership),
-        ));
+  const redirectTo = externalMemberPostLoginPath(loginMembership, resolveLoginCallbackDestination(
+    requiresWorkspaceSelection
+      ? LOGIN_WORKSPACE_SELECTOR_PATH
+      : requiresIdentityCompletion
+        ? FIRST_LOGIN_IDENTITY_SETUP_PATH
+        : resolveDeploymentPostLoginPath(resolvePostLoginRedirectPath(loginMembership)),
+    callback,
+  ));
 
   await logEvent({
     workspaceId: activeMembership.workspaceId,
@@ -788,7 +791,7 @@ const DEMO_ENTRY_EMAILS: ReadonlySet<string> = new Set(
     .map((profile) => normalizeEmailAddress(profile.accountEmail)),
 );
 
-export async function loginAction(input: string | z.infer<typeof legacyEmailLoginSchema>) {
+export async function loginAction(input: string | z.infer<typeof legacyEmailLoginSchema>, callback?: string) {
   const actionInput = typeof input === "string" ? { email: input } : input;
   const locale = resolveActionInputLocale(actionInput);
   const english = locale === "en-US";
@@ -855,6 +858,7 @@ export async function loginAction(input: string | z.infer<typeof legacyEmailLogi
       "/login",
       AUTH_SESSION_PROVIDER_TYPES.EMAIL_ENTRY,
       locale,
+      callback,
     );
   }
 
@@ -866,6 +870,7 @@ export async function loginAction(input: string | z.infer<typeof legacyEmailLogi
       "/login",
       AUTH_SESSION_PROVIDER_TYPES.EMAIL_ENTRY,
       locale,
+      callback,
     );
   }
 
@@ -1420,7 +1425,7 @@ export async function completeTrialSignupVerificationAction(
   };
 }
 
-export async function passwordLoginAction(input: z.infer<typeof passwordLoginSchema>) {
+export async function passwordLoginAction(input: z.infer<typeof passwordLoginSchema>, callback?: string) {
   const locale = resolveActionInputLocale(input);
   const english = locale === "en-US";
   const parsed = passwordLoginSchema.safeParse(input);
@@ -1497,6 +1502,7 @@ export async function passwordLoginAction(input: z.infer<typeof passwordLoginSch
     "/login",
     AUTH_SESSION_PROVIDER_TYPES.PASSWORD,
     locale,
+    callback,
   );
 }
 
@@ -1690,6 +1696,7 @@ export async function beginPublicPhoneEntryAction(
 
 export async function loginWithPhoneCodeAction(
   input: z.infer<typeof phoneCodeLoginSchema>,
+  callback?: string,
 ) {
   const locale = resolveActionInputLocale(input);
   const english = locale === "en-US";
@@ -1764,11 +1771,12 @@ export async function loginWithPhoneCodeAction(
     };
   }
 
-  return finalizeLoginForUser(user, "/login", AUTH_SESSION_PROVIDER_TYPES.PHONE_CODE, locale);
+  return finalizeLoginForUser(user, "/login", AUTH_SESSION_PROVIDER_TYPES.PHONE_CODE, locale, callback);
 }
 
 export async function completeFirstLoginIdentityCompletionAction(
   input: z.infer<typeof firstLoginIdentityCompletionSchema>,
+  callback?: string,
 ) {
   const cookieStore = await cookies();
   const locale = resolveActionInputLocale(input);
@@ -1839,8 +1847,9 @@ export async function completeFirstLoginIdentityCompletionAction(
     }
     return {
       ok: true,
-      redirectTo: externalMemberPostLoginPath(membership, resolveDeploymentPostLoginPath(
-        resolvePostLoginRedirectPath(membership),
+      redirectTo: externalMemberPostLoginPath(membership, resolveLoginCallbackDestination(
+        resolveDeploymentPostLoginPath(resolvePostLoginRedirectPath(membership)),
+        callback,
       )),
     };
   }
@@ -1859,8 +1868,9 @@ export async function completeFirstLoginIdentityCompletionAction(
     }
     return {
       ok: true,
-      redirectTo: externalMemberPostLoginPath(membership, resolveDeploymentPostLoginPath(
-        resolvePostLoginRedirectPath(membership),
+      redirectTo: externalMemberPostLoginPath(membership, resolveLoginCallbackDestination(
+        resolveDeploymentPostLoginPath(resolvePostLoginRedirectPath(membership)),
+        callback,
       )),
     };
   }
@@ -1937,14 +1947,16 @@ export async function completeFirstLoginIdentityCompletionAction(
 
   return {
     ok: true,
-    redirectTo: externalMemberPostLoginPath(membership, resolveDeploymentPostLoginPath(
-      resolvePostLoginRedirectPath(membership),
+    redirectTo: externalMemberPostLoginPath(membership, resolveLoginCallbackDestination(
+      resolveDeploymentPostLoginPath(resolvePostLoginRedirectPath(membership)),
+      callback,
     )),
   };
 }
 
 export async function selectLoginWorkspaceAction(
   input: z.infer<typeof loginWorkspaceSelectionSchema>,
+  callback?: string,
 ) {
   const parsed = loginWorkspaceSelectionSchema.safeParse(input);
   const english = resolveActionInputLocale(parsed.success ? parsed.data : input) === "en-US";
@@ -2006,13 +2018,12 @@ export async function selectLoginWorkspaceAction(
   await setActiveWorkspace(parsed.data.workspaceId);
 
   const requiresIdentityCompletion = externalScopeOf(selectedMembership) === null && shouldRequireFirstLoginIdentityCompletion(user);
-  const redirectTo = externalMemberPostLoginPath(selectedMembership, requiresIdentityCompletion
-    ? FIRST_LOGIN_IDENTITY_SETUP_PATH
-    : resolveDeploymentPostLoginPath(
-        resolvePostLoginRedirectPath(
-          selectedMembership,
-        ),
-      ));
+  const redirectTo = externalMemberPostLoginPath(selectedMembership, resolveLoginCallbackDestination(
+    requiresIdentityCompletion
+      ? FIRST_LOGIN_IDENTITY_SETUP_PATH
+      : resolveDeploymentPostLoginPath(resolvePostLoginRedirectPath(selectedMembership)),
+    callback,
+  ));
 
   return {
     ok: true,

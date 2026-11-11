@@ -1619,7 +1619,7 @@ describe("password login action", () => {
       passwordHash: hashPassword("Password123"), lastLoginAt: returning ? now : null,
       memberships: [membership, ...(multiple ? [{ ...membership, workspaceId: "workspace-2", workspace: { ...membership.workspace, id: "workspace-2", slug: "workspace-2" } }] : [])] });
     try {
-      const result = await passwordLoginAction({ identifier: "member@example.com", password: "Password123", locale: "en-US" });
+      const result = await passwordLoginAction({ identifier: "member@example.com", password: "Password123", locale: "en-US" }, "/tenant-alpha/workspace");
       expect(result).toMatchObject({ ok: true, redirectTo: expected });
       expect(mocks.cookieStore.set.mock.calls.some(([name]) => name === "helm-first-login-identity-setup")).toBe(false);
     } finally { __resetPackRegistryForTest(); }
@@ -1648,11 +1648,12 @@ describe("password login action", () => {
     };
     mocks.db.user.findFirst.mockResolvedValue(user);
 
+    const callback = "/tenant-alpha/workspace?view=summary#selected=example";
     const result = await passwordLoginAction({
       identifier: "owner@example.com",
       password: "Password123",
       locale: "en-US",
-    });
+    }, callback);
 
     expect(mocks.db.user.findFirst).toHaveBeenCalledWith({
       where: { email: "owner@example.com" },
@@ -1669,7 +1670,7 @@ describe("password login action", () => {
         },
       },
     });
-    expect(result).toMatchObject({ ok: true, redirectTo: "/dashboard" });
+    expect(result).toMatchObject({ ok: true, redirectTo: callback });
     expect(mocks.session.createSession).toHaveBeenCalledWith({
       userId: "user-1",
       email: "owner@example.com",
@@ -1789,6 +1790,7 @@ describe("first-login identity completion action", () => {
   });
 
   it("does not route first-time demo users into identity completion", async () => {
+    vi.stubEnv("HELM_AUTH_EMAIL_ENTRY_ENABLED", "true");
     mocks.cookieStore.get.mockImplementation((name?: string) => {
       if (name === "helm-ui-locale") {
         return { value: "zh-CN" };

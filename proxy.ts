@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { WORKSPACE_REQUEST_PATH_HEADER, withLoginCallback } from "@/lib/auth/login-callback";
 import {
   FIRST_LOGIN_IDENTITY_SETUP_COOKIE,
   SESSION_ID_COOKIE,
@@ -14,6 +15,12 @@ export function proxy(request: NextRequest) {
     request.cookies.get(FIRST_LOGIN_IDENTITY_SETUP_COOKIE)?.value,
   );
 
+  const requestUrl = request.nextUrl.clone();
+  if (requestUrl.searchParams.has("_rsc")) requestUrl.searchParams.delete("_rsc");
+  const callback = requestUrl.pathname + requestUrl.search;
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set(WORKSPACE_REQUEST_PATH_HEADER, callback);
+
   if (
     !shouldRedirectMissingWorkspaceSession({
       pathname: request.nextUrl.pathname,
@@ -27,19 +34,13 @@ export function proxy(request: NextRequest) {
         hasPendingIdentitySetupCookie,
       })
     ) {
-      const gettingStartedUrl = request.nextUrl.clone();
-      gettingStartedUrl.pathname = "/getting-started";
-      gettingStartedUrl.search = "mode=identity-completion";
-      return NextResponse.redirect(gettingStartedUrl);
+      const destination = withLoginCallback("/getting-started?mode=identity-completion", callback);
+      return NextResponse.redirect(new URL(destination, request.url));
     }
-    return NextResponse.next();
+    return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
-  const loginUrl = request.nextUrl.clone();
-  loginUrl.pathname = "/login";
-  loginUrl.search = "";
-
-  return NextResponse.redirect(loginUrl);
+  return NextResponse.redirect(new URL(withLoginCallback("/login", callback), request.url));
 }
 
 export const config = {

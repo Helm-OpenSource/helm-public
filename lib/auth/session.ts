@@ -1,3 +1,4 @@
+import { WORKSPACE_REQUEST_PATH_HEADER, withLoginCallback } from "@/lib/auth/login-callback";
 import { isSessionProviderAllowed } from "@/lib/auth/email-entry-policy";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -601,11 +602,15 @@ export async function getCurrentUser() {
   };
 }
 
+export async function getWorkspaceLoginPath() {
+  return withLoginCallback("/login", (await headers()).get(WORKSPACE_REQUEST_PATH_HEADER));
+}
+
 export async function requireCurrentUser() {
   const user = await getCurrentUser();
 
   if (!user) {
-    redirect("/login");
+    redirect(await getWorkspaceLoginPath());
   }
 
   return user;
@@ -803,7 +808,7 @@ export async function getCurrentWorkspaceSession() {
     // An external member is signed in but may not hold a Core workspace session: send them to their own
     // surface, not back to /login (whose signed-in redirect would bring them here again).
     const external = await getCurrentExternalMemberScope();
-    redirect(external === null ? "/login" : externalLandingPath(external));
+    redirect(external === null ? await getWorkspaceLoginPath() : externalLandingPath(external));
   }
 
   return session;
@@ -1036,7 +1041,7 @@ export async function getCurrentCaioOperatorSessionOrNull() {
 
 export async function getCurrentCaioOperatorSession() {
   const session = await getCurrentCaioOperatorSessionOrNull();
-  if (!session) redirect("/login");
+  if (!session) redirect(await getWorkspaceLoginPath());
   return session;
 }
 

@@ -1,5 +1,7 @@
 "use client";
 
+import { readBrowserLoginCallback } from "@/lib/auth/login-callback";
+
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, LogIn } from "lucide-react";
@@ -24,7 +26,7 @@ export function WorkspaceSelectorPanel({
 
   const chooseWorkspace = (workspaceId: string) => {
     startTransition(async () => {
-      const result = await selectLoginWorkspaceAction({ workspaceId, locale });
+      const result = await selectLoginWorkspaceAction({ workspaceId, locale }, readBrowserLoginCallback());
       if (!result.ok || !result.redirectTo) {
         toast.error(
           result.error ??
