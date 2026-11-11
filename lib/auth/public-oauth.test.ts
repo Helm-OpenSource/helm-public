@@ -224,6 +224,14 @@ describe("public oauth state payload", () => {
     });
   });
 
+  it.each([
+    ["/tenant-alpha/workspace?view=summary#selected=example", "/tenant-alpha/workspace?view=summary#selected=example"],
+    ["//offsite.invalid/workspace", undefined],
+  ])("validates the optional callback in OAuth state: %s", (callback, expected) => {
+    const parsed = readPublicOauthState(JSON.stringify({ state: "state-1", locale: "zh-CN", callback }));
+    expect(parsed?.callback).toBe(expected);
+  });
+
   it("accepts feishu as a valid provider payload", () => {
     const cookieStore = createCookieStore();
     const now = new Date("2026-05-20T10:00:00.000Z");

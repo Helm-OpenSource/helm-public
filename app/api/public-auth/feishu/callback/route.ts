@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withLoginCallback } from "@/lib/auth/login-callback";
 import { cookies } from "next/headers";
 import { AUTH_SESSION_PROVIDER_TYPES } from "@/lib/auth/provider-seam";
 import {
@@ -44,6 +45,7 @@ export async function GET(request: Request) {
         providerType: AUTH_SESSION_PROVIDER_TYPES.FEISHU_OAUTH,
         preferredLocale: stored.locale,
         preferredWorkspaceId: stored.workspaceId,
+        callback: stored.callback,
         profile: {
           name: profile.nick,
           phone: profile.mobile,
@@ -51,18 +53,18 @@ export async function GET(request: Request) {
         },
       });
 
-      return NextResponse.redirect(new URL(result.redirectTo, request.url));
+      return NextResponse.redirect(new URL(result.ok ? result.redirectTo : withLoginCallback(result.redirectTo, stored.callback), request.url));
     }
 
     if (matchedUser.status === "identity-conflict") {
       return NextResponse.redirect(
-        buildPublicOauthFallbackUrl(request, "feishu", "identity-conflict"),
+        buildPublicOauthFallbackUrl(request, "feishu", "identity-conflict", stored.callback),
       );
     }
 
     if (matchedUser.status === "missing-identity") {
       return NextResponse.redirect(
-        buildPublicOauthFallbackUrl(request, "feishu", "missing-identity"),
+        buildPublicOauthFallbackUrl(request, "feishu", "missing-identity", stored.callback),
       );
     }
 
@@ -85,6 +87,6 @@ export async function GET(request: Request) {
       }),
     );
   } catch {
-    return NextResponse.redirect(buildPublicOauthFallbackUrl(request, "feishu"));
+    return NextResponse.redirect(buildPublicOauthFallbackUrl(request, "feishu", undefined, stored.callback));
   }
 }
