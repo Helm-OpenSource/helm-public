@@ -7,11 +7,16 @@ import "server-only";
 //
 // Consistency (design v0.3 §6.2, P2-7): Workspace, Membership, User and
 // AuthSession are read OUTSIDE the Serializable transaction (InnoDB turns
-// reads inside it into locking reads); inside it only device rows, audit and
-// notification rows are touched, so these writes never lock in an order that
-// could cycle with the extension's Workspace -> device -> Membership -> User.
+// reads inside it into locking reads). Inside it the writes are device rows
+// plus AuditLog and Notification rows; those two have foreign keys to
+// Workspace and User, so inserting them takes shared locks on the parent
+// rows. A transaction holding Workspace FOR UPDATE (the extension's
+// Workspace -> device -> Membership -> User order) can therefore block or
+// deadlock with these writes. A deadlock is a retried conflict and, once the
+// retries run out, a closed error code; the cross-path concurrency test with
+// refresh/revoke (1b) and the extension belongs to slice 3a-2.
 // Every lifecycle write is a CAS on (id, status, version) after re-reading the
-// row in the same transaction; a serialization failure is retried.
+// row in the same transaction.
 //
 // No plaintext token or pairing code is stored, logged or put in an error or
 // audit payload: only sha256 hashes reach the database.
@@ -19,7 +24,7 @@ import "server-only";
 import { ActorType, Prisma } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { db } from "@/lib/db";
-import { isWriteConflictError, runWithWriteConflictRetry } from "@/lib/db/conflict-aware-write";
+import { isWriteConflictError } from "@/lib/db/conflict-aware-write";
 import {
   SEAT_DEVICE_PAIRING_CODE_MAX_ATTEMPTS,
   SEAT_DEVICE_PENDING_BUCKET_WINDOW_SECONDS,
@@ -43,7 +48,13 @@ import {
 } from "@/lib/seat-device/contract";
 
 const TX = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
-const RETRY = { maxAttempts: 8, retryDelayMs: 50 } as const;
+// Concurrent writers on the counted index ranges deadlock under Serializable
+// and InnoDB rolls one back. Retries back off exponentially with full jitter
+// so they spread out instead of colliding again in lockstep.
+const RETRY_ATTEMPTS = 8;
+const RETRY_BASE_DELAY_MS = 20;
+const RETRY_MAX_DELAY_MS = 320;
+const CONTENDED_RETRY_AFTER_SECONDS = 1;
 const TARGET_TYPE = "SeatDeviceAuthorization";
 const SOURCE_PAGE = "/device";
 
@@ -75,8 +86,36 @@ function secondsUntil(at: Date, now: Date) {
   return Math.max(1, Math.ceil((at.getTime() - now.getTime()) / 1000));
 }
 
-function retried<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>, isConflict = isWriteConflictError) {
-  return runWithWriteConflictRetry(() => db.$transaction(fn, TX), { ...RETRY, isConflict });
+// Prisma P2024: no pooled connection in time; P2028: the interactive
+// transaction could not start or ran out of time. Both mean contention.
+function isContentionError(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2024" || error.code === "P2028");
+}
+
+// Runs `transaction` (a Serializable `db.$transaction`, written at the call
+// site so the CAS guard can see its isolation) and retries write conflicts. A
+// conflict that outlasts the retries, or contention for a connection, never
+// leaves as a raw database error: it becomes `exhausted`, a closed code with a
+// Retry-After, so callers answer it like any other refusal.
+async function retried<T>(
+  transaction: () => Promise<T>,
+  exhausted: SeatDeviceErrorCode,
+  isConflict: (error: unknown) => boolean = isWriteConflictError,
+): Promise<T> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await transaction();
+    } catch (error) {
+      const conflict = isConflict(error);
+      if (conflict && attempt < RETRY_ATTEMPTS) {
+        const ceiling = Math.min(RETRY_MAX_DELAY_MS, RETRY_BASE_DELAY_MS * 2 ** attempt);
+        await new Promise((resolve) => setTimeout(resolve, Math.random() * ceiling));
+        continue;
+      }
+      if (conflict || isContentionError(error)) throw new SeatDeviceAuthError(exhausted, CONTENDED_RETRY_AFTER_SECONDS);
+      throw error;
+    }
+  }
 }
 
 function isUniqueViolation(error: unknown, field?: string) {
@@ -114,10 +153,12 @@ export async function requestSeatDeviceAuthorization(input: {
   // "expired" is derived from the clock and has no write of its own: clear
   // the code hash (and source) of lapsed pending rows here, so a pairing hash
   // does not outlive its request and the unique space is freed. Idempotent.
-  await db.seatDeviceAuthorization.updateMany({
-    where: { status: "pending", requestExpiresAt: { lte: now }, pairingCodeHash: { not: null } },
-    data: { pairingCodeHash: null, sourceIp: null },
-  });
+  await retried(async () => {
+    await db.seatDeviceAuthorization.updateMany({
+      where: { status: "pending", requestExpiresAt: { lte: now }, pairingCodeHash: { not: null } },
+      data: { pairingCodeHash: null, sourceIp: null },
+    });
+  }, "rate_limited");
 
   for (let attempt = 1; attempt <= SEAT_DEVICE_PAIRING_CODE_MAX_ATTEMPTS; attempt += 1) {
     const pairingCode = generate();
@@ -125,7 +166,7 @@ export async function requestSeatDeviceAuthorization(input: {
     if (pairingCodeHash === null) throw new Error("seat device pairing code generator produced an invalid code");
     const poll = mintSeatDeviceToken("poll");
     try {
-      const requestId = await retried(async (tx) => {
+      const requestId = await retried(() => db.$transaction(async (tx) => {
         await assertPendingCapacity(tx, bucket, now);
         const row = await tx.seatDeviceAuthorization.create({
           data: {
@@ -144,7 +185,7 @@ export async function requestSeatDeviceAuthorization(input: {
           select: { id: true },
         });
         return row.id;
-      });
+      }, TX), "rate_limited");
       return {
         requestId,
         pollToken: poll.token,
@@ -215,7 +256,7 @@ export async function cancelSeatDeviceAuthorization(input: {
   assertDeploymentEnabled();
   const now = input.now ?? new Date();
   const pollTokenHash = hashSeatDeviceToken(input.pollToken);
-  return runWithWriteConflictRetry(() => db.$transaction(async (tx) => {
+  return retried(() => db.$transaction(async (tx): Promise<{ status: SeatDeviceCancelStatus }> => {
     const row = await tx.seatDeviceAuthorization.findUnique({ where: { id: input.requestId } });
     if (!row || !seatDeviceHashesEqual(row.pollTokenHash, pollTokenHash)) return { status: "expired" as const };
     const status = effectiveSeatDeviceStatus(row, now);
@@ -245,11 +286,12 @@ export async function cancelSeatDeviceAuthorization(input: {
     }
     if (status === "cancelled" || status === "rejected" || status === "revoked") return { status };
     return { status: "expired" as const };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), RETRY);
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), "temporarily_unavailable");
 }
 
 // A CAS that loses after the row was re-read in the same transaction means a
-// concurrent writer slipped in; surface it as a write conflict so it is retried.
+// concurrent writer slipped in; the message matches isWriteConflictError, so
+// it is retried like any other conflict.
 function casLost(): never {
   throw new Error("seat device write conflict");
 }
