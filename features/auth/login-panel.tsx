@@ -1,5 +1,7 @@
 "use client";
 
+import { readBrowserLoginCallback } from "@/lib/auth/login-callback";
+
 import Link from "next/link";
 import {
   type ReactNode,
@@ -508,14 +510,14 @@ function LoginPanelSurface({
 
   const loginWithPassword = () => {
     startPasswordTransition(async () => {
-      const result = await passwordLoginAction({ ...passwordLogin, locale });
+      const result = await passwordLoginAction({ ...passwordLogin, locale }, readBrowserLoginCallback());
       handleLoginSuccess(result);
     });
   };
 
   const loginWithPhoneCode = () => {
     startPhoneCodeTransition(async () => {
-      const result = await loginWithPhoneCodeAction({ ...phoneLogin, locale });
+      const result = await loginWithPhoneCodeAction({ ...phoneLogin, locale }, readBrowserLoginCallback());
       handleLoginSuccess(result);
     });
   };
@@ -523,7 +525,7 @@ function LoginPanelSurface({
   const continueWithWorkEmail = () => {
     if (!allowEmailEntry) return;
     startCompatibilityTransition(async () => {
-      const result = await loginAction({ email: compatibilityEmail, locale });
+      const result = await loginAction({ email: compatibilityEmail, locale }, readBrowserLoginCallback());
       handleLoginSuccess(result);
     });
   };
@@ -540,7 +542,7 @@ function LoginPanelSurface({
 
     compatibilityAutoTriggeredRef.current = true;
     startCompatibilityTransition(async () => {
-      const result = await loginAction({ email, locale });
+      const result = await loginAction({ email, locale }, readBrowserLoginCallback());
       handleLoginSuccess(result);
     });
   }, [allowEmailEntry, autoContinueCompatibility, compatibilityEmail, handleLoginSuccess, locale]);

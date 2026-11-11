@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { MembershipStatus, WorkspaceRole, type User, type Workspace } from "@prisma/client";
 import { logEvent } from "@/lib/analytics";
+import { normalizeLoginCallback, resolveLoginCallbackDestination } from "@/lib/auth/login-callback";
 import { createSession } from "@/lib/auth/session";
 import { externalMemberPostLoginPath, externalScopeOf } from "@/lib/auth/external-member-scope";
 import { FIRST_LOGIN_IDENTITY_SETUP_COOKIE } from "@/lib/auth/session-cookies";
@@ -48,6 +49,7 @@ type PublicOauthStateSnapshot = {
   organizationName?: string;
   workspaceId?: string;
   title?: string;
+  callback?: string;
   expiresAtMs: number;
 };
 
@@ -198,6 +200,7 @@ function toPublicOauthStateSnapshotPayload(snapshot: PublicOauthStateSnapshot) {
   const organizationName = normalizeOrganizationName(snapshot.organizationName);
   const workspaceId = normalizeWorkspaceId(snapshot.workspaceId);
   const title = normalizeTitle(snapshot.title);
+  const callback = normalizeLoginCallback(snapshot.callback);
   return {
     state: snapshot.state,
     locale: resolveUiLocale(snapshot.locale),
@@ -205,6 +208,7 @@ function toPublicOauthStateSnapshotPayload(snapshot: PublicOauthStateSnapshot) {
     ...(organizationName ? { organizationName } : {}),
     ...(workspaceId ? { workspaceId } : {}),
     ...(title ? { title } : {}),
+    ...(callback ? { callback } : {}),
   };
 }
 
@@ -225,11 +229,13 @@ export function readPublicOauthState(rawState: string | null) {
       organizationName?: string;
       workspaceId?: string;
       title?: string;
+      callback?: string;
     };
     const normalizedFlowId = parsed.flowId?.trim() || null;
     const organizationName = normalizeOrganizationName(parsed.organizationName);
     const workspaceId = normalizeWorkspaceId(parsed.workspaceId);
     const title = normalizeTitle(parsed.title);
+    const callback = normalizeLoginCallback(parsed.callback);
 
     return {
       state: parsed.state?.trim() || null,
@@ -238,6 +244,7 @@ export function readPublicOauthState(rawState: string | null) {
       ...(organizationName ? { organizationName } : {}),
       ...(workspaceId ? { workspaceId } : {}),
       ...(title ? { title } : {}),
+      ...(callback ? { callback } : {}),
     };
   } catch {
     return null;
@@ -298,9 +305,12 @@ export function buildPublicOauthFallbackUrl(
   request: Request,
   provider?: PublicOauthProvider,
   status?: PublicOauthFallbackStatus,
+  callback?: string,
 ) {
   const url = new URL("/login", resolvePublicOauthRequestBaseUrl(request));
   url.searchParams.set("tab", "phone");
+  const target = normalizeLoginCallback(callback ?? new URL(request.url).searchParams.get("callback"));
+  if (target) url.searchParams.set("callback", target);
 
   if (provider) {
     url.searchParams.set("provider", provider);
@@ -562,6 +572,7 @@ export async function finalizePublicOauthLogin(input: {
   providerType: AuthSessionProviderType;
   preferredLocale?: UiLocale | null;
   preferredWorkspaceId?: string | null;
+  callback?: string | null;
   profile?: {
     name?: string | null;
     phone?: string | null;
@@ -647,13 +658,14 @@ export async function finalizePublicOauthLogin(input: {
     cookieStore.delete(FIRST_LOGIN_IDENTITY_SETUP_COOKIE);
   }
 
-  const redirectTo = externalMemberPostLoginPath(activeMembership, requiresWorkspaceSelection
-    ? LOGIN_WORKSPACE_SELECTOR_PATH
-    : requiresIdentityCompletion
-      ? FIRST_LOGIN_IDENTITY_SETUP_PATH
-      : resolveDeploymentPostLoginPath(
-          resolvePostLoginRedirectPath(activeMembership),
-        ));
+  const redirectTo = externalMemberPostLoginPath(activeMembership, resolveLoginCallbackDestination(
+    requiresWorkspaceSelection
+      ? LOGIN_WORKSPACE_SELECTOR_PATH
+      : requiresIdentityCompletion
+        ? FIRST_LOGIN_IDENTITY_SETUP_PATH
+        : resolveDeploymentPostLoginPath(resolvePostLoginRedirectPath(activeMembership)),
+    input.callback,
+  ));
 
   await logEvent({
     workspaceId: activeMembership.workspaceId,
@@ -685,12 +697,14 @@ export async function setPublicOauthStateCookie(input: {
   organizationName?: string | null;
   workspaceId?: string | null;
   title?: string | null;
+  callback?: string | null;
 }) {
   const cookieStore = await cookies();
   const normalizedFlowId = input.flowId?.trim() || null;
   const organizationName = normalizeOrganizationName(input.organizationName);
   const workspaceId = normalizeWorkspaceId(input.workspaceId);
   const title = normalizeTitle(input.title);
+  const callback = normalizeLoginCallback(input.callback);
   cookieStore.set(
     getPublicOauthStateCookieName(input.provider),
     JSON.stringify({
@@ -700,6 +714,7 @@ export async function setPublicOauthStateCookie(input: {
       ...(organizationName ? { organizationName } : {}),
       ...(workspaceId ? { workspaceId } : {}),
       ...(title ? { title } : {}),
+      ...(callback ? { callback } : {}),
     }),
     {
       httpOnly: true,
@@ -724,6 +739,7 @@ export async function setPublicOauthStateCookie(input: {
       ...(organizationName ? { organizationName } : {}),
       ...(workspaceId ? { workspaceId } : {}),
       ...(title ? { title } : {}),
+      ...(callback ? { callback } : {}),
       expiresAtMs: Date.now() + PUBLIC_OAUTH_STATE_TTL_MS,
     });
   } catch (error) {
