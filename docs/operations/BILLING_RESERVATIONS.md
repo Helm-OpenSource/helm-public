@@ -76,7 +76,8 @@ S3-b1/S3-b2 (Core): migrations `20261110200000_billing_reservations`, `202611102
   draw, replay without a second draw, tightened line, 0-fen/shadow, suspended payer, concurrent draws). S3-w adds no migration;
   undo it by reverting the code (the S3-e rollback still refuses while credit rows exist). P1-1: revert the code first (the old code
   does not write the binding columns), then `prisma/rollback/20261112_rollback_billing_reservation_payer_binding.sql` (refuses while
-  any reservation row or later billing migration exists; restores the S3-b1 trigger), before the charges and reservations rollbacks.
+  any reservation row or later billing migration exists; restores the S3-b1 trigger), before the charges and reservations rollbacks;
+  the reservations rollback now refuses while this migration is applied.
   Stop calling the service; roll back charges
   first (refuses while charge rows exist; removes only `charge`/`charge_revenue` from the current ENUMs), then reservations. The charges
   rollback re-checks that no `charge*` value is left; the S2-c and S2-a rollbacks refuse while any later billing migration is applied.
