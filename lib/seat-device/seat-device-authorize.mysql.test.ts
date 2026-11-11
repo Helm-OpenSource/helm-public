@@ -5,6 +5,7 @@
 // audit and notification) and reject, and the device's cancel.
 //
 //   SEAT_DEVICE_DATABASE_URL=<disposable db> DATABASE_URL=<same>
+//   DB_RESET_ALLOWLIST=<that db name>   (or CI=true with a *_ci / *_test name)
 //   npm run test:seat-device:mysql   (sets SEAT_DEVICE_MYSQL_REQUIRED=1: a missing URL fails instead of skipping)
 
 import { MembershipStatus, WorkspaceRole } from "@prisma/client";
@@ -12,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { LOGIN_RATE_LIMIT, hashLoginIdentifier } from "@/lib/auth/login-rate-limit";
 import { db } from "@/lib/db";
+import { classifyResetTarget } from "@/lib/db-url";
 import {
   SEAT_DEVICE_CODE_ENTRY_MAX_FAILURES,
   SEAT_DEVICE_CODE_ENTRY_WINDOW_SECONDS,
@@ -123,10 +125,19 @@ describeMysql("seat device authorization (request, decide, cancel) on MySQL", ()
     if (process.env.DATABASE_URL !== integrationDatabaseUrl) {
       throw new Error("DATABASE_URL must equal SEAT_DEVICE_DATABASE_URL for the isolated integration test.");
     }
-    process.env.HELM_SEAT_DEVICE_AUTH_ENABLED = "true";
     // The limits count rows across the whole table, so a re-run on the same
-    // disposable database starts from an empty one. This run's rows are kept:
-    // CI then checks that the rollback refuses to drop them.
+    // disposable database starts from an empty one. Clearing it is allowed only
+    // on a database setup-db would also reset. This run's rows are kept: CI
+    // then checks that the rollback refuses to drop them.
+    const target = classifyResetTarget({
+      databaseUrl: integrationDatabaseUrl,
+      ci: process.env.CI === "true",
+      allowlistedDatabases: (process.env.DB_RESET_ALLOWLIST ?? "").split(",").map((entry) => entry.trim()).filter(Boolean),
+    });
+    if (!target.canReset) {
+      throw new Error(`Refusing to clear seat device rows in "${target.databaseName ?? "(unknown)"}": not a CI temporary or DB_RESET_ALLOWLIST database.`);
+    }
+    process.env.HELM_SEAT_DEVICE_AUTH_ENABLED = "true";
     await db.seatDeviceAuthorization.deleteMany({});
     const workspace = await db.workspace.create({
       data: { name: `坐席设备 ${suffix}`, slug: `seat-device-${suffix}`, featureFlagsJson: JSON.stringify({ seatDesktop: true }) },
@@ -217,6 +228,36 @@ describeMysql("seat device authorization (request, decide, cancel) on MySQL", ()
     await db.seatDeviceAuthorization.createMany({ data: filler });
     await expectCode(request(at(later, 1), null), "rate_limited");
     await request(at(later, 600), null); // the filler has lapsed
+  });
+
+  // Concurrent requests contend on the counted index ranges. Each answer must
+  // be a grant or the closed rate_limited code with a Retry-After, never a
+  // raw database error, and the rows written must match the grants.
+  async function concurrentRequests(now: Date, sources: (string | null)[]) {
+    const results = await Promise.allSettled(sources.map((source) => request(now, source)));
+    for (const result of results) {
+      if (result.status === "fulfilled") continue;
+      expect(result.reason).toBeInstanceOf(SeatDeviceAuthError);
+      expect((result.reason as SeatDeviceAuthError).code).toBe("rate_limited");
+      expect((result.reason as SeatDeviceAuthError).retryAfterSeconds).toBeGreaterThan(0);
+    }
+    return results.filter((result) => result.status === "fulfilled").length;
+  }
+
+  it("answers 30 concurrent requests with grants or a closed rate limit", async () => {
+    const now = nextClock();
+    const granted = await concurrentRequests(now, Array.from({ length: 30 }, (_, index) => (index % 2 ? null : freshSource())));
+    expect(granted).toBeGreaterThan(0);
+    expect(await db.seatDeviceAuthorization.count({ where: { requestedAt: now } })).toBe(granted);
+  });
+
+  it("never lets concurrent requests overrun the per-bucket window", async () => {
+    const now = nextClock();
+    const source = freshSource();
+    for (let index = 0; index < 9; index += 1) await request(now, source);
+    const granted = await concurrentRequests(now, Array.from({ length: 30 }, () => source));
+    expect(granted).toBeLessThanOrEqual(1);
+    expect(await db.seatDeviceAuthorization.count({ where: { requestedAt: now } })).toBe(9 + granted);
   });
 
   it("locks pairing-code entry after eight failures, before looking at the code", async () => {
