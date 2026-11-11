@@ -4,7 +4,8 @@ import { CreditOperatorError, parseCreditBatchList, parseCreditOperatorArgs } fr
 
 const bytes = (value: unknown) => Buffer.from(typeof value === "string" ? value : JSON.stringify(value));
 const list = (extra: Record<string, unknown> = {}) => ({ v: 1, batchRef: "credit-20261112", evidenceRef: "owner-ruling:20261111-1826",
-  validUntil: null, entries: [{ workspaceId: "ws-1", limitFen: "100000000" }, { workspaceId: "ws-2", limitFen: "1" }], ...extra });
+  validUntil: null, entries: [{ workspaceId: "ws-1", payerAccountId: "p-1", limitFen: "100000000" }, { workspaceId: "ws-2", payerAccountId: "p-2", limitFen: "1" }],
+  ...extra });
 const code = (run: () => unknown) => { try { run(); } catch (error) { return (error as CreditOperatorError).code; } return null; };
 
 describe("credit batch list", () => {
@@ -12,18 +13,22 @@ describe("credit batch list", () => {
     const raw = bytes(list());
     const parsed = parseCreditBatchList(raw);
     expect(parsed).toMatchObject({ operationKey: "credit-batch:credit-20261112", validUntil: null,
-      entries: [{ workspaceId: "ws-1", limitFen: BigInt(100_000_000) }, { workspaceId: "ws-2", limitFen: BigInt(1) }] });
+      entries: [{ workspaceId: "ws-1", payerAccountId: "p-1", limitFen: BigInt(100_000_000) },
+        { workspaceId: "ws-2", payerAccountId: "p-2", limitFen: BigInt(1) }] });
     expect(parsed.listSha).toBe(createHash("sha256").update(raw).digest("hex"));
     expect(parseCreditBatchList(Buffer.from(`${raw.toString()}\n`)).listSha).not.toBe(parsed.listSha);
   });
 
-  it("refuses yuan, decimals, signs, zero, duplicates, unknown fields and non-canonical times", () => {
+  it("refuses yuan, decimals, signs, zero, duplicates, a missing payer id, unknown fields and non-canonical times", () => {
     for (const limitFen of ["1000000.00", "-1", "0", "01", "1e8", "9007199254740992"]) {
-      expect(code(() => parseCreditBatchList(bytes(list({ entries: [{ workspaceId: "ws-1", limitFen }] }))))).toBe("usage:list_limit_fen");
+      expect(code(() => parseCreditBatchList(bytes(list({ entries: [{ workspaceId: "ws-1", payerAccountId: "p-1", limitFen }] }))))).toBe("usage:list_limit_fen");
     }
-    expect(code(() => parseCreditBatchList(bytes(list({ entries: [{ workspaceId: "ws-1", limitFen: 100 }] }))))).toBe("usage:list_invalid");
-    expect(code(() => parseCreditBatchList(bytes(list({ entries: [{ workspaceId: "ws-1", limitFen: "1" }, { workspaceId: "ws-1", limitFen: "2" }] })))))
-      .toBe("usage:list_duplicate_workspace");
+    expect(code(() => parseCreditBatchList(bytes(list({ entries: [{ workspaceId: "ws-1", payerAccountId: "p-1", limitFen: 100 }] }))))).toBe("usage:list_invalid");
+    expect(code(() => parseCreditBatchList(bytes(list({ entries: [{ workspaceId: "ws-1", payerAccountId: "p-1", limitFen: "1" },
+      { workspaceId: "ws-1", payerAccountId: "p-2", limitFen: "2" }] }))))).toBe("usage:list_duplicate_workspace");
+    expect(code(() => parseCreditBatchList(bytes(list({ entries: [{ workspaceId: "ws-1", payerAccountId: "p-1", limitFen: "1" },
+      { workspaceId: "ws-2", payerAccountId: "p-1", limitFen: "2" }] }))))).toBe("usage:list_duplicate_payer");
+    expect(code(() => parseCreditBatchList(bytes(list({ entries: [{ workspaceId: "ws-1", limitFen: "1" }] }))))).toBe("usage:list_invalid");
     expect(code(() => parseCreditBatchList(bytes(list({ owner: "x" }))))).toBe("usage:list_invalid");
     expect(code(() => parseCreditBatchList(bytes(list({ batchRef: "has:colon" }))))).toBe("usage:list_invalid");
     expect(code(() => parseCreditBatchList(bytes(list({ validUntil: "2027-01-01" }))))).toBe("usage:list_valid_until");

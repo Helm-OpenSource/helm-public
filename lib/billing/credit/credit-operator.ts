@@ -24,7 +24,8 @@ const COMMANDS: Record<string, string[]> = {
   propose: ["actor-user-id", "workspace-id", "payer-account-id", "limit-fen", "operation-key", "evidence-ref", "valid-until",
     "max-limit-fen"],
   approve: ["max-limit-fen"], expire: [], revoke: [], reduce: ["limit-fen"], activate: ["supersedes-facility-id", "supersedes-version"],
-  batch: ["list-file", "step", "actor-user-id", "expect-list-sha", "max-limit-fen", "maker-user-id", "checker-user-id"],
+  batch: ["list-file", "step", "actor-user-id", "expect-list-sha", "expect-plan-sha", "max-limit-fen", "maker-user-id",
+    "checker-user-id"],
 };
 const CHANGE_FLAGS = ["actor-user-id", "facility-id", "expected-version", "evidence-ref"];
 
@@ -122,12 +123,14 @@ async function show(client: PrismaClient, payerAccountId: string) {
 const listSchema = z.object({
   v: z.literal(1), batchRef: z.string().regex(BATCH_REF), evidenceRef: z.string().regex(REF),
   validUntil: z.string().nullable(),
-  entries: z.array(z.object({ workspaceId: z.string().regex(REF), limitFen: z.string() }).strict()).min(1).max(500),
+  entries: z.array(z.object({ workspaceId: z.string().regex(REF), payerAccountId: z.string().regex(REF), limitFen: z.string() })
+    .strict()).min(1).max(500),
 }).strict();
+type BatchEntry = { workspaceId: string; payerAccountId: string; limitFen: bigint };
 export type CreditBatchList = { listSha: string; batchRef: string; operationKey: string; evidenceRef: string; validUntil: Date | null;
-  entries: Array<{ workspaceId: string; limitFen: bigint }> };
+  entries: BatchEntry[] };
 
-/** Parses the operator-supplied list; the sha256 of its exact bytes binds an --apply run to the dry run the owner confirmed. */
+/** Parses the operator-supplied list; the sha256 of its exact bytes binds an --apply run to the list the owner confirmed. */
 export function parseCreditBatchList(bytes: Buffer): CreditBatchList {
   let raw: unknown;
   try { raw = JSON.parse(bytes.toString("utf8")); } catch { return usage("list_not_json"); }
@@ -136,9 +139,12 @@ export function parseCreditBatchList(bytes: Buffer): CreditBatchList {
   const list = parsed.data!;
   const entries = list.entries.map(entry => {
     const limitFen = fenFlag(entry.limitFen, "list_limit_fen");
-    return { workspaceId: entry.workspaceId, limitFen: limitFen > ZERO ? limitFen : usage("list_limit_fen") };
+    return { workspaceId: entry.workspaceId, payerAccountId: entry.payerAccountId,
+      limitFen: limitFen > ZERO ? limitFen : usage("list_limit_fen") };
   });
   if (new Set(entries.map(entry => entry.workspaceId)).size !== entries.length) usage("list_duplicate_workspace");
+  // One action per payer: two workspaces of the same payer in one list refuse the whole list.
+  if (new Set(entries.map(entry => entry.payerAccountId)).size !== entries.length) usage("list_duplicate_payer");
   return { listSha: createHash("sha256").update(bytes).digest("hex"), batchRef: list.batchRef,
     operationKey: `credit-batch:${list.batchRef}`, evidenceRef: list.evidenceRef,
     validUntil: instant(list.validUntil, "list_valid_until"), entries };
@@ -146,15 +152,15 @@ export function parseCreditBatchList(bytes: Buffer): CreditBatchList {
 
 type PlanAction = "done" | "propose" | "approve" | "activate" | "reduce" | "blocked";
 type PlanRow = { workspaceId: string; payerAccountId: string | null; targetLimitFen: bigint; action: PlanAction; blocker?: string;
-  current: CreditFacility | null; batchFacility: CreditFacility | null };
+  current: ReturnType<typeof summary>; batchFacility: ReturnType<typeof summary> };
 const STEP_OF: Partial<Record<PlanAction, Step>> = { propose: "propose", approve: "approve", activate: "activate", reduce: "activate" };
 
 /** Current state -> target for one entry, read-only. "Done" means the payer's drawable line already equals the target. */
-async function planEntry(client: PrismaClient, list: CreditBatchList, entry: CreditBatchList["entries"][number], cap: bigint,
-  seenPayers: Set<string>): Promise<PlanRow> {
+async function planEntry(client: PrismaClient, list: CreditBatchList, entry: BatchEntry, cap: bigint, now: Date): Promise<PlanRow> {
   const row: PlanRow = { workspaceId: entry.workspaceId, payerAccountId: null, targetLimitFen: entry.limitFen, action: "blocked",
     current: null, batchFacility: null };
   const blocked = (blocker: string) => Object.assign(row, { action: "blocked" as const, blocker });
+  const act = (action: PlanAction) => Object.assign(row, { action });
   if (entry.limitFen > cap) return blocked("limit_over_cap");
   try {
     row.payerAccountId = (await transaction(client, tx => resolvePayerForWorkspaceInTransaction(tx, entry.workspaceId))).payerAccountId;
@@ -165,24 +171,25 @@ async function planEntry(client: PrismaClient, list: CreditBatchList, entry: Cre
     if (message === "payer_account_unavailable") return blocked("payer_unavailable");
     throw error;
   }
-  const payerAccountId = row.payerAccountId;
-  if (seenPayers.has(payerAccountId)) return blocked("payer_listed_twice");
-  seenPayers.add(payerAccountId);
-  const [current, mine] = await Promise.all([client.creditFacility.findUnique({ where: { activePayerAccountId: payerAccountId } }),
-    client.creditFacility.findUnique({ where: { payerAccountId_operationKey: { payerAccountId, operationKey: list.operationKey } } })]);
-  Object.assign(row, { current, batchFacility: mine });
+  // The confirmed list names the payer; a binding that moved since then must not redirect the line.
+  if (row.payerAccountId !== entry.payerAccountId) return blocked("payer_mismatch");
+  const payerAccountId = entry.payerAccountId;
+  const current = await client.creditFacility.findUnique({ where: { activePayerAccountId: payerAccountId } });
+  const mine = await client.creditFacility.findUnique({ where: { payerAccountId_operationKey: { payerAccountId, operationKey: list.operationKey } } });
+  Object.assign(row, { current: summary(current), batchFacility: summary(mine) });
   const target = entry.limitFen;
-  // Past its term a line lends nothing but still holds the per-payer key: expire it first (operator clock; the service re-checks).
-  if (current?.validUntil && current.validUntil <= new Date()) return blocked("current_past_term");
-  if (current && current.limitFen === target) return Object.assign(row, { action: "done" as const });
-  if (current && target < current.limitFen) return target < current.usedFen ? blocked("target_below_used") : Object.assign(row, { action: "reduce" as const });
+  // Past its term a line lends nothing but still holds the per-payer key: expire it first (database clock).
+  if (current?.validUntil && current.validUntil <= now) return blocked("current_past_term");
+  // Same batchRef, other content: never approve, activate or reduce toward a line the owner did not confirm.
+  if (mine && (mine.limitFen !== target || mine.evidenceRef !== list.evidenceRef ||
+      (mine.validUntil?.getTime() ?? null) !== (list.validUntil?.getTime() ?? null))) return blocked("batch_key_conflict");
+  if (current && current.limitFen === target) return act("done");
+  if (current && target < current.limitFen) return target < current.usedFen ? blocked("target_below_used") : act("reduce");
   // A higher line needs a new facility; usage on the old one would stay owed on top of the new line.
   if (current && current.usedFen > ZERO) return blocked("current_in_use");
-  if (!mine) return Object.assign(row, { action: "propose" as const });
-  if (mine.limitFen !== target || mine.evidenceRef !== list.evidenceRef ||
-      (mine.validUntil?.getTime() ?? null) !== (list.validUntil?.getTime() ?? null)) return blocked("batch_key_conflict");
-  if (mine.state === "draft") return Object.assign(row, { action: "approve" as const });
-  if (mine.state === "approved") return Object.assign(row, { action: "activate" as const });
+  if (!mine) return act("propose");
+  if (mine.state === "draft") return act("approve");
+  if (mine.state === "approved") return act("activate");
   return blocked("batch_facility_closed");
 }
 
@@ -205,8 +212,13 @@ async function executeEntry(client: PrismaClient, list: CreditBatchList, row: Pl
     evidenceRef, supersedes: row.current ? { facilityId: row.current.id, expectedVersion: row.current.version } : null });
 }
 
-const refusalCode = (error: unknown) => error instanceof CreditFacilityRefusal || error instanceof CreditOperatorError ? error.code
-  : error instanceof Error && /^payer_/.test(error.message) ? error.message : "unexpected_error";
+function refusalCode(error: unknown) {
+  if (error instanceof CreditFacilityRefusal || error instanceof CreditOperatorError) return error.code;
+  // A concurrent identical propose: the S3-e replay read (non-locking, REPEATABLE READ snapshot) misses the row the other run
+  // just committed. Nothing was written here; a rerun replays it.
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") return "credit_write_conflict";
+  return error instanceof Error && /^payer_/.test(error.message) ? error.message : "unexpected_error";
+}
 
 async function grantHeld(client: PrismaClient, userId: string | undefined, role: "maker" | "checker") {
   if (userId === undefined) return null;
@@ -223,19 +235,26 @@ async function batch(client: PrismaClient, args: Args, readFile: (path: string) 
     step = STEPS.find(value => value === args.flags.get("step")) ?? usage("step");
     actorUserId = refFlag(args, "actor-user-id");
     if (flag(args, "expect-list-sha") !== list.listSha) fail("list_sha_mismatch"); // nothing written
+    flag(args, "expect-plan-sha");
   }
   const maker = args.flags.get("maker-user-id"), checker = args.flags.get("checker-user-id");
   const preflight = { maker: await grantHeld(client, maker, "maker"), checker: await grantHeld(client, checker, "checker"),
     distinct: maker === undefined || checker === undefined ? null : maker !== checker };
-  const seenPayers = new Set<string>();
-  const rows: Array<Record<string, unknown> & { action: PlanAction; status: string }> = [];
-  // One entry at a time, each write in its own transaction: a refusal is recorded and the next entry still runs.
+  const [{ now }] = await client.$queryRaw<Array<{ now: Date }>>`SELECT UTC_TIMESTAMP(3) AS now`;
+  const plan: PlanRow[] = [];
   for (const entry of list.entries) {
-    let row: PlanRow;
-    try { row = await planEntry(client, list, entry, cap, seenPayers); } catch (error) {
-      rows.push({ workspaceId: entry.workspaceId, action: "blocked", blocker: "plan_failed", status: "failed", code: refusalCode(error) });
-      continue;
+    try { plan.push(await planEntry(client, list, entry, cap, now)); } catch (error) {
+      plan.push({ workspaceId: entry.workspaceId, payerAccountId: null, targetLimitFen: entry.limitFen, action: "blocked",
+        blocker: `plan_failed:${refusalCode(error)}`, current: null, batchFacility: null });
     }
+  }
+  // The plan the operator just reviewed (payer, action, current line and version per entry); --apply re-derives it and writes
+  // nothing unless it is byte-identical.
+  const planSha = createHash("sha256").update(toJson(plan)).digest("hex");
+  if (args.apply && flag(args, "expect-plan-sha") !== planSha) fail("plan_sha_mismatch");
+  const rows: Array<PlanRow & { status: "planned" | "skipped" | "applied" | "failed"; code?: string; detail?: unknown }> = [];
+  // One entry at a time, each write in its own transaction: a refusal is recorded and the next entry still runs.
+  for (const row of plan) {
     let result: { status: "planned" | "skipped" | "applied" | "failed"; code?: string; detail?: unknown } = { status: "planned" };
     if (step && row.action !== "blocked" && row.action !== "done") {
       if (STEP_OF[row.action] !== step) result = { status: "skipped" };
@@ -244,15 +263,17 @@ async function batch(client: PrismaClient, args: Args, readFile: (path: string) 
         catch (error) { result = { status: "failed", code: refusalCode(error) }; }
       }
     }
-    rows.push({ workspaceId: row.workspaceId, payerAccountId: row.payerAccountId, action: row.action, blocker: row.blocker,
-      targetLimitFen: row.targetLimitFen, current: summary(row.current), batchFacility: summary(row.batchFacility), ...result });
+    rows.push({ ...row, ...result });
   }
   const count = (key: "action" | "status") => rows.reduce<Record<string, number>>((acc, row) =>
     ({ ...acc, [row[key]]: (acc[row[key]] ?? 0) + 1 }), {});
   const problems = rows.filter(row => row.status === "failed" || row.action === "blocked").length;
-  return { exitCode: args.apply && problems > 0 ? 1 : 0, output: { ok: !args.apply || problems === 0, command: "batch", applied: args.apply,
-    step, listSha: list.listSha, batchRef: list.batchRef, operationKey: list.operationKey, maxLimitFen: cap, preflight,
-    actions: count("action"), results: count("status"), rows } };
+  // An --apply step that ran nothing while entries wait for another step was most likely run out of order.
+  const idle = args.apply && !rows.some(row => row.status === "applied" || row.status === "failed") && rows.some(row => row.status === "skipped");
+  const ok = !args.apply || (problems === 0 && !idle);
+  return { exitCode: ok ? 0 : 1, output: { ok, ...(idle ? { code: "step_nothing_to_do" } : {}), command: "batch",
+    applied: args.apply, step, listSha: list.listSha, planSha, batchRef: list.batchRef, operationKey: list.operationKey,
+    maxLimitFen: cap, preflight, actions: count("action"), results: count("status"), rows } };
 }
 
 /** Runs one CLI invocation; never prints evidence beyond references and amounts (integer fen as strings). */

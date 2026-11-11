@@ -7,7 +7,7 @@
  *   npm run billing:credit-operator -- show --workspace-id=<id>
  *   npm run billing:credit-operator -- batch --list-file=<list.json> [--maker-user-id=<id> --checker-user-id=<id>]
  *   npm run billing:credit-operator -- batch --list-file=<list.json> --step=propose|approve|activate \
- *     --actor-user-id=<id> --expect-list-sha=<sha256> --apply
+ *     --actor-user-id=<id> --expect-list-sha=<listSha> --expect-plan-sha=<planSha> --apply
  *
  * Output is one JSON document; exit 0 ok, 1 refusal or any failed/blocked entry in an --apply run, 2 usage.
  */
