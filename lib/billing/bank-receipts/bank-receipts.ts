@@ -18,7 +18,7 @@ export type BankReceiptDraftInput = { actorUserId: string; payerAccountId: strin
 export type BankReceiptReviewInput = { actorUserId: string; receiptId: string; decision: "approve" | "reject";
   expectedVersion: number; evidenceRef: string };
 export type BankReceiptRefusalCode = "bank_receipt_input_invalid" | "bank_receipt_forbidden" | "bank_receipt_self_review_forbidden" |
-  "bank_receipt_duplicate" | "bank_receipt_unavailable" | "bank_receipt_not_pending" | "bank_receipt_version_conflict" |
+  "bank_receipt_duplicate" | "bank_receipt_account_unregistered" | "bank_receipt_unavailable" | "bank_receipt_not_pending" | "bank_receipt_version_conflict" |
   "bank_receipt_posting_conflict" | "payer_account_unavailable" | "payer_billing_off" | "finance_grant_forbidden" |
   "finance_grant_exists" | "finance_grant_unavailable";
 
@@ -38,11 +38,36 @@ function isUniqueViolation(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }
 
+/**
+ * Dedupe key of a bank transaction reference (#528 review P1-2): case-folded and with the `REF` separators `- _ . : /` removed,
+ * so "Txn-0001", "TXN_0001" and "txn0001" are one bank transaction. Whitespace and non-ASCII never get here (`REF` refuses them),
+ * leading zeros are kept. Over-merging two distinct references can only refuse a draft (`bank_receipt_duplicate`, a person
+ * checks), never post twice. The migration's CHECK holds the same expression, so a raw write cannot store another key.
+ */
+export function bankTxnKey(bankTxnRef: string) {
+  return bankTxnRef.toUpperCase().replace(/[-_.:/]/g, "");
+}
+
+const RECEIVING_ACCOUNT = /^[a-z0-9][a-z0-9._:-]{0,63}$/;
+/**
+ * Server-side receiving-account registry: `HELM_BILLING_BANK_RECEIVING_ACCOUNTS`, a non-secret JSON array of opaque, lowercase
+ * references to our own receiving accounts (never the account number). Absent, malformed, or two entries that differ only in
+ * separators: nothing is registered and every draft refuses (fail closed). A draft must name one entry exactly.
+ */
+export function registeredReceivingAccounts(env: Readonly<Record<string, string | undefined>> = process.env): ReadonlySet<string> {
+  let parsed: unknown;
+  try { parsed = JSON.parse(env.HELM_BILLING_BANK_RECEIVING_ACCOUNTS ?? ""); } catch { return new Set(); }
+  if (!Array.isArray(parsed) || !parsed.every(ref => typeof ref === "string" && RECEIVING_ACCOUNT.test(ref))) return new Set();
+  const accounts = new Set<string>(parsed);
+  return new Set([...accounts].map(ref => ref.replace(/[._:-]/g, ""))).size === accounts.size ? accounts : new Set();
+}
+
 /** Pure validation of a draft; returns the row data. `valueDate` is a real calendar date `YYYY-MM-DD`. */
-export function normalizeBankReceiptDraft(input: BankReceiptDraftInput) {
+export function normalizeBankReceiptDraft(input: BankReceiptDraftInput, env: Readonly<Record<string, string | undefined>> = process.env) {
   if (!input || typeof input !== "object") refuse("bank_receipt_input_invalid");
   reference(input.actorUserId, "bank_receipt_forbidden");
   for (const value of [input.payerAccountId, input.receivingAccountRef, input.bankTxnRef, input.evidenceRef]) reference(value);
+  if (!registeredReceivingAccounts(env).has(input.receivingAccountRef)) refuse("bank_receipt_account_unregistered");
   if (input.payerNameDigest != null && (typeof input.payerNameDigest !== "string" || !NAME_DIGEST.test(input.payerNameDigest))) {
     refuse("bank_receipt_input_invalid");
   }
@@ -51,7 +76,7 @@ export function normalizeBankReceiptDraft(input: BankReceiptDraftInput) {
     ? new Date(`${input.valueDate}T00:00:00.000Z`) : null;
   if (!date || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== input.valueDate) refuse("bank_receipt_input_invalid");
   return { payerAccountId: input.payerAccountId, receivingAccountRef: input.receivingAccountRef, bankTxnRef: input.bankTxnRef,
-    activeBankTxnRef: input.bankTxnRef, payerNameDigest: input.payerNameDigest ?? null, amountFen: input.amountFen, currency: "CNY",
+    activeBankTxnRef: bankTxnKey(input.bankTxnRef), payerNameDigest: input.payerNameDigest ?? null, amountFen: input.amountFen, currency: "CNY",
     valueDate: date, draftedByUserId: input.actorUserId, evidenceRef: input.evidenceRef };
 }
 
@@ -132,8 +157,9 @@ function assertPayerReceives(payer: PayerRow | undefined) {
   if (payer.billingMode !== "shadow" && payer.billingMode !== "enforce") refuse("payer_billing_off");
 }
 
-export async function draftBankReceipt(client: PrismaClient, input: BankReceiptDraftInput) {
-  const data = normalizeBankReceiptDraft(input);
+export async function draftBankReceipt(client: PrismaClient, input: BankReceiptDraftInput,
+  env: Readonly<Record<string, string | undefined>> = process.env) {
+  const data = normalizeBankReceiptDraft(input, env);
   return transaction(client, async tx => {
     const workspaceId = await lockFinanceActor(tx, data.draftedByUserId, "maker");
     assertPayerReceives(await lockPayer(tx, data.payerAccountId));

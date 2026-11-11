@@ -42,6 +42,7 @@ describe.skipIf(!url)("bank receipts and wallet against MySQL", () => {
   const membership = (workspaceId: string, userId: string, role: string) => a.$executeRaw`
     INSERT INTO Membership (id,workspaceId,userId,role,status,updatedAt) VALUES (${`m-${workspaceId}-${userId}`},${workspaceId},${userId},${role},'ACTIVE',NOW(3))`;
   beforeAll(async () => {
+    process.env.HELM_BILLING_BANK_RECEIVING_ACCOUNTS = JSON.stringify(["recv:synthetic-1", "recv:synthetic-2"]);
     const datadir = assertIsolatedTarget(url);
     a = new PrismaClient({ datasources: { db: { url } } });
     b = new PrismaClient({ datasources: { db: { url } } });
@@ -63,7 +64,10 @@ describe.skipIf(!url)("bank receipts and wallet against MySQL", () => {
     await grant(maker, "maker"); await grant(checker, "checker"); await grant(checker2, "checker"); await grant(dual, "maker"); await grant(dual, "checker");
   });
   // Receipts and journal rows are append-only by trigger, so this synthetic database keeps them; it is discarded after the run.
-  afterAll(async () => { await Promise.all([a?.$disconnect(), b?.$disconnect()]); });
+  afterAll(async () => {
+    delete process.env.HELM_BILLING_BANK_RECEIVING_ACCOUNTS;
+    await Promise.all([a?.$disconnect(), b?.$disconnect()]);
+  });
 
   async function payer(workspaceId = ws, actor = owner, mode = "enforce") {
     const account = await createPayerAccount(a, { actorUserId: actor, workspaceId, kind: "enterprise_contract", contractSubjectRef: "subject-bank" });
@@ -154,6 +158,32 @@ describe.skipIf(!url)("bank receipts and wallet against MySQL", () => {
     await review(redraft.id, checker, "approve");
     await expect(draft(p, { bankTxnRef: ref })).rejects.toThrow("bank_receipt_duplicate");
     expect(await wallet(p)).toBe(BigInt(25000));
+  });
+  it("treats case and separator variants of one bank transaction as the same live receipt (#528 review P1-2)", async () => {
+    const p = await payer();
+    const ref = `Icbc-2026.1112/${run}_07`;
+    const first = await draft(p, { bankTxnRef: ref });
+    expect(first).toMatchObject({ bankTxnRef: ref, activeBankTxnRef: `ICBC20261112${run.toUpperCase()}07` }); // evidence kept as typed
+    for (const variant of [ref.toUpperCase(), ref.toLowerCase(), `ICBC20261112${run}07`, `icbc:2026-1112-${run}-07`, `Icbc_2026_1112_${run}_07`]) {
+      await expect(draft(p, { bankTxnRef: variant })).rejects.toThrow("bank_receipt_duplicate");
+    }
+    // A different registered receiving account still takes the same bank reference; an unregistered or variant account never drafts.
+    await expect(draft(p, { bankTxnRef: ref, receivingAccountRef: "recv:synthetic-2" })).resolves.toMatchObject({ state: "drafted" });
+    for (const receivingAccountRef of ["recv:synthetic-3", "RECV:SYNTHETIC-1", "recv:synthetic1", "recv.synthetic-1"]) {
+      await expect(draft(p, { bankTxnRef: `${ref}-x`, receivingAccountRef })).rejects.toThrow("bank_receipt_account_unregistered");
+    }
+    // Leading zeros are significant: these are different bank transactions.
+    await expect(draft(p, { bankTxnRef: `0${ref}` })).resolves.toMatchObject({ state: "drafted" });
+    // A rejected receipt frees the key for a correctly typed variant; posting then blocks every variant again.
+    await review(first.id, checker, "reject");
+    const corrected = await draft(p, { bankTxnRef: ref.toUpperCase() });
+    await review(corrected.id, checker, "approve");
+    await expect(draft(p, { bankTxnRef: ref })).rejects.toThrow("bank_receipt_duplicate");
+    expect(await wallet(p)).toBe(BigInt(25000));
+    // The CHECK keeps a raw write from storing the exact reference (or any other value) as the live key.
+    await expect(a.$executeRaw`INSERT INTO BankReceipt (id, payerAccountId, receivingAccountRef, bankTxnRef, activeBankTxnRef, amountFen,
+      valueDate, draftedByUserId, evidenceRef, updatedAt) VALUES (${id("raw")}, ${p}, 'recv:synthetic-1', ${`raw-${run}`}, ${`raw-${run}`},
+      1, '2026-11-09', ${maker}, 'e', NOW(3))`).rejects.toThrow(/BankReceipt_active_key_check/);
   });
   it("rolls back receipt state, funds, audit and outbox when posting fails or the transaction aborts", async () => {
     const p = await payer();
