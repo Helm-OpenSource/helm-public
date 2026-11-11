@@ -30,6 +30,31 @@ describe("platform operation normalization", () => {
   });
 });
 
+describe("price and grant normalization (E1b)", () => {
+  const price = (extra: Record<string, unknown> = {}) => ({ kind: "price_publish", productCode: "robot-call", version: 1,
+    billingEventRef: "service-billing-event-v1:robot_call_minute", meterUnit: "minute", acceptanceRef: "acceptance:connected-call",
+    unitPriceFenNumerator: "35", unitPriceDenominator: "1", effectiveFrom: "2026-11-01T00:00:00.000Z", effectiveUntil: null,
+    approvalRef: "owner-ruling:planning", priceLabel: "planning_estimate_not_a_quote", ...extra }) as PlatformOperationRequest;
+  it("keys a price by product and version, hashes the price, and refuses zero, malformed amounts, times and labels", () => {
+    expect(normalizePlatformOperation(RULING, price()).operationKey).toBe(normalizePlatformOperation(RULING, price({ unitPriceFenNumerator: "40" })).operationKey);
+    expect(normalizePlatformOperation(RULING, price()).contentHash).not.toBe(normalizePlatformOperation(RULING, price({ unitPriceFenNumerator: "40" })).contentHash);
+    expect(() => normalizePlatformOperation(RULING, price({ unitPriceFenNumerator: "0" }))).toThrow("price_zero_refused");
+    for (const extra of [{ unitPriceFenNumerator: "0.35" }, { unitPriceDenominator: "0" }, { effectiveFrom: "2026-11-01" },
+      { priceLabel: "final" }, { meterUnit: "Minute" }, { effectiveUntil: "2026-10-01T00:00:00.000Z" }]) {
+      expect(() => normalizePlatformOperation(RULING, price(extra))).toThrow("platform_operation_input_invalid");
+    }
+  });
+  it("keys a grant by workspace, product and price version", () => {
+    const grant = (priceVersion: number, perChargeLimitFen = "3500") => ({ kind: "spend_grant", workspaceId: "ws-1", productCode: "robot-call",
+      priceVersion, validFrom: "2026-11-01T00:00:00.000Z", validUntil: "2027-11-01T00:00:00.000Z", perChargeLimitFen,
+      dailyLimitFen: "5000000", monthlyLimitFen: "100000000" }) as PlatformOperationRequest;
+    expect(normalizePlatformOperation(RULING, grant(1)).operationKey).toBe(normalizePlatformOperation(RULING, grant(1, "100")).operationKey);
+    expect(normalizePlatformOperation(RULING, grant(1)).operationKey).not.toBe(normalizePlatformOperation(RULING, grant(2)).operationKey);
+    expect(() => normalizePlatformOperation(RULING, grant(0))).toThrow("platform_operation_input_invalid");
+    expect(() => normalizePlatformOperation(RULING, grant(1, "-1"))).toThrow("platform_operation_input_invalid");
+  });
+});
+
 describe("operation list and arguments", () => {
   it("hashes the exact bytes and refuses extra fields, duplicates and empty lists", () => {
     const value = { evidenceRef: RULING, entries: [mode("off", "enforce"), mode("off", "enforce", "ws-2")] };

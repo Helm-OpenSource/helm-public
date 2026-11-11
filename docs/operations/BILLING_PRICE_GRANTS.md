@@ -28,6 +28,8 @@ route, UI or real price. 只提供价格版本与授权原语，所有授权默�
   of two writers on one version one wins (`grant_version_conflict`). No automatic retry.
 - **Verify / rollback**: unit `price-grants.test.ts`; `npm run test:billing:mysql` (CI `model-egress-mysql`). Rollback: stop calling the
   service; `prisma/rollback/20261110_rollback_billing_price_grants.sql` refuses while any row exists.
+- **Platform path (E1b)**: `publishPriceVersionInTransaction`, `createSpendGrantInTransaction` and `changeSpendGrantInTransaction` with
+  authority `platform_checker` back the maker/checker CLI ([platform operations](BILLING_PLATFORM_OPERATIONS.md)); still no route.
 - **Not here**: charge posting (S3-b2), price retirement, `expired` sweep, consumer grants, Pack event contract, routes.
   Before any route exposes price publishing, the `SYSTEM` actor must be authenticated by `BillingServiceGrant` (S0 §5). Two concurrent
   first-version publishes of one product may fail once with `billing_write_conflict`; retrying is safe (replay).

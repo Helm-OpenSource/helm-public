@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { grantPlatformFinanceRole, revokePlatformFinanceRole } from "../bank-receipts/bank-receipts";
+import { createSpendGrantInTransaction } from "../grants/price-grants";
 import { parseOperationList, runPlatformBatch, type PlatformBatchArgs } from "./platform-batch";
 import { draftPlatformOperation, reviewPlatformOperation, type PlatformOperationRequest } from "./platform-operations";
 
@@ -196,5 +197,76 @@ describe.skipIf(!url)("platform billing operations against MySQL", () => {
     expect(await a.payerScopeBinding.count({ where: { activeScopeRef: { in: [w1, w2, w3] } } })).toBe(3);
     const after = await runPlatformBatch(a, args({ apply: false, listSha: null }), list);
     expect(after.plan?.map(row => [row.operationState, row.currentMode])).toEqual([["applied", "off"], ["applied", "off"], ["applied", "off"]]);
+  });
+
+  // E1b: platform price publishing and spend grants. Placeholder price 35/1 fen per minute = 财模规划价 0.35 元/分钟 (规划试算价).
+  const price = (version: number, extra: Partial<Record<string, unknown>> = {}) => ({ kind: "price_publish", productCode: `robot-call-${run}`,
+    version, billingEventRef: "service-billing-event-v1:robot_call_minute", meterUnit: "minute", acceptanceRef: "acceptance:connected-call",
+    unitPriceFenNumerator: "35", unitPriceDenominator: "1", effectiveFrom: "2026-11-01T00:00:00.000Z", effectiveUntil: null,
+    approvalRef: "owner-ruling:planning-estimate-not-a-quote", priceLabel: "planning_estimate_not_a_quote", ...extra }) as PlatformOperationRequest;
+  const grantFor = (workspaceId: string, priceVersion = 1, perChargeLimitFen = "3500") => ({ kind: "spend_grant", workspaceId,
+    productCode: `robot-call-${run}`, priceVersion, validFrom: "2026-11-01T00:00:00.000Z", validUntil: "2027-11-01T00:00:00.000Z",
+    perChargeLimitFen, dailyLimitFen: "5000000", monthlyLimitFen: "100000000" }) as PlatformOperationRequest;
+
+  it("publishes a non-zero price version only through maker and a different checker, replaying", async () => {
+    await expect(draft(price(1, { unitPriceFenNumerator: "0" }))).rejects.toThrow("price_zero_refused");
+    await expect(draft(price(1), owner)).rejects.toThrow("platform_operation_forbidden");
+    const drafted = await draft(price(1), dual);
+    expect(drafted.operation).toMatchObject({ workspaceId: reserved, payerAccountId: null, state: "drafted" });
+    await expect(review(price(1), dual)).rejects.toThrow("platform_operation_self_review_forbidden");
+    expect(await a.billingProduct.count({ where: { code: `robot-call-${run}` } })).toBe(0);
+    const applied = await review(price(1));
+    const row = await a.billingPriceVersion.findUniqueOrThrow({ where: { id: applied.operation.resultRef! } });
+    expect(row).toMatchObject({ version: 1, meterUnit: "minute", billingEventRef: "service-billing-event-v1:robot_call_minute",
+      unitPriceFenNumerator: BigInt(35), unitPriceDenominator: BigInt(1), createdBy: `SYSTEM:platform-op:${applied.operation.id}` });
+    expect((await review(price(1))).replayed).toBe(true);
+    expect(await a.auditLog.count({ where: { targetId: applied.operation.id, workspaceId: reserved } })).toBe(2);
+  });
+
+  it("opens a spend grant (create, set_limits, activate) for a platform-onboarded payer, one open grant per product", async () => {
+    const ws = await onboarded();
+    await expect(draft(grantFor(ws, 9))).resolves.toMatchObject({ replayed: false });
+    await expect(review(grantFor(ws, 9))).rejects.toThrow("price_version_unavailable");
+    await draft(grantFor(ws, 1, "0"));
+    await expect(review(grantFor(ws, 1, "0"))).rejects.toThrow("grant_limits_zero");
+    expect(await a.spendGrant.count({ where: { payerAccountId: (await payerOf(ws)).id } })).toBe(0); // rolled back with the refusal
+    const other = await onboarded();
+    await draft(grantFor(other));
+    await expect(review(grantFor(other), owner)).rejects.toThrow("platform_operation_forbidden");
+    const applied = await review(grantFor(other));
+    const grant = await a.spendGrant.findUniqueOrThrow({ where: { id: applied.operation.resultRef! } });
+    expect(grant).toMatchObject({ state: "active", version: 3, perChargeLimitFen: BigInt(3500), createdByUserId: checker, evidenceRef: ruling,
+      payerAccountId: (await payerOf(other)).id });
+    const steps = await a.auditLog.findMany({ where: { workspaceId: other, targetId: grant.id }, select: { actionType: true } });
+    expect(steps.map(step => step.actionType).sort()).toEqual(["BILLING_SPEND_GRANT_ACTIVATE", "BILLING_SPEND_GRANT_CREATED",
+      "BILLING_SPEND_GRANT_SET_LIMITS"]);
+    // The platform authority inside price-grants re-checks the checker grant itself; a maker or customer OWNER is refused there.
+    for (const actorUserId of [maker, owner]) {
+      await expect(a.$transaction(tx => createSpendGrantInTransaction(tx, { actorUserId, payerAccountId: grant.payerAccountId,
+        priceVersionId: grant.priceVersionId, operationKey: `direct-${actorUserId}`, evidenceRef: ruling, validFrom: new Date("2026-11-01T00:00:00Z"),
+        validUntil: new Date("2027-11-01T00:00:00Z") }, "platform_checker"))).rejects.toThrow("grant_forbidden");
+    }
+    await draft(price(2, { unitPriceFenNumerator: "40" }));
+    await review(price(2, { unitPriceFenNumerator: "40" }));
+    await draft(grantFor(other, 2));
+    await expect(review(grantFor(other, 2))).rejects.toThrow("grant_active_exists");
+  });
+
+  it("runs a price-and-grant list with the label shown, resuming idempotently", async () => {
+    const [w1, w2] = [await onboarded(), await onboarded()];
+    const bytes = Buffer.from(JSON.stringify({ evidenceRef: `${ruling}-list`, entries: [price(3, { unitPriceFenNumerator: "45" }), grantFor(w1, 3), grantFor(w2, 3)] }));
+    const list = parseOperationList(bytes);
+    const args = (extra: Partial<PlatformBatchArgs>): PlatformBatchArgs => ({ command: "draft", listFile: "-", actorUserId: maker,
+      apply: true, listSha: list.sha256, decision: null, reviewEvidenceRef: null, confirmEnforce: false, ...extra });
+    const dry = await runPlatformBatch(a, args({ apply: false, listSha: null }), list);
+    expect(dry.plan?.[0]).toMatchObject({ priceNotice: "owner 11-12 裁定，六家实扣，规划试算价，不对外报价", operationState: null });
+    expect(dry.plan?.[1]).toMatchObject({ limitUnits: null }); // price 3 not yet published
+    expect((await runPlatformBatch(a, args({}), list)).ok).toBe(true);
+    const reviewArgs = args({ command: "review", actorUserId: checker, decision: "approve", reviewEvidenceRef: "review:synthetic" });
+    expect((await runPlatformBatch(a, reviewArgs, list)).results?.map(row => row.state)).toEqual(["applied", "applied", "applied"]);
+    expect((await runPlatformBatch(a, reviewArgs, list)).results?.every(row => row.replayed)).toBe(true);
+    const after = await runPlatformBatch(a, args({ apply: false, listSha: null }), list);
+    expect(after.plan?.[1]).toMatchObject({ limitUnits: { meterUnit: "minute", perCharge: "77", daily: "111111", monthly: "2222222" } });
+    for (const ws of [w1, w2]) expect(await a.spendGrant.count({ where: { payerAccountId: (await payerOf(ws)).id, state: "active" } })).toBe(1);
   });
 });

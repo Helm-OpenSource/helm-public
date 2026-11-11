@@ -1,7 +1,8 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
-import { draftPlatformOperation, normalizePlatformOperation, PlatformOperationRefusal, reviewPlatformOperation,
+import { SpendGrantRefusal } from "../grants/price-grants";
+import { draftPlatformOperation, normalizePlatformOperation, PlatformOperationRefusal, PRICE_LABEL_TEXT, reviewPlatformOperation,
   type PlatformOperationRequest } from "./platform-operations";
 
 /**
@@ -15,7 +16,15 @@ export type PlatformBatchArgs = { command: "draft" | "review"; listFile: string;
   listSha: string | null; decision: "approve" | "reject" | null; reviewEvidenceRef: string | null; confirmEnforce: boolean };
 
 const FIELDS: Record<string, string[]> = { payer_onboard: ["contractSubjectRef", "kind", "workspaceId"],
-  billing_mode: ["fromMode", "kind", "toMode", "workspaceId"] };
+  billing_mode: ["fromMode", "kind", "toMode", "workspaceId"],
+  price_publish: ["acceptanceRef", "approvalRef", "billingEventRef", "effectiveFrom", "effectiveUntil", "kind", "meterUnit", "priceLabel",
+    "productCode", "unitPriceDenominator", "unitPriceFenNumerator", "version"],
+  spend_grant: ["dailyLimitFen", "kind", "monthlyLimitFen", "perChargeLimitFen", "priceVersion", "productCode", "validFrom", "validUntil",
+    "workspaceId"] };
+/** What an entry shows in output: its workspace, or for a price its product version and the price label text. */
+const subject = (request: PlatformOperationRequest) => request.kind === "price_publish"
+  ? { productCode: request.productCode, version: request.version, priceNotice: PRICE_LABEL_TEXT[request.priceLabel] }
+  : { workspaceId: request.workspaceId };
 const MAX_ENTRIES = 500;
 const invalid = (): never => { throw new PlatformOperationRefusal("platform_operation_input_invalid"); };
 const sameKeys = (value: object, keys: string[]) => Object.keys(value).sort().join(",") === keys.join(",");
@@ -62,6 +71,17 @@ export function parsePlatformBatchArgs(argv: readonly string[]): PlatformBatchAr
     confirmEnforce: values.has("--confirm-enforce") };
 }
 
+/** Dry-run basis for grant limits: how many meter units each limit covers at the referenced price (null until it is published). */
+async function limitUnits(client: PrismaClient, request: Extract<PlatformOperationRequest, { kind: "spend_grant" }>) {
+  const product = await client.billingProduct.findUnique({ where: { code: request.productCode }, select: { id: true } });
+  const price = product && await client.billingPriceVersion.findFirst({ where: { productId: product.id, version: request.priceVersion },
+    select: { meterUnit: true, unitPriceFenNumerator: true, unitPriceDenominator: true } });
+  if (!price) return { limitUnits: null };
+  const units = (fen: string) => (BigInt(fen) * price.unitPriceDenominator / price.unitPriceFenNumerator).toString();
+  return { limitUnits: { meterUnit: price.meterUnit, perCharge: units(request.perChargeLimitFen), daily: units(request.dailyLimitFen),
+    monthly: units(request.monthlyLimitFen) } };
+}
+
 export async function runPlatformBatch(client: PrismaClient, args: PlatformBatchArgs, list: PlatformOperationList) {
   const enforce = list.entries.some(entry => entry.kind === "billing_mode" && entry.toMode === "enforce");
   const base = { command: args.command, listSha: list.sha256, evidenceRef: list.evidenceRef, entries: list.entries.length,
@@ -72,10 +92,10 @@ export async function runPlatformBatch(client: PrismaClient, args: PlatformBatch
     for (const [index, request] of list.entries.entries()) {
       const { operationKey } = normalizePlatformOperation(list.evidenceRef, request);
       const operation = await client.platformBillingOperation.findUnique({ where: { operationKey }, select: { state: true } });
-      const binding = await client.payerScopeBinding.findFirst({ where: { scopeKind: "workspace", activeScopeRef: request.workspaceId },
-        select: { payerAccountId: true } });
+      const binding = request.kind === "price_publish" ? null : await client.payerScopeBinding.findFirst({
+        where: { scopeKind: "workspace", activeScopeRef: request.workspaceId }, select: { payerAccountId: true } });
       const payer = binding && await client.payerAccount.findUnique({ where: { id: binding.payerAccountId }, select: { billingMode: true } });
-      plan.push({ index, ...request, operationKey, operationState: operation?.state ?? null, currentMode: payer?.billingMode ?? null });
+      plan.push({ index, ...request, ...subject(request), ...(request.kind === "spend_grant" ? await limitUnits(client, request) : {}), operationKey, operationState: operation?.state ?? null, currentMode: payer?.billingMode ?? null });
     }
     return { ok: true, applied: false, ...base, plan };
   }
@@ -87,10 +107,10 @@ export async function runPlatformBatch(client: PrismaClient, args: PlatformBatch
     try {
       const { operation, replayed } = args.command === "draft" ? await draftPlatformOperation(client, common)
         : await reviewPlatformOperation(client, { ...common, decision: args.decision!, reviewEvidenceRef: args.reviewEvidenceRef! });
-      results.push({ index, workspaceId: request.workspaceId, operationId: operation.id, state: operation.state, replayed });
+      results.push({ index, ...subject(request), operationId: operation.id, state: operation.state, replayed });
     } catch (error) {
-      const code = error instanceof PlatformOperationRefusal ? error.code : "unavailable";
-      return { ok: false, applied: true, ...base, results, stoppedAt: { index, workspaceId: request.workspaceId, code } };
+      const code = error instanceof PlatformOperationRefusal || error instanceof SpendGrantRefusal ? error.code : "unavailable";
+      return { ok: false, applied: true, ...base, results, stoppedAt: { index, ...subject(request), code } };
     }
   }
   return { ok: true, applied: true, ...base, results };
