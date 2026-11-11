@@ -51,7 +51,7 @@ describe.skipIf(!url)("Alipay wallet top-up notify against MySQL", () => {
     }
     holder.client = a;
     await a.$executeRaw`INSERT INTO User (id,name,email,updatedAt) VALUES (${admin},'Synthetic',${`${admin}@example.invalid`},NOW(3))`;
-    for (const [key, value] of Object.entries({ ...double.env, HELM_BILLING_TOPUP_ALIPAY_ENABLED: "true" })) vi.stubEnv(key, value);
+    for (const [key, value] of Object.entries({ ...double.env, HELM_BILLING_TOPUP_ALIPAY_ENABLED: "true", HELM_FINANCIAL_ACTIONS_ENABLED: "true" })) vi.stubEnv(key, value);
     vi.stubGlobal("fetch", () => { throw new Error("network_forbidden"); }); // the notify path never calls the provider
   });
   afterAll(async () => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); await Promise.all([a?.$disconnect(), b?.$disconnect()]); });

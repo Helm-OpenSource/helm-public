@@ -74,17 +74,21 @@ describe("alipay top-up notify entry", () => {
     for (const env of [{}, { HELM_BILLING_TOPUP_ALIPAY_ENABLED: "yes" }, { HELM_BILLING_TOPUP_ALIPAY_ENABLED: "true", HELM_FINANCIAL_ACTIONS_ENABLED: "false" }]) {
       vi.stubEnv("HELM_BILLING_TOPUP_ALIPAY_ENABLED", undefined); vi.stubEnv("HELM_FINANCIAL_ACTIONS_ENABLED", undefined);
       for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
-      const response = await post(double.notify(paid));
-      expect([response.status, await response.text()]).toEqual([404, "Not Found"]);
+      const request = new Request("https://helm.invalid/x", { method: "POST", body: double.notify(paid),
+        headers: { "content-type": "application/x-www-form-urlencoded" } });
+      const response = await handleAlipayTopupNotify(request, noDatabase);
+      expect([response.status, await response.text(), request.bodyUsed]).toEqual([404, "Not Found", false]);
     }
   });
 
   it("refuses unconfigured, non-form, oversized, non-UTF-8 and unauthenticated bodies without touching the database", async () => {
-    vi.stubEnv("HELM_BILLING_TOPUP_ALIPAY_ENABLED", "true");
+    vi.stubEnv("HELM_BILLING_TOPUP_ALIPAY_ENABLED", "true"); vi.stubEnv("HELM_FINANCIAL_ACTIONS_ENABLED", "true");
     expect((await post(double.notify(paid))).status).toBe(503); // ALIPAY_* not configured
     for (const [key, value] of Object.entries(double.env)) vi.stubEnv(key, value);
     expect((await post(double.notify(paid), { "content-type": "application/json" })).status).toBe(415);
     expect((await post(`${double.notify(paid)}&pad=${"x".repeat(16_384)}`)).status).toBe(413);
+    const declared = await post(double.notify(paid), { "content-type": "application/x-www-form-urlencoded", "content-length": "16385" });
+    expect(declared.status).toBe(413); // refused on the declared length alone, before streaming
     // Signed over U+FFFD but sent as a raw invalid byte: only strict decoding refuses it before the database.
     const signedReplacement = Buffer.from(double.notify({ ...paid, subject: "\uFFFD" }));
     const at = signedReplacement.indexOf("%EF%BF%BD");
