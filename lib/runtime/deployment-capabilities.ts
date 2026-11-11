@@ -9,7 +9,8 @@ export type DeploymentCapability =
   | "automated_customer_call"
   | "sms_send"
   | "financial_action"
-  | "billing_internal_route";
+  | "billing_internal_route"
+  | "billing_topup_alipay";
 
 type DeploymentEnvironment = Readonly<Record<string, string | undefined>>;
 
@@ -68,6 +69,10 @@ const CAPABILITY_CONTROLS: Record<
   },
   billing_internal_route: {
     envKey: "HELM_BILLING_INTERNAL_ROUTES_ENABLED",
+    defaultAllowed: false,
+  },
+  billing_topup_alipay: {
+    envKey: "HELM_BILLING_TOPUP_ALIPAY_ENABLED",
     defaultAllowed: false,
   },
 };
