@@ -145,6 +145,9 @@ describe("login callback destinations", () => {
     "/%2561pi/auth/logout",
     "/%6cogin/workspaces",
     "/api/auth/logout",
+    "/dashboard%3f/../api/public-auth/dingtalk/start",
+    "/dashboard%23/../login",
+    "/dashboard%3f/../%6cogin/workspaces",
     "/portal/access/synthetic",
     "/tenant-alpha/%0aheader",
   ])("rejects unsafe callbacks: %s", (value) => {
@@ -154,6 +157,7 @@ describe("login callback destinations", () => {
 
   it("carries the original address through required login steps", () => {
     const callback = "/tenant-alpha/workspace?q=a%20b#selected=example";
+    expect(normalizeLoginCallback(normalizeLoginCallback(callback))).toBe(callback);
     const selector = resolveLoginCallbackDestination("/login/workspaces", callback);
     const setup = resolveLoginCallbackDestination("/getting-started?mode=identity-completion", callback);
     expect(new URL(selector, "https://example.test").searchParams.get("callback")).toBe(callback);

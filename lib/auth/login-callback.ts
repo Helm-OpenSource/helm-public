@@ -4,6 +4,12 @@ export const WORKSPACE_REQUEST_PATH_HEADER = "x-helm-workspace-path";
 
 const LOCAL_ORIGIN = "https://login-callback.invalid";
 
+function isCallbackPathname(pathname: string): boolean {
+  return !pathname.startsWith("//") &&
+    !/^\/(?:api|_next|login|assets)(?:\/|$)/i.test(pathname) &&
+    isWorkspacePagePathname(pathname);
+}
+
 export function normalizeLoginCallback(value: unknown): string | undefined {
   if (typeof value !== "string" || value.length > 2048 || !value.startsWith("/")) return;
 
@@ -13,15 +19,19 @@ export function normalizeLoginCallback(value: unknown): string | undefined {
     const decodedPath = decodeURIComponent(rawPath);
     if (
       url.origin !== LOCAL_ORIGIN ||
-      url.pathname.startsWith("//") ||
+      !isCallbackPathname(url.pathname) ||
       decodedPath.startsWith("//") ||
       /[%\\]/.test(decodedPath) ||
       /[\u0000-\u001f\u007f]/u.test(decodedPath + value)
     ) return;
 
-    // Check the decoded path too, so encoded auth and API routes cannot become destinations.
-    const pathname = new URL(decodedPath, LOCAL_ORIGIN).pathname;
-    if (pathname.startsWith("//") || /^\/(?:api|_next|login|assets)(?:\/|$)/i.test(pathname) || !isWorkspacePagePathname(pathname)) return;
+    // Decode the canonical pathname after URL parsing resolves dot segments.
+    // Check both forms because the returned URL and the decoded route can differ.
+    const canonicalDecodedPath = decodeURIComponent(url.pathname);
+    if (
+      canonicalDecodedPath.startsWith("//") ||
+      !isCallbackPathname(new URL(canonicalDecodedPath, LOCAL_ORIGIN).pathname)
+    ) return;
 
     return `${url.pathname}${url.search}${url.hash}`;
   } catch {
