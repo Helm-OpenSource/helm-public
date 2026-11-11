@@ -41,7 +41,8 @@ batch runner `lib/billing/platform/platform-batch.ts`, CLI `npm run billing:plat
   plus `BILLING_PAYER_SCOPE_BOUND` or `BILLING_PAYER_MODE_CHANGED` in the target workspace.
 - Idempotency: `operationKey` derives from (ruling, kind, workspace, mode step). The same request replays; the same key with other
   content refuses `platform_operation_conflict`; the same checker repeating a decision replays. Repeating a mode step already taken
-  under one ruling replays it, so a second identical step needs a new ruling reference.
+  under one ruling replays it; if the mode has moved since, the draft refuses `platform_operation_stale_replay` (E1b), so a second identical
+  step (e.g. a second rollback) needs a new ruling reference. A rejected operation likewise needs a new reference to be drafted again.
 
 ## Prices and spend grants (E1b) / 发价与消费授权
 
@@ -51,10 +52,10 @@ batch runner `lib/billing/platform/platform-batch.ts`, CLI `npm run billing:plat
   strings, times ISO-8601 UTC. A zero numerator refuses `price_zero_refused` (reserve would refuse it as `grant_charge_zero`). Versions stay
   append-only; same content replays, other content `price_version_conflict`.
 - `priceLabel` is a closed set that is part of the reviewed content; today only `planning_estimate_not_a_quote`, printed as
-  **「owner 11-12 裁定，六家实扣，规划试算价，不对外报价」**（规划试算价，不作为报价）. The owner-chosen price is 财模规划价 0.35 元/分钟 = `unitPriceFenNumerator "35"`,
+  **「规划试算价，不作为报价」**; the owner ruling behind the price is carried by the list's ASCII `approvalRef`, not by code. The owner-chosen price is 财模规划价 0.35 元/分钟 = `unitPriceFenNumerator "35"`,
   `unitPriceDenominator "1"`, `meterUnit "minute"`, `billingEventRef "service-billing-event-v1:robot_call_minute"`. These literals are the
   observer's provisional names and **must equal the Pack E4 event list** (`service-billing-event-v1`) before use; a mismatch makes quote
-  find no grant (`grant_not_active`). `approvalRef` is ASCII, e.g. `owner-ruling-20261112:six-live-price:planning-estimate:no-external-quote`.
+  find no grant (`grant_not_active`). `approvalRef` is ASCII, e.g. `<ruling ref>:planning-estimate-not-a-quote`.
 - `spend_grant { workspaceId, productCode, priceVersion, validFrom, validUntil, perChargeLimitFen, dailyLimitFen, monthlyLimitFen }`:
   approval runs the S3-a service steps create (disabled) -> `set_limits` -> `activate` under the `platform_checker` authority (the active
   checker grant is re-checked inside `price-grants.ts`; customer OWNER/BILLING_ADMIN paths are unchanged), each audited in the workspace.

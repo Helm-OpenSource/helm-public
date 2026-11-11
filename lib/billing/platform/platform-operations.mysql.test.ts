@@ -148,6 +148,11 @@ describe.skipIf(!url)("platform billing operations against MySQL", () => {
     await review(mode(ws, "enforce", "shadow"));
     expect((await payerOf(ws)).billingMode).toBe("shadow");
     expect(await a.auditLog.count({ where: { workspaceId: ws, actionType: "BILLING_PAYER_MODE_CHANGED" } })).toBe(2);
+    // Under the same ruling: back to enforce, then a second identical rollback must not replay as success.
+    await draft(mode(ws, "shadow", "enforce"), maker, { confirmEnforce: true });
+    await review(mode(ws, "shadow", "enforce"), checker, { confirmEnforce: true });
+    await expect(draft(mode(ws, "enforce", "shadow"))).rejects.toThrow("platform_operation_stale_replay");
+    expect((await payerOf(ws)).billingMode).toBe("enforce");
   });
 
   it("applies the mode change as a CAS on the expected old mode at approval time", async () => {
@@ -268,7 +273,7 @@ describe.skipIf(!url)("platform billing operations against MySQL", () => {
     const args = (extra: Partial<PlatformBatchArgs>): PlatformBatchArgs => ({ command: "draft", listFile: "-", actorUserId: maker,
       apply: true, listSha: list.sha256, decision: null, reviewEvidenceRef: null, confirmEnforce: false, ...extra });
     const dry = await runPlatformBatch(a, args({ apply: false, listSha: null }), list);
-    expect(dry.plan?.[0]).toMatchObject({ priceNotice: "owner 11-12 裁定，六家实扣，规划试算价，不对外报价", operationState: null });
+    expect(dry.plan?.[0]).toMatchObject({ priceNotice: "规划试算价，不作为报价", operationState: null });
     expect(dry.plan?.[1]).toMatchObject({ limitUnits: null }); // price 3 not yet published
     expect((await runPlatformBatch(a, args({}), list)).ok).toBe(true);
     const reviewArgs = args({ command: "review", actorUserId: checker, decision: "approve", reviewEvidenceRef: "review:synthetic" });

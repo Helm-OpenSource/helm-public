@@ -25,15 +25,14 @@ export type PlatformOperationRequest =
       approvalRef: string; priceLabel: PriceLabel }
   | { kind: "spend_grant"; workspaceId: string; productCode: string; priceVersion: number; validFrom: string; validUntil: string;
       perChargeLimitFen: string; dailyLimitFen: string; monthlyLimitFen: string };
-/** Closed set. The owner's 11-12 price (0.35 元/分钟) is the live price for the six institutions and a planning estimate. */
+/** Closed set; the owner-chosen price (财模规划价) is a planning estimate. The ruling itself goes in the list's `approvalRef`. */
 export type PriceLabel = "planning_estimate_not_a_quote";
-export const PRICE_LABEL_TEXT: Record<PriceLabel, string> = {
-  planning_estimate_not_a_quote: "owner 11-12 裁定，六家实扣，规划试算价，不对外报价" };
+export const PRICE_LABEL_TEXT: Record<PriceLabel, string> = { planning_estimate_not_a_quote: "规划试算价，不作为报价" };
 export type PlatformOperationRefusalCode = "platform_operation_input_invalid" | "platform_operation_forbidden" |
   "platform_operation_self_review_forbidden" | "platform_operation_conflict" | "platform_operation_unavailable" |
   "platform_operation_not_pending" | "platform_enforce_not_confirmed" | "platform_write_conflict" | "billing_mode_conflict" |
   "workspace_unavailable" | "payer_scope_already_bound" | "payer_unresolved" | "enforce_grant_not_ready" | "enforce_headroom_insufficient" |
-  "price_zero_refused" | "price_version_unavailable" | "grant_active_exists";
+  "price_zero_refused" | "price_version_unavailable" | "grant_active_exists" | "platform_operation_stale_replay";
 
 export class PlatformOperationRefusal extends Error {
   constructor(readonly code: PlatformOperationRefusalCode) { super(code); this.name = "PlatformOperationRefusal"; }
@@ -160,6 +159,9 @@ export async function draftPlatformOperation(client: PrismaClient, input: DraftP
     const existing = await lockOperation(tx, op.operationKey);
     if (existing) {
       if (existing.contentHash !== op.contentHash) refuse("platform_operation_conflict");
+      // A mode step already taken under this ruling must not report success once the mode has moved on (e.g. a second rollback).
+      if (op.request.kind === "billing_mode" && existing.state === "applied" &&
+          (await activeBinding(tx, op.request.workspaceId))?.billingMode !== op.request.toMode) refuse("platform_operation_stale_replay");
       return { operation: existing, replayed: true };
     }
     const { request } = op;
