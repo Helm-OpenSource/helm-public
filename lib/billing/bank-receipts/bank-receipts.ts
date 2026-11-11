@@ -50,7 +50,7 @@ export function bankTxnKey(bankTxnRef: string) {
 
 const RECEIVING_ACCOUNT = /^[a-z0-9][a-z0-9._:-]{0,63}$/;
 /**
- * Server-side receiving-account registry: `HELM_BILLING_BANK_RECEIVING_ACCOUNTS`, a non-secret JSON array of opaque, lowercase
+ * Server-side receiving-account registry: `HELM_BILLING_BANK_RECEIVING_ACCOUNTS`, a plain (not confidential) JSON array of opaque, lowercase
  * references to our own receiving accounts (never the account number). Absent, malformed, or two entries that differ only in
  * separators: nothing is registered and every draft refuses (fail closed). A draft must name one entry exactly.
  */
@@ -63,11 +63,10 @@ export function registeredReceivingAccounts(env: Readonly<Record<string, string 
 }
 
 /** Pure validation of a draft; returns the row data. `valueDate` is a real calendar date `YYYY-MM-DD`. */
-export function normalizeBankReceiptDraft(input: BankReceiptDraftInput, env: Readonly<Record<string, string | undefined>> = process.env) {
+export function normalizeBankReceiptDraft(input: BankReceiptDraftInput) {
   if (!input || typeof input !== "object") refuse("bank_receipt_input_invalid");
   reference(input.actorUserId, "bank_receipt_forbidden");
   for (const value of [input.payerAccountId, input.receivingAccountRef, input.bankTxnRef, input.evidenceRef]) reference(value);
-  if (!registeredReceivingAccounts(env).has(input.receivingAccountRef)) refuse("bank_receipt_account_unregistered");
   if (input.payerNameDigest != null && (typeof input.payerNameDigest !== "string" || !NAME_DIGEST.test(input.payerNameDigest))) {
     refuse("bank_receipt_input_invalid");
   }
@@ -159,9 +158,11 @@ function assertPayerReceives(payer: PayerRow | undefined) {
 
 export async function draftBankReceipt(client: PrismaClient, input: BankReceiptDraftInput,
   env: Readonly<Record<string, string | undefined>> = process.env) {
-  const data = normalizeBankReceiptDraft(input, env);
+  const data = normalizeBankReceiptDraft(input);
   return transaction(client, async tx => {
     const workspaceId = await lockFinanceActor(tx, data.draftedByUserId, "maker");
+    // After the maker check, so a non-maker cannot probe which receiving accounts are registered.
+    if (!registeredReceivingAccounts(env).has(data.receivingAccountRef)) refuse("bank_receipt_account_unregistered");
     assertPayerReceives(await lockPayer(tx, data.payerAccountId));
     const receipt = await tx.bankReceipt.create({ data }).catch((error: unknown) => {
       if (isUniqueViolation(error)) refuse("bank_receipt_duplicate"); throw error; });

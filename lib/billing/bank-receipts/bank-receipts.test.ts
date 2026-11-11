@@ -5,7 +5,7 @@ const draft = (extra: Partial<BankReceiptDraftInput> = {}): BankReceiptDraftInpu
   payerAccountId: "payer-1", receivingAccountRef: "recv:acct-1", bankTxnRef: "bank-txn-0001", amountFen: BigInt(100000),
   valueDate: "2026-11-09", evidenceRef: "bank-statement:2026-11-09/line-3", ...extra });
 const env = { HELM_BILLING_BANK_RECEIVING_ACCOUNTS: JSON.stringify(["recv:acct-1", "recv:acct-2"]) };
-const normalize = (input: BankReceiptDraftInput) => normalizeBankReceiptDraft(input, env);
+const normalize = normalizeBankReceiptDraft;
 
 describe("bank receipt draft normalization", () => {
   it("keeps bank facts byte-exact, sets the normalized live key and parses the value date as a calendar date", () => {
@@ -43,9 +43,7 @@ describe("bank receipt draft normalization", () => {
       JSON.stringify(["recv:acct-1", 7]), JSON.stringify([" recv:acct-1"])]) {
       expect(registeredReceivingAccounts({ HELM_BILLING_BANK_RECEIVING_ACCOUNTS: raw }).size).toBe(0);
     }
-    for (const receivingAccountRef of ["recv:acct-3", "RECV:ACCT-1", "recv:acct1"]) {
-      expect(() => normalize(draft({ receivingAccountRef }))).toThrow("bank_receipt_account_unregistered");
-    }
-    expect(() => normalizeBankReceiptDraft(draft(), {})).toThrow("bank_receipt_account_unregistered"); // nothing registered by default
+    for (const ref of ["recv:acct-3", "RECV:ACCT-1", "recv:acct1"]) expect(registeredReceivingAccounts(env).has(ref)).toBe(false);
+    expect(registeredReceivingAccounts({}).size).toBe(0); // nothing registered by default
   });
 });

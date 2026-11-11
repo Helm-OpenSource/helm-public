@@ -33,7 +33,7 @@ same Core transaction) or rejects it; plus a read-only wallet query. 对公到�
   `Txn-0001`, `TXN_0001`, `txn.0001` and `TXN0001` are one bank transaction. Statement serial numbers are expected to be letters and
   digits, with separators added by people or exports (an assumption, not verified per bank). Merging two references that truly differ only by separators or case
   can only refuse a draft (`bank_receipt_duplicate`; finance checks the statement), never post twice.
-- Receiving accounts come from the server, not the drafter: `HELM_BILLING_BANK_RECEIVING_ACCOUNTS`, a non-secret JSON array of
+- Receiving accounts come from the server, not the drafter: `HELM_BILLING_BANK_RECEIVING_ACCOUNTS`, a plain (not confidential) JSON array of
   opaque, lowercase references to our own receiving accounts (`[a-z0-9][a-z0-9._:-]{0,63}`, e.g. `recv:bank-a-main`; never the account
   number). A draft must name one entry exactly, else `bank_receipt_account_unregistered`. Absent, malformed, or two entries that differ
   only in separators register nothing, so every draft is refused (default). Different registered accounts may each take the same bank
@@ -48,7 +48,7 @@ same Core transaction) or rejects it; plus a read-only wallet query. 对公到�
 
 ## Service / 服务（`lib/billing/bank-receipts/bank-receipts.ts`）
 
-- `draftBankReceipt(client, input)`: maker; registered receiving account; payer must be `active`, `CNY`, `billingMode` `shadow` |
+- `draftBankReceipt(client, input)`: maker, then a registered receiving account (checked after the maker check, so non-makers cannot probe the list); payer must be `active`, `CNY`, `billingMode` `shadow` |
   `enforce`; a live receipt with the same receiving account and dedupe key refuses `bank_receipt_duplicate`. Audit `BILLING_BANK_RECEIPT_DRAFTED` in the reserved workspace.
 - `reviewBankReceipt(client, input)` / `reviewBankReceiptInTransaction(tx, input)`: checker, `expectedVersion`, `approve` | `reject`.
   Approve: CAS `drafted -> reviewed`, `postFundsTransactionInTransaction` (`bank_topup`, operation key `bank-receipt:<id>`), then

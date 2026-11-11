@@ -172,6 +172,8 @@ describe.skipIf(!url)("bank receipts and wallet against MySQL", () => {
     for (const receivingAccountRef of ["recv:synthetic-3", "RECV:SYNTHETIC-1", "recv:synthetic1", "recv.synthetic-1"]) {
       await expect(draft(p, { bankTxnRef: `${ref}-x`, receivingAccountRef })).rejects.toThrow("bank_receipt_account_unregistered");
     }
+    // The registry is only consulted for a maker: anyone else gets the same refusal for any account.
+    await expect(draft(p, { actorUserId: owner, receivingAccountRef: "recv:synthetic-3" })).rejects.toThrow("bank_receipt_forbidden");
     // Leading zeros are significant: these are different bank transactions.
     await expect(draft(p, { bankTxnRef: `0${ref}` })).resolves.toMatchObject({ state: "drafted" });
     // A rejected receipt frees the key for a correctly typed variant; posting then blocks every variant again.
