@@ -57,13 +57,15 @@ async function expectCode(promise: Promise<unknown>, code: SeatDeviceAuthError["
 }
 
 const device = { deviceLabel: "前台电脑", clientType: "seat_desktop" as const, clientVersion: "1.0.0" };
-// Code-entry lockouts persist per address bucket, so each run takes its own
-// /16 and a re-run on the same database starts unlocked.
-const runOctet = Math.floor(Math.random() * 256);
+// Code-entry lockouts persist per address bucket and the test clock repeats
+// on every run, so each run draws its own /24s (two random octets): with one
+// random octet a database reused for many runs kept meeting an earlier run's
+// lock at the same instant.
+const runOctets = [Math.floor(Math.random() * 256), Math.floor(Math.random() * 256)];
 let sourceCounter = 0;
 function freshSource() {
   sourceCounter += 1;
-  return `10.${runOctet}.${sourceCounter}.10`;
+  return `10.${runOctets[0]}.${(runOctets[1] + sourceCounter) % 256}.10`;
 }
 
 describeMysql("seat device authorization (request, decide, cancel) on MySQL", () => {
