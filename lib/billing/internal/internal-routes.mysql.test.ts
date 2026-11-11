@@ -379,7 +379,7 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
     for (const [name, terminator] of [["nl", "\n"], ["cr", "\r"], ["crlf", "\r\n"], ["ls", "\u2028"], ["nel", "\u0085"]]) {
       await expect(grant(`term-${name}`, ["reserve"], { issuerRef: `issuer-t${terminator}` })).rejects.toThrow(/BillingServiceGrant_issuer/);
     }
-    expect(await a.billingServiceGrant.count({ where: { id: { startsWith: "term-" } } })).toBe(0);
+    expect(await a.billingServiceGrant.count({ where: { id: { startsWith: "term-", endsWith: `-${run}` } } })).toBe(0);
     await grant("term-ok", ["reserve"], { issuerRef: "issuer-t.1_x-y" }); // the allowed set is unchanged
     // CREATE PROCEDURE cannot run over the prepared-statement protocol: evaluate the grant-table rollback's first guard as written.
     const sql = readFileSync(join(process.cwd(), "prisma/rollback/20261110_rollback_billing_service_grants.sql"), "utf8");
