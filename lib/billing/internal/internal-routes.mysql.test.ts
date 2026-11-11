@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { postFundsTransactionInTransaction } from "../funds/funds-journal";
 import { changeSpendGrant, createSpendGrant, publishPriceVersion } from "../grants/price-grants";
 import { bindScope, createPayerAccount } from "../payer/payer-accounts";
-import { markUnknown, release, resolveUnknown, settle } from "../reservations/reservations";
+import { markUnknown, release, reserve, resolveUnknown, settle } from "../reservations/reservations";
 import { billingServiceGrantHash, billingServiceKeyFingerprint, signBillingInternalRequest } from "./service-auth";
 import { POST as markUnknownRoute } from "@/app/api/internal/billing/v1/mark-unknown/route";
 import { POST as quoteRoute } from "@/app/api/internal/billing/v1/quote/route";
@@ -355,6 +355,35 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
     expect(await resolveUnknown(a, as("recon", `recon-${run}`), { ...step("rot2", second), outcome: "released" }))
       .toEqual({ ok: true, state: "released" }); // reconciliation resolves across issuers
     await expect(grant("badissuer", ["reserve"], { issuerRef: "Issuer/A" })).rejects.toThrow(/BillingServiceGrant_issuer/);
+  });
+
+  it("isolates issuers that share a prefix, refuses malformed billing-service actors and settles unknowns across issuers", async () => {
+    const service = await grant("pfx", ["reserve"], { issuerRef: "issuer-p" });
+    const ids = await payer("enforce", 1000);
+    const as = (ref: string) => ({ type: "SYSTEM" as const, ref });
+    const step = (key: string, reservationId: string) => ({ idempotencyKey: `idem:${key}:${run}`, reservationId,
+      operationRef: `op:${key}:${run}`, evidenceRef: `evidence:${key}` });
+    const absent = { ok: false, code: "reservation_state_conflict" }, invalid = { ok: false, code: "request_invalid" };
+    const made = await call("reserve", reserveBody(ids, "pfx"), { grantId: service });
+    const id = made.body.reservationId as string;
+    for (const issuer of ["issuer", "issuer-pp", "issuer-p.b", "issuer-p-"]) { // neither a prefix nor an extension owns it
+      expect(await settle(a, as(`billing-service:${issuer}/${service}`), { ...step("pfx", id), quantityUsed: "1" })).toEqual(absent);
+    }
+    for (const ref of ["billing-service:issuer-p", `billing-service:issuer-p/${service}/x`, `billing-service:Issuer-p/${service}`,
+      "billing-service:issuer-p/", `billing-service:/${service}`, `billing-service:issuer-p/${service.toUpperCase()}`]) {
+      expect(await release(a, as(ref), { ...step("pfx", id), reasonCode: "failed" })).toEqual(invalid);
+      expect(await reserve(a, as(ref), reserveBody(ids, "pfx-bad"))).toEqual(invalid);
+    }
+    expect(await reservations(ids.payerRef)).toBe(1);
+    expect(await markUnknown(a, as(`billing-service:issuer-p/${service}`), step("pfx", id))).toEqual({ ok: true, state: "unknown" });
+    const recon = as(`billing-service:recon-other/recon-${run}`); // a reconciliation identity of another issuer
+    expect(await resolveUnknown(a, recon, { ...step("pfx", id), outcome: "settled", quantityUsed: "1" }))
+      .toMatchObject({ ok: true, state: "settled", chargeFen: "100" });
+    expect(await resolveUnknown(a, recon, { ...step("pfx", id), outcome: "settled", quantityUsed: "1" }))
+      .toMatchObject({ ok: true, state: "settled", chargeFen: "100" }); // same key replays, no second charge
+    expect(await a.billingCharge.count({ where: { payerAccountId: ids.payerRef } })).toBe(1);
+    expect(await a.billingReservation.findUniqueOrThrow({ where: { id } }))
+      .toMatchObject({ state: "settled", createdBy: `SYSTEM:billing-service:issuer-p/${service}`, resolvedBy: `SYSTEM:${recon.ref}` });
   });
 
   it("answers a lost connection or transaction timeout with core_unavailable and other driver failures with internal_error", async () => {
