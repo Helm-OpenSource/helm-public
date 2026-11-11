@@ -15,7 +15,7 @@ import { MembershipStatus, WorkspaceRole } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { db } from "@/lib/db";
-import { hashSeatDeviceToken, normalizeSeatDevicePairingCode } from "@/lib/seat-device/contract";
+import { hashSeatDeviceToken, mintSeatDeviceToken, normalizeSeatDevicePairingCode } from "@/lib/seat-device/contract";
 import {
   SeatDeviceAuthDisabledError,
   SeatDeviceAuthError,
@@ -148,7 +148,7 @@ describeMysql("seat device credentials (classify, pin, revoke) on MySQL", () => 
     await expect(classifySeatDeviceAccessToken(`hsda_${"A".repeat(43)}`, at(now, 10))).resolves.toEqual({ ok: false, code: "token_invalid" });
     await expect(classifySeatDeviceAccessToken(live.refreshToken, at(now, 10))).resolves.toEqual({ ok: false, code: "token_invalid" });
     // The previous slot is usable until its own (overlap) expiry.
-    const previous = `hsda_${"B".repeat(43)}`;
+    const previous = mintSeatDeviceToken("access").token;
     await db.seatDeviceAuthorization.update({
       where: { id: live.deviceId },
       data: { previousAccessTokenHash: hashSeatDeviceToken(previous), previousAccessExpiresAt: at(now, 60) },
@@ -181,7 +181,7 @@ describeMysql("seat device credentials (classify, pin, revoke) on MySQL", () => 
   it("fails both access tokens of a revoked device by its status", async () => {
     const now = nextClock();
     const live = await device(now);
-    const previous = `hsda_${"C".repeat(43)}`;
+    const previous = mintSeatDeviceToken("access").token;
     await db.seatDeviceAuthorization.update({
       where: { id: live.deviceId },
       data: { previousAccessTokenHash: hashSeatDeviceToken(previous), previousAccessExpiresAt: at(now, 60) },
@@ -227,7 +227,7 @@ describeMysql("seat device credentials (classify, pin, revoke) on MySQL", () => 
     expect(JSON.parse(audit.payload ?? "{}")).toMatchObject({ refreshTokenMatched: "retired" });
 
     const second = await device(now);
-    const previous = `hsdr_${"P".repeat(43)}`;
+    const previous = mintSeatDeviceToken("refresh").token;
     await db.seatDeviceAuthorization.update({ where: { id: second.deviceId }, data: { previousRefreshTokenHash: hashSeatDeviceToken(previous) } });
     await revokeSeatDeviceWithRefreshToken({ refreshToken: previous, reason: "device_logout", now: at(now, 30) });
     expect(await row(second.deviceId)).toMatchObject({ status: "revoked" });
