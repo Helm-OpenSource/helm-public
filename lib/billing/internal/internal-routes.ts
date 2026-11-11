@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { isDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
 import { type BillingRejectCode, markUnknown, quote, release, reserve, resolveUnknown, type ServiceActor, settle }
   from "../reservations/reservations";
+import { balanceStatus, BALANCE_STATUS_MAX_WORKSPACES } from "../balance/balance-status";
 import { authenticateBillingService, type BillingServiceScope, ServiceAuthRefused } from "./service-auth";
 
 /**
@@ -35,6 +36,7 @@ const OPERATIONS = {
   "mark-unknown": operation(z.object(resolution).strict(), markUnknown),
   "resolve-unknown": operation(z.object({ ...resolution, outcome: z.enum(["settled", "released"]), quantityUsed: text.optional() })
     .strict(), resolveUnknown),
+  "balance-status": operation(z.object({ workspaceIds: z.array(text).min(1).max(BALANCE_STATUS_MAX_WORKSPACES) }).strict(), balanceStatus),
 } satisfies Record<BillingServiceScope, unknown>;
 export type BillingInternalOperation = keyof typeof OPERATIONS;
 

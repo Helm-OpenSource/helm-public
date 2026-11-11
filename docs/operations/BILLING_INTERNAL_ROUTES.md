@@ -16,7 +16,7 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
   `true` answers `404 { error: "NOT_FOUND" }` before reading the body or any grant; callers treat any non-protocol response as
   `core_unavailable` (fail closed, do not execute).
 - **BillingServiceGrant** (LLMSpendIssuerGrant pattern, protocol v3.7): `id`, `issuerRef`, canonical sorted `scopesJson`
-  (`quote`, `reserve`, `settle`, `release`, `mark-unknown`; `resolve-unknown` is the reconciliation channel and only ever
+  (`quote`, `reserve`, `settle`, `release`, `mark-unknown`, `balance-status`; `resolve-unknown` is the reconciliation channel and only ever
   alone, DB CHECK), the caller's Ed25519 `publicKeyPem` + `keyFingerprint` (sha256 of SPKI DER, unique), `approvalRef`,
   `createdBy`, `contentHash` (`billingServiceGrantHash`), `validFrom/validUntil`, one-way `revokedAt/revokedBy`. Immutable and
   undeletable (triggers); none exists by default and there is no issuance API: rows come from a reviewed operator change.
@@ -56,16 +56,31 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
   releases or changes the key. A `reserve` answered `core_unavailable` or `internal_error` must be retried with the same key
   before the work is abandoned (the reservation may exist; the retry replays it or refuses).
 - **Operations** (path = scope): `quote` (`subjectScope` `{ kind: "workspace", workspaceId }`; vault is `request_invalid` until
-  S3-f), `reserve`, `settle`, `release` (`not_executed|failed|partial_unusable`), `mark-unknown`, and `resolve-unknown`
-  (`outcome: settled` with `quantityUsed`, or `released`) for reconciliation grants only. Library semantics:
+  S3-f), `reserve`, `settle`, `release` (`not_executed|failed|partial_unusable`), `mark-unknown`, `balance-status` (below), and
+  `resolve-unknown` (`outcome: settled` with `quantityUsed`, or `released`) for reconciliation grants only. Library semantics:
   [BILLING_RESERVATIONS.md](BILLING_RESERVATIONS.md); the authenticated grant is the actor
   (`SYSTEM:billing-service:<issuerRef>/<grantId>` in `createdBy`/`resolvedBy`).
+- **balance-status** (C-BAL, protocol v3.10; scope `balance-status`, read-only, `lib/billing/balance/balance-status.ts`): request
+  `{ workspaceIds: [...] }`, 1-50 distinct ids (empty, more than 50, duplicates, bad formats or extra fields are
+  `request_invalid`). Answer `{ ok: true, results: [...] }` in request order; per workspace either `{ workspaceId, ok: true,
+  billingMode, balanceFen, headroomFen, overdraftUsedFen, arrears, asOf }` or, with no active binding, `{ workspaceId, ok: false,
+  code: "billing_mode_off" }` (not billed). Signed integer fen strings: `balanceFen = wallet - creditUsed - overdraftUsed` (may
+  be negative; creditUsed is the `credit_receivable` projection, so a closed facility's draws still count); `headroomFen = wallet +
+  creditRemaining - held` is the reserve admission formula (remaining credit of the drawable, in-term facility, 0 for a payer
+  that is not active; held = enforce `held`/`unknown` reservations); `arrears = headroomFen <= 0` (owner 11-12 Q8).
+  `overdraftUsedFen` is always `"0"` until the overdraft slice adds its account. A bound payer is answered in every mode,
+  `off` included; callers apply the arrears gate only to `billingMode: "enforce"`. One lock-free statement per batch: a
+  consistent read that never waits on, or delays, a reserve or settle. Writes only the auth nonce. The wallet read
+  (`/api/billing/v1/wallet`) carries the same `balanceFen`, `headroomFen` and `arrears` next to `availableFen` (unchanged:
+  wallet projection only).
 - **reserve** `expectedMode` (v3.4, optional `shadow|enforce`): a payer in the other mode is `mode_mismatch` before any bucket
   or reservation row; a replay of the key is also checked against it (not part of the content hash).
 - **Verify / rollback**: `npm run test:billing:mysql` (`internal-routes.mysql.test.ts`: gate, signature/expiry/replay/scope/
   revocation/pin/validity/content hash/scope canonicality/public key, bounded and exact body bytes, shape and refusal
   mapping, expectedMode, issuer isolation and rotation, connection-error mapping, every operation, separate reconciliation
-  grant, invariant alert, trailing-terminator issuerRef). Roll back: unset the gate, then
+  grant, invariant alert, trailing-terminator issuerRef) and `balance-status.mysql.test.ts` (wallet 0 + 1M yuan credit through
+  holds, unknown, full/partial settles and releases; reserve boundary at headroom 0; closed, lapsed and non-active credit;
+  every mode, unbound, order; batch shape; gate, scope, signature; consistent lock-free read under concurrent settles). Roll back: unset the gate, then
   `prisma/rollback/20261111_rollback_billing_service_grant_issuer_check.sql` (restores the original CHECK), then
   `prisma/rollback/20261110_rollback_billing_service_grants.sql` (refuses while any grant or nonce row exists or a later billing
   migration is applied). Run them before the

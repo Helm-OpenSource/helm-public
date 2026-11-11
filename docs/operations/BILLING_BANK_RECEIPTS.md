@@ -44,7 +44,8 @@ same Core transaction) or rejects it; plus a read-only wallet query. 对公到�
 
 - `getWalletInTransaction(tx, { workspaceId, actorUserId, cursor?, limit? })` (`lib/billing/wallet/wallet.ts`): reader must be an ACTIVE,
   unscoped OWNER / BILLING_ADMIN of the workspace (no finance-viewer role exists yet); the payer is resolved server-side from the active
-  binding. Returns `availableFen` from the projection and transactions newest first as `{ id, kind, walletDeltaFen, reversalOfId,
+  binding. Returns `availableFen` from the projection, `balanceFen`/`headroomFen`/`arrears` (C-BAL, see
+  [BILLING_INTERNAL_ROUTES.md](BILLING_INTERNAL_ROUTES.md) balance-status) and transactions newest first as `{ id, kind, walletDeltaFen, reversalOfId,
   createdAt }`; no evidence, operation key or business data. Keyset cursor = a transaction id of the same payer; `limit` 1-100.
 - `GET /api/billing/v1/wallet?limit=&cursor=`: workspace session; 401, 403 `wallet_forbidden`, 400 `wallet_query_invalid`, 404 `payer_unresolved`.
 
