@@ -365,12 +365,3 @@ export function parseSeatDeviceRevokeRequest(
   }
   return { ok: true, value: { refreshToken, reason: reason as SeatDeviceClientRevokeReason } };
 }
-
-// Audit details of a revoke: never a token or hash. tokenUsedAfterClaim tells
-// whether the device used its credential after claiming it (for example a
-// client_cancelled revoke of a late approval that was never used).
-export type SeatDeviceRevokeAuditDetails = {
-  deviceId: string;
-  reason: SeatDeviceRevokeReason;
-  tokenUsedAfterClaim: boolean;
-};
