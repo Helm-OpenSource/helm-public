@@ -96,6 +96,28 @@ describe.skipIf(!url)("BillingServiceGrant issuance CLI against MySQL", () => {
     await expect(issueBillingServiceGrant(a, changed.row)).rejects.toMatchObject({ code: "grant_conflict" });
   });
 
+  it("a concurrent identical issuance that loses the unique-key race replays instead of failing", async () => {
+    const racing = buildBillingServiceGrant({ grantId: `e1c-race-${run}`, issuerRef: "synthetic-e1c", scopes: ["quote"],
+      publicKeyText: generateKeyPairSync("ed25519").publicKey.export({ type: "spki", format: "pem" }).toString(),
+      approvalRef: "approval:synthetic", createdBy: "operator:synthetic", validFrom: "2026-11-12T00:00:00.000Z",
+      validUntil: "2027-11-12T00:00:00.000Z" }).row;
+    const holder = new PrismaClient({ datasources: { db: { url } } });
+    try {
+      let loser: Promise<unknown> | undefined;
+      // The holder inserts first and stays uncommitted: the loser's pre-check sees no row, its INSERT waits on the unique key
+      // and fails with 1062 once the holder commits, which is the path this test pins.
+      await holder.$transaction(async tx => {
+        await tx.$executeRaw`INSERT INTO BillingServiceGrant (id, issuerRef, scopesJson, publicKeyPem, keyFingerprint, approvalRef,
+          createdBy, contentHash, validFrom, validUntil) VALUES (${racing.id}, ${racing.issuerRef}, ${racing.scopesJson},
+          ${racing.publicKeyPem}, ${racing.keyFingerprint}, ${racing.approvalRef}, ${racing.createdBy}, ${racing.contentHash},
+          ${racing.validFrom}, ${racing.validUntil})`;
+        loser = issueBillingServiceGrant(a, racing);
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      }, { timeout: 10_000 });
+      await expect(loser).resolves.toEqual({ alreadyIssued: true, revoked: false });
+    } finally { await holder.$disconnect(); }
+  });
+
   it("revocation is one-way with database time and the pinned grant is then refused", async () => {
     const revoke = ["revoke", `--grant-id=${grantId}`, "--revoked-by=operator:synthetic"];
     expect(cli(revoke)).toMatchObject({ applied: false, alreadyRevoked: false, revokedAt: null });

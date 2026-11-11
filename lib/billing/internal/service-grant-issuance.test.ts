@@ -1,4 +1,8 @@
+import { spawnSync } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { billingServiceGrantHash, billingServiceKeyFingerprint } from "./service-auth";
 import { buildBillingServiceGrant, type GrantIssueInput, parseBillingServiceGrantArgs } from "./service-grant-issuance";
@@ -29,7 +33,8 @@ describe("buildBillingServiceGrant", () => {
   it("refuses private keys, other key types and multi-block files before deriving anything", () => {
     const rsa = generateKeyPairSync("rsa", { modulusLength: 2048 }).publicKey.export({ type: "spki", format: "pem" }).toString();
     for (const text of [privatePem, publicPem + privatePem, `${publicPem}-----END PRIVATE KEY-----\n`, privatePem + publicPem, rsa, publicPem + publicPem, "", "not a key",
-      publicPem.replace("BEGIN PUBLIC KEY", "BEGIN PUBLIC KEYS")]) {
+      publicPem.replace("BEGIN PUBLIC KEY", "BEGIN PUBLIC KEYS"), `${publicPem}trailing text\n`, `note\n${publicPem}`,
+      `${publicPem}-----BEGIN\tPUBLIC KEY-----\n`, publicPem.replace("\n", "\n\n")]) {
       expect(code(() => buildBillingServiceGrant(input({ publicKeyText: text })))).toBe("public_key_invalid");
     }
   });
@@ -62,4 +67,22 @@ describe("parseBillingServiceGrantArgs", () => {
       expect(code(() => parseBillingServiceGrantArgs(argv))).toBe("usage");
     }
   });
+});
+
+describe("billing:service-grant CLI issue dry run", () => {
+  it("opens no database: it succeeds with the database unreachable and prints the pin", () => {
+    const dir = mkdtempSync(join(tmpdir(), "e1c-dry-")), keyFile = join(dir, "public.pem");
+    try {
+      writeFileSync(keyFile, publicPem);
+      const run = spawnSync(process.execPath, ["--import", "tsx", "--import", "./scripts/node-hooks/allow-server-only.mjs",
+        "scripts/billing-service-grant.ts", "issue", "--grant-id=synthetic-grant-1", "--issuer=synthetic-issuer",
+        "--scopes=quote,reserve", `--public-key-file=${keyFile}`, "--approval-ref=approval:synthetic",
+        "--created-by=operator:synthetic", "--valid-from=2026-11-12T00:00:00.000Z", "--valid-until=2027-11-12T00:00:00.000Z"],
+      { encoding: "utf8", timeout: 60_000, env: { ...process.env, DATABASE_URL: `mysql://nobody@localhost/none?socket=${join(dir, "absent.sock")}` } });
+      expect(run.status, run.stderr).toBe(0);
+      const out = JSON.parse(run.stdout);
+      expect(out).toMatchObject({ operation: "issue", applied: false });
+      expect(out.pin).toEqual(buildBillingServiceGrant(input({ scopes: ["quote", "reserve"] })).pin);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  }, 60_000);
 });

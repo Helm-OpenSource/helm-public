@@ -11,7 +11,8 @@ import {
  * Billing V1 E1c: operator issuance and one-way revocation of BillingServiceGrant rows (docs/operations/
  * BILLING_INTERNAL_ROUTES.md "Issuance, rotation and revocation"). The row and its pin come from the same hash the request
  * verifier uses (`billingServiceGrantHash`), so a dry run prints exactly the pin the applied row will need. Only a public key
- * is ever read; a file that is not a single Ed25519 public PEM is refused before parsing. No route or server action may
+ * is ever read; a file naming a private key is refused before parsing, and one that is not exactly one canonical Ed25519
+ * public PEM block (CRLF and surrounding whitespace aside) is refused after. No route or server action may
  * import this module.
  */
 export type GrantOperatorRefusal = "usage" | "input_invalid" | "public_key_invalid" | "grant_conflict" | "grant_unknown" |
@@ -43,6 +44,10 @@ function ed25519PublicKey(text: string): KeyObject {
   let key: KeyObject;
   try { key = createPublicKey(text.trim()); } catch { return refuse("public_key_invalid"); }
   if (key.type !== "public" || key.asymmetricKeyType !== "ed25519") refuse("public_key_invalid");
+  // The file must be exactly this one canonical block (CRLF and surrounding whitespace aside): nothing else rides along.
+  if (text.replaceAll("\r\n", "\n").trim() !== key.export({ type: "spki", format: "pem" }).toString().trim()) {
+    refuse("public_key_invalid");
+  }
   return key;
 }
 

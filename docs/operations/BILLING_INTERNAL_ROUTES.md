@@ -78,8 +78,9 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
 ## Issuance, rotation and revocation / 签发、轮换与吊销
 
 `npm run billing:service-grant` (`scripts/billing-service-grant.ts`, `lib/billing/internal/service-grant-issuance.ts`) is the
-only writer. **Dry run by default**; `--apply` writes. It reads only the caller's Ed25519 public key file (at most 4 KiB, a single
-`-----BEGIN PUBLIC KEY-----` block; any file containing a private PEM is refused before parsing). The private key is generated
+only writer. **Dry run by default**; `--apply` writes. It reads only the caller's Ed25519 public key file (at most 4 KiB; any file
+naming a private key is refused before parsing, and the file must be exactly one canonical `-----BEGIN PUBLIC KEY-----`
+block, CRLF and surrounding whitespace aside, with nothing before or after it). The private key is generated
 and kept on the caller host and never passed to this command. Output is one JSON line; refusals print a fixed code only.
 
 1. **Issue (dry run)**: `npm run billing:service-grant -- issue --grant-id=<id> --issuer=<issuerRef> --scopes=quote,release,reserve,settle
@@ -93,7 +94,11 @@ and kept on the caller host and never passed to this command. Output is one JSON
    C-BAL) is final**; a later scope change means a new grant via rotation.
 2. **Review**: a second operator checks the dry-run output against the approval (`approvalRef`), issuer, scopes, validity and
    the public key fingerprint the caller reports.
-3. **Apply**: rerun with `--apply`. The row is inserted and re-read in one transaction; a readback whose hash differs rolls
+3. **Apply**: set `DATABASE_URL` explicitly for the target Core database (when it is unset the CLI falls back to `.env.local`
+   / `.env` in the working directory) and use an operator database identity that may INSERT and UPDATE `BillingServiceGrant`
+   (no other table is written). Before `--apply`, confirm the target database (host, schema, migration
+   `20261111100000_billing_service_grant_issuer_check` applied) and that it is the deployment whose pins you will change.
+   `revoke` reads the database even in its dry run, so the same applies to it. Then rerun with `--apply`. The row is inserted and re-read in one transaction; a readback whose hash differs rolls
    back (`readback_mismatch`). Rerunning the same issuance replays (`alreadyIssued: true`); a different row under the same id,
    or the same public key under another id, is `grant_conflict` (a key is never reused: rotation always uses a new key).
 4. **Pin**: merge the printed `pin` entry into `HELM_BILLING_SERVICE_GRANT_PINS`, keeping existing entries (the value is
@@ -112,4 +117,7 @@ the replacement grant of the same issuer keeps settling and releasing the old gr
 
 Verification: `npm run test:billing:mysql` includes `service-grant-issuance.mysql.test.ts` (CLI dry run writes nothing; the
 applied row authenticates with the dry-run pin; a pin differing in one character is `grant_untrusted`; replay and key
-conflict; revocation then `grant_inactive`). Rollback: the CLI adds no schema; issued rows stay as history (revoke them).
+conflict; an identical issuance that loses the unique-key race replays; revocation then `grant_inactive`), and the unit test
+runs the CLI issue dry run with the database unreachable. Rollback: the CLI adds no schema; issued rows stay as history
+(revoke them). Reverting the verifier change makes any grant that declares `balance-status` trust no scope at all (the
+earlier verifier refused unknown scopes), so revert only while no such grant is pinned, or rotate those grants first.
