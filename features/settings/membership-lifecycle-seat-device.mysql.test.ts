@@ -36,6 +36,7 @@ const describeMysql = integrationDatabaseUrl ? describe.sequential : describe.sk
 const suffix = `${process.pid.toString(36)}-${Date.now().toString(36)}`;
 
 describeMysql("membership lifecycle revokes seat desktop devices on MySQL", () => {
+  const previousEnv = process.env.HELM_SEAT_DEVICE_AUTH_ENABLED;
   let workspaceId = "";
   let count = 0;
 
@@ -73,6 +74,7 @@ describeMysql("membership lifecycle revokes seat desktop devices on MySQL", () =
     if (process.env.DATABASE_URL !== integrationDatabaseUrl) {
       throw new Error("DATABASE_URL must equal SEAT_DEVICE_DATABASE_URL for the isolated integration test.");
     }
+    process.env.HELM_SEAT_DEVICE_AUTH_ENABLED = "true";
     const workspace = await db.workspace.create({ data: { name: `成员状态 ${suffix}`, slug: `seat-lifecycle-${suffix}` } });
     workspaceId = workspace.id;
     const owner = await member(WorkspaceRole.OWNER);
@@ -82,6 +84,8 @@ describeMysql("membership lifecycle revokes seat desktop devices on MySQL", () =
   });
 
   afterAll(async () => {
+    if (previousEnv === undefined) delete process.env.HELM_SEAT_DEVICE_AUTH_ENABLED;
+    else process.env.HELM_SEAT_DEVICE_AUTH_ENABLED = previousEnv;
     await db.$disconnect();
   });
 
@@ -107,6 +111,24 @@ describeMysql("membership lifecycle revokes seat desktop devices on MySQL", () =
       updateOrganizationMembershipLifecycleAction({ membershipId: leaving.membershipId, nextStatus: MembershipStatus.ACTIVE }),
     ).resolves.toMatchObject({ ok: true });
     expect((await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: devices[0] } })).status).toBe("revoked");
+  });
+
+  // Switch off (the default): the in-service action never touches the device
+  // table, so a deployment whose web identity cannot read it yet still
+  // deactivates members.
+  it("deactivates without touching devices while the deployment switch is off", async () => {
+    const leaving = await member();
+    const device = await activeDevice(leaving);
+    process.env.HELM_SEAT_DEVICE_AUTH_ENABLED = "false";
+    try {
+      await expect(
+        updateOrganizationMembershipLifecycleAction({ membershipId: leaving.membershipId, nextStatus: MembershipStatus.INACTIVE }),
+      ).resolves.toMatchObject({ ok: true });
+    } finally {
+      process.env.HELM_SEAT_DEVICE_AUTH_ENABLED = "true";
+    }
+    expect((await db.membership.findUniqueOrThrow({ where: { id: leaving.membershipId } })).status).toBe(MembershipStatus.INACTIVE);
+    expect((await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: device } })).status).toBe("active");
   });
 
   it("leaves the devices alone when the update does not take the member out of ACTIVE", async () => {
