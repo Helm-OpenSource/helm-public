@@ -3,6 +3,7 @@ import { isWorkspacePagePathname } from "@/lib/auth/workspace-route-guard";
 export const WORKSPACE_REQUEST_PATH_HEADER = "x-helm-workspace-path";
 
 const LOCAL_ORIGIN = "https://login-callback.invalid";
+const MAX_CALLBACK_LENGTH = 2048;
 
 function isCallbackPathname(pathname: string): boolean {
   return !pathname.startsWith("//") &&
@@ -11,7 +12,7 @@ function isCallbackPathname(pathname: string): boolean {
 }
 
 export function normalizeLoginCallback(value: unknown): string | undefined {
-  if (typeof value !== "string" || value.length > 2048 || !value.startsWith("/")) return;
+  if (typeof value !== "string" || value.length > MAX_CALLBACK_LENGTH || !value.startsWith("/")) return;
 
   try {
     const url = new URL(value, LOCAL_ORIGIN);
@@ -33,7 +34,8 @@ export function normalizeLoginCallback(value: unknown): string | undefined {
       !isCallbackPathname(new URL(canonicalDecodedPath, LOCAL_ORIGIN).pathname)
     ) return;
 
-    return `${url.pathname}${url.search}${url.hash}`;
+    const target = `${url.pathname}${url.search}${url.hash}`;
+    return target.length <= MAX_CALLBACK_LENGTH ? target : undefined;
   } catch {
     return;
   }

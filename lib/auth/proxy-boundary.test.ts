@@ -155,6 +155,10 @@ describe("login callback destinations", () => {
     expect(resolveLoginCallbackDestination("/dashboard", value)).toBe("/dashboard");
   });
 
+  it("rejects a callback that exceeds the limit after URL encoding", () => {
+    expect(normalizeLoginCallback("/contacts?q=" + "例".repeat(250))).toBeUndefined();
+  });
+
   it("carries the original address through required login steps", () => {
     const callback = "/tenant-alpha/workspace?q=a%20b#selected=example";
     expect(normalizeLoginCallback(normalizeLoginCallback(callback))).toBe(callback);
