@@ -24,6 +24,7 @@ import {
   SeatDeviceAuthDisabledError,
   SeatDeviceAuthError,
   cancelSeatDeviceAuthorization,
+  claimSeatDeviceAuthorization,
   decideSeatDeviceAuthorization,
   lookupSeatDeviceAuthorization,
   requestSeatDeviceAuthorization,
@@ -418,5 +419,111 @@ describeMysql("seat device authorization (request, decide, cancel) on MySQL", ()
         expect(row).toMatchObject({ status: "cancelled", version: 1, userId: null });
       }
     }
+  });
+  async function approved(now: Date, source: string | null = null) {
+    const grant = await request(now, source);
+    const who = await member();
+    await decide(who, grant, now);
+    return { grant, who };
+  }
+  const claim = (grant: { requestId: string; pollToken: string }, now: Date, source: string | null = null) =>
+    claimSeatDeviceAuthorization({ requestId: grant.requestId, pollToken: grant.pollToken, source, now });
+
+  it("answers polls before approval, throttles them, and refuses a wrong poll token", async () => {
+    const now = nextClock();
+    const grant = await request(now);
+    await expect(claim(grant, at(now, 5))).resolves.toEqual({ status: "pending" });
+    const slow = await expectCode(claim(grant, at(now, 7)), "slow_down");
+    expect(slow.retryAfterSeconds).toBe(3);
+    await expectCode(claim({ requestId: grant.requestId, pollToken: (await request(now)).pollToken }, at(now, 20)), "poll_token_invalid");
+    await cancelSeatDeviceAuthorization({ ...grant, now: at(now, 20) });
+    await expect(claim(grant, at(now, 30))).resolves.toEqual({ status: "expired" }); // cancelled reads expired
+    const rejected = await request(now);
+    await decide(await member(), rejected, now, "reject");
+    await expect(claim(rejected, at(now, 5))).resolves.toEqual({ status: "rejected" });
+  });
+
+  it("claims once: hash-only pair, identity, absolute expiry, audit", async () => {
+    const now = nextClock();
+    const source = freshSource();
+    const { grant, who } = await approved(now, source);
+    const answer = await claim(grant, at(now, 10), source);
+    if (answer.status !== "approved") throw new Error("expected tokens");
+    expect(answer.accessToken).toMatch(/^hsda_[A-Za-z0-9_-]{43}$/);
+    expect(answer.refreshToken).toMatch(/^hsdr_[A-Za-z0-9_-]{43}$/);
+    expect(answer).toMatchObject({
+      expiresInSeconds: 900,
+      refreshExpiresInSeconds: 30 * 24 * 3600 - 10,
+      deviceId: grant.requestId,
+      identity: { subjectId: `user:${who.userId}`, kind: "member", workspace: { id: workspaceId }, roles: ["OPERATOR"] },
+    });
+    const row = await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: grant.requestId } });
+    expect(row).toMatchObject({
+      status: "active",
+      accessTokenHash: hashSeatDeviceToken(answer.accessToken),
+      refreshTokenHash: hashSeatDeviceToken(answer.refreshToken),
+      refreshTokenUsed: false,
+      rotationSource: source,
+      claimedAt: at(now, 10),
+      expiresAt: at(now, 30 * 24 * 3600),
+    });
+    expect(JSON.stringify(row)).not.toContain(answer.refreshToken);
+    const audit = await db.auditLog.findFirstOrThrow({ where: { targetId: grant.requestId, actionType: "SEAT_DEVICE_CLAIMED" } });
+    expect(audit.payload ?? "").not.toContain(answer.accessToken);
+  });
+
+  it("refuses to hand tokens to a member who changed since approval", async () => {
+    const now = nextClock();
+    const { grant, who } = await approved(now);
+    await db.user.update({ where: { id: who.userId }, data: { passwordSetAt: at(now, 1) } });
+    await expectCode(claim(grant, at(now, 10)), "account_disabled");
+    const second = await approved(now);
+    await db.membership.update({ where: { id: second.who.membershipId }, data: { status: MembershipStatus.INACTIVE } });
+    await expectCode(claim(second.grant, at(now, 10)), "account_disabled");
+    expect((await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: grant.requestId } })).status).toBe("approved");
+  });
+
+  it("re-claims once within 60 seconds from the same trusted source and retires the first pair", async () => {
+    const now = nextClock();
+    const source = freshSource();
+    const { grant } = await approved(now, source);
+    const first = await claim(grant, at(now, 10), source);
+    if (first.status !== "approved") throw new Error("expected tokens");
+    await expectCode(claim(grant, at(now, 20), freshSource()), "poll_token_invalid"); // other source
+    await expectCode(claim(grant, at(now, 30), null), "poll_token_invalid"); // untrusted
+    const again = await claim(grant, at(now, 40), source);
+    if (again.status !== "approved") throw new Error("expected tokens");
+    expect(again.refreshToken).not.toBe(first.refreshToken);
+    const row = await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: grant.requestId } });
+    expect(row).toMatchObject({ reclaimed: true, refreshTokenHash: hashSeatDeviceToken(again.refreshToken), previousRefreshTokenHash: null });
+    const retired = await db.seatDeviceTokenHistory.findMany({ where: { deviceId: grant.requestId } });
+    expect(retired.map((entry) => [entry.kind, entry.tokenHash]).sort()).toEqual(
+      [["access", hashSeatDeviceToken(first.accessToken)], ["refresh", hashSeatDeviceToken(first.refreshToken)]].sort(),
+    );
+    await expectCode(claim(grant, at(now, 50), source), "poll_token_invalid"); // only once
+
+    const late = await approved(now, source);
+    await claim(late.grant, at(now, 10), source);
+    await expectCode(claim(late.grant, at(now, 71), source), "poll_token_invalid"); // past 60 s
+    const used = await approved(now, source);
+    await claim(used.grant, at(now, 10), source);
+    await db.seatDeviceAuthorization.update({ where: { id: used.grant.requestId }, data: { refreshTokenUsed: true } });
+    await expectCode(claim(used.grant, at(now, 20), source), "poll_token_invalid"); // pair already used
+  });
+
+  it("cancel revokes a claimed device whose pair was never used, and leaves a used one", async () => {
+    const now = nextClock();
+    const unused = await approved(now);
+    await claim(unused.grant, at(now, 10));
+    await expect(cancelSeatDeviceAuthorization({ ...unused.grant, now: at(now, 3600) })).resolves.toEqual({ status: "cancelled" });
+    expect(await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: unused.grant.requestId } })).toMatchObject({ status: "revoked", revokeReason: "client_cancelled" });
+    await expect(cancelSeatDeviceAuthorization({ ...unused.grant, now: at(now, 3601) })).resolves.toEqual({ status: "revoked" });
+    await expectCode(claim(unused.grant, at(now, 3700)), "poll_token_invalid");
+
+    const used = await approved(now);
+    await claim(used.grant, at(now, 10));
+    await db.seatDeviceAuthorization.update({ where: { id: used.grant.requestId }, data: { refreshTokenUsed: true } });
+    await expect(cancelSeatDeviceAuthorization({ ...used.grant, now: at(now, 20) })).resolves.toEqual({ status: "claimed" });
+    expect((await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: used.grant.requestId } })).status).toBe("active");
   });
 });
