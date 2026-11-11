@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { ActorType, Prisma, type PlatformBillingOperation, type PrismaClient } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { findPlatformFinanceActorInTransaction, type PlatformFinanceRoleName } from "../bank-receipts/bank-receipts";
+import { availableCreditFen } from "../credit/credit-facilities";
 import { changeSpendGrantInTransaction, createSpendGrantInTransaction, normalizePriceVersion,
   publishPriceVersionInTransaction } from "../grants/price-grants";
 
@@ -31,8 +32,8 @@ export const PRICE_LABEL_TEXT: Record<PriceLabel, string> = {
 export type PlatformOperationRefusalCode = "platform_operation_input_invalid" | "platform_operation_forbidden" |
   "platform_operation_self_review_forbidden" | "platform_operation_conflict" | "platform_operation_unavailable" |
   "platform_operation_not_pending" | "platform_enforce_not_confirmed" | "platform_write_conflict" | "billing_mode_conflict" |
-  "workspace_unavailable" | "payer_scope_already_bound" | "payer_unresolved" | "price_zero_refused" | "price_version_unavailable" |
-  "grant_active_exists";
+  "workspace_unavailable" | "payer_scope_already_bound" | "payer_unresolved" | "enforce_grant_not_ready" | "enforce_headroom_insufficient" |
+  "price_zero_refused" | "price_version_unavailable" | "grant_active_exists";
 
 export class PlatformOperationRefusal extends Error {
   constructor(readonly code: PlatformOperationRefusalCode) { super(code); this.name = "PlatformOperationRefusal"; }
@@ -245,6 +246,7 @@ async function applyInTransaction(tx: Prisma.TransactionClient, request: Platfor
   }
   if (!binding || binding.payerAccountId !== row.payerAccountId) refuse("payer_unresolved");
   if (request.kind === "spend_grant") return openSpendGrant(tx, request, row, binding.payerAccountId, actorUserId);
+  if (request.toMode === "enforce") await assertEnforceReady(tx, binding.payerAccountId);
   // CAS: the expected old mode stays in the UPDATE's own WHERE (the payer row is already locked FOR UPDATE above).
   const changed = await tx.$executeRaw`UPDATE PayerAccount SET billingMode = ${request.toMode}, version = version + 1,
     updatedAt = CURRENT_TIMESTAMP(3) WHERE id = ${binding.payerAccountId} AND billingMode = ${request.fromMode} AND status = 'active'`;
@@ -252,6 +254,21 @@ async function applyInTransaction(tx: Prisma.TransactionClient, request: Platfor
   await audit(tx, [request.workspaceId], actorUserId, "BILLING_PAYER_MODE_CHANGED", { type: "PayerAccount", id: binding.payerAccountId },
     { from: request.fromMode, to: request.toMode, platformOperationId: row.id, evidenceRef: row.evidenceRef });
   return binding.payerAccountId;
+}
+
+/** Enforce must not stop the payer at once: one active grant per event and unit (at least one) and headroom = wallet + undrawn credit
+ * - held/unknown enforce reservations > 0, under the payer lock as in reserve. Advisory for the switch; every use re-checks money. */
+async function assertEnforceReady(tx: Prisma.TransactionClient, payerAccountId: string) {
+  const grants = await tx.$queryRaw<Array<{ n: bigint }>>`SELECT COUNT(*) AS n FROM SpendGrant g
+    JOIN BillingPriceVersion v ON v.id = g.priceVersionId WHERE g.payerAccountId = ${payerAccountId} AND g.state = 'active'
+    GROUP BY v.billingEventRef, v.meterUnit`;
+  if (grants.length === 0 || grants.some(row => Number(row.n) !== 1)) refuse("enforce_grant_not_ready");
+  const [{ held }] = await tx.$queryRaw<Array<{ held: bigint }>>`SELECT CAST(COALESCE(SUM(chargeFen), 0) AS SIGNED) AS held
+    FROM BillingReservation WHERE payerAccountId = ${payerAccountId} AND billingMode = 'enforce' AND state IN ('held', 'unknown')`;
+  const [wallet] = await tx.$queryRaw<Array<{ balanceFen: bigint }>>`SELECT balanceFen FROM FundsAccountProjection
+    WHERE payerAccountId = ${payerAccountId} AND account = 'customer_wallet_available'`;
+  const headroom = BigInt(wallet?.balanceFen ?? 0) + await availableCreditFen(tx, payerAccountId) - BigInt(held);
+  if (headroom <= BigInt(0)) refuse("enforce_headroom_insufficient");
 }
 
 /**

@@ -63,10 +63,9 @@ describe("operation list and arguments", () => {
     expect(parseOperationList(Buffer.from(JSON.stringify(value, null, 2))).sha256).not.toBe(parsed.sha256);
     for (const bad of [{ ...value, note: "x" }, { evidenceRef: RULING, entries: [] },
       { evidenceRef: RULING, entries: [mode("off", "enforce"), mode("off", "enforce")] },
-      { evidenceRef: RULING, entries: [{ ...mode("off", "enforce"), payerAccountId: "p" }] }]) {
-      expect(() => parseOperationList(list(bad))).toThrow("platform_operation_input_invalid");
+      { evidenceRef: RULING, entries: [{ ...mode("off", "enforce"), payerAccountId: "p" }] }, "{"]) {
+      expect(() => parseOperationList(typeof bad === "string" ? Buffer.from(bad) : list(bad))).toThrow("platform_operation_input_invalid");
     }
-    expect(() => parseOperationList(Buffer.from("{"))).toThrow("platform_operation_input_invalid");
   });
   it("is dry run unless --apply carries the list sha, and review needs a decision and evidence", () => {
     const base = ["--command=draft", "--list-file=l.json", "--actor-user-id=u1"];

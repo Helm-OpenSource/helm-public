@@ -25,7 +25,6 @@ const FIELDS: Record<string, string[]> = { payer_onboard: ["contractSubjectRef",
 const subject = (request: PlatformOperationRequest) => request.kind === "price_publish"
   ? { productCode: request.productCode, version: request.version, priceNotice: PRICE_LABEL_TEXT[request.priceLabel] }
   : { workspaceId: request.workspaceId };
-const MAX_ENTRIES = 500;
 const invalid = (): never => { throw new PlatformOperationRefusal("platform_operation_input_invalid"); };
 const sameKeys = (value: object, keys: string[]) => Object.keys(value).sort().join(",") === keys.join(",");
 
@@ -35,7 +34,7 @@ export function parseOperationList(bytes: Buffer): PlatformOperationList {
   try { raw = JSON.parse(bytes.toString("utf8")); } catch { invalid(); }
   if (!raw || typeof raw !== "object" || Array.isArray(raw) || !sameKeys(raw, ["entries", "evidenceRef"])) invalid();
   const { evidenceRef, entries } = raw as { evidenceRef: unknown; entries: unknown };
-  if (!Array.isArray(entries) || entries.length < 1 || entries.length > MAX_ENTRIES) invalid();
+  if (!Array.isArray(entries) || entries.length < 1 || entries.length > 500) invalid();
   const keys = new Set<string>();
   const normalized = (entries as unknown[]).map(entry => {
     const kind = (entry as { kind?: unknown } | null)?.kind;

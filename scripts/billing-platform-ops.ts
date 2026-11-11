@@ -1,9 +1,7 @@
 #!/usr/bin/env tsx
 
 /**
- * Billing V1 E1a platform billing operations (maker drafts, a different checker reviews). Dry run by default; --apply needs the
- * --list-sha printed by the dry run. See docs/operations/BILLING_PLATFORM_OPERATIONS.md.
- *
+ * Billing V1 platform billing operations (maker drafts, a different checker reviews); docs/operations/BILLING_PLATFORM_OPERATIONS.md.
  *   npm run billing:platform-ops -- --command=draft --list-file=<list.json> --actor-user-id=<maker> [--confirm-enforce] [--apply --list-sha=<sha256>]
  *   npm run billing:platform-ops -- --command=review --list-file=<list.json> --actor-user-id=<checker> --decision=approve|reject \
  *     --review-evidence-ref=<ref> [--confirm-enforce] [--apply --list-sha=<sha256>]
