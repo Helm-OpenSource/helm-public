@@ -321,7 +321,7 @@ const REFRESH_WINDOW_MS = 60 * 1000;
 // the same checks as the extension's device branch (design §6.2, §15.6.4):
 // an ACTIVE workspace, the same ACTIVE, internal membership and an unchanged
 // password. A member who fails them is revoked for good, and so is a device
-// of a CANCELED workspace. A SUSPENDED workspace (a suspension can be lifted)
+// of a CANCELED workspace. Then a SUSPENDED workspace (a suspension can be lifted)
 // and one whose flag is off answer workspace_not_enabled and keep the device,
 // so the client keeps its credential and backs off (design §15.2: switched
 // off is not revoked). A missing workspace cannot carry the audit row of a
@@ -348,7 +348,9 @@ async function loadRefreshStanding(row: {
   ]);
   if (!workspace) return { ok: false, code: "account_disabled" };
   if (workspace.status === WorkspaceStatus.CANCELED) return { ok: false, revoke: "workspace_cancelled" };
-  if (workspace.status !== WorkspaceStatus.ACTIVE) return { ok: false, code: "workspace_not_enabled" };
+  // The member and the password are judged before a suspension or the flag
+  // (server design §2C.4 item 2): a member who left reads 401 and is revoked
+  // even while the workspace is suspended.
   if (
     !membership ||
     !user ||
@@ -361,6 +363,7 @@ async function loadRefreshStanding(row: {
   if ((user.passwordSetAt?.getTime() ?? null) !== (row.userPasswordSetAt?.getTime() ?? null)) {
     return { ok: false, revoke: "password_reset" };
   }
+  if (workspace.status !== WorkspaceStatus.ACTIVE) return { ok: false, code: "workspace_not_enabled" };
   if (!isSeatDeviceWorkspaceEnabled(workspace.featureFlagsJson)) return { ok: false, code: "workspace_not_enabled" };
   return { ok: true };
 }
