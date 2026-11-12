@@ -1,7 +1,10 @@
 import { Prisma } from "@prisma/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { alipayDouble } from "./alipay-gateway-fixture";
-import { createAlipayTopupAdapter, getAlipayTopupConfig, handleAlipayTopupNotify } from "./alipay-topup";
+import { createVerify } from "node:crypto";
+import { buildAlipaySignContent } from "@/lib/billing/alipay";
+import { ALIPAY_TOPUP_SUBJECT, buildAlipayTopupPayUrl, closeAlipayTopupTrade, createAlipayTopupAdapter, getAlipayTopupConfig, getAlipayTopupConfigProblems,
+  handleAlipayTopupNotify, resolveAlipayTopup, topupAppOrigin } from "./alipay-topup";
 
 // Pure adapter and entry checks: no database (a client that throws proves none is reached), no network (gateway double).
 const double = alipayDouble();
@@ -19,18 +22,44 @@ describe("alipay top-up adapter", () => {
   it("needs every key, identifiers and an https gateway", () => {
     expect(config).toMatchObject({ appId: double.env.ALIPAY_APP_ID, sellerId: double.env.HELM_BILLING_TOPUP_ALIPAY_SELLER_ID });
     for (const patch of [{ HELM_BILLING_TOPUP_ALIPAY_SELLER_ID: "" }, { ALIPAY_APP_ID: "x y" }, { ALIPAY_PUBLIC_KEY: "" },
-      { ALIPAY_PRIVATE_KEY: "" }, { ALIPAY_GATEWAY_URL: "http://gateway.alipay.invalid/gateway.do" }]) {
+      { ALIPAY_PRIVATE_KEY: "" }, { ALIPAY_GATEWAY_URL: "http://gateway.alipay.invalid/gateway.do" },
+      { ALIPAY_PRIVATE_KEY: "bm90LWEta2V5" }, { ALIPAY_PUBLIC_KEY: "bm90LWEta2V5" }]) {
       expect(getAlipayTopupConfig({ ...double.env, ...patch })).toBeNull();
     }
+    // Malformed key material is a configuration problem (fixed codes, never values), not a later signing failure.
+    expect(getAlipayTopupConfigProblems({ ...double.env, ALIPAY_PRIVATE_KEY: "bm90LWEta2V5", ALIPAY_PUBLIC_KEY: "AAAA" })
+      .problems).toEqual(["private_key_invalid", "public_key_invalid"]);
+    expect(getAlipayTopupConfigProblems({}).problems).toEqual(["app_id_invalid", "seller_id_invalid", "private_key_invalid",
+      "public_key_invalid"]);
+  });
+
+  it("is open by default and closes on incomplete merchant configuration with one fixed-code alert", () => {
+    const alerts = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      expect(resolveAlipayTopup("create", double.env)).toMatchObject({ appId: double.env.ALIPAY_APP_ID });
+      expect(resolveAlipayTopup("create", { ...double.env, HELM_BILLING_TOPUP_ALIPAY_ENABLED: "false" })).toBe("off");
+      expect(resolveAlipayTopup("create", { ...double.env, HELM_FINANCIAL_ACTIONS_ENABLED: "false" })).toBe("off");
+      expect(alerts).not.toHaveBeenCalled();
+      expect(resolveAlipayTopup("create", { ...double.env, HELM_BILLING_TOPUP_ALIPAY_SELLER_ID: "" })).toBe("unavailable");
+      expect(alerts).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(String(alerts.mock.calls[0][1]))).toEqual({ event: "topup_unavailable", reason: "config_unavailable",
+        entry: "create", problems: ["seller_id_invalid"] });
+      expect(resolveAlipayTopup("notify", { ...double.env, ALIPAY_PRIVATE_KEY: "bm90LWEta2V5" })).toBe("unavailable");
+      expect(String(alerts.mock.calls[1][1])).not.toContain("bm90LWEta2V5");
+    } finally { alerts.mockRestore(); }
   });
 
   it("maps a signed notify exactly (yuan to fen, status, configured identity) and refuses forged or ambiguous forms", async () => {
     expect(await observe(double.notify(paid))).toEqual({ source: "callback", merchantRef: `alipay-seller:${config.sellerId}`,
       appRef: `alipay-app:${config.appId}`, providerOrderNo: order, providerTxnId: paid.trade_no, status: "paid",
-      amountFen: BigInt(1230), currency: "CNY" });
+      amountFen: BigInt(1230), currency: "CNY", refund: null });
     expect((await observe(double.notify({ ...paid, trade_status: "TRADE_CLOSED" }))).status).toBe("closed");
     expect((await observe(double.notify({ ...paid, trade_status: "WAIT_BUYER_PAY" }))).status).toBe("not_paid");
     expect((await observe(double.notify({ ...paid, total_amount: "12.305" }))).amountFen).toBeNull();
+    // Owner 11-12: what the merchant received must equal the order amount; a different receipt is the observed amount.
+    expect((await observe(double.notify({ ...paid, receipt_amount: "12.30" }))).amountFen).toBe(BigInt(1230));
+    expect((await observe(double.notify({ ...paid, receipt_amount: "11.30" }))).amountFen).toBe(BigInt(1130));
+    expect((await observe(double.notify({ ...paid, receipt_amount: "x" }))).amountFen).toBeNull();
     // Another app or seller is not an authentication failure: it maps to no refs (topup_merchant_mismatch downstream).
     expect(await observe(double.notify({ ...paid, app_id: "2021000000000002" }))).toMatchObject({ merchantRef: null, appRef: null });
     expect(await observe(double.notify({ ...paid, seller_id: "2088000000000002" }))).toMatchObject({ merchantRef: null });
@@ -51,6 +80,10 @@ describe("alipay top-up adapter", () => {
       expect((await observe(double.notify({ ...paid, ...extra }))).status).toBe("unknown");
     }
     expect((await observe(double.notify({ ...paid, refund_fee: "0.00" }))).status).toBe("paid");
+    // P2-B: the refund amount (fen), batch and time travel with the observation into reconciliation records.
+    expect((await observe(double.notify({ ...paid, refund_fee: "2.50", out_biz_no: "refund-batch-1", gmt_refund: "2026-11-12 10:00:00.000" })))
+      .refund).toEqual({ amountFen: "250", batchRef: "refund-batch-1", at: "2026-11-12 10:00:00.000" });
+    expect((await observe(double.notify({ ...paid, out_biz_no: "x".repeat(65) }))).refund).toEqual({ amountFen: null, batchRef: null, at: null });
   });
 
   it("queries with a signed request and keeps the amount only from a verified response node", async () => {
@@ -60,6 +93,9 @@ describe("alipay top-up adapter", () => {
       merchantRef: `alipay-seller:${config.sellerId}`, appRef: `alipay-app:${config.appId}` });
     expect(JSON.parse(double.requests.at(-1)!.biz_content)).toEqual({ out_trade_no: order });
     expect(double.requests.at(-1)).toMatchObject({ app_id: config.appId, method: "alipay.trade.query", sign_type: "RSA2" });
+    double.trades.set(order, { code: "10000", msg: "Success", ...paid, receipt_amount: "10.00" });
+    expect((await adapter.queryOrder(order)).amountFen).toBe(BigInt(1000)); // the query keeps the receipt too
+    double.trades.set(order, { code: "10000", msg: "Success", ...paid, total_amount: "12.30" });
     double.setTamper(true);
     await expect(adapter.queryOrder(order)).rejects.toThrow("query_signature_invalid");
     double.setTamper(false);
@@ -85,6 +121,61 @@ describe("alipay top-up adapter", () => {
   });
 });
 
+describe("alipay top-up close", () => {
+  it("closes a waiting trade with a signed request, reports a trade never created, and refuses anything unverified", async () => {
+    double.trades.set(order, { code: "10000", ...paid, trade_status: "WAIT_BUYER_PAY" });
+    expect(await closeAlipayTopupTrade(config, order, double.fetch)).toBe("closed");
+    expect(double.requests.at(-1)).toMatchObject({ app_id: config.appId, method: "alipay.trade.close", sign_type: "RSA2" });
+    expect(JSON.parse(double.requests.at(-1)!.biz_content)).toEqual({ out_trade_no: order });
+    expect(double.trades.get(order)?.trade_status).toBe("TRADE_CLOSED");
+    await expect(closeAlipayTopupTrade(config, order, double.fetch)).rejects.toThrow("close_failed"); // no longer waiting
+    expect(await closeAlipayTopupTrade(config, "tpa_eeeeeeeeeeeeeeeeeeeeeeeeeeee", double.fetch)).toBe("not_created");
+    double.trades.set(order, { code: "10000", ...paid, trade_status: "WAIT_BUYER_PAY" });
+    double.setMode("empty_sign");
+    try { await expect(closeAlipayTopupTrade(config, order, double.fetch)).rejects.toThrow("query_signature_invalid"); }
+    finally { double.setMode("ok"); }
+    expect(double.trades.get(order)?.trade_status).toBe("TRADE_CLOSED"); // the double closed it; our side saw nothing trusted
+    double.closeOverrides.set(order, { code: "10000", msg: "Success", out_trade_no: "tpa_ffffffffffffffffffffffffffff" });
+    try { await expect(closeAlipayTopupTrade(config, order, double.fetch)).rejects.toThrow("query_response_invalid"); }
+    finally { double.closeOverrides.clear(); }
+  });
+});
+
+describe("alipay top-up cashier URL", () => {
+  it("signs a page.pay request with fixed notify_url, fixed subject, exact amount and no passback_params", () => {
+    const expiresAt = new Date("2026-11-12T04:00:00.000Z");
+    const url = new URL(buildAlipayTopupPayUrl(config, "https://helm.example.invalid",
+      { id: "ord_1", providerOrderNo: order, amountFen: BigInt(1005), expiresAt }, new Date("2026-11-12T02:00:00.000Z")));
+    expect(`${url.origin}${url.pathname}`).toBe(double.env.ALIPAY_GATEWAY_URL);
+    const params = Object.fromEntries(url.searchParams);
+    const { sign, ...signed } = params;
+    expect(createVerify("RSA-SHA256").update(buildAlipaySignContent(signed), "utf8").verify(double.appPublicKey, sign, "base64")).toBe(true);
+    expect(signed).toMatchObject({ app_id: config.appId, method: "alipay.trade.page.pay", charset: "utf-8", sign_type: "RSA2",
+      version: "1.0", timestamp: "2026-11-12 10:00:00", notify_url: "https://helm.example.invalid/api/billing/v1/topup-notify/alipay",
+      return_url: "https://helm.example.invalid/billing/topup?order=ord_1" });
+    expect(Object.keys(signed).sort()).toEqual(["app_id", "biz_content", "charset", "method", "notify_url", "return_url", "sign_type",
+      "timestamp", "version"]);
+    expect(JSON.parse(signed.biz_content)).toEqual({ out_trade_no: order, product_code: "FAST_INSTANT_TRADE_PAY", total_amount: "10.05",
+      subject: ALIPAY_TOPUP_SUBJECT, time_expire: "2026-11-12 12:00:00" });
+    expect(signed.biz_content).not.toContain("passback_params");
+  });
+
+  it("takes every browser-facing origin from APP_URL only: https, default port, no credentials or path", () => {
+    expect(topupAppOrigin({ APP_URL: "https://helm.example.invalid" })).toBe("https://helm.example.invalid");
+    expect(topupAppOrigin({ APP_URL: "https://helm.example.invalid:443/" })).toBe("https://helm.example.invalid");
+    for (const APP_URL of [undefined, "", "http://helm.example.invalid", "https://helm.example.invalid:8443",
+      "https://someone@helm.example.invalid", "https://helm.example.invalid/app", "https://helm.example.invalid/?x=1"]) {
+      expect(topupAppOrigin({ APP_URL })).toBeNull();
+    }
+    const alerts = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      expect(resolveAlipayTopup("create", { ...double.env, APP_URL: "http://localhost:3000" })).toBe("unavailable");
+      expect(resolveAlipayTopup("notify", { ...double.env, APP_URL: "http://localhost:3000" })).toMatchObject({ appId: config.appId });
+      expect(JSON.parse(String(alerts.mock.calls[0][1])).problems).toEqual(["app_url_invalid"]);
+    } finally { alerts.mockRestore(); }
+  });
+});
+
 describe("alipay top-up notify entry", () => {
   it("answers non-success when the database fails after verification, so Alipay retries", async () => {
     for (const [key, value] of Object.entries({ ...double.env, HELM_BILLING_TOPUP_ALIPAY_ENABLED: "true", HELM_FINANCIAL_ACTIONS_ENABLED: "true" })) {
@@ -99,7 +190,8 @@ describe("alipay top-up notify entry", () => {
   });
 
   it("is a plain 404 while either gate is off, before the body or database", async () => {
-    for (const env of [{}, { HELM_BILLING_TOPUP_ALIPAY_ENABLED: "yes" }, { HELM_BILLING_TOPUP_ALIPAY_ENABLED: "true", HELM_FINANCIAL_ACTIONS_ENABLED: "false" }]) {
+    for (const env of [{ HELM_BILLING_TOPUP_ALIPAY_ENABLED: "false" }, { HELM_BILLING_TOPUP_ALIPAY_ENABLED: "yes" },
+      { HELM_FINANCIAL_ACTIONS_ENABLED: "false" }]) {
       vi.stubEnv("HELM_BILLING_TOPUP_ALIPAY_ENABLED", undefined); vi.stubEnv("HELM_FINANCIAL_ACTIONS_ENABLED", undefined);
       for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
       const request = new Request("https://helm.invalid/x", { method: "POST", body: double.notify(paid),
@@ -110,8 +202,12 @@ describe("alipay top-up notify entry", () => {
   });
 
   it("refuses unconfigured, non-form, oversized, non-UTF-8 and unauthenticated bodies without touching the database", async () => {
-    vi.stubEnv("HELM_BILLING_TOPUP_ALIPAY_ENABLED", "true"); vi.stubEnv("HELM_FINANCIAL_ACTIONS_ENABLED", "true");
-    expect((await post(double.notify(paid))).status).toBe(503); // ALIPAY_* not configured
+    vi.stubEnv("HELM_BILLING_TOPUP_ALIPAY_ENABLED", undefined); vi.stubEnv("HELM_FINANCIAL_ACTIONS_ENABLED", undefined);
+    for (const key of Object.keys(double.env)) vi.stubEnv(key, undefined);
+    const alerts = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const unconfigured = await post(double.notify(paid)); // gates default open, ALIPAY_* not configured: closed, nothing read
+    expect([unconfigured.status, await unconfigured.text(), alerts.mock.calls.length]).toEqual([503, "fail", 1]);
+    alerts.mockRestore();
     for (const [key, value] of Object.entries(double.env)) vi.stubEnv(key, value);
     expect((await post(double.notify(paid), { "content-type": "application/json" })).status).toBe(415);
     expect((await post(`${double.notify(paid)}&pad=${"x".repeat(16_384)}`)).status).toBe(413);
