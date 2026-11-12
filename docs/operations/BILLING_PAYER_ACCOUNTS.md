@@ -48,7 +48,7 @@ Billing V1 slice S1-c. Payer identity only: no wallet, balance, price, charge, p
 
 - `consumer` payers and `consumer_principal` bindings fail closed (`payer_kind_not_enabled`, `payer_scope_kind_not_enabled`) until a
   trusted consumer-service identity exists (later slice). No HTTP route, UI or env switch is added; the only
-  `billingMode` change path is the platform maker/checker CLI ([platform operations](BILLING_PLATFORM_OPERATIONS.md), E1a).
+  `billingMode` change path is the platform maker/checker operation ([platform operations](BILLING_PLATFORM_OPERATIONS.md), E1a).
 - Finance read-only visibility, contract/collection subject master data and real activation remain separate prerequisites.
 
 ## Verification and rollback / 验证与回滚
