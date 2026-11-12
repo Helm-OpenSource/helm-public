@@ -7,19 +7,23 @@ import type { BillingRejectCode, ServiceActor } from "../reservations/reservatio
  * Billing V1 C-BAL balance summary (S3 internal protocol v3.10; docs/operations/BILLING_INTERNAL_ROUTES.md). Read-only and
  * lock-free: one statement per batch, so wallet, credit and holds come from one consistent read (a settle in flight is seen
  * wholly before or wholly after) and no reserve or settle ever waits on it. Integer fen:
- * - balance = wallet - creditUsed - overdraftUsed (may be negative; the one number shown to customers);
+ * - balance = wallet - creditUsed - overdraftUsed (may be negative; the one number shown to customers). headroom includes
+ *   remaining credit and is a stop/go input only: clients must never display it as a balance;
  * - headroom = wallet + creditRemaining - held, the reserve admission formula (reservations.ts reserveInTransaction with
  *   credit-facilities.ts availableCreditFen): creditRemaining is max(0, limit - used) of the drawable, in-term facility and 0
  *   for a payer that is not active; held is enforce held/unknown reservations;
- * - arrears = headroom <= 0 (owner 11-12 Q8: effective headroom at or below zero).
+ * - arrears: stop new billable work. Two causes, reported as arrearsReason: "funds" when headroom <= 0 (Q8: effective
+ *   headroom at or below zero), "payer_inactive" when an enforce payer is suspended or closed (coordinator 11-12): Core
+ *   refuses its new reserves, so work would run unbilled. payer_inactive wins when both hold; null when not in arrears.
  * creditUsed is the credit_receivable projection, so a revoked or expired facility's outstanding draws still count.
  * overdraftUsed is always 0 until the overdraft slice (C-OD) adds its account; the field is reserved in the response now.
  */
 export const BALANCE_STATUS_MAX_WORKSPACES = 50;
 export type PayerStatus = "active" | "suspended" | "closed"; // PayerAccount.status ENUM
+export type ArrearsReason = "funds" | "payer_inactive";
 export type PayerBalanceSummary = { billingMode: "off" | "shadow" | "enforce"; payerStatus: PayerStatus; walletFen: bigint; creditUsedFen: bigint;
   overdraftUsedFen: bigint; creditRemainingFen: bigint; heldFen: bigint; balanceFen: bigint; headroomFen: bigint; arrears: boolean;
-  asOf: Date };
+  arrearsReason: ArrearsReason | null; asOf: Date };
 
 const ZERO = BigInt(0);
 const REF = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,190}$/;
@@ -45,27 +49,30 @@ export async function readPayerBalanceSummaries(client: PrismaClient | Prisma.Tr
     WHERE b.scopeKind = 'workspace' AND b.state = 'active' AND b.activeScopeRef IN (${Prisma.join(workspaceIds)})`;
   const summaries = new Map<string, PayerBalanceSummary>();
   for (const row of rows) {
-    if (!workspaceIds.includes(row.workspaceId)) continue; // collation-equal but not byte-equal: not this workspace's binding
+    // Mirrors resolvePayerForWorkspaceInTransaction's byte-exact check; unreachable today (activeScopeRef is utf8mb4_bin and
+    // REF admits no trailing space), kept so the two resolvers cannot drift apart.
+    if (!workspaceIds.includes(row.workspaceId)) continue;
     const walletFen = BigInt(row.walletFen ?? ZERO), creditUsedFen = BigInt(row.creditUsedFen ?? ZERO), overdraftUsedFen = ZERO;
     const creditRemainingFen = BigInt(row.creditRemainingFen ?? ZERO), heldFen = BigInt(row.heldFen);
     const headroomFen = walletFen + creditRemainingFen - heldFen;
-    summaries.set(row.workspaceId, { billingMode: row.billingMode, payerStatus: row.payerStatus, walletFen, creditUsedFen, overdraftUsedFen, creditRemainingFen,
-      heldFen, balanceFen: walletFen - creditUsedFen - overdraftUsedFen, headroomFen, arrears: headroomFen <= ZERO, asOf: row.asOf });
+    const arrearsReason: ArrearsReason | null = row.billingMode === "enforce" && row.payerStatus !== "active" ? "payer_inactive"
+      : headroomFen <= ZERO ? "funds" : null;
+    summaries.set(row.workspaceId, { billingMode: row.billingMode, payerStatus: row.payerStatus, walletFen, creditUsedFen,
+      overdraftUsedFen, creditRemainingFen, heldFen, balanceFen: walletFen - creditUsedFen - overdraftUsedFen, headroomFen,
+      arrears: arrearsReason !== null, arrearsReason, asOf: row.asOf });
   }
   return summaries;
 }
 
 export type BalanceStatusRequest = { workspaceIds: string[] };
 export type BalanceStatusEntry = { workspaceId: string; ok: true; billingMode: PayerBalanceSummary["billingMode"]; payerStatus: PayerStatus;
-  balanceFen: string;
-  headroomFen: string; overdraftUsedFen: string; arrears: boolean; asOf: string } | { workspaceId: string; ok: false; code: "billing_mode_off" };
+  balanceFen: string; headroomFen: string; overdraftUsedFen: string; arrears: boolean; arrearsReason: ArrearsReason | null; asOf: string } | { workspaceId: string; ok: false; code: "billing_mode_off" };
 
 /**
  * `balance-status` (v3.10): 1-50 distinct workspace ids, answered in request order. A bound payer is reported whatever its mode
  * (off included, so balances can be checked before enforce); an unbound workspace is `billing_mode_off` (not billed). The
- * caller applies the arrears gate only to `billingMode: "enforce"`, and treats an enforce payer whose `payerStatus` is not
- * `active` as stopped exactly like arrears (owner 11-12): Core refuses its new reserves, so work would run unbilled. The service identity is authenticated by the route; a read
- * leaves no per-identity trace beyond the auth nonce.
+ * caller reads one boolean, `arrears`, and applies it only to `billingMode: "enforce"`; `arrearsReason` only tells alerts
+ * apart. The service identity is authenticated by the route; a read leaves no per-identity trace beyond the auth nonce.
  */
 export async function balanceStatus(client: PrismaClient, _actor: ServiceActor, req: BalanceStatusRequest):
   Promise<{ ok: true; results: BalanceStatusEntry[] } | { ok: false; code: BillingRejectCode }> {
@@ -78,6 +85,6 @@ export async function balanceStatus(client: PrismaClient, _actor: ServiceActor, 
     if (!summary) return { workspaceId, ok: false, code: "billing_mode_off" };
     return { workspaceId, ok: true, billingMode: summary.billingMode, payerStatus: summary.payerStatus, balanceFen: fenToDecimalString(summary.balanceFen),
       headroomFen: fenToDecimalString(summary.headroomFen), overdraftUsedFen: fenToDecimalString(summary.overdraftUsedFen),
-      arrears: summary.arrears, asOf: summary.asOf.toISOString() };
+      arrears: summary.arrears, arrearsReason: summary.arrearsReason, asOf: summary.asOf.toISOString() };
   }) };
 }

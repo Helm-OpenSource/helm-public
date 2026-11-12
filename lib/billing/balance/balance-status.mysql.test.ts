@@ -114,7 +114,9 @@ describe.skipIf(!url)("balance-status and the balance summary against MySQL", ()
     settle(client, settler, { ...resolution(reservationId, key), quantityUsed: String(minutes) });
   const summary = async (p: Payer) => {
     const found = (await readPayerBalanceSummaries(a, [p.ws])).get(p.ws)!;
-    return { balance: Number(found.balanceFen), headroom: Number(found.headroomFen), arrears: found.arrears, mode: found.billingMode,
+    expect(found.arrears).toBe(found.arrearsReason !== null);
+    // arrears: false, or its reason ("funds" | "payer_inactive")
+    return { balance: Number(found.balanceFen), headroom: Number(found.headroomFen), arrears: found.arrears && found.arrearsReason, mode: found.billingMode,
       ...(found.payerStatus === "active" ? {} : { status: found.payerStatus }) };
   };
   const moneyRows = async () => [await a.fundsTransaction.count(), await a.billingReservation.count(), await a.creditFacility.count()];
@@ -172,7 +174,7 @@ describe.skipIf(!url)("balance-status and the balance summary against MySQL", ()
     const answer = await call({ workspaceIds: [p.ws] }, service);
     expect(answer.status).toBe(200);
     expect(answer.body).toEqual({ ok: true, results: [{ workspaceId: p.ws, ok: true, billingMode: "enforce", payerStatus: "active", balanceFen: "-490",
-      headroomFen: String(MILLION_YUAN - 665), overdraftUsedFen: "0", arrears: false, asOf: expect.stringMatching(/^2\d{3}-.*Z$/) }] });
+      headroomFen: String(MILLION_YUAN - 665), overdraftUsedFen: "0", arrears: false, arrearsReason: null, asOf: expect.stringMatching(/^2\d{3}-.*Z$/) }] });
     expect(Math.abs(Date.parse(answer.body.results[0].asOf) - Date.now())).toBeLessThan(60_000);
     expect(await moneyRows()).toEqual(before); // read-only: no funds, reservation or credit row
     const wallet = await a.$transaction(tx => getWalletInTransaction(tx, { workspaceId: p.ws, actorUserId: owner }));
@@ -184,7 +186,7 @@ describe.skipIf(!url)("balance-status and the balance summary against MySQL", ()
     await hold(p, "b1", 2); // 70 held
     expect(await summary(p)).toEqual({ balance: 100, headroom: 280, arrears: false, mode: "enforce" });
     await hold(p, "b2", 8); // exactly 280: admitted
-    expect(await summary(p)).toEqual({ balance: 100, headroom: 0, arrears: true, mode: "enforce" }); // holds do not move the balance
+    expect(await summary(p)).toEqual({ balance: 100, headroom: 0, arrears: "funds", mode: "enforce" }); // holds do not move the balance
     await expect(hold(p, "b3", 1)).rejects.toThrow("insufficient_funds");
   });
 
@@ -192,31 +194,35 @@ describe.skipIf(!url)("balance-status and the balance summary against MySQL", ()
     const revoked = await payer("enforce", 0, 1000);
     expect(await settleUsed(await hold(revoked, "c1", 10), "c1", 10)).toMatchObject({ ok: true });
     await changeCreditFacility(a, { actorUserId: checker, facilityId: revoked.facilityId!, action: "revoke", expectedVersion: 3, evidenceRef: "review:revoke" });
-    expect(await summary(revoked)).toEqual({ balance: -350, headroom: 0, arrears: true, mode: "enforce" });
+    expect(await summary(revoked)).toEqual({ balance: -350, headroom: 0, arrears: "funds", mode: "enforce" });
 
     const reduced = await payer("enforce", 0, 1000); // v3.6: a hold settles past a later reduce, so used may exceed the limit
     const held = await hold(reduced, "c2", 10);
     await changeCreditFacility(a, { actorUserId: checker, facilityId: reduced.facilityId!, action: "reduce", expectedVersion: 3,
       limitFen: BigInt(0), evidenceRef: "review:reduce" });
     expect(await settleUsed(held, "c2", 10)).toMatchObject({ ok: true, chargeFen: "350" });
-    expect(await summary(reduced)).toEqual({ balance: -350, headroom: 0, arrears: true, mode: "enforce" }); // never negative credit
+    expect(await summary(reduced)).toEqual({ balance: -350, headroom: 0, arrears: "funds", mode: "enforce" }); // never negative credit
 
     const lapsing = await payer("enforce", 50, 1000, new Date(Date.now() + 4_000));
     expect(await summary(lapsing)).toMatchObject({ headroom: 1050, arrears: false });
     await new Promise(resolve => setTimeout(resolve, 4_500)); // still the active row, now outside its term
     expect(await summary(lapsing)).toEqual({ balance: 50, headroom: 50, arrears: false, mode: "enforce" });
 
-    // Non-active payers keep their numbers (credit remaining 0) and report payerStatus; Overlay stops them like arrears.
+    // Non-active enforce payers keep their numbers (credit remaining 0) and are in arrears as payer_inactive, even with money.
     const service = await grant("status", ["balance-status"]);
     const suspended = await payer("enforce", 30, 1000), closed = await payer("enforce", 0, 1000);
     await a.$executeRaw`UPDATE PayerAccount SET status = 'suspended' WHERE id = ${suspended.payerRef}`;
     await a.$executeRaw`UPDATE PayerAccount SET status = 'closed' WHERE id = ${closed.payerRef}`;
-    expect(await summary(suspended)).toEqual({ balance: 30, headroom: 30, arrears: false, mode: "enforce", status: "suspended" });
+    expect(await summary(suspended)).toEqual({ balance: 30, headroom: 30, arrears: "payer_inactive", mode: "enforce", status: "suspended" });
     expect((await call({ workspaceIds: [suspended.ws, closed.ws] }, service)).body.results).toEqual([
       { workspaceId: suspended.ws, ok: true, billingMode: "enforce", payerStatus: "suspended", balanceFen: "30", headroomFen: "30",
-        overdraftUsedFen: "0", arrears: false, asOf: expect.any(String) },
+        overdraftUsedFen: "0", arrears: true, arrearsReason: "payer_inactive", asOf: expect.any(String) },
       { workspaceId: closed.ws, ok: true, billingMode: "enforce", payerStatus: "closed", balanceFen: "0", headroomFen: "0",
-        overdraftUsedFen: "0", arrears: true, asOf: expect.any(String) }]);
+        overdraftUsedFen: "0", arrears: true, arrearsReason: "payer_inactive", asOf: expect.any(String) }]); // both causes
+    // Outside enforce a non-active payer is in arrears only for funds (callers do not gate it anyway).
+    const pausedShadow = await payer("shadow", 40);
+    await a.$executeRaw`UPDATE PayerAccount SET status = 'suspended' WHERE id = ${pausedShadow.payerRef}`;
+    expect(await summary(pausedShadow)).toEqual({ balance: 40, headroom: 40, arrears: false, mode: "shadow", status: "suspended" });
   }, 20_000);
 
   it("answers every bound payer whatever its mode, unbound workspaces as billing_mode_off, in request order, per payer", async () => {
@@ -227,13 +233,13 @@ describe.skipIf(!url)("balance-status and the balance summary against MySQL", ()
     const unbound = `bal-unbound-${run}`;
     const answer = await call({ workspaceIds: [shadow.ws, unbound, off.ws, enforce.ws] }, service);
     expect(answer).toEqual({ status: 200, body: { ok: true, results: [
-      { workspaceId: shadow.ws, ok: true, billingMode: "shadow", payerStatus: "active", balanceFen: "500", headroomFen: "500", overdraftUsedFen: "0", arrears: false, asOf: expect.any(String) },
+      { workspaceId: shadow.ws, ok: true, billingMode: "shadow", payerStatus: "active", balanceFen: "500", headroomFen: "500", overdraftUsedFen: "0", arrears: false, arrearsReason: null, asOf: expect.any(String) },
       { workspaceId: unbound, ok: false, code: "billing_mode_off" },
-      { workspaceId: off.ws, ok: true, billingMode: "off", payerStatus: "active", balanceFen: "0", headroomFen: String(MILLION_YUAN), overdraftUsedFen: "0", arrears: false, asOf: expect.any(String) },
-      { workspaceId: enforce.ws, ok: true, billingMode: "enforce", payerStatus: "active", balanceFen: "0", headroomFen: "930", overdraftUsedFen: "0", arrears: false, asOf: expect.any(String) },
+      { workspaceId: off.ws, ok: true, billingMode: "off", payerStatus: "active", balanceFen: "0", headroomFen: String(MILLION_YUAN), overdraftUsedFen: "0", arrears: false, arrearsReason: null, asOf: expect.any(String) },
+      { workspaceId: enforce.ws, ok: true, billingMode: "enforce", payerStatus: "active", balanceFen: "0", headroomFen: "930", overdraftUsedFen: "0", arrears: false, arrearsReason: null, asOf: expect.any(String) },
     ] } });
     const fresh = await payer("off", 0); // bound, no wallet, no credit: arrears is reported; the caller gates only enforce payers
-    expect((await call({ workspaceIds: [fresh.ws] }, service)).body.results[0]).toMatchObject({ billingMode: "off", balanceFen: "0", headroomFen: "0", arrears: true });
+    expect((await call({ workspaceIds: [fresh.ws] }, service)).body.results[0]).toMatchObject({ billingMode: "off", balanceFen: "0", headroomFen: "0", arrears: true, arrearsReason: "funds" });
   });
 
   it("refuses malformed batches as request_invalid and accepts exactly 50", async () => {

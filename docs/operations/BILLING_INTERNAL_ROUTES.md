@@ -64,18 +64,23 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
 - **balance-status** (C-BAL, protocol v3.10; scope `balance-status`, read-only, `lib/billing/balance/balance-status.ts`): request
   `{ workspaceIds: [...] }`, 1-50 distinct ids (empty, more than 50, duplicates, bad formats or extra fields are
   `request_invalid`). Answer `{ ok: true, results: [...] }` in request order; per workspace either `{ workspaceId, ok: true,
-  billingMode, payerStatus, balanceFen, headroomFen, overdraftUsedFen, arrears, asOf }` or, with no active binding, `{ workspaceId, ok: false,
-  code: "billing_mode_off" }` (not billed). Signed integer fen strings: `balanceFen = wallet - creditUsed - overdraftUsed` (may
-  be negative; creditUsed is the `credit_receivable` projection, so a closed facility's draws still count); `headroomFen = wallet +
-  creditRemaining - held` is the reserve admission formula (remaining credit of the drawable, in-term facility, 0 for a payer
-  that is not active; held = enforce `held`/`unknown` reservations); `arrears = headroomFen <= 0` (owner 11-12 Q8).
-  `overdraftUsedFen` is always `"0"` until the overdraft slice adds its account. A bound payer is answered in every mode,
-  `off` included; callers apply the arrears gate only to `billingMode: "enforce"`. `payerStatus` is the PayerAccount status
-  (`active|suspended|closed`); numbers are still returned for a non-active payer, and callers stop an enforce payer that is
-  not `active` exactly like arrears (owner 11-12: Core refuses its new reserves, so work would run unbilled). One lock-free statement per batch: a
-  consistent read that never waits on, or delays, a reserve or settle. Writes only the auth nonce. The wallet read
-  (`/api/billing/v1/wallet`) carries the same `balanceFen`, `headroomFen` and `arrears` next to `availableFen` (unchanged:
-  wallet projection only).
+  billingMode, payerStatus, balanceFen, headroomFen, overdraftUsedFen, arrears, arrearsReason, asOf }` or, with no active
+  binding, `{ workspaceId, ok: false, code: "billing_mode_off" }` (not billed). Signed integer fen strings:
+  `balanceFen = wallet - creditUsed - overdraftUsed` (may be negative; creditUsed is the `credit_receivable` projection, so a
+  closed facility's draws still count); `headroomFen = wallet + creditRemaining - held` is the reserve admission formula
+  (remaining credit of the drawable, in-term facility, 0 for a payer that is not active; held = enforce `held`/`unknown`
+  reservations). `headroomFen` includes remaining credit: a stop/go input only, clients must never display it as a balance.
+  `overdraftUsedFen` is always `"0"` until the overdraft slice adds its account. `payerStatus` is the PayerAccount status
+  (`active|suspended|closed`); numbers are returned in every mode and status, `off` included.
+  **`arrears`** is the one boolean callers gate on (only for `billingMode: "enforce"`), with two causes in `arrearsReason`:
+  `funds` when `headroomFen <= 0` (Q8), `payer_inactive` when an enforce payer is suspended or closed (coordinator 11-12: Core
+  refuses its new reserves, so work would run unbilled); `payer_inactive` wins when both hold, `null` when not in arrears.
+  One lock-free statement per batch: a consistent read that never waits on, or delays, a reserve or settle. Writes only the
+  auth nonce. The wallet read (`/api/billing/v1/wallet`) carries the same `balanceFen`, `headroomFen` and `arrears` next to
+  `availableFen` (unchanged: wallet projection only).
+- **Scope list, single source**: `BILLING_SERVICE_SCOPES` is both what a grant may declare and what routes accept. If the E1c
+  issuance change keeps a separate declarable list (`BILLING_SERVICE_GRANT_SCOPES`), whichever lands second makes it equal to
+  `BILLING_SERVICE_SCOPES` and updates its "no route yet" wording.
 - **reserve** `expectedMode` (v3.4, optional `shadow|enforce`): a payer in the other mode is `mode_mismatch` before any bucket
   or reservation row; a replay of the key is also checked against it (not part of the content hash).
 - **Verify / rollback**: `npm run test:billing:mysql` (`internal-routes.mysql.test.ts`: gate, signature/expiry/replay/scope/
@@ -83,12 +88,14 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
   mapping, expectedMode, issuer isolation and rotation, connection-error mapping, every operation, separate reconciliation
   grant, invariant alert, trailing-terminator issuerRef) and `balance-status.mysql.test.ts` (wallet 0 + 1M yuan credit through
   holds, unknown, full/partial settles and releases; reserve boundary at headroom 0; closed, lapsed and non-active credit;
-  every mode, unbound, order; batch shape; gate, scope, signature; consistent lock-free read under concurrent settles). Roll back: unset the gate, then
+  every mode, unbound, order; batch shape; gate, scope, signature; consistent lock-free read under concurrent settles; arrears causes). Roll back: unset the gate, then
   `prisma/rollback/20261111_rollback_billing_service_grant_issuer_check.sql` (restores the original CHECK), then
   `prisma/rollback/20261110_rollback_billing_service_grants.sql` (refuses while any grant or nonce row exists or a later billing
   migration is applied). Run them before the
   S2-c and S2-a rollbacks (their guards refuse while any later billing migration is applied); it does not depend on the
-  charges, credit or reservations rollbacks.
+  charges, credit or reservations rollbacks. Reverting C-BAL alone (no migration, no data): unless the scope stays declarable
+  through E1c, any grant already issued with `balance-status` then has an unknown scope name and is refused on **every** route
+  (`scope_denied`, never broader access): revoke and reissue such grants before reverting.
 - **Not here**: limiting a service grant to certain payers or workspaces (deferred: the grant row is immutable and its hash covers
   every field, so a limit means a new hash schema, re-issuing and re-pinning every grant, and re-issuing again on each new binding;
   reserve now checks the binding instead), `claim-verify`, reconcile (S5), the caller

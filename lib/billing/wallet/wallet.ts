@@ -8,7 +8,7 @@ import { readPayerBalanceSummaries } from "../balance/balance-status";
 /** Billing V1 S2-c wallet read, finance visibility only: payer resolved server-side; reader is an ACTIVE, unscoped OWNER/BILLING_ADMIN.
  * Projection balance plus wallet deltas newest first (keyset cursor); no evidence, operation keys or business data; fen strings.
  * `availableFen` keeps its meaning (wallet projection only); C-BAL adds the summary's balanceFen (may be negative), headroomFen and
- * arrears (balance-status.ts). */
+ * arrears (balance-status.ts); headroomFen includes remaining credit and must never be displayed as a balance. */
 export const WALLET_PAGE_MAX = 100;
 export type WalletQuery = { workspaceId: string; actorUserId: string; cursor?: string | null; limit?: number };
 export type WalletView = { currency: "CNY"; billingMode: "off" | "shadow" | "enforce"; availableFen: string;
@@ -53,7 +53,9 @@ export async function getWalletInTransaction(tx: Prisma.TransactionClient, query
     ORDER BY t.createdAt DESC, t.id DESC LIMIT ${limit + 1}`;
   const page = rows.slice(0, limit);
   const summary = (await readPayerBalanceSummaries(tx, [query.workspaceId])).get(query.workspaceId);
-  if (!summary) fail("payer_unresolved"); // the binding resolved above under its share lock, so this cannot happen
+  // Under REPEATABLE READ this plain read uses the snapshot of the transaction's first read, so a binding created between that
+  // read and the locking resolve above is not seen here: refused as payer_unresolved (404), never a wrong number.
+  if (!summary) fail("payer_unresolved");
   return { currency: "CNY", billingMode: payer.billingMode,
     availableFen: fenToDecimalString(projection ? BigInt(projection.balanceFen) : BigInt(0)),
     balanceFen: fenToDecimalString(summary.balanceFen), headroomFen: fenToDecimalString(summary.headroomFen), arrears: summary.arrears,
