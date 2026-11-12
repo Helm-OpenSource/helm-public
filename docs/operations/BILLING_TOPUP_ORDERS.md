@@ -114,7 +114,10 @@ Only an order of the session's workspace, for its OWNER/BILLING_ADMIN (403); any
   verified), then runs the same query: the order becomes `closed_unpaid` only when Alipay reports `TRADE_CLOSED`. `close` is
   `closed`, `not_created` (`ACQ.TRADE_NOT_EXIST`: the cashier was never submitted; the order stays open until it expires) or
   `close_failed`. A success arriving after close still credits once (`lateAfterClose`).
-- Config: same `resolveAlipayTopup("query")` decision; incomplete → `503 topup_unavailable`. Alipay is called only on these explicit
+- Provider dispatch: an order is only ever sent to its own provider; another provider's order answers 409
+  `topup_provider_mismatch` before any throttle write or provider call (WeChat Pay orders wait for the WeChat slice).
+- Config: same `resolveAlipayTopup("query")` decision, checked after the session (unsigned requests log nothing); incomplete →
+  `503 topup_unavailable`. Alipay is called only on these explicit
   user actions, never by a timer.
 
 ## Verification and rollback / 验证与回滚

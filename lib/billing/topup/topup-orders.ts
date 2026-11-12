@@ -162,10 +162,13 @@ export async function readTopupOrderForSession(client: PrismaClient, input: Sess
  * Admits one session-triggered provider call for the order (query, or close then query) under the per-order throttle. A credited
  * order, or one too old or not queryable, is returned as is without a provider call (`query: false`); close needs a waiting order.
  */
-export async function claimTopupOrderQuery(client: PrismaClient, input: SessionOrderInput & { purpose: "query" | "close"; now?: Date }) {
+export async function claimTopupOrderQuery(client: PrismaClient,
+  input: SessionOrderInput & { purpose: "query" | "close"; provider: TopupProvider; now?: Date }) {
   const now = input.now ?? new Date();
   return client.$transaction(async tx => {
     const order = await lockSessionOrder(tx, input);
+    // Refused before any throttle write or provider call: an order is only ever sent to its own provider.
+    if (order.provider !== input.provider) refuse("topup_provider_mismatch");
     if (input.purpose === "close" && order.state !== "created" && order.state !== "pending") refuse("topup_order_not_closable");
     if (!QUERYABLE.includes(order.state) || now.getTime() - order.createdAt.getTime() > TOPUP_QUERY_MAX_AGE_MS) {
       return { order, query: false };

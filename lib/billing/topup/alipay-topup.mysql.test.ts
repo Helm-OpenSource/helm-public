@@ -388,6 +388,40 @@ describe.skipIf(!url)("Alipay wallet top-up notify against MySQL", () => {
   });
 
   // Prisma stores DATETIME in UTC, so test-side clock edits use UTC_TIMESTAMP (the server's NOW() may be another zone).
+  it("never sends another provider's order to Alipay, counts each refresh, and keeps the status read behind the gate", async () => {
+    const { ws } = await payerWorkspace();
+    sessionHolder.session = { user: { id: admin }, workspace: { id: ws } };
+    const wechat = await createTopupOrder(a, { actorUserId: admin, workspaceId: ws, provider: "wechat_pay", amountFen: BigInt(10_000),
+      merchantRef: "wechat-mch:synthetic", appRef: "wechat-app:synthetic" });
+    const sent = double.requests.length;
+    for (const route of [verifyRoute, closeRoute]) {
+      expect(await onOrder(route, wechat.id)).toEqual({ status: 409, body: { error: "topup_provider_mismatch" } });
+    }
+    expect(double.requests.length).toBe(sent); // nothing reached the Alipay gateway
+    expect(await a.paymentOrder.findUniqueOrThrow({ where: { id: wechat.id } })).toMatchObject({ queryCount: 0, lastQueriedAt: null });
+    // Two refreshes of an Alipay order more than 10 s apart count twice.
+    const { row } = await sessionOrder();
+    expect((await onOrder(verifyRoute, row.id, admin, row.workspaceId)).body).toMatchObject({ queried: true });
+    await a.$executeRaw`UPDATE PaymentOrder SET lastQueriedAt = UTC_TIMESTAMP(3) - INTERVAL 11 SECOND WHERE id = ${row.id}`;
+    expect((await onOrder(verifyRoute, row.id)).body).toMatchObject({ queried: true });
+    expect(await a.paymentOrder.findUniqueOrThrow({ where: { id: row.id } })).toMatchObject({ queryCount: 2 });
+    vi.stubEnv("HELM_BILLING_TOPUP_ALIPAY_ENABLED", "false");
+    try {
+      const response = await orderRoute(new Request("https://helm.invalid/x"), { params: Promise.resolve({ id: row.id }) });
+      expect([response.status, await response.text()]).toEqual([404, "Not Found"]);
+    } finally { vi.stubEnv("HELM_BILLING_TOPUP_ALIPAY_ENABLED", "true"); }
+  });
+
+  it("checks the session before the configuration on refresh and close, so unsigned requests log nothing", async () => {
+    const alerts = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.stubEnv("HELM_BILLING_TOPUP_ALIPAY_SELLER_ID", "");
+    try {
+      sessionHolder.session = null;
+      for (const route of [verifyRoute, closeRoute]) expect((await onOrder(route, "any-order")).status).toBe(401);
+      expect(alerts).not.toHaveBeenCalled();
+    } finally { vi.stubEnv("HELM_BILLING_TOPUP_ALIPAY_SELLER_ID", double.env.HELM_BILLING_TOPUP_ALIPAY_SELLER_ID); alerts.mockRestore(); }
+  });
+
   it("caps refreshes at 30 an hour per order and stops querying orders older than 72 hours", async () => {
     const { ws, row } = await sessionOrder();
     sessionHolder.session = { user: { id: admin }, workspace: { id: ws } };
