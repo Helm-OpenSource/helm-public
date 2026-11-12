@@ -57,7 +57,8 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
   releases or changes the key. A `reserve` answered `core_unavailable` or `internal_error` must be retried with the same key
   before the work is abandoned (the reservation may exist; the retry replays it or refuses).
 - **Operations** (path = scope): `quote` (`subjectScope` `{ kind: "workspace", workspaceId }`; vault is `request_invalid` until
-  S3-f), `reserve`, `settle`, `release` (`not_executed|failed|partial_unusable`), `mark-unknown`, and `resolve-unknown`
+  S3-f), `reserve` (required `subjectScope`, the same shape as quote, plus `payerRef` from quote: refused as
+  `grant_not_active` unless that workspace's current binding names `payerRef`; see BILLING_RESERVATIONS.md "Payer binding"), `settle`, `release` (`not_executed|failed|partial_unusable`), `mark-unknown`, and `resolve-unknown`
   (`outcome: settled` with `quantityUsed`, or `released`) for reconciliation grants only. Library semantics:
   [BILLING_RESERVATIONS.md](BILLING_RESERVATIONS.md); the authenticated grant is the actor
   (`SYSTEM:billing-service:<issuerRef>/<grantId>` in `createdBy`/`resolvedBy`).
@@ -72,7 +73,9 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
   migration is applied). Run them before the
   S2-c and S2-a rollbacks (their guards refuse while any later billing migration is applied); it does not depend on the
   charges, credit or reservations rollbacks.
-- **Not here**: `claim-verify`, reconcile (S5), the caller
+- **Not here**: limiting a service grant to certain payers or workspaces (deferred: the grant row is immutable and its hash covers
+  every field, so a limit means a new hash schema, re-issuing and re-pinning every grant, and re-issuing again on each new binding;
+  reserve now checks the binding instead), `claim-verify`, reconcile (S5), the caller
   client (Overlay), CP env-contract entries for the two keys (both non-secret).
 
 ## Issuance, rotation and revocation / 签发、轮换与吊销

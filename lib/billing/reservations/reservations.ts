@@ -10,7 +10,8 @@ import { type BillingPeriodKeys, chargeFenForQuantity, lockSpendGrantForUseInTra
 
 /**
  * Billing V1 S3-b reservations on the S3 internal protocol (docs/operations/BILLING_RESERVATIONS.md); nothing auto-releases and
- * shadow never moves money. Lock order: Membership -> PayerAccount FOR UPDATE (per-payer mutex) -> SpendGrant -> BudgetBucket
+ * shadow never moves money. Lock order: Membership -> PayerAccount FOR UPDATE (per-payer mutex) -> (reserve: the workspace's
+ * PayerScopeBinding FOR SHARE; revokeBinding takes no PayerAccount lock, it serializes with reserve on this row) -> SpendGrant -> BudgetBucket
  * day, month -> (reserve: CreditFacility) -> BillingReservation -> (settle: the S3-e credit draw's order) -> FundsTransaction ->
  * FundsAccountProjection; the bucket CAS and limit guard in the UPDATE's own WHERE are the second line.
  */
@@ -90,7 +91,16 @@ const run = <T>(client: PrismaClient, body: (tx: Prisma.TransactionClient) => Pr
   client.$transaction(body, { maxWait: 5000, timeout: 10000, isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
 
 function idempotencyKey(value: unknown) { if (typeof value !== "string" || !/^[A-Za-z0-9:_-]{8,128}$/.test(value)) reject("request_invalid"); }
-export type ReserveRequest = { idempotencyKey: string; operationRef: string; payerRef: string; grantId: string;
+export type SubjectScope = { kind: "workspace"; workspaceId: string } | { kind: "vault"; vaultId: string };
+/** vault scopes need consumer payers (S3-f); until then request_invalid (protocol v3.2). Returns the workspace id. */
+function workspaceScope(scope: SubjectScope | undefined) {
+  if (!scope || typeof scope !== "object" || scope.kind !== "workspace") reject("request_invalid");
+  reference(scope.workspaceId);
+  return scope.workspaceId;
+}
+export type ReserveRequest = { idempotencyKey: string; operationRef: string;
+  /** The workspace the work is for; Core resolves its current binding and requires it to name `payerRef` (P1-1). */
+  subjectScope: SubjectScope; payerRef: string; grantId: string;
   priceVersionId: string; billingEventRef: string; meterUnit: string; quantity: string;
   /** v3.4: the payer's actual mode must equal it, else `mode_mismatch` and nothing is held (not part of the content hash). */
   expectedMode?: Mode };
@@ -100,13 +110,26 @@ export function normalizeReserve(actor: ServiceActor, req: ReserveRequest) {
   const createdBy = serviceActor(actor);
   if (!req || typeof req !== "object") reject("request_invalid");
   idempotencyKey(req.idempotencyKey);
+  const workspaceId = workspaceScope(req.subjectScope);
   for (const value of [req.operationRef, req.payerRef, req.grantId, req.priceVersionId, req.billingEventRef]) reference(value);
   if (typeof req.meterUnit !== "string" || !/^[a-z][a-z0-9_]{0,31}$/.test(req.meterUnit)) reject("request_invalid");
   const quantity = positiveQuantity(req.quantity);
   if (req.expectedMode !== undefined && req.expectedMode !== "shadow" && req.expectedMode !== "enforce") reject("request_invalid");
-  const content = { v: 1, operationRef: req.operationRef, payerRef: req.payerRef, grantId: req.grantId,
+  const content = { v: 2, operationRef: req.operationRef, workspaceId, payerRef: req.payerRef, grantId: req.grantId,
     priceVersionId: req.priceVersionId, billingEventRef: req.billingEventRef, meterUnit: req.meterUnit, quantity: req.quantity };
-  return { createdBy, quantity, contentHash: createHash("sha256").update(JSON.stringify(content)).digest("hex") };
+  return { createdBy, workspaceId, quantity, contentHash: createHash("sha256").update(JSON.stringify(content)).digest("hex") };
+}
+
+/**
+ * The workspace's current active binding (S1-c resolver: it share-locks the binding row, so a concurrent revoke either committed
+ * first and is seen here, or waits for this transaction). Unbound, revoked, or a suspended / non-CNY payer: `unresolved`.
+ */
+async function workspaceBinding(tx: Prisma.TransactionClient, workspaceId: string, unresolved: BillingRejectCode) {
+  try { return await resolvePayerForWorkspaceInTransaction(tx, workspaceId); } catch (error) {
+    if (error instanceof Error && error.message === "payer_unresolved") reject(unresolved);
+    if (error instanceof Error && error.message === "payer_account_unavailable") reject("grant_not_active");
+    throw error;
+  }
 }
 
 async function lockPayerRow(tx: Prisma.TransactionClient, payerAccountId: string) {
@@ -149,7 +172,7 @@ async function moveBucket(tx: Prisma.TransactionClient, grantId: string, billing
 /** Reserve: idempotent by (payer, key) + content hash, one per (payer, operationRef); any refusal rolls back, key unused. */
 // Not exported: its plain reads rely on PayerAccount being locked before the transaction's first read, which `reserve` guarantees.
 async function reserveInTransaction(tx: Prisma.TransactionClient, actor: ServiceActor, req: ReserveRequest) {
-  const { createdBy, quantity, contentHash } = normalizeReserve(actor, req);
+  const { createdBy, workspaceId, quantity, contentHash } = normalizeReserve(actor, req);
   const payerAccountId = req.payerRef;
   await lockPayerRow(tx, payerAccountId);
   // Every reservation writer holds this PayerAccount lock, so a plain read now sees any committed row; a stale caller snapshot
@@ -162,7 +185,13 @@ async function reserveInTransaction(tx: Prisma.TransactionClient, actor: Service
     reject("idempotency_conflict");
   }
   if (replay && req.expectedMode !== undefined && replay.billingMode !== req.expectedMode) reject("mode_mismatch");
+  // A replay returns the recorded hold even after a later revoke: its binding was checked when it was made (and the content hash
+  // covers the workspace), so a caller retrying a core_unavailable answer never strands a held reservation.
   if (replay) return reserved(replay.billingMode, replay.id, replay.state, replay.chargeFen, replay.priceContentHash, replay.dayKey, replay.monthKey);
+  // P1-1 (S0 §2.2): the payer is the one the declared workspace is bound to now, never the caller's cached or chosen payerRef.
+  // Under the PayerAccount lock, so the binding frozen below is the one this hold ran under; settle uses the frozen row (R05).
+  const binding = await workspaceBinding(tx, workspaceId, "grant_not_active");
+  if (binding.payerAccountId !== payerAccountId) reject("grant_not_active");
   let buckets: BucketRow[] = [];
   const admitted = await lockSpendGrantForUseInTransaction(tx, { payerAccountId, grantId: req.grantId,
     priceVersionId: req.priceVersionId, billingEventRef: req.billingEventRef, meterUnit: req.meterUnit, quantity },
@@ -191,7 +220,8 @@ async function reserveInTransaction(tx: Prisma.TransactionClient, actor: Service
     operationRef: req.operationRef, contentHash, grantId: grant.id, grantVersion: grant.version, productId: grant.productId,
     priceVersionId: admitted.priceVersionId, priceContentHash: admitted.priceContentHash, billingEventRef: req.billingEventRef,
     meterUnit: req.meterUnit, quantity, chargeFen, billingMode, reservedAt: admitted.at, dayKey: admitted.periodKeys.day,
-    monthKey: admitted.periodKeys.month, createdBy } });
+    monthKey: admitted.periodKeys.month, createdBy, subjectWorkspaceId: workspaceId, payerBindingId: binding.bindingId,
+    payerBindingVersion: binding.bindingVersion } });
   return reserved(billingMode, row.id, row.state, chargeFen, row.priceContentHash, row.dayKey, row.monthKey);
 }
 function reserved(mode: Mode, reservationId: string, state: string, capFen: bigint, priceContentHash: string, day: string, month: string) {
@@ -378,9 +408,7 @@ export async function resolveUnknownInTransaction(tx: Prisma.TransactionClient, 
   return releaseFrom(tx, actor, req, "unknown_released", true);
 }
 
-export type QuoteRequest = { subjectScope: { kind: "workspace"; workspaceId: string } | { kind: "vault"; vaultId: string };
-  billingEventRef: string; meterUnit: string;
-  quantity: string };
+export type QuoteRequest = { subjectScope: SubjectScope; billingEventRef: string; meterUnit: string; quantity: string };
 /**
  * Resolves payer, grant and price version for a subject (protocol v2 §3) so the business side never picks a grant. Advisory and
  * lock-free: `reserve` re-checks everything under lock. An unbound workspace or an off payer is `billing_mode_off` (not billed);
@@ -388,18 +416,11 @@ export type QuoteRequest = { subjectScope: { kind: "workspace"; workspaceId: str
  */
 export async function quoteInTransaction(tx: Prisma.TransactionClient, actor: ServiceActor, req: QuoteRequest) {
   serviceActor(actor);
-  // vault scopes need consumer payers (S3-f); until then request_invalid (protocol v3.2)
-  if (!req?.subjectScope || req.subjectScope.kind !== "workspace") reject("request_invalid");
-  const workspaceId = req.subjectScope.workspaceId;
-  reference(workspaceId); reference(req.billingEventRef); positiveQuantity(req.quantity);
+  const workspaceId = workspaceScope(req?.subjectScope);
+  reference(req.billingEventRef); positiveQuantity(req.quantity);
   if (typeof req.meterUnit !== "string" || !/^[a-z][a-z0-9_]{0,31}$/.test(req.meterUnit)) reject("request_invalid");
-  let payer: Awaited<ReturnType<typeof resolvePayerForWorkspaceInTransaction>>;
-  try { payer = await resolvePayerForWorkspaceInTransaction(tx, workspaceId); } catch (error) {
-    // No active binding: the workspace is not billed today (status quo). A suspended payer fails closed.
-    if (error instanceof Error && error.message === "payer_unresolved") reject("billing_mode_off");
-    if (error instanceof Error && error.message === "payer_account_unavailable") reject("grant_not_active");
-    throw error;
-  }
+  // No active binding: the workspace is not billed today (status quo). A suspended payer fails closed.
+  const payer = await workspaceBinding(tx, workspaceId, "billing_mode_off");
   if (payer.billingMode === "off") reject("billing_mode_off");
   const grants = await tx.$queryRaw<Array<{ grantId: string; priceVersionId: string }>>`SELECT g.id AS grantId,
       g.priceVersionId FROM SpendGrant g JOIN BillingPriceVersion p ON p.id = g.priceVersionId
