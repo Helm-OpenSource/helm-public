@@ -127,6 +127,22 @@ Only an order of the session's workspace, for its OWNER/BILLING_ADMIN (403); any
 - Config: same `resolveAlipayTopup("query")` decision; incomplete → `503 topup_unavailable`. Alipay is called only on these explicit
   user actions, never by a timer.
 
+## Top-up page / 充值页（S2-d3）
+
+`app/(workspace)/billing/topup/page.tsx` + `features/billing/topup-panel.tsx`; helpers `lib/billing/topup/topup-page.ts`.
+`/billing` is a workspace page prefix, so an unsigned browser (e.g. opened by the seat desktop client) signs in first.
+
+- 404 while the gates are off. Merchant configuration incomplete: the Alipay entry shows 充值暂不可用 (no order is attempted).
+  Members without OWNER/BILLING_ADMIN see who can top up instead of the form.
+- Amount: presets 100 / 500 / 1 000 / 5 000 yuan or typed (exact yuan → fen, no floating point), prefilled from the server-issued
+  `suggestedFen` (integer, clamped into 1–50 000 yuan; only a prefill, never an authority). The panel sends only
+  `{provider:"alipay", amountFen}` with one `Idempotency-Key` per amount, then opens the returned cashier URL.
+- WeChat Pay has a reserved, disabled slot on the same page (即将开通) until its slice wires it.
+- Return: Alipay returns to `/billing/topup?order=<order id>`; the page shows that order of the session workspace read-only and
+  「刷新状态」 calls `POST /{id}/verify`. Nothing in the return URL is ever a credit.
+- Client URL rule (contract S2D §10.3 as ruled by the owner 2026-11-12): `buildTopUpUrl(APP_URL origin, suggestedFen?)` and the
+  reference check `isOpenableTopUpUrl` — https, port 443, the login host or an exact allow-listed host, no credentials; **no path check**.
+
 ## Verification and rollback / 验证与回滚
 
 - Unit `topup-orders.test.ts`; `npm run test:billing:mysql` (CI `mysql:8.4`) with a synthetic HMAC adapter covers the rules above,

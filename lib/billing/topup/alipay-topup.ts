@@ -7,6 +7,7 @@ import { isDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabili
 import { FundsRefusal } from "../funds/funds-journal";
 import type { MerchantRefLookup } from "./provider-observation";
 import { defineTopupProviderAdapter, TopupRefusal, verifyTopupCallback } from "./topup-orders";
+import { TOPUP_PAGE_PATH } from "./topup-page";
 
 /**
  * Billing V1 S2-d1 Alipay (computer website payment) wallet top-up adapter and its own notify entry
@@ -181,7 +182,6 @@ export async function closeAlipayTopupTrade(config: AlipayTopupConfig, providerO
 }
 
 export const ALIPAY_TOPUP_NOTIFY_PATH = "/api/billing/v1/topup-notify/alipay";
-export const TOPUP_PAGE_PATH = "/billing/topup";
 /** Fixed text: nothing we write into a signed Alipay field comes from a user (contract S2D §6). */
 export const ALIPAY_TOPUP_SUBJECT = "Helm 钱包充值";
 const fenToYuan = (fen: bigint) => `${fen / BigInt(100)}.${(fen % BigInt(100)).toString().padStart(2, "0")}`;
