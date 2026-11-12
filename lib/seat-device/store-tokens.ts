@@ -320,13 +320,15 @@ const REFRESH_WINDOW_MS = 60 * 1000;
 // What the bound member allows, read outside the transaction (P2-7) with
 // the same checks as the extension's device branch (design §6.2, §15.6.4):
 // an ACTIVE workspace, the same ACTIVE, internal membership and an unchanged
-// password. A member who fails them is revoked for good. A workspace that is
-// missing (it could not carry the audit row) or not ACTIVE (a suspension can
-// be lifted) is refused without revoking, as is one whose flag is off
-// (design §15.2: switched off is not revoked).
+// password. A member who fails them is revoked for good, and so is a device
+// of a CANCELED workspace. A SUSPENDED workspace (a suspension can be lifted)
+// and one whose flag is off answer workspace_not_enabled and keep the device,
+// so the client keeps its credential and backs off (design §15.2: switched
+// off is not revoked). A missing workspace cannot carry the audit row of a
+// revoke and is refused without one.
 type RefreshStanding =
   | { ok: true }
-  | { ok: false; revoke: "membership_inactive" | "password_reset" }
+  | { ok: false; revoke: "membership_inactive" | "password_reset" | "workspace_cancelled" }
   | { ok: false; code: "account_disabled" | "workspace_not_enabled" };
 
 async function loadRefreshStanding(row: {
@@ -344,7 +346,9 @@ async function loadRefreshStanding(row: {
     }),
     db.user.findUnique({ where: { id: row.userId }, select: { passwordSetAt: true } }),
   ]);
-  if (!workspace || workspace.status !== WorkspaceStatus.ACTIVE) return { ok: false, code: "account_disabled" };
+  if (!workspace) return { ok: false, code: "account_disabled" };
+  if (workspace.status === WorkspaceStatus.CANCELED) return { ok: false, revoke: "workspace_cancelled" };
+  if (workspace.status !== WorkspaceStatus.ACTIVE) return { ok: false, code: "workspace_not_enabled" };
   if (
     !membership ||
     !user ||

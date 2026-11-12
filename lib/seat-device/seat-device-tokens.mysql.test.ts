@@ -542,17 +542,41 @@ describeMysql("seat device credentials (classify, pin, revoke) on MySQL", () => 
     }
   });
 
-  it("refuses a suspended workspace without revoking, like the device channel", async () => {
+  // Owner coordination 2026-11-12 (review P3-3, option a): a suspension can
+  // be lifted, so the client keeps its credential and backs off; a canceled
+  // workspace revokes the device.
+  it("keeps the device of a SUSPENDED workspace and revokes the device of a CANCELED one", async () => {
     const now = nextClock();
-    const live = await device(now);
+    const suspended = await device(now);
+    const canceled = await device(now);
     await db.workspace.update({ where: { id: workspaceId }, data: { status: WorkspaceStatus.SUSPENDED } });
     try {
-      await expectCode(refreshAt(live.refreshToken, at(now, 100), live.source), "account_disabled");
+      await expectCode(refreshAt(suspended.refreshToken, at(now, 100), suspended.source), "workspace_not_enabled");
     } finally {
       await db.workspace.update({ where: { id: workspaceId }, data: { status: WorkspaceStatus.ACTIVE } });
     }
-    expect(await row(live.deviceId)).toMatchObject({ status: "active", refreshTokenUsed: true, revokedAt: null });
-    await expect(refreshAt(live.refreshToken, at(now, 110), live.source)).resolves.toMatchObject({ expiresInSeconds: 900 });
+    expect(await row(suspended.deviceId)).toMatchObject({ status: "active", refreshTokenUsed: true, revokedAt: null });
+    await expect(refreshAt(suspended.refreshToken, at(now, 110), suspended.source)).resolves.toMatchObject({ expiresInSeconds: 900 });
+
+    await db.workspace.update({ where: { id: workspaceId }, data: { status: WorkspaceStatus.CANCELED } });
+    try {
+      await expectCode(refreshAt(canceled.refreshToken, at(now, 100), canceled.source), "account_disabled");
+    } finally {
+      await db.workspace.update({ where: { id: workspaceId }, data: { status: WorkspaceStatus.ACTIVE } });
+    }
+    expect(await row(canceled.deviceId)).toMatchObject({ status: "revoked", revokeReason: "workspace_cancelled" });
+    await expect(classifySeatDeviceAccessToken(canceled.accessToken, at(now, 101))).resolves.toEqual({ ok: false, code: "device_revoked" });
+  });
+
+  // Reuse is judged before the member: a replayed token of a member who also
+  // changed is recorded as reuse, the stronger signal.
+  it("records reuse, not the member change, when both happen", async () => {
+    const now = nextClock();
+    const live = await device(now);
+    await refreshAt(live.refreshToken, at(now, 100), live.source);
+    await db.membership.update({ where: { id: live.owner.membershipId }, data: { status: MembershipStatus.INACTIVE } });
+    await expectCode(refreshAt(live.refreshToken, at(now, 300), live.source), "token_revoked");
+    expect(await row(live.deviceId)).toMatchObject({ status: "revoked", revokeReason: "refresh_reuse" });
   });
 
   it("keeps the device while the workspace is not enabled", async () => {

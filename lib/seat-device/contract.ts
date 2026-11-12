@@ -69,6 +69,8 @@ export const SEAT_DEVICE_REVOKE_REASONS = [
   "seat_inactive",
   // The client refused a claim answer it could not read (design v0.3.2).
   "client_rejected",
+  // The bound workspace was CANCELED (seen on refresh; a suspension is not).
+  "workspace_cancelled",
 ] as const;
 export type SeatDeviceRevokeReason = (typeof SEAT_DEVICE_REVOKE_REASONS)[number];
 
