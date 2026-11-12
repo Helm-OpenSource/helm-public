@@ -141,6 +141,11 @@ describe.skipIf(!url)("Alipay wallet top-up notify against MySQL", () => {
     for (let i = 0; i < 2; i += 1) expect(await notify(double.notify(trade(o, { total_amount: "7.99" })))).toEqual([200, "success"]);
     expect(await exceptions(`amount_mismatch:alipay:${trade(o).trade_no}`)).toBe(1);
     expect(await effects(o)).toEqual(untouched);
+    // Paid in full on paper but received less (a discount the merchant should not run): kept, never credited.
+    const short = await order(810);
+    expect(await notify(double.notify(trade(short, { receipt_amount: "8090.00" })))).toEqual([200, "success"]);
+    expect(await exceptions(`amount_mismatch:alipay:${trade(short).trade_no}`)).toBe(1);
+    expect(await effects(short)).toEqual(untouched);
   });
 
   it("lets exactly one of concurrent notifies and queries credit", async () => {

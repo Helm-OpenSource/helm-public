@@ -55,7 +55,19 @@ export function observeAlipayTrade(trade: Record<string, string | undefined>, co
   return { source: context.source, merchantRef: refs?.merchantRef ?? null,
     appRef: refs?.appRef ?? null, providerOrderNo: text(trade.out_trade_no), providerTxnId: text(trade.trade_no) || null,
     status: Object.hasOwn(ALIPAY_STATUS, text(trade.trade_status)) ? ALIPAY_STATUS[text(trade.trade_status)] : "unknown",
-    amountFen: yuanToFenExact(trade.total_amount), currency: text(trade.trans_currency) || "CNY", refund: alipayRefund(trade) };
+    amountFen: alipayAmountFen(trade), currency: text(trade.trans_currency) || "CNY", refund: alipayRefund(trade) };
+}
+
+/**
+ * Owner 2026-11-12 11:24: the merchant runs no discounts and credits the order amount; when Alipay reports a `receipt_amount`
+ * (what the merchant actually received) that differs from `total_amount`, the observed amount is the receipt, so the order's exact
+ * amount check refuses it and keeps an `amount_mismatch` exception (never a credit). An unparseable receipt is unparseable.
+ */
+function alipayAmountFen(trade: Record<string, string | undefined>) {
+  const total = yuanToFenExact(trade.total_amount);
+  if (trade.receipt_amount === undefined || trade.receipt_amount === "") return total;
+  const receipt = yuanToFenExact(trade.receipt_amount);
+  return receipt === total ? total : receipt;
 }
 
 const bounded = (value: unknown) => /^[\x21-\x7e ]{1,64}$/.test(text(value)) ? text(value) : null;

@@ -56,6 +56,10 @@ describe("alipay top-up adapter", () => {
     expect((await observe(double.notify({ ...paid, trade_status: "TRADE_CLOSED" }))).status).toBe("closed");
     expect((await observe(double.notify({ ...paid, trade_status: "WAIT_BUYER_PAY" }))).status).toBe("not_paid");
     expect((await observe(double.notify({ ...paid, total_amount: "12.305" }))).amountFen).toBeNull();
+    // Owner 11-12: what the merchant received must equal the order amount; a different receipt is the observed amount.
+    expect((await observe(double.notify({ ...paid, receipt_amount: "12.30" }))).amountFen).toBe(BigInt(1230));
+    expect((await observe(double.notify({ ...paid, receipt_amount: "11.30" }))).amountFen).toBe(BigInt(1130));
+    expect((await observe(double.notify({ ...paid, receipt_amount: "x" }))).amountFen).toBeNull();
     // Another app or seller is not an authentication failure: it maps to no refs (topup_merchant_mismatch downstream).
     expect(await observe(double.notify({ ...paid, app_id: "2021000000000002" }))).toMatchObject({ merchantRef: null, appRef: null });
     expect(await observe(double.notify({ ...paid, seller_id: "2088000000000002" }))).toMatchObject({ merchantRef: null });
@@ -89,6 +93,9 @@ describe("alipay top-up adapter", () => {
       merchantRef: `alipay-seller:${config.sellerId}`, appRef: `alipay-app:${config.appId}` });
     expect(JSON.parse(double.requests.at(-1)!.biz_content)).toEqual({ out_trade_no: order });
     expect(double.requests.at(-1)).toMatchObject({ app_id: config.appId, method: "alipay.trade.query", sign_type: "RSA2" });
+    double.trades.set(order, { code: "10000", msg: "Success", ...paid, receipt_amount: "10.00" });
+    expect((await adapter.queryOrder(order)).amountFen).toBe(BigInt(1000)); // the query keeps the receipt too
+    double.trades.set(order, { code: "10000", msg: "Success", ...paid, total_amount: "12.30" });
     double.setTamper(true);
     await expect(adapter.queryOrder(order)).rejects.toThrow("query_signature_invalid");
     double.setTamper(false);

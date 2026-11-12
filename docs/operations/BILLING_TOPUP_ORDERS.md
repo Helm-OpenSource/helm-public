@@ -73,7 +73,8 @@ notify route (`/api/billing/alipay/notify`, unchanged): top-up orders are create
   values are not re-checked; they are covered by the signature), no duplicate names,
   `sign_type=RSA2`, RSA2 signature over every parameter but `sign`/`sign_type` (`buildAlipaySignContent`), `charset` utf-8 if present.
   Unknown fields are signed, accepted and ignored. Empty values are outside the signature and are dropped after verification;
-  `trade_status` must then be present (signed return-page parameters are refused). `total_amount` is converted with `yuanToFenExact`. A notify carrying refund fields
+  `trade_status` must then be present (signed return-page parameters are refused). `total_amount` is converted with `yuanToFenExact`; a `receipt_amount` (notify or query) that differs from it becomes the observed
+  amount (owner 2026-11-12: no merchant discounts, credit the order amount only), so it is an `amount_mismatch` exception, never a credit. A notify carrying refund fields
   (`refund_fee` > 0, `gmt_refund`, `out_biz_no`) maps to `unknown` even if it says `TRADE_SUCCESS`: never a first credit; for a credited
   order it is a `paid_then_unknown` exception, for an uncredited one `unknown_before_credit`. No time window: late success must credit and replays are idempotent per trade.
 - **Answer**: `success` when credited, replayed, a state recorded, or a payment exception persisted where a retry cannot help (amount/currency
