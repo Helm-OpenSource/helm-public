@@ -1,7 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { alipayDouble } from "./alipay-gateway-fixture";
-import { createAlipayTopupAdapter, getAlipayTopupConfig, handleAlipayTopupNotify } from "./alipay-topup";
+import { createAlipayTopupAdapter, getAlipayTopupConfig, getAlipayTopupConfigProblems, handleAlipayTopupNotify,
+  resolveAlipayTopup } from "./alipay-topup";
 
 // Pure adapter and entry checks: no database (a client that throws proves none is reached), no network (gateway double).
 const double = alipayDouble();
@@ -19,9 +20,31 @@ describe("alipay top-up adapter", () => {
   it("needs every key, identifiers and an https gateway", () => {
     expect(config).toMatchObject({ appId: double.env.ALIPAY_APP_ID, sellerId: double.env.HELM_BILLING_TOPUP_ALIPAY_SELLER_ID });
     for (const patch of [{ HELM_BILLING_TOPUP_ALIPAY_SELLER_ID: "" }, { ALIPAY_APP_ID: "x y" }, { ALIPAY_PUBLIC_KEY: "" },
-      { ALIPAY_PRIVATE_KEY: "" }, { ALIPAY_GATEWAY_URL: "http://gateway.alipay.invalid/gateway.do" }]) {
+      { ALIPAY_PRIVATE_KEY: "" }, { ALIPAY_GATEWAY_URL: "http://gateway.alipay.invalid/gateway.do" },
+      { ALIPAY_PRIVATE_KEY: "bm90LWEta2V5" }, { ALIPAY_PUBLIC_KEY: "bm90LWEta2V5" }]) {
       expect(getAlipayTopupConfig({ ...double.env, ...patch })).toBeNull();
     }
+    // Malformed key material is a configuration problem (fixed codes, never values), not a later signing failure.
+    expect(getAlipayTopupConfigProblems({ ...double.env, ALIPAY_PRIVATE_KEY: "bm90LWEta2V5", ALIPAY_PUBLIC_KEY: "AAAA" })
+      .problems).toEqual(["private_key_invalid", "public_key_invalid"]);
+    expect(getAlipayTopupConfigProblems({}).problems).toEqual(["app_id_invalid", "seller_id_invalid", "private_key_invalid",
+      "public_key_invalid"]);
+  });
+
+  it("is open by default and closes on incomplete merchant configuration with one fixed-code alert", () => {
+    const alerts = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      expect(resolveAlipayTopup("create", double.env)).toMatchObject({ appId: double.env.ALIPAY_APP_ID });
+      expect(resolveAlipayTopup("create", { ...double.env, HELM_BILLING_TOPUP_ALIPAY_ENABLED: "false" })).toBe("off");
+      expect(resolveAlipayTopup("create", { ...double.env, HELM_FINANCIAL_ACTIONS_ENABLED: "false" })).toBe("off");
+      expect(alerts).not.toHaveBeenCalled();
+      expect(resolveAlipayTopup("create", { ...double.env, HELM_BILLING_TOPUP_ALIPAY_SELLER_ID: "" })).toBe("unavailable");
+      expect(alerts).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(String(alerts.mock.calls[0][1]))).toEqual({ event: "topup_unavailable", reason: "config_unavailable",
+        entry: "create", problems: ["seller_id_invalid"] });
+      expect(resolveAlipayTopup("notify", { ...double.env, ALIPAY_PRIVATE_KEY: "bm90LWEta2V5" })).toBe("unavailable");
+      expect(String(alerts.mock.calls[1][1])).not.toContain("bm90LWEta2V5");
+    } finally { alerts.mockRestore(); }
   });
 
   it("maps a signed notify exactly (yuan to fen, status, configured identity) and refuses forged or ambiguous forms", async () => {
@@ -99,7 +122,8 @@ describe("alipay top-up notify entry", () => {
   });
 
   it("is a plain 404 while either gate is off, before the body or database", async () => {
-    for (const env of [{}, { HELM_BILLING_TOPUP_ALIPAY_ENABLED: "yes" }, { HELM_BILLING_TOPUP_ALIPAY_ENABLED: "true", HELM_FINANCIAL_ACTIONS_ENABLED: "false" }]) {
+    for (const env of [{ HELM_BILLING_TOPUP_ALIPAY_ENABLED: "false" }, { HELM_BILLING_TOPUP_ALIPAY_ENABLED: "yes" },
+      { HELM_FINANCIAL_ACTIONS_ENABLED: "false" }]) {
       vi.stubEnv("HELM_BILLING_TOPUP_ALIPAY_ENABLED", undefined); vi.stubEnv("HELM_FINANCIAL_ACTIONS_ENABLED", undefined);
       for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
       const request = new Request("https://helm.invalid/x", { method: "POST", body: double.notify(paid),
@@ -110,8 +134,12 @@ describe("alipay top-up notify entry", () => {
   });
 
   it("refuses unconfigured, non-form, oversized, non-UTF-8 and unauthenticated bodies without touching the database", async () => {
-    vi.stubEnv("HELM_BILLING_TOPUP_ALIPAY_ENABLED", "true"); vi.stubEnv("HELM_FINANCIAL_ACTIONS_ENABLED", "true");
-    expect((await post(double.notify(paid))).status).toBe(503); // ALIPAY_* not configured
+    vi.stubEnv("HELM_BILLING_TOPUP_ALIPAY_ENABLED", undefined); vi.stubEnv("HELM_FINANCIAL_ACTIONS_ENABLED", undefined);
+    for (const key of Object.keys(double.env)) vi.stubEnv(key, undefined);
+    const alerts = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const unconfigured = await post(double.notify(paid)); // gates default open, ALIPAY_* not configured: closed, nothing read
+    expect([unconfigured.status, await unconfigured.text(), alerts.mock.calls.length]).toEqual([503, "fail", 1]);
+    alerts.mockRestore();
     for (const [key, value] of Object.entries(double.env)) vi.stubEnv(key, value);
     expect((await post(double.notify(paid), { "content-type": "application/json" })).status).toBe(415);
     expect((await post(`${double.notify(paid)}&pad=${"x".repeat(16_384)}`)).status).toBe(413);
