@@ -65,6 +65,24 @@ CLI `npm run billing:platform-ops` (`lib/billing/platform/platform-batch.ts`); n
   charged (under-billed, never over-charged)** and goes to manual review; size limits from real daily volume. The dry run prints
   `limitUnits` (meter units each limit covers at the referenced price) as the basis.
 
+## Emergency rollback / 一人紧急回退
+
+Owner ruling 2026-11-12: one person may roll a payer back at once; a second person confirms afterwards. 一人回退立即生效、留痕，并生成
+待补复核记录；24 小时内须由另一人复核确认。逾期只告警、不自动撤销回退。切 enforce 仍须两人。
+
+- Direction: **`enforce -> shadow` only** (keeps metering, moves no money; the recommended rollback). `-> off` and `-> enforce` stay
+  maker + checker above. Migration `20261112130000_billing_platform_emergency_rollbacks`, `lib/billing/platform/platform-emergency.ts`.
+- `--command=emergency-rollback --workspace-id=<id> --actor-user-id=<id> --evidence-ref=<ref> [--apply]`: any platform finance role
+  (maker or checker). Dry run prints the current mode. Apply: CAS `enforce -> shadow` on the payer (also when suspended) and a
+  `PlatformEmergencyRollback` row `pending_review` with `reviewDueAt = executedAt + 24h` (DB CHECK), audited
+  (`BILLING_PAYER_MODE_CHANGED`, `BILLING_PLATFORM_EMERGENCY_ROLLBACK_EXECUTED`) in the same transaction. Same person + same
+  `(evidenceRef, workspace)` replays; anyone else refuses `emergency_conflict`; a payer not in enforce refuses `billing_mode_conflict`.
+- `--command=confirm-rollback --rollback-id=<id> --actor-user-id=<checker> --evidence-ref=<ref> [--apply]`: a platform finance
+  **checker other than the executor** (service and DB CHECK); allowed after the due time too, audited with `overdue`.
+- `--command=pending-rollbacks`: read-only list, oldest due first, `overdue` on database time; when any is overdue it sets
+  `alert: emergency_rollback_review_overdue`, prints it on stderr and exits **3**, so a scheduled check can raise an alarm.
+- Rows refuse DELETE and keep their facts (trigger); rollback script refuses while any row exists.
+
 ## Batch CLI / 批量命令
 
 The roster is supplied by operations from the owner ruling; nothing in code names an institution.

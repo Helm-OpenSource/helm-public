@@ -6,6 +6,10 @@
  *   npm run billing:platform-ops -- --command=draft --list-file=<list.json> --actor-user-id=<maker> [--confirm-enforce] [--apply --list-sha=<sha256> --plan-sha=<sha256>]
  *   npm run billing:platform-ops -- --command=review --list-file=<list.json> --actor-user-id=<checker> --decision=approve|reject \
  *     --review-evidence-ref=<ref> [--confirm-enforce] [--apply --list-sha=<sha256> --plan-sha=<sha256>]
+ *   Emergency (one person, enforce -> shadow only; a different checker confirms within 24 hours):
+ *   npm run billing:platform-ops -- --command=emergency-rollback --workspace-id=<id> --actor-user-id=<id> --evidence-ref=<ref> [--apply]
+ *   npm run billing:platform-ops -- --command=confirm-rollback --rollback-id=<id> --actor-user-id=<checker> --evidence-ref=<ref> [--apply]
+ *   npm run billing:platform-ops -- --command=pending-rollbacks   (exit code 3 when any review is overdue)
  *
  * Output is one JSON document with closed codes and ids only; exit code 1 on refusal, 2 on usage error.
  */
@@ -14,9 +18,22 @@ import { readFileSync } from "node:fs";
 
 import { db } from "@/lib/db";
 import { parseOperationList, parsePlatformBatchArgs, runPlatformBatch } from "@/lib/billing/platform/platform-batch";
+import { EMERGENCY_COMMANDS, parseEmergencyArgs, runEmergencyCommand } from "@/lib/billing/platform/platform-emergency";
 
 async function main(): Promise<number> {
-  const args = parsePlatformBatchArgs(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  if (EMERGENCY_COMMANDS.some(command => argv.includes(`--command=${command}`))) {
+    const emergency = parseEmergencyArgs(argv);
+    if ("invalid" in emergency) {
+      console.error(JSON.stringify({ ok: false, code: "usage", reason: emergency.invalid }));
+      return 2;
+    }
+    const result = await runEmergencyCommand(db, emergency);
+    console.log(JSON.stringify(result, null, 2));
+    if ("alert" in result && result.alert) console.error(JSON.stringify({ alert: result.alert })); // overdue second-person review
+    return !result.ok ? 1 : "alert" in result && result.alert ? 3 : 0;
+  }
+  const args = parsePlatformBatchArgs(argv);
   if ("invalid" in args) {
     console.error(JSON.stringify({ ok: false, code: "usage", reason: args.invalid }));
     return 2;
