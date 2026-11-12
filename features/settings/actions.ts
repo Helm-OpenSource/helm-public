@@ -111,6 +111,8 @@ import {
   validateOwnershipTransfer,
 } from "@/lib/auth/membership-lifecycle";
 import { findFirstMembershipWithExistingUser } from "@/lib/auth/membership-with-user";
+import { isSeatDeviceAuthDeploymentEnabled } from "@/lib/seat-device/contract";
+import { revokeSeatDevicesInTx } from "@/lib/seat-device/store-tokens";
 import { buildMemberDefinitionDraft, type MemberDefinitionDraft } from "@/lib/definitions/member-definition";
 import {
   getWorkspaceRolePresetDefinition,
@@ -1379,12 +1381,28 @@ export async function updateOrganizationMembershipLifecycleAction(
       ? new Date()
       : targetMembership.joinedAt;
 
-  const updatedMembership = await db.membership.update({
-    where: { id: targetMembership.id },
-    data: {
-      status: parsed.data.nextStatus,
-      joinedAt: nextJoinedAt,
-    },
+  // A member leaving ACTIVE loses every seat desktop device in the same
+  // transaction (design D1 §4.6): otherwise a device not used while the
+  // member was inactive would work again once they are re-activated. Only
+  // while the deployment switch is on: until then the device table may not
+  // be readable by this process, and no device can be used anyway.
+  const updatedMembership = await db.$transaction(async (tx) => {
+    const updated = await tx.membership.update({
+      where: { id: targetMembership.id },
+      data: {
+        status: parsed.data.nextStatus,
+        joinedAt: nextJoinedAt,
+      },
+    });
+    if (updated.status !== MembershipStatus.ACTIVE && isSeatDeviceAuthDeploymentEnabled()) {
+      await revokeSeatDevicesInTx(tx, {
+        workspaceId: workspace.id,
+        membershipId: targetMembership.id,
+        reason: "membership_inactive",
+        actor: { userId: user.id, name: user.name },
+      });
+    }
+    return updated;
   });
 
   await writeAuditLog({
