@@ -4,17 +4,25 @@
  * or an exact allow-listed host; the path is NOT checked.
  */
 export const TOPUP_PAGE_PATH = "/billing/topup";
-// Same bounds as createTopupOrder (topup-orders.ts): 1 yuan – 50 000 yuan per order.
-export const TOPUP_PAGE_MIN_FEN = 100;
-export const TOPUP_PAGE_MAX_FEN = 5_000_000;
+// Same rule as checkTopupAmountFen (topup-orders.ts; owner 2026-11-12): whole multiples of 100 yuan, at least 100 yuan, no
+// business cap (only Alipay's 100 000 000 yuan maximum as a technical bound).
+export const TOPUP_PAGE_UNIT_FEN = 10_000;
+export const TOPUP_PAGE_MIN_FEN = TOPUP_PAGE_UNIT_FEN;
+export const TOPUP_PAGE_MAX_FEN = 10_000_000_000;
+export const isTopupAmountFen = (fen: number | null): fen is number =>
+  fen !== null && Number.isSafeInteger(fen) && fen >= TOPUP_PAGE_MIN_FEN && fen <= TOPUP_PAGE_MAX_FEN && fen % TOPUP_PAGE_UNIT_FEN === 0;
 export const TOPUP_PRESET_FEN = [10_000, 50_000, 100_000, 500_000] as const;
 
-/** `suggestedFen` is only a prefill: an integer string, clamped into the per-order bounds; anything else is ignored. */
+/**
+ * `suggestedFen` (the shortfall) is only a prefill: an integer string, rounded UP to the next whole 100 yuan (owner 2026-11-12) and
+ * kept within the bounds; anything else is ignored.
+ */
 export function parseSuggestedFen(raw: unknown) {
   const value = Array.isArray(raw) ? raw[0] : raw;
   if (typeof value !== "string" || !/^[0-9]{1,12}$/.test(value)) return null;
   const fen = Number(value);
-  return fen <= 0 ? null : Math.min(Math.max(fen, TOPUP_PAGE_MIN_FEN), TOPUP_PAGE_MAX_FEN);
+  if (fen <= 0) return null;
+  return Math.min(Math.ceil(fen / TOPUP_PAGE_UNIT_FEN) * TOPUP_PAGE_UNIT_FEN, TOPUP_PAGE_MAX_FEN);
 }
 
 /** The URL a server hands to clients (balance or insufficient-balance answers): APP_URL origin + fixed path, optional prefill only. */
@@ -36,7 +44,7 @@ export function isOpenableTopUpUrl(raw: string, loginOrigin: string, allowedHost
 
 /** Exact yuan text (at most two decimals) to integer fen, never through floating point; null when not a valid amount. */
 export function yuanTextToFen(text: string) {
-  const match = /^(0|[1-9][0-9]{0,8})(?:\.([0-9]{1,2}))?$/.exec(text.trim());
+  const match = /^(0|[1-9][0-9]{0,11})(?:\.([0-9]{1,2}))?$/.exec(text.trim());
   if (!match) return null;
   return Number(match[1]) * 100 + Number((match[2] ?? "").padEnd(2, "0"));
 }

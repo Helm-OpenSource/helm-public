@@ -1,20 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { buildTopUpUrl, fenToYuanText, isOpenableTopUpUrl, parseSuggestedFen, yuanTextToFen } from "./topup-page";
+import { buildTopUpUrl, fenToYuanText, isOpenableTopUpUrl, isTopupAmountFen, parseSuggestedFen, yuanTextToFen } from "./topup-page";
 
 describe("top-up page helpers", () => {
-  it("only prefills an integer suggestedFen, clamped into the per-order bounds", () => {
-    expect(parseSuggestedFen("12345")).toBe(12345);
-    expect(parseSuggestedFen(["50", "1"])).toBe(100); // below 1 yuan: the minimum
-    expect(parseSuggestedFen("900000000")).toBe(5_000_000); // above the cap: the cap, the page says to split
+  it("only prefills an integer suggestedFen, rounded up to whole 100 yuan (owner 2026-11-12)", () => {
+    expect(parseSuggestedFen("12345")).toBe(20_000); // a 123.45 yuan shortfall prefills 200 yuan
+    expect(parseSuggestedFen("10000")).toBe(10_000);
+    expect(parseSuggestedFen(["50", "1"])).toBe(10_000); // below 100 yuan: the minimum
+    expect(parseSuggestedFen("900000000")).toBe(900_000_000); // no business cap
+    expect(parseSuggestedFen("999999999999")).toBe(10_000_000_000); // only the technical bound
+    expect([10_000, 50_000, 900_000_000].every(isTopupAmountFen)).toBe(true);
+    expect([9_999, 10_050, 15_000, null, 10_000_010_000].some(isTopupAmountFen)).toBe(false);
     for (const raw of [undefined, "", "0", "-5", "1.5", "1e5", "abc", "1234567890123"]) expect(parseSuggestedFen(raw)).toBeNull();
   });
 
   it("builds the client URL from the APP_URL origin and the fixed path, which the client rule then accepts", () => {
     const origin = "https://helm.example.invalid";
     expect(buildTopUpUrl(origin)).toBe("https://helm.example.invalid/billing/topup");
-    expect(buildTopUpUrl(origin, 4321)).toBe("https://helm.example.invalid/billing/topup?suggestedFen=4321");
+    expect(buildTopUpUrl(origin, 4321)).toBe("https://helm.example.invalid/billing/topup?suggestedFen=10000");
     expect(buildTopUpUrl(origin, -1)).toBe("https://helm.example.invalid/billing/topup");
     expect(isOpenableTopUpUrl(buildTopUpUrl(origin, 4321), origin)).toBe(true);
+    expect(buildTopUpUrl(origin, 123_456)).toBe("https://helm.example.invalid/billing/topup?suggestedFen=130000");
   });
 
   it("follows the 2026-11-12 client rule: https, port 443, same or allow-listed host, no credentials; the path is not checked", () => {

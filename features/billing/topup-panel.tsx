@@ -2,14 +2,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { fenToYuanText, TOPUP_PAGE_MAX_FEN, TOPUP_PAGE_MIN_FEN, TOPUP_PRESET_FEN, yuanTextToFen } from "@/lib/billing/topup/topup-page";
+import { fenToYuanText, isTopupAmountFen, TOPUP_PRESET_FEN, yuanTextToFen } from "@/lib/billing/topup/topup-page";
 
 type Order = { id: string; state: string; amountFen: string; expiresAt: string };
 const STATE_TEXT: Record<string, string> = { created: "待付款", pending: "待付款", paid_verified: "已到账", closed_unpaid: "已关闭，未付款",
   unknown: "状态待核实，请稍后刷新或联系管理员" };
 const ERROR_TEXT: Record<string, string> = { topup_unavailable: "充值暂不可用，请稍后再试或联系管理员。", topup_forbidden: "当前账号不能为本组织充值。",
   topup_rate_limited: "操作过于频繁，请稍后再试。", topup_billing_off: "本组织的计费账户尚未开通，暂不能充值。",
-  topup_amount_out_of_range: "金额超出单笔范围。", payer_unresolved: "本组织尚未绑定计费账户，暂不能充值。" };
+  topup_amount_out_of_range: "金额超出单笔范围。", topup_amount_not_multiple: "充值金额须为 100 元的整数倍。", payer_unresolved: "本组织尚未绑定计费账户，暂不能充值。" };
 const errorText = (code: unknown) => (typeof code === "string" && ERROR_TEXT[code]) || "操作没有完成，请稍后再试。";
 
 /**
@@ -25,7 +25,7 @@ export function TopupPanel({ canTopUp, alipayAvailable, suggestedFen, returnedOr
   const [order, setOrder] = useState<Order | null>(null);
   const attempt = useRef<{ fen: number; key: string } | null>(null); // one Idempotency-Key per amount: a resubmit replays
   const fen = yuanTextToFen(amount);
-  const amountOk = fen !== null && fen >= TOPUP_PAGE_MIN_FEN && fen <= TOPUP_PAGE_MAX_FEN;
+  const amountOk = isTopupAmountFen(fen);
 
   useEffect(() => {
     if (!returnedOrderId) return;
@@ -74,8 +74,8 @@ export function TopupPanel({ canTopUp, alipayAvailable, suggestedFen, returnedOr
         <label className="block text-sm font-medium" htmlFor="topup-amount">充值金额（元）</label>
         <div className="flex flex-wrap gap-2">{TOPUP_PRESET_FEN.map(preset => <Button key={preset} type="button" variant="outline"
           onClick={() => setAmount(fenToYuanText(preset))}>{fenToYuanText(preset).replace(/\.00$/, "")} 元</Button>)}</div>
-        <Input id="topup-amount" inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} placeholder="例如 500" />
-        {amount !== "" && !amountOk && <p className="text-sm">单笔 {TOPUP_PAGE_MIN_FEN / 100}–{TOPUP_PAGE_MAX_FEN / 100} 元，最多两位小数；金额较大请分多笔。</p>}
+        <Input id="topup-amount" inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} placeholder="100 的整数倍，例如 500" />
+        {amount !== "" && !amountOk && <p className="text-sm">充值金额须为 100 元的整数倍，最低 100 元。</p>}
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-2 rounded border p-4" data-testid="topup-alipay">

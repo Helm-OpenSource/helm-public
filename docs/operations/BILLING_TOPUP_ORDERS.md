@@ -138,8 +138,9 @@ Only an order of the session's workspace, for its OWNER/BILLING_ADMIN (403); any
 
 - 404 while the gates are off. Merchant configuration incomplete: the Alipay entry shows 充值暂不可用 (no order is attempted).
   Members without OWNER/BILLING_ADMIN see who can top up instead of the form.
-- Amount: presets 100 / 500 / 1 000 / 5 000 yuan or typed (exact yuan → fen, no floating point), prefilled from the server-issued
-  `suggestedFen` (integer, clamped into 1–50 000 yuan; only a prefill, never an authority). The panel sends only
+- Amount: presets 100 / 500 / 1 000 / 5 000 yuan or typed (exact yuan → fen, no floating point), whole multiples of 100 yuan only
+  (owner 2026-11-12, same rule as `checkTopupAmountFen`); prefilled from the server-issued `suggestedFen` rounded **up** to the next
+  whole 100 yuan (integer; only a prefill, never an authority). The panel sends only
   `{provider:"alipay", amountFen}` with one `Idempotency-Key` per amount, then opens the returned cashier URL.
 - WeChat Pay has a reserved, disabled slot on the same page (即将开通) until its slice wires it.
 - Return: Alipay returns to `/billing/topup?order=<order id>`; the page shows that order of the session workspace read-only and
