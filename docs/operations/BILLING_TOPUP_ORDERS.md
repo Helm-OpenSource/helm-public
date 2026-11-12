@@ -50,7 +50,7 @@ notify route (`/api/billing/alipay/notify`, unchanged): top-up orders are create
   answers a plain 404 before reading the body or the database. **On by default** since 2026-11-12 (owner: the payment entry is a public
   collection interface and should collect by default). 充值开关缺省打开；前提是商户配置齐全，否则一律失败即关闭。
 - **Config** (environment only): existing `ALIPAY_APP_ID`, `ALIPAY_PRIVATE_KEY` (secret), `ALIPAY_PUBLIC_KEY`, `ALIPAY_GATEWAY_URL`
-  (https only) and the new non-secret `HELM_BILLING_TOPUP_ALIPAY_SELLER_ID`. One decision, `resolveAlipayTopup(entry)`, serves every
+  (https only) and the new non-confidential `HELM_BILLING_TOPUP_ALIPAY_SELLER_ID`. One decision, `resolveAlipayTopup(entry)`, serves every
   entry: any key missing, an identifier malformed, a key that does not parse as PEM, or a non-https gateway closes the entry
   (notify `503 fail`, never credited; order creation in S2-d2 answers `topup_unavailable`) and logs one
   `{"event":"topup_unavailable","reason":"config_unavailable","entry",problems:[fixed codes]}` alert, never a value. Only the configured
