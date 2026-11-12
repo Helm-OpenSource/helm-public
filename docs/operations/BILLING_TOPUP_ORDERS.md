@@ -46,10 +46,14 @@ queries. No route, UI, real provider call or merchant credential (S2-d1 adds the
 notify route (`/api/billing/alipay/notify`, unchanged): top-up orders are created (S2-d2) with this `notify_url` and without
 `passback_params`. 与旧订阅通知入口分开；订阅单号（`helm_ali_`）在开事务前即被拒。
 
-- **Gate**: `HELM_BILLING_TOPUP_ALIPAY_ENABLED` (capability `billing_topup_alipay`, safe default deny) and `financial_action`;
-  otherwise a plain 404 before reading the body or the database.
+- **Gate**: `HELM_BILLING_TOPUP_ALIPAY_ENABLED` (capability `billing_topup_alipay`) and `financial_action`; either set to `false`
+  answers a plain 404 before reading the body or the database. **On by default** since 2026-11-12 (owner: the payment entry is a public
+  collection interface and should collect by default). 充值开关缺省打开；前提是商户配置齐全，否则一律失败即关闭。
 - **Config** (environment only): existing `ALIPAY_APP_ID`, `ALIPAY_PRIVATE_KEY` (secret), `ALIPAY_PUBLIC_KEY`, `ALIPAY_GATEWAY_URL`
-  (https only) and the new non-secret `HELM_BILLING_TOPUP_ALIPAY_SELLER_ID`. Missing or malformed: `503 fail`. Only the configured
+  (https only) and the new non-secret `HELM_BILLING_TOPUP_ALIPAY_SELLER_ID`. One decision, `resolveAlipayTopup(entry)`, serves every
+  entry: any key missing, an identifier malformed, a key that does not parse as PEM, or a non-https gateway closes the entry
+  (notify `503 fail`, never credited; order creation in S2-d2 answers `topup_unavailable`) and logs one
+  `{"event":"topup_unavailable","reason":"config_unavailable","entry",problems:[fixed codes]}` alert, never a value. Only the configured
   seller + app pair maps to `merchantRef=alipay-seller:<id>` / `appRef=alipay-app:<id>`; anything else is `topup_merchant_mismatch`.
 - **Notify**: `application/x-www-form-urlencoded`, at most 16 KiB (declared and streamed), raw bytes strict UTF-8 (percent-decoded
   values are not re-checked; they are covered by the signature), no duplicate names,
@@ -67,7 +71,7 @@ notify route (`/api/billing/alipay/notify`, unchanged): top-up orders are create
   The session-triggered query route and order creation are S2-d2.
 - **Verify / rollback**: `alipay-topup.test.ts` (per-run RSA keys, in-process gateway double) and `alipay-topup.mysql.test.ts` in
   `npm run test:billing:mysql` (forged signature, app/seller mismatch, subscription order number, amount mismatch, duplicate notify,
-  concurrent notify and query, late success after close, refund news, billing off, gate off). Roll back: unset the gate; no migration.
+  concurrent notify and query, late success after close, refund news, billing off, gate off). Roll back: set the gate to `false`; no migration.
 
 ## Verification and rollback / 验证与回滚
 

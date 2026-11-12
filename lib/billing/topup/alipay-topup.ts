@@ -1,5 +1,5 @@
 import "server-only";
-import { createSign, createVerify } from "node:crypto";
+import { createPrivateKey, createPublicKey, createSign, createVerify } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { buildAlipaySignContent, normalizePem } from "@/lib/billing/alipay";
 import { db } from "@/lib/db";
@@ -21,15 +21,43 @@ const IDENTIFIER = /^[0-9A-Za-z]{1,32}$/;
 
 export type AlipayTopupConfig = { appId: string; sellerId: string; privateKey: string; alipayPublicKey: string; gatewayUrl: string };
 
-/** Reuses the existing ALIPAY_* keys plus the receiving merchant id; null (unavailable) when anything is missing or malformed. */
-export function getAlipayTopupConfig(env: Readonly<Record<string, string | undefined>> = process.env): AlipayTopupConfig | null {
-  const appId = env.ALIPAY_APP_ID?.trim() ?? "", sellerId = env.HELM_BILLING_TOPUP_ALIPAY_SELLER_ID?.trim() ?? "";
+export type AlipayTopupConfigProblem = "app_id_invalid" | "seller_id_invalid" | "private_key_invalid" | "public_key_invalid" |
+  "gateway_invalid";
+const parses = (parse: () => unknown) => { try { parse(); return true; } catch { return false; } };
+
+/** Fixed problem codes only (never values). Keys must parse as PEM, so a malformed key closes the entry instead of failing later. */
+export function getAlipayTopupConfigProblems(env: Readonly<Record<string, string | undefined>> = process.env) {
   const privateKey = normalizePem(env.ALIPAY_PRIVATE_KEY?.trim(), "PRIVATE KEY");
   const alipayPublicKey = normalizePem(env.ALIPAY_PUBLIC_KEY?.trim(), "PUBLIC KEY");
   const gatewayUrl = env.ALIPAY_GATEWAY_URL?.trim() || GATEWAY_DEFAULT;
-  if (!IDENTIFIER.test(appId) || !IDENTIFIER.test(sellerId) || !privateKey || !alipayPublicKey ||
-      !URL.canParse(gatewayUrl) || new URL(gatewayUrl).protocol !== "https:") return null;
-  return { appId, sellerId, privateKey, alipayPublicKey, gatewayUrl };
+  const problems: AlipayTopupConfigProblem[] = [];
+  if (!IDENTIFIER.test(env.ALIPAY_APP_ID?.trim() ?? "")) problems.push("app_id_invalid");
+  if (!IDENTIFIER.test(env.HELM_BILLING_TOPUP_ALIPAY_SELLER_ID?.trim() ?? "")) problems.push("seller_id_invalid");
+  if (!privateKey || !parses(() => createPrivateKey(privateKey))) problems.push("private_key_invalid");
+  if (!alipayPublicKey || !parses(() => createPublicKey(alipayPublicKey))) problems.push("public_key_invalid");
+  if (!URL.canParse(gatewayUrl) || new URL(gatewayUrl).protocol !== "https:") problems.push("gateway_invalid");
+  return { problems, config: { appId: env.ALIPAY_APP_ID?.trim() ?? "", sellerId: env.HELM_BILLING_TOPUP_ALIPAY_SELLER_ID?.trim() ?? "",
+    privateKey: privateKey ?? "", alipayPublicKey: alipayPublicKey ?? "", gatewayUrl } };
+}
+
+/** Reuses the existing ALIPAY_* keys plus the receiving merchant id; null (unavailable) when anything is missing or malformed. */
+export function getAlipayTopupConfig(env: Readonly<Record<string, string | undefined>> = process.env): AlipayTopupConfig | null {
+  const { problems, config } = getAlipayTopupConfigProblems(env);
+  return problems.length === 0 ? config : null;
+}
+
+/**
+ * The one availability decision for every Alipay top-up entry (notify now; order creation and query in S2-d2). The gate is on
+ * by default (owner 2026-11-12), so incomplete merchant configuration is what keeps the entry closed: "unavailable" never
+ * credits or creates anything, and each refusal logs one alert event with fixed problem codes.
+ */
+export function resolveAlipayTopup(entry: "notify" | "create" | "query",
+  env: Readonly<Record<string, string | undefined>> = process.env): AlipayTopupConfig | "off" | "unavailable" {
+  if (!isDeploymentCapabilityEnabled("billing_topup_alipay", env) || !isDeploymentCapabilityEnabled("financial_action", env)) return "off";
+  const { problems, config } = getAlipayTopupConfigProblems(env);
+  if (problems.length === 0) return config;
+  console.error("[billing-topup-alipay]", JSON.stringify({ event: "topup_unavailable", reason: "config_unavailable", entry, problems }));
+  return "unavailable";
 }
 
 /** Single merchant + app: only the configured pair maps to refs (written on the order at creation, compared per order). */
@@ -139,11 +167,9 @@ async function readBoundedText(request: Request): Promise<string | null> {
  * recorded, or a payment exception persisted where a retry cannot help); retryable conditions answer non-success.
  */
 export async function handleAlipayTopupNotify(request: Request, client: PrismaClient = db) {
-  if (!isDeploymentCapabilityEnabled("billing_topup_alipay") || !isDeploymentCapabilityEnabled("financial_action")) {
-    return new Response("Not Found", { status: 404 });
-  }
-  const config = getAlipayTopupConfig();
-  if (!config) { alert("config_unavailable"); return reply(503, "fail"); }
+  const config = resolveAlipayTopup("notify");
+  if (config === "off") return new Response("Not Found", { status: 404 });
+  if (config === "unavailable") return reply(503, "fail"); // never credits; Alipay retries once configuration is complete
   if (!/^application\/x-www-form-urlencoded(\s*;|$)/i.test(request.headers.get("content-type") ?? "")) return reply(415, "fail");
   if (!(Number(request.headers.get("content-length") ?? "0") <= MAX_BODY_BYTES)) return reply(413, "fail");
   let rawBody: string | null;
