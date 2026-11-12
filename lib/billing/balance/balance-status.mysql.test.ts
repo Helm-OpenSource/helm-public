@@ -104,7 +104,7 @@ describe.skipIf(!url)("balance-status and the balance summary against MySQL", ()
   type Payer = Awaited<ReturnType<typeof payer>>;
   const hold = async (p: Payer, key: string, minutes: number, client = a) => {
     const result = await reserve(client, settler, { idempotencyKey: `idem:${key}:${run}`, operationRef: `op:${key}:${run}`,
-      payerRef: p.payerRef, grantId: p.grantId, priceVersionId: priceId, billingEventRef: event, meterUnit: "minute", quantity: String(minutes) });
+      subjectScope: { kind: "workspace", workspaceId: p.ws }, payerRef: p.payerRef, grantId: p.grantId, priceVersionId: priceId, billingEventRef: event, meterUnit: "minute", quantity: String(minutes) });
     if (!result.ok) throw new Error(result.code);
     return result.reservationId;
   };
