@@ -2210,6 +2210,9 @@ model BillingReservation {
   state                 BillingReservationState @default(held)
   version               Int                     @default(1)
   createdBy             String                  @db.VarChar(191)
+  subjectWorkspaceId    String                  @db.VarChar(191) // the workspace the caller declared (reserve subjectScope)
+  payerBindingId        String                  @db.VarChar(191) // its active PayerScopeBinding at reserve time; names payerAccountId
+  payerBindingVersion   Int
   unknownKey            String?                 @db.VarChar(191)
   unknownEvidenceRef    String?                 @db.VarChar(191)
   unknownAt             DateTime?
@@ -2383,7 +2386,8 @@ model BankReceipt {
   payerAccountId      String           @db.VarChar(191)
   receivingAccountRef String           @db.VarChar(191) // opaque reference to our receiving bank account
   bankTxnRef          String           @db.VarChar(191)
-  // Equals bankTxnRef unless rejected: one live receipt per bank transaction per receiving account.
+  // The dedupe key of bankTxnRef (upper-cased, separators - _ . : / removed; DB CHECK) unless rejected: one live receipt per bank
+  // transaction per registered receiving account, whatever case or separators the drafter typed.
   activeBankTxnRef    String?          @db.VarChar(191)
   payerNameDigest     String?          @db.VarChar(191) // keyed digest or opaque reference; never a plaintext name
   amountFen           BigInt

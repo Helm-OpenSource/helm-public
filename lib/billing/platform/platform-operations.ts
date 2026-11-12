@@ -208,6 +208,8 @@ export async function reviewPlatformOperation(client: PrismaClient, input: Revie
     if (!row) refuse("platform_operation_unavailable");
     if (row.contentHash !== op.contentHash) refuse("platform_operation_conflict");
     if (row.state === (approve ? "applied" : "rejected") && row.reviewedByUserId === input.actorUserId) {
+      if (approve && op.request.kind === "billing_mode" &&
+          (await activeBinding(tx, op.request.workspaceId))?.billingMode !== op.request.toMode) refuse("platform_operation_stale_replay");
       return { operation: row, replayed: true };
     }
     if (row.state !== "drafted") refuse("platform_operation_not_pending");
@@ -261,9 +263,11 @@ async function applyInTransaction(tx: Prisma.TransactionClient, request: Platfor
 /** Enforce must not stop the payer at once: one active grant per event and unit (at least one), headroom = wallet + undrawn credit -
  * held/unknown enforce reservations > 0. Advisory: this snapshot may lag a concurrent writer (reserve reads under RC); every use re-checks. */
 async function assertEnforceReady(tx: Prisma.TransactionClient, payerAccountId: string) {
+  // Same predicate as quote (reservations.ts): active, inside its validity, on a price inside its effective window, at DB time.
   const grants = await tx.$queryRaw<Array<{ n: bigint }>>`SELECT COUNT(*) AS n FROM SpendGrant g
     JOIN BillingPriceVersion v ON v.id = g.priceVersionId WHERE g.payerAccountId = ${payerAccountId} AND g.state = 'active'
-    GROUP BY v.billingEventRef, v.meterUnit`;
+      AND g.validFrom <= UTC_TIMESTAMP(3) AND g.validUntil > UTC_TIMESTAMP(3) AND v.effectiveFrom <= UTC_TIMESTAMP(3)
+      AND (v.effectiveUntil IS NULL OR v.effectiveUntil > UTC_TIMESTAMP(3)) GROUP BY v.billingEventRef, v.meterUnit`;
   if (grants.length === 0 || grants.some(row => Number(row.n) !== 1)) refuse("enforce_grant_not_ready");
   const [{ held }] = await tx.$queryRaw<Array<{ held: bigint }>>`SELECT CAST(COALESCE(SUM(chargeFen), 0) AS SIGNED) AS held
     FROM BillingReservation WHERE payerAccountId = ${payerAccountId} AND billingMode = 'enforce' AND state IN ('held', 'unknown')`;

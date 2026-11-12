@@ -69,12 +69,13 @@ describe("operation list and arguments", () => {
   });
   it("is dry run unless --apply carries the list sha, and review needs a decision and evidence", () => {
     const base = ["--command=draft", "--list-file=l.json", "--actor-user-id=u1"];
-    expect(parsePlatformBatchArgs(base)).toMatchObject({ apply: false, listSha: null, confirmEnforce: false });
-    expect(parsePlatformBatchArgs([...base, "--apply"])).toEqual({ invalid: "apply_requires_list_sha" });
-    expect(parsePlatformBatchArgs([...base, "--apply", "--list-sha=ab"])).toMatchObject({ apply: true, listSha: "ab" });
+    expect(parsePlatformBatchArgs(base)).toMatchObject({ apply: false, listSha: null, planSha: null, confirmEnforce: false });
+    expect(parsePlatformBatchArgs([...base, "--apply"])).toEqual({ invalid: "apply_requires_list_and_plan_sha" });
+    expect(parsePlatformBatchArgs([...base, "--apply", "--list-sha=ab"])).toEqual({ invalid: "apply_requires_list_and_plan_sha" });
+    expect(parsePlatformBatchArgs([...base, "--apply", "--list-sha=ab", "--plan-sha=cd"])).toMatchObject({ apply: true, listSha: "ab", planSha: "cd" });
     expect(parsePlatformBatchArgs([...base, "--decision=approve"])).toEqual({ invalid: "review_arguments_invalid" });
     expect(parsePlatformBatchArgs([...base, "--force"])).toEqual({ invalid: "unknown_argument" });
-    expect(parsePlatformBatchArgs([...base, "--apply", "--apply", "--list-sha=ab"])).toEqual({ invalid: "duplicate_argument" });
+    expect(parsePlatformBatchArgs([...base, "--apply", "--apply", "--list-sha=ab", "--plan-sha=cd"])).toEqual({ invalid: "duplicate_argument" });
     const review = ["--command=review", "--list-file=l.json", "--actor-user-id=u2"];
     expect(parsePlatformBatchArgs(review)).toEqual({ invalid: "review_arguments_invalid" });
     expect(parsePlatformBatchArgs([...review, "--decision=approve", "--review-evidence-ref=r1", "--confirm-enforce"]))

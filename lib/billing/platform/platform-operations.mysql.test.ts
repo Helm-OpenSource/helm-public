@@ -3,9 +3,10 @@ import { lstatSync, realpathSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { grantPlatformFinanceRole } from "../bank-receipts/bank-receipts";
+import { grantPlatformFinanceRole, revokePlatformFinanceRole } from "../bank-receipts/bank-receipts";
 import { changeCreditFacility, proposeCreditFacility } from "../credit/credit-facilities";
 import { changeSpendGrant, createSpendGrant, createSpendGrantInTransaction, publishPriceVersion } from "../grants/price-grants";
+import { revokeBinding } from "../payer/payer-accounts";
 import { parseOperationList, runPlatformBatch, type PlatformBatchArgs } from "./platform-batch";
 import { draftPlatformOperation, reviewPlatformOperation, type PlatformOperationRequest } from "./platform-operations";
 
@@ -80,6 +81,7 @@ describe.skipIf(!url)("platform billing operations against MySQL", () => {
     const binding = await a.payerScopeBinding.findFirstOrThrow({ where: { scopeKind: "workspace", activeScopeRef: ws } });
     return a.payerAccount.findUniqueOrThrow({ where: { id: binding.payerAccountId } });
   };
+  const modeOfPayer = async (id: string) => (await a.payerAccount.findUniqueOrThrow({ where: { id } })).billingMode;
   const onboarded = async () => { const ws = await workspace(); await draft(onboard(ws)); await review(onboard(ws)); return ws; };
 
   it("onboards a workspace payer without the customer OWNER, maker and checker distinct, replaying both steps", async () => {
@@ -106,7 +108,7 @@ describe.skipIf(!url)("platform billing operations against MySQL", () => {
     await expect(draft(onboard(ws), maker)).resolves.toMatchObject({ replayed: true }); // same ruling: replay, not a second payer
   });
 
-  it("refuses the drafter as reviewer and non-platform identities (service and DB CHECK)", async () => {
+  it("refuses the drafter as reviewer, non-platform identities and revoked grants (service and DB CHECK)", async () => {
     const ws = await workspace();
     await expect(draft(onboard(ws), owner)).rejects.toThrow("platform_operation_forbidden"); // customer OWNER
     await expect(draft(onboard(ws), checker)).rejects.toThrow("platform_operation_forbidden"); // checker cannot draft
@@ -114,6 +116,10 @@ describe.skipIf(!url)("platform billing operations against MySQL", () => {
     await expect(review(onboard(ws), dual)).rejects.toThrow("platform_operation_self_review_forbidden");
     await expect(review(onboard(ws), maker)).rejects.toThrow("platform_operation_forbidden"); // maker cannot review
     await expect(review(onboard(ws), owner)).rejects.toThrow("platform_operation_forbidden");
+    const revoked = await a.platformFinanceGrant.findFirstOrThrow({ where: { userId: dual, role: "checker", state: "active" } });
+    await revokePlatformFinanceRole(a, { actorUserId: admin, grantId: revoked.id, expectedVersion: revoked.version, evidenceRef: "approval:finance-roster" });
+    await expect(review(onboard(ws), dual)).rejects.toThrow("platform_operation_forbidden"); // revoked checker grant
+    await grantPlatformFinanceRole(a, { actorUserId: admin, userId: dual, role: "checker", evidenceRef: "approval:finance-roster" });
     await expect(a.$executeRaw`UPDATE PlatformBillingOperation SET state='rejected', reviewedByUserId=draftedByUserId,
       reviewEvidenceRef='x', reviewedAt=NOW(3), version=version+1 WHERE workspaceId=${ws}`).rejects.toThrow(/maker_checker_check/);
     await expect(a.$executeRaw`DELETE FROM PlatformBillingOperation WHERE workspaceId=${ws}`).rejects.toThrow(/no_delete/);
@@ -121,26 +127,40 @@ describe.skipIf(!url)("platform billing operations against MySQL", () => {
     await expect(draft(onboard(reserved))).rejects.toThrow("workspace_unavailable");
   });
 
-  it("switches off -> enforce only when confirmed twice, with one active grant and positive headroom; rolls back to shadow", async () => {
+  const day = 86_400_000;
+  /** Publishes a price (one product per call, shared event) and opens an active grant valid from `from` via the customer path. */
+  async function grant(payerAccountId: string, product: string, from = Date.now() - day) {
+    const { priceVersion } = await publishPriceVersion(a, { actor: { type: "SYSTEM", ref: "synthetic" }, productCode: `${product}-${run}`,
+      version: 1, billingEventRef: `event:${run}`, meterUnit: "minute", acceptanceRef: "acceptance:synthetic", scopeKind: "workspace",
+      unitPriceFenNumerator: BigInt(35), unitPriceDenominator: BigInt(1), effectiveFrom: new Date(Date.now() - day), effectiveUntil: null, approvalRef: ruling });
+    const { grant: row } = await createSpendGrant(a, { actorUserId: owner, payerAccountId, priceVersionId: priceVersion.id, operationKey: product,
+      evidenceRef: ruling, validFrom: new Date(from), validUntil: new Date(Date.now() + 2 * day),
+      limits: { perChargeLimitFen: BigInt(100), dailyLimitFen: BigInt(100), monthlyLimitFen: BigInt(100) } });
+    return changeSpendGrant(a, { actorUserId: owner, grantId: row.id, expectedVersion: 1, action: "activate", evidenceRef: ruling });
+  }
+  async function credit(payerAccountId: string, limitFen: number) {
+    const { facility } = await proposeCreditFacility(a, { actorUserId: maker, payerAccountId, limitFen: BigInt(limitFen), validUntil: null,
+      operationKey: `credit-${payerAccountId}`, evidenceRef: ruling });
+    await changeCreditFacility(a, { actorUserId: checker, facilityId: facility.id, expectedVersion: 1, action: "approve", evidenceRef: ruling });
+    await changeCreditFacility(a, { actorUserId: maker, facilityId: facility.id, expectedVersion: 2, action: "activate", evidenceRef: ruling });
+  }
+
+  it("switches off -> enforce only when confirmed twice, with exactly one usable grant and positive headroom; rolls back to shadow", async () => {
     const ws = await onboarded();
     await expect(draft(mode(ws, "off", "enforce"))).rejects.toThrow("platform_enforce_not_confirmed");
     await draft(mode(ws, "off", "enforce"), maker, { confirmEnforce: true });
     await expect(review(mode(ws, "off", "enforce"))).rejects.toThrow("platform_enforce_not_confirmed");
     const enforce = () => review(mode(ws, "off", "enforce"), checker, { confirmEnforce: true });
     await expect(enforce()).rejects.toThrow("enforce_grant_not_ready");
-    const payerAccountId = (await payerOf(ws)).id, day = 86_400_000;
-    const { priceVersion } = await publishPriceVersion(a, { actor: { type: "SYSTEM", ref: "synthetic" }, productCode: `e1a-${run}`, version: 1,
-      billingEventRef: `event:${run}`, meterUnit: "minute", acceptanceRef: "acceptance:synthetic", scopeKind: "workspace",
-      unitPriceFenNumerator: BigInt(35), unitPriceDenominator: BigInt(1), effectiveFrom: new Date(Date.now() - day), effectiveUntil: null, approvalRef: ruling });
-    const { grant } = await createSpendGrant(a, { actorUserId: owner, payerAccountId, priceVersionId: priceVersion.id, operationKey: "e1a-grant",
-      evidenceRef: ruling, validFrom: new Date(Date.now() - day), validUntil: new Date(Date.now() + day),
-      limits: { perChargeLimitFen: BigInt(100), dailyLimitFen: BigInt(100), monthlyLimitFen: BigInt(100) } });
-    await changeSpendGrant(a, { actorUserId: owner, grantId: grant.id, expectedVersion: 1, action: "activate", evidenceRef: ruling });
+    const payerAccountId = (await payerOf(ws)).id;
+    await grant(payerAccountId, "future", Date.now() + day); // active but not yet valid: quote would not find it
+    await expect(enforce()).rejects.toThrow("enforce_grant_not_ready");
+    await grant(payerAccountId, "usable");
+    const second = await grant(payerAccountId, "second"); // two usable grants for one event and unit: quote finds none
+    await expect(enforce()).rejects.toThrow("enforce_grant_not_ready");
+    await changeSpendGrant(a, { actorUserId: owner, grantId: second.id, expectedVersion: second.version, action: "revoke", evidenceRef: ruling });
     await expect(enforce()).rejects.toThrow("enforce_headroom_insufficient"); // no wallet, no credit: enforce would stop it at once
-    const { facility } = await proposeCreditFacility(a, { actorUserId: maker, payerAccountId, limitFen: BigInt(1000), validUntil: null,
-      operationKey: "e1a-credit", evidenceRef: ruling });
-    await changeCreditFacility(a, { actorUserId: checker, facilityId: facility.id, expectedVersion: 1, action: "approve", evidenceRef: ruling });
-    await changeCreditFacility(a, { actorUserId: maker, facilityId: facility.id, expectedVersion: 2, action: "activate", evidenceRef: ruling });
+    await credit(payerAccountId, 1000);
     expect((await payerOf(ws)).billingMode).toBe("off");
     await enforce();
     expect(await payerOf(ws)).toMatchObject({ billingMode: "enforce", version: 3 });
@@ -152,7 +172,36 @@ describe.skipIf(!url)("platform billing operations against MySQL", () => {
     await draft(mode(ws, "shadow", "enforce"), maker, { confirmEnforce: true });
     await review(mode(ws, "shadow", "enforce"), checker, { confirmEnforce: true });
     await expect(draft(mode(ws, "enforce", "shadow"))).rejects.toThrow("platform_operation_stale_replay");
+    await expect(review(mode(ws, "enforce", "shadow"))).rejects.toThrow("platform_operation_stale_replay"); // checker re-running the old list
     expect((await payerOf(ws)).billingMode).toBe("enforce");
+  });
+
+  it("nets held enforce reservations out of the headroom", async () => {
+    const ws = await onboarded();
+    const payerAccountId = (await payerOf(ws)).id;
+    const usable = await grant(payerAccountId, "held");
+    await credit(payerAccountId, 1000);
+    await a.billingReservation.create({ data: { payerAccountId, idempotencyKey: "held-1", operationRef: "held-1", contentHash: "0".repeat(64),
+      grantId: usable.id, grantVersion: usable.version, productId: usable.productId, priceVersionId: usable.priceVersionId,
+      priceContentHash: "0".repeat(64), billingEventRef: `event:${run}`, meterUnit: "minute", quantity: BigInt(1), chargeFen: BigInt(1000),
+      billingMode: "enforce", reservedAt: new Date(), dayKey: "2026-11-12", monthKey: "2026-11", createdBy: "synthetic",
+      subjectWorkspaceId: ws, payerBindingId: "synthetic", payerBindingVersion: 1 } });
+    await draft(mode(ws, "off", "enforce"), maker, { confirmEnforce: true });
+    await expect(review(mode(ws, "off", "enforce"), checker, { confirmEnforce: true })).rejects.toThrow("enforce_headroom_insufficient");
+  });
+
+  it("refuses an approval once the workspace was rebound to another payer after the draft", async () => {
+    const ws = await onboarded();
+    const before = await payerOf(ws);
+    await draft(mode(ws, "off", "shadow"));
+    const bound = await a.payerScopeBinding.findFirstOrThrow({ where: { activeScopeRef: ws } });
+    await revokeBinding(a, { actorUserId: owner, bindingId: bound.id, expectedVersion: bound.version, evidenceRef: ruling });
+    const rebind = { actorUserId: maker, evidenceRef: `${ruling}-rebind`, request: onboard(ws) };
+    await draftPlatformOperation(a, rebind);
+    await reviewPlatformOperation(a, { ...rebind, actorUserId: checker, decision: "approve", reviewEvidenceRef: "review:synthetic" });
+    const after = await payerOf(ws);
+    await expect(review(mode(ws, "off", "shadow"))).rejects.toThrow("payer_unresolved");
+    expect([await modeOfPayer(before.id), after.billingMode, (await payerOf(ws)).billingMode]).toEqual(["off", "off", "off"]);
   });
 
   it("applies the mode change as a CAS on the expected old mode at approval time", async () => {
@@ -188,29 +237,50 @@ describe.skipIf(!url)("platform billing operations against MySQL", () => {
     expect((await a.platformBillingOperation.findFirstOrThrow({ where: { workspaceId: ws } })).state).toBe("drafted");
   });
 
-  it("runs a list: dry run writes nothing, apply needs the sha, stops at a refusal and resumes idempotently", async () => {
+  it("runs a list: dry run writes nothing, apply needs the list and plan sha, stops at a refusal and resumes idempotently", async () => {
     const [w1, w2, w3] = [await workspace(), await workspace(), await workspace()];
     const bytes = (entries: PlatformOperationRequest[]) => Buffer.from(JSON.stringify({ evidenceRef: ruling, entries }));
     const list = parseOperationList(bytes([onboard(w1), onboard(w2), onboard(w3)]));
     const args = (extra: Partial<PlatformBatchArgs>): PlatformBatchArgs => ({ command: "draft", listFile: "-", actorUserId: maker,
-      apply: true, listSha: list.sha256, decision: null, reviewEvidenceRef: null, confirmEnforce: false, ...extra });
-    const dry = await runPlatformBatch(a, args({ apply: false, listSha: null }), list);
-    expect(dry).toMatchObject({ ok: true, applied: false, listSha: list.sha256 });
+      apply: true, listSha: list.sha256, planSha: null, decision: null, reviewEvidenceRef: null, confirmEnforce: false, ...extra });
+    const dryRun = (extra: Partial<PlatformBatchArgs> = {}) => runPlatformBatch(a, args({ ...extra, apply: false, listSha: null }), list);
+    /** Dry run, then apply with the plan sha it printed (the operator's two steps). */
+    const apply = async (extra: Partial<PlatformBatchArgs> = {}) => runPlatformBatch(a, args({ ...extra, planSha: (await dryRun(extra)).planSha }), list);
+    const dry = await dryRun();
+    expect(dry).toMatchObject({ ok: true, applied: false, listSha: list.sha256, planSha: expect.stringMatching(/^[a-f0-9]{64}$/) });
     expect(await a.platformBillingOperation.count({ where: { workspaceId: { in: [w1, w2, w3] } } })).toBe(0);
-    expect(await runPlatformBatch(a, args({ listSha: "0".repeat(64) }), list)).toMatchObject({ ok: false, code: "list_sha_mismatch" });
+    expect(await runPlatformBatch(a, args({ listSha: "0".repeat(64), planSha: dry.planSha }), list)).toMatchObject({ ok: false, code: "list_sha_mismatch" });
+    expect(await runPlatformBatch(a, args({ planSha: "0".repeat(64) }), list)).toMatchObject({ ok: false, code: "plan_sha_mismatch" });
     await a.$executeRaw`UPDATE Workspace SET status = 'SUSPENDED' WHERE id = ${w2}`;
-    const stopped = await runPlatformBatch(a, args({}), list);
+    const stopped = await apply();
     expect(stopped).toMatchObject({ ok: false, stoppedAt: { index: 1, code: "workspace_unavailable" } });
     expect(stopped.results).toHaveLength(1);
     await a.$executeRaw`UPDATE Workspace SET status = 'ACTIVE' WHERE id = ${w2}`;
-    const resumed = await runPlatformBatch(a, args({}), list);
+    expect(await runPlatformBatch(a, args({ planSha: dry.planSha }), list)).toMatchObject({ code: "plan_sha_mismatch" }); // state moved on
+    const resumed = await apply();
     expect(resumed.ok && resumed.results?.map(row => row.replayed)).toEqual([true, false, false]);
-    const reviewArgs = args({ command: "review", actorUserId: checker, decision: "approve", reviewEvidenceRef: "review:synthetic" });
-    expect((await runPlatformBatch(a, reviewArgs, list)).ok).toBe(true);
-    expect((await runPlatformBatch(a, reviewArgs, list)).results?.every(row => row.replayed && row.state === "applied")).toBe(true);
-    expect(await a.payerScopeBinding.count({ where: { activeScopeRef: { in: [w1, w2, w3] } } })).toBe(3);
-    const after = await runPlatformBatch(a, args({ apply: false, listSha: null }), list);
+    const reviewArgs = { command: "review" as const, actorUserId: checker, decision: "approve" as const, reviewEvidenceRef: "review:synthetic" };
+    expect((await apply(reviewArgs)).ok).toBe(true);
+    expect((await apply(reviewArgs)).results?.every(row => row.replayed && row.state === "applied")).toBe(true);
+    const after = await dryRun();
     expect(after.plan?.map(row => [row.operationState, row.currentMode])).toEqual([["applied", "off"], ["applied", "off"], ["applied", "off"]]);
+    expect(after.plan?.[0]).toMatchObject({ payerAccountId: (await payerOf(w1)).id, bindingId: expect.any(String) });
+  });
+
+  it("stops an apply whose workspace was rebound to another payer after the dry run", async () => {
+    const ws = await onboarded();
+    const list = parseOperationList(Buffer.from(JSON.stringify({ evidenceRef: `${ruling}-drift`, entries: [mode(ws, "off", "shadow")] })));
+    const args: PlatformBatchArgs = { command: "draft", listFile: "-", actorUserId: maker, apply: false, listSha: null, planSha: null,
+      decision: null, reviewEvidenceRef: null, confirmEnforce: false };
+    const dry = await runPlatformBatch(a, args, list);
+    const bound = await a.payerScopeBinding.findFirstOrThrow({ where: { activeScopeRef: ws } });
+    await revokeBinding(a, { actorUserId: owner, bindingId: bound.id, expectedVersion: bound.version, evidenceRef: ruling });
+    const rebind = { actorUserId: maker, evidenceRef: `${ruling}-drift-rebind`, request: onboard(ws) };
+    await draftPlatformOperation(a, rebind);
+    await reviewPlatformOperation(a, { ...rebind, actorUserId: checker, decision: "approve", reviewEvidenceRef: "review:synthetic" });
+    expect(await runPlatformBatch(a, { ...args, apply: true, listSha: list.sha256, planSha: dry.planSha }, list))
+      .toMatchObject({ ok: false, code: "plan_sha_mismatch" });
+    expect(await a.platformBillingOperation.count({ where: { workspaceId: ws, kind: "billing_mode" } })).toBe(0);
   });
 
   // E1b: platform price publishing and spend grants. Placeholder price 35/1 fen per minute = 财模规划价 0.35 元/分钟 (规划试算价).
@@ -266,21 +336,24 @@ describe.skipIf(!url)("platform billing operations against MySQL", () => {
     await expect(review(grantFor(other, 2))).rejects.toThrow("grant_active_exists");
   });
 
-  it("runs a price-and-grant list with the label shown, resuming idempotently", async () => {
+  it("runs a price-and-grant list with the label and price shown, resuming idempotently", async () => {
     const [w1, w2] = [await onboarded(), await onboarded()];
     const bytes = Buffer.from(JSON.stringify({ evidenceRef: `${ruling}-list`, entries: [price(3, { unitPriceFenNumerator: "45" }), grantFor(w1, 3), grantFor(w2, 3)] }));
     const list = parseOperationList(bytes);
     const args = (extra: Partial<PlatformBatchArgs>): PlatformBatchArgs => ({ command: "draft", listFile: "-", actorUserId: maker,
-      apply: true, listSha: list.sha256, decision: null, reviewEvidenceRef: null, confirmEnforce: false, ...extra });
-    const dry = await runPlatformBatch(a, args({ apply: false, listSha: null }), list);
-    expect(dry.plan?.[0]).toMatchObject({ priceNotice: "规划试算价，不作为报价", operationState: null });
-    expect(dry.plan?.[1]).toMatchObject({ limitUnits: null }); // price 3 not yet published
-    expect((await runPlatformBatch(a, args({}), list)).ok).toBe(true);
-    const reviewArgs = args({ command: "review", actorUserId: checker, decision: "approve", reviewEvidenceRef: "review:synthetic" });
-    expect((await runPlatformBatch(a, reviewArgs, list)).results?.map(row => row.state)).toEqual(["applied", "applied", "applied"]);
-    expect((await runPlatformBatch(a, reviewArgs, list)).results?.every(row => row.replayed)).toBe(true);
-    const after = await runPlatformBatch(a, args({ apply: false, listSha: null }), list);
-    expect(after.plan?.[1]).toMatchObject({ limitUnits: { meterUnit: "minute", perCharge: "77", daily: "111111", monthly: "2222222" } });
+      apply: true, listSha: list.sha256, planSha: null, decision: null, reviewEvidenceRef: null, confirmEnforce: false, ...extra });
+    const dryRun = (extra: Partial<PlatformBatchArgs> = {}) => runPlatformBatch(a, args({ ...extra, apply: false, listSha: null }), list);
+    const apply = async (extra: Partial<PlatformBatchArgs> = {}) => runPlatformBatch(a, args({ ...extra, planSha: (await dryRun(extra)).planSha }), list);
+    const dry = await dryRun();
+    expect(dry.plan?.[0]).toMatchObject({ priceNotice: "规划试算价，不作为报价", operationState: null, payerAccountId: null });
+    expect(dry.plan?.[1]).toMatchObject({ limitUnits: null, priceContentHash: null, payerAccountId: (await payerOf(w1)).id }); // price 3 not yet published
+    expect((await apply()).ok).toBe(true);
+    const reviewArgs = { command: "review" as const, actorUserId: checker, decision: "approve" as const, reviewEvidenceRef: "review:synthetic" };
+    expect((await apply(reviewArgs)).results?.map(row => row.state)).toEqual(["applied", "applied", "applied"]);
+    expect((await apply(reviewArgs)).results?.every(row => row.replayed)).toBe(true);
+    const after = await dryRun();
+    expect(after.plan?.[1]).toMatchObject({ limitUnits: { meterUnit: "minute", perCharge: "77", daily: "111111", monthly: "2222222" },
+      priceContentHash: expect.stringMatching(/^[a-f0-9]{64}$/) });
     for (const ws of [w1, w2]) expect(await a.spendGrant.count({ where: { payerAccountId: (await payerOf(ws)).id, state: "active" } })).toBe(1);
   });
 });
