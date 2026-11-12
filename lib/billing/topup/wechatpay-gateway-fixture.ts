@@ -37,7 +37,7 @@ export function weChatPayDouble() {
   };
   const trades = new Map<string, Record<string, unknown>>();
   const requests: Array<{ url: string; authorization: string }> = [];
-  let mode: "ok" | "tamper" | "unsigned" | "http_500" = "ok";
+  let mode: "ok" | "tamper" | "unsigned" | "http_500" | "not_found_other" = "ok";
   const fetch = (async (url: string | URL | Request, init?: RequestInit) => {
     const target = new URL(String(url));
     if (target.origin !== "https://api.mch.weixin.qq.com" || init?.method !== "GET") throw new Error("unexpected_request");
@@ -51,9 +51,12 @@ export function weChatPayDouble() {
     const outTradeNo = decodeURIComponent(target.pathname.split("/").at(-1) ?? "");
     const [status, answer] = !signedOk ? [401, { code: "SIGN_ERROR", message: "签名错误" }]
       : mode === "http_500" ? [500, { code: "SYSTEM_ERROR", message: "系统错误" }]
+        : mode === "not_found_other" ? [404, { code: "RESOURCE_NOT_EXISTS", message: "资源不存在" }]
         : trades.has(outTradeNo) ? [200, trades.get(outTradeNo)] : [404, { code: "ORDER_NOT_EXIST", message: "订单不存在" }];
     const body = JSON.stringify(answer);
-    const signed = signHeaders(body);
+    // Without the public key id request header WeChat Pay may sign with a platform certificate (another key and serial).
+    const signed = headers.get("wechatpay-serial") === env.HELM_BILLING_TOPUP_WECHATPAY_PUBLIC_KEY_ID ? signHeaders(body)
+      : signHeaders(body, { key: stranger.privateKey, serial: "4DF076AC00000000000000000000000000000000" });
     const sent = mode === "tamper" ? body.replace(/"total":\d+/, "\"total\":1") : body;
     return new Response(sent, { status, headers: { "content-type": "application/json", ...(mode === "unsigned" ? {} : signed) } });
   }) as typeof globalThis.fetch;

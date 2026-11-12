@@ -94,6 +94,14 @@ shared with Alipay in `notify-entry.ts`; only the wire format differs. 与旧订
   signed with the merchant key (`WECHATPAY2-SHA256-RSA2048`), asking for public-key signed answers; 10 s timeout, redirects refused. The
   answer is verified like a notify before it is parsed; `404 ORDER_NOT_EXIST` is `not_paid`; other answers throw (order unchanged).
   Order creation (Native), the session-triggered query route, close order and the legacy-route guard are S2-w2.
+- **Before collecting real payments / 真实收款前提**（the notify entry being on does not mean collection is ready）:
+  1. The merchant id has **finished the platform-certificate to WeChat Pay public key switch** and signs with the public key only. During
+     the switch WeChat Pay mixes both signatures; this entry accepts only the configured public key id, so certificate-signed notifies are
+     refused (400) and only an active query can recover them. 商户号须已走完平台证书到微信支付公钥的切换。
+  2. The merchant platform has **no coupons or discounts** configured (owner 2026-11-12: no discounts; credit is the order amount). This
+     slice compares `amount.total` only. 商户平台不得配置代金券或立减。
+  3. **Required before S2-w2 merges** (the slice that can create `tpw_` orders): a paid observation whose `amount.payer_total` differs from
+     the order amount is recorded as a reconciliation exception and not credited, with tests. d2 合入前必做：入账前比对 `payer_total`。
 - **Verify / rollback**: `wechatpay-topup.test.ts` (per-run RSA keys and APIv3 key, in-process API double) and `wechatpay-topup.mysql.test.ts`
   in `npm run test:billing:mysql` (forged/stale/undecryptable notify, merchant or app mismatch, subscription order number, amount and currency
   mismatch, duplicate notify, concurrent notify and query, refund state before credit, billing off, gate off). Roll back: unset the gate; no migration.

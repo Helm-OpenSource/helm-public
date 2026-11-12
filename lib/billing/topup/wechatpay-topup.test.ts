@@ -90,7 +90,8 @@ describe("wechat pay top-up adapter", () => {
       merchantRef: `wechatpay-mch:${config.merchantId}`, providerTxnId: paid.transaction_id });
     expect(double.requests.at(-1)?.url).toBe(`https://api.mch.weixin.qq.com/v3/pay/transactions/out-trade-no/${order}?mchid=${config.merchantId}`);
     expect(double.requests.at(-1)?.authorization).toContain(`serial_no="${config.merchantSerialNo}"`);
-    for (const [mode, message] of [["tamper", "query_signature_invalid"], ["unsigned", "query_signature_invalid"], ["http_500", "query_failed"]] as const) {
+    for (const [mode, message] of [["tamper", "query_signature_invalid"], ["unsigned", "query_signature_invalid"], ["http_500", "query_failed"],
+      ["not_found_other", "query_failed"]] as const) { // only a signed ORDER_NOT_EXIST 404 means not paid
       double.setMode(mode);
       await expect(adapter.queryOrder(order)).rejects.toThrow(message);
     }
@@ -136,6 +137,10 @@ describe("wechat pay top-up notify entry", () => {
       vi.setSystemTime(new Date("2030-01-01T00:01:00Z"));
       expect((await post(double.notify(paid))).status).toBe(503);
       expect(alerts.mock.calls).toEqual([line(0), line(patches.length)]);
+      expect((await post(double.notify(paid))).status).toBe(503); // suppressed again, counting from zero
+      vi.setSystemTime(new Date("2030-01-01T00:02:00Z"));
+      expect((await post(double.notify(paid))).status).toBe(503);
+      expect(alerts.mock.calls).toEqual([line(0), line(patches.length), line(1)]);
       for (const [key, value] of Object.entries(double.env)) vi.stubEnv(key, value);
       expect((await post(double.notify(paid, { forge: true }))).status).toBe(400); // fully configured: the entry is live
     } finally { vi.useRealTimers(); alerts.mockRestore(); }
