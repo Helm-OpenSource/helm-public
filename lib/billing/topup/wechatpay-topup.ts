@@ -28,6 +28,8 @@ function isRsaKey(pem: string | null, kind: "private" | "public"): pem is string
   try { return Boolean(pem) && (kind === "private" ? createPrivateKey(pem!) : createPublicKey(pem!)).asymmetricKeyType === "rsa"; }
   catch { return false; }
 }
+/** createPublicKey also accepts a private key (deriving its public half); the public slot must never hold one. */
+function isPrivateKey(pem: string) { try { createPrivateKey(pem); return true; } catch { return false; } }
 
 /** Reuses the existing WECHAT_PAY_* keys plus the public key id; null (unavailable) when anything is missing or malformed. */
 export function getWeChatPayTopupConfig(env: Readonly<Record<string, string | undefined>> = process.env): WeChatPayTopupConfig | null {
@@ -38,7 +40,7 @@ export function getWeChatPayTopupConfig(env: Readonly<Record<string, string | un
   const publicKey = normalizePem(env.WECHAT_PAY_PLATFORM_PUBLIC_KEY?.trim(), "PUBLIC KEY");
   const apiV3Key = Buffer.from(env.WECHAT_PAY_API_V3_KEY?.trim() ?? "", "utf8");
   if (!IDENTIFIER.test(appId) || !IDENTIFIER.test(merchantId) || !/^[0-9A-Fa-f]{1,64}$/.test(merchantSerialNo) ||
-      !/^PUB_KEY_ID_[0-9]{1,64}$/.test(publicKeyId) || !isRsaKey(privateKey, "private") || !isRsaKey(publicKey, "public") ||
+      !/^PUB_KEY_ID_[0-9]{1,64}$/.test(publicKeyId) || !isRsaKey(privateKey, "private") || !isRsaKey(publicKey, "public") || isPrivateKey(publicKey) ||
       apiV3Key.length !== 32) return null;
   return { appId, merchantId, merchantSerialNo, privateKey, publicKey, publicKeyId, apiV3Key };
 }
@@ -65,11 +67,12 @@ function verifySigned(config: WeChatPayTopupConfig, signed: Signed, nowMs: numbe
 
 const isObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
-/** AEAD_AES_256_GCM with the APIv3 key: ciphertext is base64 with the 16-byte tag appended; nonce and AAD are used as UTF-8. */
+/** AEAD_AES_256_GCM with the APIv3 key: ciphertext is base64 with the 16-byte tag appended; nonce and AAD are used as UTF-8.
+ * associated_data is an optional string that "may be empty"; absent, "" and null all mean empty AAD (the GCM tag still decides). */
 function decryptResource(config: WeChatPayTopupConfig, resource: Record<string, unknown>): unknown {
   const { algorithm, ciphertext, nonce, associated_data: aad } = resource;
   if (algorithm !== "AEAD_AES_256_GCM" || typeof ciphertext !== "string" || typeof nonce !== "string" ||
-      (aad !== undefined && typeof aad !== "string")) throw new Error("resource_invalid");
+      (aad !== undefined && aad !== null && typeof aad !== "string")) throw new Error("resource_invalid");
   const sealed = Buffer.from(ciphertext, "base64");
   if (sealed.length <= 16) throw new Error("resource_invalid");
   const decipher = createDecipheriv("aes-256-gcm", config.apiV3Key, Buffer.from(nonce, "utf8"));
@@ -128,7 +131,17 @@ export function createWeChatPayTopupAdapter(config: WeChatPayTopupConfig, fetchI
 }
 
 /** Fixed reason codes only: never ids, amounts, keys or provider text. */
-function alert(reason: string) { console.error("[billing-topup-wechatpay]", JSON.stringify({ event: "notify_refused", reason })); }
+function alert(reason: string, extra: Record<string, number> = {}) {
+  console.error("[billing-topup-wechatpay]", JSON.stringify({ event: "notify_refused", reason, ...extra }));
+}
+/** Default-on deployments without WeChat Pay see unauthenticated POSTs: at most one config alert per minute, with a count. */
+const CONFIG_ALERT_INTERVAL_MS = 60_000;
+const configAlert = { lastAt: Number.NEGATIVE_INFINITY, suppressed: 0 };
+function alertConfigUnavailable(nowMs: number) {
+  if (nowMs - configAlert.lastAt < CONFIG_ALERT_INTERVAL_MS) { configAlert.suppressed += 1; return; }
+  alert("config_unavailable", { suppressed: configAlert.suppressed });
+  configAlert.lastAt = nowMs; configAlert.suppressed = 0;
+}
 /** WeChat Pay: success is 200 with no body; failure is 4XX/5XX with {"code":"FAIL",...} and is retried. */
 const fail = (status: number) => Response.json({ code: "FAIL", message: "失败" }, { status, headers: { "Cache-Control": "no-store" } });
 const SIGNED_HEADERS = ["wechatpay-timestamp", "wechatpay-nonce", "wechatpay-signature", "wechatpay-serial"] as const;
@@ -138,7 +151,7 @@ export async function handleWeChatPayTopupNotify(request: Request, client: Prism
     return new Response("Not Found", { status: 404 });
   }
   const config = getWeChatPayTopupConfig();
-  if (!config) { alert("config_unavailable"); return fail(503); }
+  if (!config) { alertConfigUnavailable(Date.now()); return fail(503); }
   if (!/^application\/json(\s*;|$)/i.test(request.headers.get("content-type") ?? "")) return fail(415);
   const rawBody = await readNotifyBody(request);
   if (typeof rawBody === "number") return fail(rawBody);

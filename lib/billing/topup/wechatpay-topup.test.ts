@@ -69,6 +69,13 @@ describe("wechat pay top-up adapter", () => {
     const refused = (options: Parameters<typeof double.notify>[1]) => expect(observe(double.notify(paid, options))).rejects.toThrow("topup_signature_invalid");
     await refused({ apiV3Key: "f".repeat(32) }); // sealed with another key
     await refused({ resource: r => ({ ...r, associated_data: "other" }) });
+    // associated_data is optional and "may be empty": absent, "" and null are all empty AAD, still bound by the GCM tag.
+    for (const resource of [(r: Record<string, unknown>) => ({ ...r, associated_data: "" }), ({ associated_data: _drop, ...r }: Record<string, unknown>) => r,
+      (r: Record<string, unknown>) => ({ ...r, associated_data: null })]) {
+      expect((await observe(double.notify(paid, { aad: "", resource }))).status).toBe("paid");
+      await refused({ resource }); // sealed with a non-empty AAD
+    }
+    await refused({ aad: "", resource: r => ({ ...r, associated_data: 0 }) });
     await refused({ resource: r => ({ ...r, nonce: "000000000000" }) });
     await refused({ resource: r => ({ ...r, ciphertext: Buffer.from(Buffer.from(r.ciphertext, "base64").map((b, i) => (i === 0 ? b ^ 1 : b))).toString("base64") }) });
     await refused({ resource: r => ({ ...r, algorithm: "AEAD_AES_128_GCM" }) });
@@ -109,25 +116,29 @@ describe("wechat pay top-up notify entry", () => {
     }
   });
 
-  it("is on by default but fails closed with an alert while any merchant key is missing or malformed", async () => {
+  it("is on by default but fails closed while any merchant key is missing or malformed, alerting at most once a minute", async () => {
     vi.stubEnv("HELM_BILLING_TOPUP_WECHATPAY_ENABLED", undefined); vi.stubEnv("HELM_FINANCIAL_ACTIONS_ENABLED", undefined);
     const alerts = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.useFakeTimers({ toFake: ["Date"] });
     try {
+      vi.setSystemTime(new Date("2030-01-01T00:00:00Z")); // beyond any earlier alert in this process
       for (const name of Object.keys(double.env)) vi.stubEnv(name, undefined);
       const nothing = await post(double.notify(paid));
       expect([nothing.status, await nothing.json()]).toEqual([503, { code: "FAIL", message: "失败" }]);
-      for (const name of Object.keys(double.env)) { // each key alone: missing, then malformed
-        for (const value of [undefined, "x y"]) {
-          for (const [key, configured] of Object.entries(double.env)) vi.stubEnv(key, key === name ? value : configured);
-          expect((await post(double.notify(paid))).status).toBe(503);
-        }
+      const misplaced = { WECHAT_PAY_PLATFORM_PUBLIC_KEY: double.env.WECHAT_PAY_PRIVATE_KEY }; // a private key in the public slot
+      const patches = [misplaced, ...Object.keys(double.env).flatMap(name => [{ [name]: undefined }, { [name]: "x y" }])];
+      for (const patch of patches) { // each key alone: missing, then malformed
+        for (const [key, value] of Object.entries({ ...double.env, ...patch })) vi.stubEnv(key, value);
+        expect((await post(double.notify(paid))).status).toBe(503);
       }
-      expect(alerts.mock.calls.length).toBe(1 + Object.keys(double.env).length * 2);
-      expect(alerts.mock.calls.every(([tag, line]) => tag === "[billing-topup-wechatpay]" &&
-        line === JSON.stringify({ event: "notify_refused", reason: "config_unavailable" }))).toBe(true);
+      const line = (suppressed: number) => ["[billing-topup-wechatpay]", JSON.stringify({ event: "notify_refused", reason: "config_unavailable", suppressed })];
+      expect(alerts.mock.calls).toEqual([line(0)]);
+      vi.setSystemTime(new Date("2030-01-01T00:01:00Z"));
+      expect((await post(double.notify(paid))).status).toBe(503);
+      expect(alerts.mock.calls).toEqual([line(0), line(patches.length)]);
       for (const [key, value] of Object.entries(double.env)) vi.stubEnv(key, value);
       expect((await post(double.notify(paid, { forge: true }))).status).toBe(400); // fully configured: the entry is live
-    } finally { alerts.mockRestore(); }
+    } finally { vi.useRealTimers(); alerts.mockRestore(); }
   });
 
   it("refuses non-JSON, oversized and unauthenticated bodies without touching the database", async () => {

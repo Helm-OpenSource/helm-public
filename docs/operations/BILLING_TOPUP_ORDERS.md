@@ -77,7 +77,8 @@ shared with Alipay in `notify-entry.ts`; only the wire format differs. 与旧订
 
 - **Gate**: `HELM_BILLING_TOPUP_WECHATPAY_ENABLED` (capability `billing_topup_wechatpay`, **default enabled**, owner 2026-11-12) and
   `financial_action`; `false` (or an invalid value) answers a plain 404 before reading the body or the database. Enabled but any merchant
-  key missing or malformed: fail closed, `503` with alert `config_unavailable`, nothing read or credited.
+  key missing or malformed (a private key in the public key slot included): fail closed, `503`, nothing read or credited; the
+  `config_unavailable` alert is logged at most once a minute per process with a `suppressed` count. Deployments that do not collect WeChat Pay set `false`.
 - **Config** (environment only): existing `WECHAT_PAY_APP_ID`, `WECHAT_PAY_MERCHANT_ID`, `WECHAT_PAY_MERCHANT_SERIAL_NO`,
   `WECHAT_PAY_PRIVATE_KEY` (confidential), `WECHAT_PAY_PLATFORM_PUBLIC_KEY` (the WeChat Pay public key), `WECHAT_PAY_API_V3_KEY` (confidential, 32 bytes)
   and the new public `HELM_BILLING_TOPUP_WECHATPAY_PUBLIC_KEY_ID` (`PUB_KEY_ID_<digits>`). Missing or malformed: `503`. Only the
@@ -85,7 +86,7 @@ shared with Alipay in `notify-entry.ts`; only the wire format differs. 与旧订
 - **Notify**: `application/json`, at most 16 KiB, strict UTF-8. `Wechatpay-Timestamp` within 300 s either way (checked first),
   `Wechatpay-Serial` equal to the configured public key id (platform-certificate mode is not supported and fails), SHA256-RSA over
   `timestamp\nnonce\nbody\n`; signature probes are not special-cased. Then `resource_type=encrypt-resource`, `original_type=transaction`,
-  `AEAD_AES_256_GCM` decryption with the APIv3 key (16-byte tag appended). The decrypted transaction maps with `observeWeChatPayTransaction`
+  `AEAD_AES_256_GCM` decryption with the APIv3 key (16-byte tag appended; `associated_data` absent, `""` or `null` is empty AAD). The decrypted transaction maps with `observeWeChatPayTransaction`
   (`amount.total` is fen); an `event_type` other than `TRANSACTION.SUCCESS` maps to `unknown`, as do `REFUND` and unlisted states.
 - **Answer**: 200 with no body when acknowledged (same cases as Alipay `success`); otherwise 4XX/5XX with `{"code":"FAIL","message":"失败"}`
   so WeChat Pay retries. Logs carry a fixed reason code only.

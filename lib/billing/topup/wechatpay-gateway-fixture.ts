@@ -19,17 +19,17 @@ export function weChatPayDouble() {
     return { "wechatpay-timestamp": timestamp, "wechatpay-nonce": nonce, "wechatpay-signature": signature,
       "wechatpay-serial": options.serial ?? env.HELM_BILLING_TOPUP_WECHATPAY_PUBLIC_KEY_ID };
   };
-  const encrypt = (plain: string, apiV3Key = env.WECHAT_PAY_API_V3_KEY) => {
-    const nonce = randomBytes(6).toString("hex"), associated_data = "transaction"; // 12-character nonce
+  const encrypt = (plain: string, apiV3Key = env.WECHAT_PAY_API_V3_KEY, associated_data = "transaction") => {
+    const nonce = randomBytes(6).toString("hex"); // 12-character nonce
     const cipher = createCipheriv("aes-256-gcm", Buffer.from(apiV3Key, "utf8"), Buffer.from(nonce, "utf8")).setAAD(Buffer.from(associated_data));
     const sealed = Buffer.concat([cipher.update(plain, "utf8"), cipher.final(), cipher.getAuthTag()]);
     return { algorithm: "AEAD_AES_256_GCM", ciphertext: sealed.toString("base64"), associated_data, original_type: "transaction", nonce };
   };
-  type NotifyOptions = { forge?: boolean; skewSeconds?: number; serial?: string; eventType?: string; apiV3Key?: string;
+  type NotifyOptions = { forge?: boolean; skewSeconds?: number; serial?: string; eventType?: string; apiV3Key?: string; aad?: string;
     resource?: (resource: ReturnType<typeof encrypt>) => Record<string, unknown> };
   /** A notify as WeChat Pay sends it: JSON body with an encrypted transaction, signed headers over the exact body. */
   const notify = (trade: Record<string, unknown>, options: NotifyOptions = {}) => {
-    const resource = encrypt(JSON.stringify({ appid: env.WECHAT_PAY_APP_ID, mchid: env.WECHAT_PAY_MERCHANT_ID, ...trade }), options.apiV3Key);
+    const resource = encrypt(JSON.stringify({ appid: env.WECHAT_PAY_APP_ID, mchid: env.WECHAT_PAY_MERCHANT_ID, ...trade }), options.apiV3Key, options.aad);
     const body = JSON.stringify({ id: randomBytes(8).toString("hex"), create_time: "2026-11-12T10:00:00+08:00", resource_type: "encrypt-resource",
       event_type: options.eventType ?? "TRANSACTION.SUCCESS", summary: "支付成功", resource: options.resource?.(resource) ?? resource });
     return { body, headers: { "content-type": "application/json", ...signHeaders(body, { key: options.forge ? stranger.privateKey : undefined,

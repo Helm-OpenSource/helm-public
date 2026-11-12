@@ -41,7 +41,9 @@ outbound voice provider, and are not an outbound voice deployment gate.
 | Billing Alipay top-up | `HELM_BILLING_TOPUP_ALIPAY_ENABLED` | Safe default deny | `/api/billing/v1/topup-notify/alipay` answers 404 before reading the body or the database; also requires `financial_action` ([contract](BILLING_TOPUP_ORDERS.md)) |
 | Billing WeChat Pay top-up | `HELM_BILLING_TOPUP_WECHATPAY_ENABLED` | Default enabled (owner 2026-11-12) | `false` makes `/api/billing/v1/topup-notify/wechatpay` answer 404 before reading the body or the database; while enabled, any missing or malformed merchant key fails closed (503, alert, no credit); also requires `financial_action` ([contract](BILLING_TOPUP_ORDERS.md)) |
 
-The generated `.env.example` sets every gate to `false`. That is a safe
+The generated `.env.example` sets every gate to `false`, except
+`HELM_BILLING_TOPUP_WECHATPAY_ENABLED`, which is empty and therefore **on** (owner 2026-11-12);
+set it to `false` on deployments that do not collect WeChat Pay. That is a safe
 fresh-deployment example, not the missing-key compatibility rule. Production
 contracts should set every key explicitly and validate the observed values
 before startup.
