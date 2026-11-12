@@ -35,6 +35,13 @@ describe("deployment capability policy", () => {
     });
   });
 
+  it("opens Alipay top-up by default (owner 2026-11-12; merchant configuration fails it closed)", () => {
+    expect(getDeploymentCapabilityDecision("billing_topup_alipay", {})).toMatchObject({ allowed: true });
+    expect(getDeploymentCapabilityDecision("billing_topup_alipay", { HELM_BILLING_TOPUP_ALIPAY_ENABLED: "false" }))
+      .toMatchObject({ allowed: false, reason: "explicitly_disabled" });
+    expect(getDeploymentCapabilityDecision("billing_internal_route", {})).toMatchObject({ allowed: false });
+  });
+
   it.each([
     "outbound_voice_asr",
     "automated_customer_call",

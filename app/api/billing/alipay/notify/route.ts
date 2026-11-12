@@ -26,6 +26,8 @@ import { isDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabili
 
 export const runtime = "nodejs";
 
+const TOPUP_ORDER_PREFIX = /^tp[aw]_/;
+
 export async function POST(request: Request) {
   if (!isDeploymentCapabilityEnabled("financial_action")) {
     return NextResponse.json(
@@ -74,6 +76,13 @@ export async function POST(request: Request) {
   }
 
   const outTradeNo = payload.out_trade_no ?? null;
+  // Wallet top-up orders (tpa_ Alipay, tpw_ WeChat Pay; lib/billing/topup/topup-orders.ts) belong to their own notify entry. A
+  // misrouted top-up notify is refused here, after verification and before any write, so it never reaches the subscription
+  // tenancy resolution (whose passback hint fallback could otherwise grant a subscription). Prefix match on purpose: a malformed
+  // tpa_/tpw_ number is refused too. Non-success, so nothing is acknowledged on the provider side either.
+  if (TOPUP_ORDER_PREFIX.test(outTradeNo ?? "")) {
+    return new Response("fail", { status: 400 });
+  }
   const tradeNo = payload.trade_no ?? null;
   const tradeStatus = payload.trade_status ?? null;
   const callbackEvent = await beginPaymentWebhookCallbackEvent({

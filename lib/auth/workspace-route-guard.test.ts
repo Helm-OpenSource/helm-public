@@ -17,6 +17,7 @@ describe("workspace route guard", () => {
   });
 
   it("keeps public entry, demo, program and portal paths outside the workspace guard", () => {
+    expect(isWorkspacePagePathname("/billing/topup")).toBe(true); // S2-d3: opened from the seat client's browser, signs in first
     expect(isWorkspacePagePathname("/")).toBe(false);
     expect(isWorkspacePagePathname("/login")).toBe(false);
     expect(isWorkspacePagePathname("/demo")).toBe(false);
