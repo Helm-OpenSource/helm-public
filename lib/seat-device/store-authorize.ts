@@ -22,15 +22,19 @@ import "server-only";
 // No plaintext token or pairing code is stored, logged or put in an error or
 // audit payload: only sha256 hashes reach the database.
 
-import { ActorType, MembershipStatus, Prisma } from "@prisma/client";
+import { ActorType, MembershipStatus, Prisma, type WorkspaceRole } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { externalScopeOf } from "@/lib/auth/external-member-scope";
-import { evaluateLock, hashLoginIdentifier, nextStateOnFailure } from "@/lib/auth/login-rate-limit";
+import { evaluateLock, hashLoginIdentifier, nextStateOnFailure, type FailureLimit } from "@/lib/auth/login-rate-limit";
 import { AUTH_SESSION_PROVIDER_TYPES } from "@/lib/auth/provider-seam";
 import { db } from "@/lib/db";
 import { isWriteConflictError } from "@/lib/db/conflict-aware-write";
 import {
   SEAT_DEVICE_ACCESS_TOKEN_TTL_SECONDS,
+  SEAT_DEVICE_CODE_ENTRY_LOCK_SECONDS,
+  SEAT_DEVICE_CODE_ENTRY_MAX_FAILURES,
+  SEAT_DEVICE_CODE_ENTRY_MAX_FAILURES_PER_SOURCE_BUCKET,
+  SEAT_DEVICE_CODE_ENTRY_WINDOW_SECONDS,
   SEAT_DEVICE_MAX_ACTIVE_PER_MEMBER,
   SEAT_DEVICE_PAIRING_CODE_MAX_ATTEMPTS,
   SEAT_DEVICE_PENDING_BUCKET_WINDOW_SECONDS,
@@ -91,7 +95,7 @@ export class SeatDeviceAuthDisabledError extends Error {
   }
 }
 
-function assertDeploymentEnabled() {
+export function assertDeploymentEnabled() {
   if (!isSeatDeviceAuthDeploymentEnabled()) throw new SeatDeviceAuthDisabledError();
 }
 
@@ -110,7 +114,7 @@ function isContentionError(error: unknown) {
 // conflict that outlasts the retries, or contention for a connection, never
 // leaves as a raw database error: it becomes `exhausted`, a closed code with a
 // Retry-After, so callers answer it like any other refusal.
-async function retried<T>(
+export async function retried<T>(
   transaction: () => Promise<T>,
   exhausted: SeatDeviceErrorCode,
   isConflict: (error: unknown) => boolean = isWriteConflictError,
@@ -321,7 +325,7 @@ export async function cancelSeatDeviceAuthorization(input: {
 // A CAS that loses after the row was re-read in the same transaction means a
 // concurrent writer slipped in; the message matches isWriteConflictError, so
 // it is retried like any other conflict.
-function casLost(): never {
+export function casLost(): never {
   throw new Error("seat device write conflict");
 }
 
@@ -336,7 +340,7 @@ async function clearLapsedPairingCode(
   });
 }
 
-async function auditDevice(
+export async function auditDevice(
   tx: Prisma.TransactionClient,
   row: { id: string; workspaceId: string | null; userId: string | null; clientType: string },
   actionType: string,
@@ -525,7 +529,7 @@ export async function claimSeatDeviceAuthorization(input: {
 // Website: pairing-code entry (lookup, approve, reject)
 // ---------------------------------------------------------------------------
 
-type MemberContext = {
+export type MemberContext = {
   authSessionId: string;
   providerType: string | null;
   userId: string;
@@ -533,12 +537,13 @@ type MemberContext = {
   passwordSetAt: Date | null;
   workspace: { id: string; name: string; enabled: boolean };
   membershipId: string;
+  role: WorkspaceRole;
 };
 
 // Re-reads the session row itself instead of trusting the caller's view of
 // it: usable, owned by the user, seated on a workspace where the user is an
 // ACTIVE, non-external member. The workspace bound later is this one.
-async function loadMemberContext(authSessionId: string, userId: string, now: Date): Promise<MemberContext> {
+export async function loadMemberContext(authSessionId: string, userId: string, now: Date): Promise<MemberContext> {
   const session = await db.authSession.findUnique({
     where: { id: authSessionId },
     select: { userId: true, activeWorkspaceId: true, providerType: true, revokedAt: true, expiresAt: true },
@@ -551,7 +556,7 @@ async function loadMemberContext(authSessionId: string, userId: string, now: Dat
     db.workspace.findUnique({ where: { id: workspaceId }, select: { id: true, name: true, featureFlagsJson: true } }),
     db.membership.findUnique({
       where: { workspaceId_userId: { workspaceId, userId } },
-      select: { id: true, status: true, accessScope: true },
+      select: { id: true, role: true, status: true, accessScope: true },
     }),
     db.user.findUnique({ where: { id: userId }, select: { name: true, passwordSetAt: true } }),
   ]);
@@ -566,29 +571,41 @@ async function loadMemberContext(authSessionId: string, userId: string, now: Dat
     passwordSetAt: user.passwordSetAt,
     workspace: { id: workspace.id, name: workspace.name, enabled: isSeatDeviceWorkspaceEnabled(workspace.featureFlagsJson) },
     membershipId: membership.id,
+    role: membership.role,
   };
 }
 
-// Code entry is limited per account and, with a trusted source, per address
-// bucket, in FailedLoginAttempt (15 minutes, 8 failures, then locked). The
+// Code entry is limited per account (8 failures in 15 minutes) and, with a
+// trusted source, per address bucket (30 in 15 minutes: an office shares one
+// bucket), in FailedLoginAttempt; either lock lasts 15 minutes. The
 // lock check, the look at the code and the failure count run in ONE
 // Serializable transaction: the counter rows read by the check stay locked
 // until the count is written, so concurrent wrong codes cannot all pass the
 // check before any of them is counted, and a right guess during a lock is
 // not confirmed. A success never clears the count: anyone can mint a valid
 // code of their own, so clearing would let them reset it.
-function codeEntryKeys(userId: string, source: string | null) {
+const codeEntryLimit = (maxAttempts: number) => ({
+  windowMs: SEAT_DEVICE_CODE_ENTRY_WINDOW_SECONDS * 1000,
+  maxAttempts,
+  lockMs: SEAT_DEVICE_CODE_ENTRY_LOCK_SECONDS * 1000,
+});
+const ACCOUNT_CODE_ENTRY_LIMIT = codeEntryLimit(SEAT_DEVICE_CODE_ENTRY_MAX_FAILURES);
+const BUCKET_CODE_ENTRY_LIMIT = codeEntryLimit(SEAT_DEVICE_CODE_ENTRY_MAX_FAILURES_PER_SOURCE_BUCKET);
+
+type CodeEntryKey = { identifierHash: string; limit: FailureLimit };
+
+function codeEntryKeys(userId: string, source: string | null): CodeEntryKey[] {
   const bucket = source ? seatDeviceSourceBucket(source) : null;
-  const keys = [`seat-device-code:user:${userId}`];
-  if (bucket) keys.push(`seat-device-code:ip:${bucket}`);
-  return keys.map(hashLoginIdentifier);
+  const keys = [{ identifierHash: hashLoginIdentifier(`seat-device-code:user:${userId}`), limit: ACCOUNT_CODE_ENTRY_LIMIT }];
+  if (bucket) keys.push({ identifierHash: hashLoginIdentifier(`seat-device-code:ip:${bucket}`), limit: BUCKET_CODE_ENTRY_LIMIT });
+  return keys;
 }
 
 type CodeEntryCounter = { identifierHash: string; attemptCount: number; windowStartedAt: Date; lockedUntil: Date | null };
 
-async function openCodeEntryInTx(tx: Prisma.TransactionClient, identifierHashes: string[], now: Date) {
+async function openCodeEntryInTx(tx: Prisma.TransactionClient, keys: CodeEntryKey[], now: Date) {
   const counters: CodeEntryCounter[] = await tx.failedLoginAttempt.findMany({
-    where: { identifierHash: { in: identifierHashes } },
+    where: { identifierHash: { in: keys.map((key) => key.identifierHash) } },
     select: { identifierHash: true, attemptCount: true, windowStartedAt: true, lockedUntil: true },
   });
   const retryAfterMs = Math.max(0, ...counters.map((counter) => evaluateLock(counter, now).retryAfterMs));
@@ -598,9 +615,9 @@ async function openCodeEntryInTx(tx: Prisma.TransactionClient, identifierHashes:
 
 // Committed with the transaction that found the code wrong; the caller
 // answers pairing_code_invalid only after that commit.
-async function countCodeEntryFailureInTx(tx: Prisma.TransactionClient, identifierHashes: string[], counters: CodeEntryCounter[], now: Date) {
-  for (const identifierHash of identifierHashes) {
-    const next = nextStateOnFailure(counters.find((counter) => counter.identifierHash === identifierHash) ?? null, now);
+async function countCodeEntryFailureInTx(tx: Prisma.TransactionClient, keys: CodeEntryKey[], counters: CodeEntryCounter[], now: Date) {
+  for (const { identifierHash, limit } of keys) {
+    const next = nextStateOnFailure(counters.find((counter) => counter.identifierHash === identifierHash) ?? null, now, limit);
     await tx.failedLoginAttempt.upsert({
       where: { identifierHash },
       create: { identifierHash, ...next },
