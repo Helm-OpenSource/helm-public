@@ -1,12 +1,12 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
-import { ActorType, Prisma, type PaymentOrderState, type PrismaClient } from "@prisma/client";
+import { ActorType, Prisma, type PaymentOrder, type PaymentOrderState, type PrismaClient } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { canManageWorkspaceBilling } from "@/lib/auth/billing-governance";
 import { FundsRefusal, postFundsTransactionInTransaction, runFundsTransactionWithRetry } from "../funds/funds-journal";
 import { lockBillingAuthority, resolvePayerForWorkspaceInTransaction } from "../payer/payer-accounts";
-import { observeAlipayTrade, observeWeChatPayTransaction, type MerchantRefLookup, type ObservedPayment, type ObservedStatus,
-  type TopupProvider } from "./provider-observation";
+import { observeAlipayTrade, observeWeChatPayTransaction, type MerchantRefLookup, type ObservedPayment, type ObservedRefund,
+  type ObservedStatus, type TopupProvider } from "./provider-observation";
 
 /**
  * Billing V1 S2-b wallet top-up orders. Callbacks and active queries converge on ONE private verification entry: only an
@@ -14,22 +14,36 @@ import { observeAlipayTrade, observeWeChatPayTransaction, type MerchantRefLookup
  * provider txn, in one Core transaction with the order transition, VerifiedPayment, funds journal, audit and outbox.
  * Lock order: PayerAccount -> PaymentOrder -> VerifiedPayment -> funds journal (S2-a). Nothing here calls a provider.
  */
-export const TOPUP_MIN_FEN = BigInt(100); // 1 yuan
-export const TOPUP_MAX_FEN = BigInt(5_000_000); // 50 000 yuan per order; provisional until finance approves limits
-const ORDER_TTL_MS = 2 * 60 * 60 * 1000;
+/** Owner 2026-11-12 11:24 「100 的整倍数，上不封顶」: whole multiples of 100 yuan, at least 100 yuan, for every provider. */
+export const TOPUP_UNIT_FEN = BigInt(10_000);
+export const TOPUP_MIN_FEN = TOPUP_UNIT_FEN;
+/** No business cap. Technical bound only: Alipay's documented total_amount maximum (100 000 000 yuan). */
+export const TOPUP_MAX_FEN = BigInt(10_000_000_000);
+
+/** The one amount rule shared by every top-up provider (closed codes). */
+export function checkTopupAmountFen(amountFen: unknown): asserts amountFen is bigint {
+  if (typeof amountFen !== "bigint" || amountFen < TOPUP_MIN_FEN || amountFen > TOPUP_MAX_FEN) refuse("topup_amount_out_of_range");
+  if (amountFen % TOPUP_UNIT_FEN !== BigInt(0)) refuse("topup_amount_not_multiple");
+}
+export const TOPUP_ORDER_TTL_MS = 2 * 60 * 60 * 1000;
 const VERIFIER = { type: "SYSTEM" as const, ref: "billing-topup-verifier" };
 const SOURCE_PAGE = "/billing/topup";
 const ORDER_NO = /^tp[wa]_[0-9a-f]{28}$/;
 const TXN_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
-export type TopupRefusalCode = "topup_input_invalid" | "topup_amount_out_of_range" | "topup_forbidden" | "topup_billing_off" |
+export type TopupRefusalCode = "topup_input_invalid" | "topup_amount_out_of_range" | "topup_amount_not_multiple" |
+  "topup_forbidden" | "topup_billing_off" |
+  "topup_rate_limited" | "topup_idempotency_conflict" | "topup_order_not_closable" | "topup_observation_recorded" |
+  "topup_query_required" | "topup_query_unconfirmed" |
   "topup_observation_invalid" | "topup_signature_invalid" | "topup_order_unknown" | "topup_order_type_invalid" |
   "topup_provider_mismatch" | "topup_merchant_mismatch" | "topup_amount_mismatch" | "topup_currency_mismatch" |
   "topup_txn_conflict" | "topup_order_paid_by_other_txn" | "topup_invariant_breach" | "topup_observation_untrusted" |
   "payer_billing_off";
 /** A pending-reconciliation record for money a provider reports that cannot be credited (never a balance change). */
 export type PaymentException = { key: string; reason: string; paymentOrderId: string; workspaceId: string; payerAccountId: string;
-  provider: TopupProvider; providerTxnId: string | null; amountFen: string | null; source: string; observed: ObservedStatus };
+  provider: TopupProvider; providerTxnId: string | null; amountFen: string | null; source: string; observed: ObservedStatus;
+  /** Refund amount (fen), batch and time the provider reported with it, when it reported any (contract S2D §5 P2-B). */
+  refund?: ObservedRefund | null };
 export class TopupRefusal extends Error {
   constructor(readonly code: TopupRefusalCode, readonly exception?: PaymentException) { super(code); this.name = "TopupRefusal"; }
 }
@@ -47,36 +61,130 @@ function newProviderOrderNo(provider: TopupProvider) {
 
 export type CreateTopupOrderInput = { actorUserId: string; workspaceId: string; provider: TopupProvider; amountFen: bigint;
   /** Resolved by the server from merchant configuration, never from the client. */
-  merchantRef: string; appRef: string; now?: Date };
+  merchantRef: string; appRef: string; now?: Date;
+  /** S2-d2 route: the caller's Idempotency-Key; the same key with the same request replays the order, with another conflicts. */
+  idempotencyKey?: string };
+
+/** Contract S2D §2: per creator and workspace at most 5 open unpaid orders and 5 creations a minute. */
+export const TOPUP_OPEN_ORDER_LIMIT = 5;
+export const TOPUP_CREATIONS_PER_MINUTE = 5;
+const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{8,128}$/;
 
 /** OWNER or BILLING_ADMIN of the workspace; the payer is resolved server-side and must be in shadow or enforce mode. */
 export async function createTopupOrder(client: PrismaClient, input: CreateTopupOrderInput) {
+  return (await createOrReplayTopupOrder(client, input)).order as PaymentOrder; // without a key nothing is replayed
+}
+
+export type ReplayedTopupOrder = Pick<PaymentOrder, "id" | "provider" | "providerOrderNo" | "amountFen" | "state" | "expiresAt">;
+
+/** As createTopupOrder, with Idempotency-Key replay and the creation limits; `replayed` marks an earlier order returned again. */
+export async function createOrReplayTopupOrder(client: PrismaClient, input: CreateTopupOrderInput):
+  Promise<{ order: PaymentOrder | ReplayedTopupOrder; replayed: boolean }> {
   reference(input.actorUserId); reference(input.workspaceId); reference(input.merchantRef); reference(input.appRef);
   if (input.provider !== "wechat_pay" && input.provider !== "alipay") refuse("topup_input_invalid");
-  if (typeof input.amountFen !== "bigint" || input.amountFen < TOPUP_MIN_FEN || input.amountFen > TOPUP_MAX_FEN) {
-    refuse("topup_amount_out_of_range");
-  }
+  checkTopupAmountFen(input.amountFen);
+  if (input.idempotencyKey !== undefined && !IDEMPOTENCY_KEY.test(input.idempotencyKey)) refuse("topup_input_invalid");
   const now = input.now ?? new Date();
+  const createdBy = `USER:${input.actorUserId}`;
+  const requestHash = sha256(JSON.stringify([input.provider, input.amountFen.toString(), input.merchantRef, input.appRef]));
+  // READ COMMITTED (#546 review P2-1): under REPEATABLE READ a creator's first order makes the locking reads below hit an empty
+  // (workspace, creator) range and take a shared gap lock; two different creators then insert into that gap and deadlock. RC takes
+  // no gap locks. Replay and the limits keep their meaning: the creator's membership row lock still serializes one creator, the
+  // reads after it see the latest commit, and UNIQUE (workspace, creator, key) backs the replay. Needs ROW binlog, as reservations.
   return client.$transaction(async tx => {
+    // The creator's membership row lock serializes this creator's concurrent creations; the reads below then see what a previous
+    // lock holder committed (they stay locking reads, which also keeps them correct should the isolation level ever change).
     try { await lockBillingAuthority(tx, input.actorUserId, [input.workspaceId], canManageWorkspaceBilling); } catch (error) {
       if (error instanceof Error && error.message === "payer_binding_forbidden") refuse("topup_forbidden");
       throw error;
     }
+    if (input.idempotencyKey !== undefined) {
+      const [earlier] = await tx.$queryRaw<Array<ReplayedTopupOrder & { requestHash: string | null }>>`
+        SELECT id, provider, providerOrderNo, amountFen, state, expiresAt, requestHash FROM PaymentOrder
+        WHERE workspaceId = ${input.workspaceId} AND createdBy = ${createdBy} AND idempotencyKey = ${input.idempotencyKey} FOR SHARE`;
+      if (earlier) {
+        if (earlier.requestHash !== requestHash) refuse("topup_idempotency_conflict");
+        const { requestHash: _hash, ...order } = earlier;
+        return { order: { ...order, amountFen: BigInt(order.amountFen) }, replayed: true };
+      }
+    }
+    const [{ open, recent }] = await tx.$queryRaw<Array<{ open: bigint | null; recent: bigint | null }>>`
+      SELECT SUM(state IN ('created', 'pending', 'unknown') AND expiresAt > ${now}) AS open,
+        SUM(createdAt > ${new Date(now.getTime() - 60_000)}) AS recent
+      FROM PaymentOrder WHERE workspaceId = ${input.workspaceId} AND createdBy = ${createdBy} FOR SHARE`;
+    if (Number(open ?? 0) >= TOPUP_OPEN_ORDER_LIMIT || Number(recent ?? 0) >= TOPUP_CREATIONS_PER_MINUTE) refuse("topup_rate_limited");
     const payer = await resolvePayerForWorkspaceInTransaction(tx, input.workspaceId);
     if (payer.billingMode !== "shadow" && payer.billingMode !== "enforce") refuse("topup_billing_off");
     const order = await tx.paymentOrder.create({ data: { payerAccountId: payer.payerAccountId, payerBindingId: payer.bindingId,
       workspaceId: input.workspaceId, orderType: "wallet_topup", provider: input.provider,
       providerOrderNo: newProviderOrderNo(input.provider), amountFen: input.amountFen, currency: "CNY",
-      merchantRef: input.merchantRef, appRef: input.appRef, expiresAt: new Date(now.getTime() + ORDER_TTL_MS),
-      createdBy: `USER:${input.actorUserId}` } });
+      merchantRef: input.merchantRef, appRef: input.appRef, expiresAt: new Date(now.getTime() + TOPUP_ORDER_TTL_MS), createdBy,
+      idempotencyKey: input.idempotencyKey ?? null, requestHash: input.idempotencyKey === undefined ? null : requestHash } });
     await writeAuditLog({ workspaceId: input.workspaceId, userId: input.actorUserId, actor: input.actorUserId,
       actorType: ActorType.USER, actionType: "BILLING_TOPUP_ORDER_CREATED", targetType: "PaymentOrder", targetId: order.id,
       summary: "Created wallet top-up order", sourcePage: SOURCE_PAGE, relatedObjectType: "PayerAccount",
       relatedObjectId: payer.payerAccountId, payload: { provider: order.provider, providerOrderNo: order.providerOrderNo,
         amountFen: order.amountFen.toString(), billingMode: payer.billingMode } }, { client: tx });
-    return order;
+    return { order, replayed: false };
+  }, { maxWait: 5000, timeout: 10000, isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+}
+
+/** Contract S2D §1.6: the session-triggered query runs at most every 10 s and 30 times an hour, for unpaid orders up to 72 h old. */
+export const TOPUP_QUERY_MIN_INTERVAL_MS = 10_000;
+export const TOPUP_QUERIES_PER_HOUR = 30;
+export const TOPUP_QUERY_MAX_AGE_MS = 72 * 60 * 60 * 1000;
+const QUERYABLE: PaymentOrderState[] = ["created", "pending", "unknown", "closed_unpaid"];
+export type TopupOrderView = { id: string; provider: TopupProvider; state: PaymentOrderState; amountFen: string; expiresAt: string;
+  createdAt: string };
+type SessionOrderInput = { actorUserId: string; workspaceId: string; paymentOrderId: string };
+type SessionOrder = Pick<PaymentOrder, "id" | "provider" | "providerOrderNo" | "state" | "amountFen" | "expiresAt" | "createdAt" |
+  "lastQueriedAt" | "queryWindowStartedAt" | "queryCount">;
+const view = (order: SessionOrder): TopupOrderView => ({ id: order.id, provider: order.provider, state: order.state,
+  amountFen: order.amountFen.toString(), expiresAt: order.expiresAt.toISOString(), createdAt: order.createdAt.toISOString() });
+
+/** The order of the session's workspace, for its OWNER/BILLING_ADMIN; any other order is unknown (never another workspace's). */
+async function lockSessionOrder(tx: Prisma.TransactionClient, input: SessionOrderInput) {
+  reference(input.actorUserId); reference(input.workspaceId); reference(input.paymentOrderId);
+  try { await lockBillingAuthority(tx, input.actorUserId, [input.workspaceId], canManageWorkspaceBilling); } catch (error) {
+    if (error instanceof Error && error.message === "payer_binding_forbidden") refuse("topup_forbidden");
+    throw error;
+  }
+  // A locking read of every column used: a plain read would see the snapshot from before the membership lock was granted.
+  const [row] = await tx.$queryRaw<SessionOrder[]>`SELECT id, provider, providerOrderNo, state, amountFen, expiresAt, createdAt,
+    lastQueriedAt, queryWindowStartedAt, queryCount FROM PaymentOrder WHERE id = ${input.paymentOrderId}
+    AND workspaceId = ${input.workspaceId} AND orderType = 'wallet_topup' FOR UPDATE`;
+  if (!row) refuse("topup_order_unknown");
+  return { ...row, amountFen: BigInt(row.amountFen), queryCount: Number(row.queryCount) };
+}
+
+export async function readTopupOrderForSession(client: PrismaClient, input: SessionOrderInput) {
+  return client.$transaction(async tx => view(await lockSessionOrder(tx, input)), { maxWait: 5000, timeout: 10000 });
+}
+
+/**
+ * Admits one session-triggered provider call for the order (query, or close then query) under the per-order throttle. A credited
+ * order, or one too old or not queryable, is returned as is without a provider call (`query: false`); close needs a waiting order.
+ */
+export async function claimTopupOrderQuery(client: PrismaClient,
+  input: SessionOrderInput & { purpose: "query" | "close"; provider: TopupProvider; now?: Date }) {
+  const now = input.now ?? new Date();
+  return client.$transaction(async tx => {
+    const order = await lockSessionOrder(tx, input);
+    // Refused before any throttle write or provider call: an order is only ever sent to its own provider.
+    if (order.provider !== input.provider) refuse("topup_provider_mismatch");
+    if (input.purpose === "close" && order.state !== "created" && order.state !== "pending") refuse("topup_order_not_closable");
+    if (!QUERYABLE.includes(order.state) || now.getTime() - order.createdAt.getTime() > TOPUP_QUERY_MAX_AGE_MS) {
+      return { order, query: false };
+    }
+    if (order.lastQueriedAt && now.getTime() - order.lastQueriedAt.getTime() < TOPUP_QUERY_MIN_INTERVAL_MS) refuse("topup_rate_limited");
+    const fresh = !order.queryWindowStartedAt || now.getTime() - order.queryWindowStartedAt.getTime() >= 3_600_000;
+    if (!fresh && order.queryCount >= TOPUP_QUERIES_PER_HOUR) refuse("topup_rate_limited");
+    await tx.$executeRaw`UPDATE PaymentOrder SET lastQueriedAt = ${now}, queryWindowStartedAt = ${fresh ? now : order.queryWindowStartedAt},
+      queryCount = ${fresh ? 1 : order.queryCount + 1} WHERE id = ${order.id}`; // throttle only: neither state nor version changes
+    return { order, query: true };
   }, { maxWait: 5000, timeout: 10000 });
 }
+export { view as topupOrderView };
 
 /** Non-paid observations: `closed` (provider-confirmed) closes, `unknown` parks, `not_paid` marks pending; nothing by time. */
 export function nextUnpaidState(state: PaymentOrderState, status: Exclude<ObservedStatus, "paid">): PaymentOrderState {
@@ -172,26 +280,37 @@ async function verifyInTransaction(tx: Prisma.TransactionClient, provider: Topup
   const exception = (reason: string, ref = observed.providerTxnId ?? observed.providerOrderNo): PaymentException => ({
     key: `${reason}:${provider}:${ref}`, reason, paymentOrderId: order.id, workspaceId: order.workspaceId,
     payerAccountId: order.payerAccountId, provider, providerTxnId: observed.providerTxnId,
-    amountFen: observed.amountFen?.toString() ?? null, source: observed.source, observed: observed.status });
+    amountFen: observed.amountFen?.toString() ?? null, source: observed.source, observed: observed.status, refund: observed.refund ?? null });
 
+  // One record per refund batch (#549 review P3-3: a third refund left none); news without a batch keeps one per order.
+  const refundRef = observed.refund?.batchRef ? `${observed.providerOrderNo}:${observed.refund.batchRef}` : observed.providerOrderNo;
   if (observed.status !== "paid") {
     // Closed or refund/unknown news about a credited order: record for reconciliation, never touch the balance or state.
     if (order.state === "paid_verified" && observed.status !== "not_paid") {
-      const recorded = await recordPaymentException(tx, exception(`paid_then_${observed.status}`, observed.providerOrderNo));
+      const recorded = await recordPaymentException(tx, exception(`paid_then_${observed.status}`, refundRef));
       return result(recorded ? "exception_recorded" : "unchanged", order.state);
     }
     // Unknown news (e.g. a refund) before any credit is kept too: a later query may still credit the full amount.
     const recorded = observed.status === "unknown" &&
-      await recordPaymentException(tx, exception("unknown_before_credit", observed.providerOrderNo));
+      await recordPaymentException(tx, exception("unknown_before_credit", refundRef));
     const next = nextUnpaidState(order.state, observed.status);
     if (next === order.state) return result(recorded ? "exception_recorded" : "unchanged", order.state);
     await recordState(tx, order, next, { source: observed.source, observed: observed.status });
     return result("state_recorded", next);
   }
+  // #528 review P2-2: a callback "paid" for an order we saw closed or in an unknown state (e.g. refund news) may describe money
+  // already refunded. It never credits by itself: the caller re-queries the provider and the query result decides.
+  if (observed.source === "callback" && (order.state === "unknown" || order.state === "closed_unpaid")) refuse("topup_query_required");
   const txnId = observed.providerTxnId as string;
   // A signed paid report that cannot be credited means money may have arrived: refuse, and the caller records an exception.
   if (observed.currency !== order.currency) refuse("topup_currency_mismatch", exception("currency_mismatch"));
   if (observed.amountFen !== BigInt(order.amountFen)) refuse("topup_amount_mismatch", exception("amount_mismatch"));
+  // #549 review P2-1: once any report showed a different received amount for this order, no later report (e.g. a query that omits
+  // receipt_amount) credits it; the existing record is the case a person settles (owner 2026-11-12: credit the order amount only).
+  const [mismatch] = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM BillingOutbox WHERE aggregateType = 'PaymentException'
+    AND eventType = 'payment_exception' AND aggregateId LIKE ${`amount_mismatch:${provider}:%`}
+    AND payload LIKE ${`%"paymentOrderId":"${order.id}"%`} LIMIT 1`;
+  if (mismatch) refuse("topup_amount_mismatch", exception("amount_mismatch"));
   type PaymentRow = { id: string; paymentOrderId: string; fundsTransactionId: string; lateAfterClose: number | boolean };
   const [byTxn] = await tx.$queryRaw<PaymentRow[]>`SELECT id, paymentOrderId, fundsTransactionId, lateAfterClose
     FROM VerifiedPayment WHERE provider = ${provider} AND providerTxnId = ${txnId} FOR SHARE`;
@@ -243,8 +362,9 @@ async function verifyObserved(client: PrismaClient, provider: TopupProvider, obs
   try { checkObservation(provider, observed); } catch (error) { // untrusted or malformed observations open no credit transaction
     if (error instanceof TopupRefusal && error.code === "topup_observation_invalid" && observed.status === "paid" &&
         isTopupProviderOrderNo(observed.providerOrderNo)) {
-      const pending = await recordUnparseablePaid(client, provider, observed);
-      if (pending) refuse("topup_observation_invalid", pending);
+      // Contract S2D §5 P2-A, option 甲: kept once, then answered as NOT handled so the provider keeps retrying; a fixed parser
+      // then credits on a retry (or `billing:topup-exceptions reverify`). A distinct code tells "kept" from "not kept" in logs.
+      if (await recordUnparseablePaid(client, provider, observed)) refuse("topup_observation_recorded");
     }
     throw error;
   }
@@ -261,7 +381,36 @@ async function verifyObserved(client: PrismaClient, provider: TopupProvider, obs
 export async function verifyTopupCallback(client: PrismaClient, adapter: TopupProviderAdapter, request: CallbackRequest) {
   const observed = await adapter.observeCallback(request);
   if (observed?.source !== "callback") refuse("topup_observation_invalid");
-  return verifyObserved(client, adapter.provider, observed);
+  try {
+    return await verifyObserved(client, adapter.provider, observed);
+  } catch (error) {
+    if (!(error instanceof TopupRefusal && error.code === "topup_query_required")) throw error;
+    return confirmPaidCallbackByQuery(client, adapter, observed);
+  }
+}
+
+/**
+ * The provider's own query decides a paid callback for a closed or unknown order (provider IO outside any transaction; a failed
+ * query fails the notify). Query paid: credit through the same entry. Query closed: the signed paid callback is discarded, so it
+ * is kept as a `paid_callback_closed` exception and acknowledged. Anything else (not paid, unknown): not acknowledged, retried.
+ */
+async function confirmPaidCallbackByQuery(client: PrismaClient, adapter: TopupProviderAdapter, callback: ObservedPayment) {
+  const order = await client.paymentOrder.findUniqueOrThrow({ where: { providerOrderNo: callback.providerOrderNo } });
+  // #549 review P2-2: a signed paid callback that the query does not settle leaves a record before the notify fails (once per order),
+  // so it stays visible in `billing:topup-exceptions list` even if every provider retry fails.
+  const keep = (reason: "paid_callback_closed" | "paid_callback_unconfirmed") => runFundsTransactionWithRetry(client, tx =>
+    recordPaymentException(tx, { key: `${reason}:${adapter.provider}:${order.providerOrderNo}`, reason, paymentOrderId: order.id,
+      workspaceId: order.workspaceId, payerAccountId: order.payerAccountId, provider: adapter.provider,
+      providerTxnId: callback.providerTxnId, amountFen: callback.amountFen?.toString() ?? null, source: "callback", observed: "paid",
+      refund: callback.refund ?? null }));
+  let queried: ObservedPayment;
+  try { queried = await adapter.queryOrder(order.providerOrderNo); } catch (error) { await keep("paid_callback_unconfirmed"); throw error; }
+  if (queried?.source !== "query" || queried.providerOrderNo !== order.providerOrderNo) refuse("topup_observation_invalid");
+  const result = await verifyObserved(client, adapter.provider, queried);
+  if (queried.status === "paid") return result;
+  if (queried.status !== "closed") { await keep("paid_callback_unconfirmed"); refuse("topup_query_unconfirmed"); }
+  await keep("paid_callback_closed");
+  return { ...result, outcome: "exception_recorded" as const };
 }
 /** Active query path (lost callback): re-query the order's ORIGINAL provider order number, never a new order. */
 export async function verifyTopupByQuery(client: PrismaClient, adapter: TopupProviderAdapter, paymentOrderId: string) {
