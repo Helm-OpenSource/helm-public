@@ -72,9 +72,11 @@ const CAPABILITY_CONTROLS: Record<
     envKey: "HELM_BILLING_INTERNAL_ROUTES_ENABLED",
     defaultAllowed: false,
   },
+  // Owner 2026-11-12: a public collection entry, open by default. Fail-closed on merchant configuration instead
+  // (lib/billing/topup/alipay-topup.ts: missing or malformed Alipay keys close order creation and notify).
   billing_topup_alipay: {
     envKey: "HELM_BILLING_TOPUP_ALIPAY_ENABLED",
-    defaultAllowed: false,
+    defaultAllowed: true,
   },
   billing_topup_wechatpay: {
     envKey: "HELM_BILLING_TOPUP_WECHATPAY_ENABLED",
