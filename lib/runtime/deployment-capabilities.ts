@@ -10,7 +10,8 @@ export type DeploymentCapability =
   | "sms_send"
   | "financial_action"
   | "billing_internal_route"
-  | "billing_topup_alipay";
+  | "billing_topup_alipay"
+  | "billing_topup_wechatpay";
 
 type DeploymentEnvironment = Readonly<Record<string, string | undefined>>;
 
@@ -73,6 +74,10 @@ const CAPABILITY_CONTROLS: Record<
   },
   billing_topup_alipay: {
     envKey: "HELM_BILLING_TOPUP_ALIPAY_ENABLED",
+    defaultAllowed: false,
+  },
+  billing_topup_wechatpay: {
+    envKey: "HELM_BILLING_TOPUP_WECHATPAY_ENABLED",
     defaultAllowed: false,
   },
 };
