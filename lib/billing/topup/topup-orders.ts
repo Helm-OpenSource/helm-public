@@ -84,9 +84,13 @@ export async function createOrReplayTopupOrder(client: PrismaClient, input: Crea
   const now = input.now ?? new Date();
   const createdBy = `USER:${input.actorUserId}`;
   const requestHash = sha256(JSON.stringify([input.provider, input.amountFen.toString(), input.merchantRef, input.appRef]));
+  // READ COMMITTED (#546 review P2-1): under REPEATABLE READ a creator's first order makes the locking reads below hit an empty
+  // (workspace, creator) range and take a shared gap lock; two different creators then insert into that gap and deadlock. RC takes
+  // no gap locks. Replay and the limits keep their meaning: the creator's membership row lock still serializes one creator, the
+  // reads after it see the latest commit, and UNIQUE (workspace, creator, key) backs the replay. Needs ROW binlog, as reservations.
   return client.$transaction(async tx => {
-    // The creator's membership row lock serializes this creator's concurrent creations. The reads below are locking reads, so
-    // they see orders a previous lock holder committed (a plain read would use a snapshot taken before the lock was granted).
+    // The creator's membership row lock serializes this creator's concurrent creations; the reads below then see what a previous
+    // lock holder committed (they stay locking reads, which also keeps them correct should the isolation level ever change).
     try { await lockBillingAuthority(tx, input.actorUserId, [input.workspaceId], canManageWorkspaceBilling); } catch (error) {
       if (error instanceof Error && error.message === "payer_binding_forbidden") refuse("topup_forbidden");
       throw error;
@@ -119,7 +123,7 @@ export async function createOrReplayTopupOrder(client: PrismaClient, input: Crea
       relatedObjectId: payer.payerAccountId, payload: { provider: order.provider, providerOrderNo: order.providerOrderNo,
         amountFen: order.amountFen.toString(), billingMode: payer.billingMode } }, { client: tx });
     return { order, replayed: false };
-  }, { maxWait: 5000, timeout: 10000 });
+  }, { maxWait: 5000, timeout: 10000, isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
 }
 
 /** Non-paid observations: `closed` (provider-confirmed) closes, `unknown` parks, `not_paid` marks pending; nothing by time. */

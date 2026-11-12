@@ -88,7 +88,9 @@ Route `POST /api/billing/v1/topup-orders` (`app/api/billing/v1/topup-orders/rout
   2026-11-12 11:24 「100 的整倍数，上不封顶」): whole multiples of 100 yuan (400 `topup_amount_not_multiple`), at least 100 yuan and no
   business cap — only Alipay's documented 100 000 000 yuan maximum as a technical bound (400 `topup_amount_out_of_range`); the same key with the same request replays the order (200,
   `replayed: true`), with a different request 409 `topup_idempotency_conflict`; per creator and workspace at most 5 open unpaid orders and
-  5 creations a minute (429 `topup_rate_limited`). The reads after the lock are locking reads, so concurrent requests serialize.
+  5 creations a minute (429 `topup_rate_limited`). The transaction runs at READ COMMITTED (no gap locks, so different creators'
+  first orders do not deadlock; needs ROW binlog like reservations); the creator's membership row lock serializes one creator and the
+  reads after it see the latest commit. An unexpected failure answers 500 and logs one fixed-code `create_failed` event.
 - **Cashier URL** (`buildAlipayTopupPayUrl`, built, never sent by the server): signed `alipay.trade.page.pay` GET URL with
   `notify_url = APP_URL + /api/billing/v1/topup-notify/alipay`, `return_url = APP_URL + /billing/topup?order=<order id>`,
   `product_code=FAST_INSTANT_TRADE_PAY`, `total_amount` formatted exactly from fen, fixed `subject`, `time_expire` = order expiry
