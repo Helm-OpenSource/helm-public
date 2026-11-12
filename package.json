@@ -93,6 +93,7 @@
     "caio:attention-control": "node --import tsx scripts/caio-attention-control.ts",
     "test:caio-attention:mysql": "CAIO_ATTENTION_MYSQL_REQUIRED=1 vitest run lib/caio-attention/schema.mysql.test.ts lib/caio-attention/control.service.mysql.test.ts lib/caio-attention/generator.mysql.test.ts lib/caio-attention/lifecycle/lifecycle.mysql.test.ts lib/caio-attention/lifecycle/disposition.mysql.test.ts lib/caio-attention/reminder-scanner.mysql.test.ts lib/caio-attention/watchdog.mysql.test.ts lib/caio-attention-runtime/page-service.mysql.test.ts lib/caio-attention-runtime/attention-e2e.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
     "test:caio-operating-context:mysql": "vitest run lib/caio-operating-context/schema.mysql.test.ts lib/caio-operating-context/quick-check.mysql.test.ts lib/caio-operating-context/g0-preparation.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
+    "billing:platform-ops": "node --import tsx --import ./scripts/node-hooks/allow-server-only.mjs scripts/billing-platform-ops.ts",
     "caio:g0-prepare": "node --import tsx --import ./scripts/node-hooks/allow-server-only.mjs scripts/caio-g0-prepare.ts",
     "caio:inference-token": "node --import tsx --import ./scripts/node-hooks/allow-server-only.mjs scripts/caio-inference-token.ts",
     "caio:inference-decision-candidates": "node --import tsx --import ./scripts/node-hooks/allow-server-only.mjs scripts/caio-inference-decision-candidates.ts",
