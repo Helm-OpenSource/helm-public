@@ -1,8 +1,10 @@
 import { Prisma } from "@prisma/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { alipayDouble } from "./alipay-gateway-fixture";
-import { createAlipayTopupAdapter, getAlipayTopupConfig, getAlipayTopupConfigProblems, handleAlipayTopupNotify,
-  resolveAlipayTopup } from "./alipay-topup";
+import { createVerify } from "node:crypto";
+import { buildAlipaySignContent } from "@/lib/billing/alipay";
+import { ALIPAY_TOPUP_SUBJECT, buildAlipayTopupPayUrl, createAlipayTopupAdapter, getAlipayTopupConfig, getAlipayTopupConfigProblems,
+  handleAlipayTopupNotify, resolveAlipayTopup, topupAppOrigin } from "./alipay-topup";
 
 // Pure adapter and entry checks: no database (a client that throws proves none is reached), no network (gateway double).
 const double = alipayDouble();
@@ -105,6 +107,41 @@ describe("alipay top-up adapter", () => {
     // The gateway refuses a request not signed by the app's key; nothing unsigned is ever trusted back.
     await expect(createAlipayTopupAdapter({ ...config, privateKey: double.strangerPrivateKey }, double.fetch).queryOrder(order))
       .rejects.toThrow("query_response_invalid");
+  });
+});
+
+describe("alipay top-up cashier URL", () => {
+  it("signs a page.pay request with fixed notify_url, fixed subject, exact amount and no passback_params", () => {
+    const expiresAt = new Date("2026-11-12T04:00:00.000Z");
+    const url = new URL(buildAlipayTopupPayUrl(config, "https://helm.example.invalid",
+      { id: "ord_1", providerOrderNo: order, amountFen: BigInt(1005), expiresAt }, new Date("2026-11-12T02:00:00.000Z")));
+    expect(`${url.origin}${url.pathname}`).toBe(double.env.ALIPAY_GATEWAY_URL);
+    const params = Object.fromEntries(url.searchParams);
+    const { sign, ...signed } = params;
+    expect(createVerify("RSA-SHA256").update(buildAlipaySignContent(signed), "utf8").verify(double.appPublicKey, sign, "base64")).toBe(true);
+    expect(signed).toMatchObject({ app_id: config.appId, method: "alipay.trade.page.pay", charset: "utf-8", sign_type: "RSA2",
+      version: "1.0", timestamp: "2026-11-12 10:00:00", notify_url: "https://helm.example.invalid/api/billing/v1/topup-notify/alipay",
+      return_url: "https://helm.example.invalid/billing/topup?order=ord_1" });
+    expect(Object.keys(signed).sort()).toEqual(["app_id", "biz_content", "charset", "method", "notify_url", "return_url", "sign_type",
+      "timestamp", "version"]);
+    expect(JSON.parse(signed.biz_content)).toEqual({ out_trade_no: order, product_code: "FAST_INSTANT_TRADE_PAY", total_amount: "10.05",
+      subject: ALIPAY_TOPUP_SUBJECT, time_expire: "2026-11-12 12:00:00" });
+    expect(signed.biz_content).not.toContain("passback_params");
+  });
+
+  it("takes every browser-facing origin from APP_URL only: https, default port, no credentials or path", () => {
+    expect(topupAppOrigin({ APP_URL: "https://helm.example.invalid" })).toBe("https://helm.example.invalid");
+    expect(topupAppOrigin({ APP_URL: "https://helm.example.invalid:443/" })).toBe("https://helm.example.invalid");
+    for (const APP_URL of [undefined, "", "http://helm.example.invalid", "https://helm.example.invalid:8443",
+      "https://someone@helm.example.invalid", "https://helm.example.invalid/app", "https://helm.example.invalid/?x=1"]) {
+      expect(topupAppOrigin({ APP_URL })).toBeNull();
+    }
+    const alerts = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      expect(resolveAlipayTopup("create", { ...double.env, APP_URL: "http://localhost:3000" })).toBe("unavailable");
+      expect(resolveAlipayTopup("notify", { ...double.env, APP_URL: "http://localhost:3000" })).toMatchObject({ appId: config.appId });
+      expect(JSON.parse(String(alerts.mock.calls[0][1])).problems).toEqual(["app_url_invalid"]);
+    } finally { alerts.mockRestore(); }
   });
 });
 

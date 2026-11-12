@@ -2325,7 +2325,11 @@ model PaymentOrder {
   createdBy       String               @db.VarChar(191)
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
+  // S2-d2 order creation: the caller's Idempotency-Key (per workspace and creator) and the hash of what it asked for.
+  idempotencyKey  String?              @db.VarChar(128)
+  requestHash     String?              @db.Char(64)
 
+  @@unique([workspaceId, createdBy, idempotencyKey], map: "PaymentOrder_creator_idempotency_key")
   @@index([payerAccountId, createdAt])
 }
 

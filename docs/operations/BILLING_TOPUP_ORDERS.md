@@ -21,7 +21,7 @@ queries. No route, UI, real provider call or merchant credential (S2-d1 adds the
 ## Service / 服务（`lib/billing/topup/`）
 
 - `createTopupOrder`: OWNER or BILLING_ADMIN (`topup_forbidden`); payer resolved server-side; `billingMode` `shadow`|`enforce`
-  (`topup_billing_off`); 100 – 5 000 000 fen (provisional). `lockBillingAuthority` now requires an explicit role rule.
+  (`topup_billing_off`); amount rule `checkTopupAmountFen` (see S2-d2a below). `lockBillingAuthority` now requires an explicit role rule.
 - Trust: only `defineTopupProviderAdapter(provider, io)` mints observations (frozen, registered in a module-private WeakSet); anything else
   is `topup_observation_untrusted`. `io.verifyCallback` authenticates the raw notify itself and throws on failure (`topup_signature_invalid`);
   no caller-supplied trust flag exists. Public entries: `verifyTopupCallback(client, adapter, request)` and
@@ -72,6 +72,32 @@ notify route (`/api/billing/alipay/notify`, unchanged): top-up orders are create
 - **Verify / rollback**: `alipay-topup.test.ts` (per-run RSA keys, in-process gateway double) and `alipay-topup.mysql.test.ts` in
   `npm run test:billing:mysql` (forged signature, app/seller mismatch, subscription order number, amount mismatch, duplicate notify,
   concurrent notify and query, late success after close, refund news, billing off, gate off). Roll back: set the gate to `false`; no migration.
+
+## Order creation and cashier URL / 建单与支付链接（S2-d2a）
+
+Route `POST /api/billing/v1/topup-orders` (`app/api/billing/v1/topup-orders/route.ts`), migration
+`20261112120000_billing_topup_order_idempotency` (rollback `prisma/rollback/20261112_rollback_billing_topup_order_idempotency.sql`).
+
+- **Gate**: the same `resolveAlipayTopup("create")` as the notify entry, plus `APP_URL` must be an https origin on the default port
+  (`topupAppOrigin`); off → 404, incomplete → `503 {"error":"topup_unavailable"}` (充值暂不可用) and one alert. Nothing is created.
+- **Request**: session required (401); header `Idempotency-Key` (8–128 of `[A-Za-z0-9._:-]`, 400 without it); JSON body
+  `{"provider":"alipay","amountFen":"<integer string>"}`, anything else in the body is ignored. `wechat_pay` answers
+  `topup_provider_unavailable` until its adapter lands. Workspace, payer, merchant/app refs and the order number are server-side.
+- **Rules** (`createOrReplayTopupOrder`, one transaction after the creator's membership row lock): OWNER/BILLING_ADMIN (403), payer
+  bound and `shadow|enforce` (409 `topup_billing_off`); amount (`checkTopupAmountFen`, the one rule for every provider, owner
+  2026-11-12 11:24 「100 的整倍数，上不封顶」): whole multiples of 100 yuan (400 `topup_amount_not_multiple`), at least 100 yuan and no
+  business cap — only Alipay's documented 100 000 000 yuan maximum as a technical bound (400 `topup_amount_out_of_range`); the same key with the same request replays the order (200,
+  `replayed: true`), with a different request 409 `topup_idempotency_conflict`; per creator and workspace at most 5 open unpaid orders and
+  5 creations a minute (429 `topup_rate_limited`). The transaction runs at READ COMMITTED (no gap locks, so different creators'
+  first orders do not deadlock; needs ROW binlog like reservations); the creator's membership row lock serializes one creator and the
+  reads after it see the latest commit. An unexpected failure answers 500 and logs one fixed-code `create_failed` event.
+- **Cashier URL** (`buildAlipayTopupPayUrl`, built, never sent by the server): signed `alipay.trade.page.pay` GET URL with
+  `notify_url = APP_URL + /api/billing/v1/topup-notify/alipay`, `return_url = APP_URL + /billing/topup?order=<order id>`,
+  `product_code=FAST_INSTANT_TRADE_PAY`, `total_amount` formatted exactly from fen, fixed `subject`, `time_expire` = order expiry
+  (Beijing time), and **no `passback_params`**. Returned only while the order is `created|pending` and unexpired.
+- **Legacy guard**: the subscription notify route `/api/billing/alipay/notify` answers `400 fail` for any verified `tpa_`/`tpw_`
+  `out_trade_no` before recording a callback event or resolving a workspace (no write). 旧订阅入口拒绝充值单号。The WeChat Pay
+  subscription route gets the same guard in the WeChat d2 slice.
 
 ## WeChat Pay adapter and notify entry / 微信支付适配器与充值通知入口（S2-w1）
 
