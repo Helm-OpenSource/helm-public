@@ -549,14 +549,18 @@ describeMysql("seat device credentials (classify, pin, revoke) on MySQL", () => 
     const now = nextClock();
     const suspended = await device(now);
     const canceled = await device(now);
-    // The member is judged before the suspension (server design §2C.4 item 2).
+    // The member and the password are judged before the suspension (server design §2C.4 item 2).
     const leaver = await device(now);
     await db.membership.update({ where: { id: leaver.owner.membershipId }, data: { status: MembershipStatus.INACTIVE } });
+    const reset = await device(now);
+    await db.user.update({ where: { id: reset.owner.userId }, data: { passwordSetAt: at(now, 1) } });
     await db.workspace.update({ where: { id: workspaceId }, data: { status: WorkspaceStatus.SUSPENDED } });
     try {
       await expectCode(refreshAt(suspended.refreshToken, at(now, 100), suspended.source), "workspace_not_enabled");
       await expectCode(refreshAt(leaver.refreshToken, at(now, 100), leaver.source), "account_disabled");
       expect(await row(leaver.deviceId)).toMatchObject({ status: "revoked", revokeReason: "membership_inactive" });
+      await expectCode(refreshAt(reset.refreshToken, at(now, 100), reset.source), "account_disabled");
+      expect(await row(reset.deviceId)).toMatchObject({ status: "revoked", revokeReason: "password_reset" });
     } finally {
       await db.workspace.update({ where: { id: workspaceId }, data: { status: WorkspaceStatus.ACTIVE } });
     }

@@ -648,6 +648,16 @@ describeMysql("seat device authorization (request, decide, cancel) on MySQL", ()
       expect(await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: grant.requestId } })).toMatchObject({ status: "approved", accessTokenHash: null });
     }
     await expect(claim(grant, at(now, 10))).resolves.toMatchObject({ status: "approved" });
+    // The member is judged first: one who left reads poll_token_invalid (the
+    // client gives up), not workspace_not_enabled (it would keep polling).
+    const left = await approved(now);
+    await db.membership.update({ where: { id: left.who.membershipId }, data: { status: MembershipStatus.INACTIVE } });
+    await db.workspace.update({ where: { id: workspaceId }, data: { featureFlagsJson: "{}" } });
+    try {
+      await expectCode(claim(left.grant, at(now, 10)), "poll_token_invalid");
+    } finally {
+      await db.workspace.update({ where: { id: workspaceId }, data: { featureFlagsJson: JSON.stringify({ seatDesktop: true }) } });
+    }
   });
 
   it("re-claims once within 60 seconds from the same trusted source and retires the first pair", async () => {
