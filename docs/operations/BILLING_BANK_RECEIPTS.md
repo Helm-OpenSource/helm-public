@@ -46,6 +46,32 @@ same Core transaction) or rejects it; plus a read-only wallet query. 对公到�
 - Customer OWNER / BILLING_ADMIN, other roles and service identities have no draft, review or posting path. One person may hold both
   roles but never reviews their own draft (service + CHECK).
 
+## Granting finance roles / 授予平台财务角色（`npm run billing:finance-grant`）
+
+Operator CLI over `grantPlatformFinanceRole` / `revokePlatformFinanceRole` (`lib/billing/bank-receipts/finance-grant-operator.ts`);
+no HTTP route. Reads by default, writes only with `--apply`; one JSON document; exit 0 ok, 1 refusal, 2 usage. The service rules
+above apply unchanged (reserved-workspace OWNER only, never to themselves, only to ACTIVE unscoped members, one active grant per role
+and user, AuditLog in the same transaction).
+
+| Command | Flags |
+|---|---|
+| `list` | `[--user-id] [--include-revoked=true]` (read only) |
+| `grant` | `--actor-user-id --user-id --role=maker\|checker --evidence-ref [--apply]`; without `--apply` prints `preflight` |
+| `revoke` | `--actor-user-id --grant-id --expected-version --evidence-ref [--apply]` |
+
+Refusals: `finance_grant_forbidden` (actor not the reserved OWNER, self-grant, grantee not an ACTIVE unscoped reserved member),
+`finance_grant_exists`, `finance_grant_unavailable` (not active or version moved), `usage:*`.
+
+Runbook / 运行手册:
+1. **Read-only check first** (production included): `grant ... ` without `--apply` for each of the two finance people; `preflight`
+   must show `actorIsReservedOwner: true`, `userIsReservedMember: true`, `selfGrant: false` and no `activeGrant`. If the reserved
+   workspace, its OWNER or either membership is missing, stop: creating them is a separate, owner-approved step, not this tool.
+2. **Grant**: the reserved workspace OWNER runs it in person, from their own login, with the owner ruling as `--evidence-ref`;
+   `--actor-user-id` is declared, not authenticated, so nobody else runs it on the OWNER's behalf. Keep the JSON output.
+3. **Read back**: `list`; one active grant per person and role. The maker and the checker for any two-person flow must be
+   different people (the services refuse self-approval; one person may hold both roles).
+4. **Offboarding**: `revoke` with the version from `list`; leaving the reserved workspace also stops a grant.
+
 ## Service / 服务（`lib/billing/bank-receipts/bank-receipts.ts`）
 
 - `draftBankReceipt(client, input)`: maker, then a registered receiving account (checked after the maker check, so non-makers cannot probe the list); payer must be `active`, `CNY`, `billingMode` `shadow` |
@@ -74,5 +100,7 @@ same Core transaction) or rejects it; plus a read-only wallet query. 对公到�
   `prisma/rollback/20261112_rollback_billing_bank_receipt_txn_key.sql` (refuses while any receipt or later billing migration exists;
   restores the byte-exact CHECK). Schema rollback `prisma/rollback/20261110_rollback_billing_bank_receipts.sql`
   refuses while any receipt, grant, `bank_topup` or `bank_clearing` row exists; run it before the S2-a rollback.
+- Grant CLI: `finance-grant-operator.test.ts`; `finance-grant-operator.mysql.test.ts` in `npm run test:billing:mysql` (dry run,
+  OWNER-only, self-grant, non-member and scoped member refused, audit in the same transaction, revoke). It adds no schema.
 - Not enabled: bank-receipt HTTP routes and the finance queue UI (S6), statement import, reconciliation of `bank_clearing` against the
   bank (S5), outbox delivery. Real receiving accounts and finance rosters are enablement blockers, not code.
