@@ -11,7 +11,11 @@ export type ObservedPayment = {
   merchantRef: string | null; appRef: string | null;
   providerOrderNo: string; providerTxnId: string | null;
   status: ObservedStatus; amountFen: bigint | null; currency: string | null;
+  /** Refund fields a provider sent with the report (Alipay `refund_fee` / `out_biz_no` / `gmt_refund`), kept for reconciliation
+   * records only; never used to credit. Absent when the provider sent none. */
+  refund?: ObservedRefund | null;
 };
+export type ObservedRefund = { amountFen: string | null; batchRef: string | null; at: string | null };
 export type MerchantRefLookup = (providerMerchantId: string, providerAppId: string) =>
   { merchantRef: string; appRef: string } | null;
 type Context = { source: ObservedPayment["source"]; refs: MerchantRefLookup };
@@ -51,5 +55,11 @@ export function observeAlipayTrade(trade: Record<string, string | undefined>, co
   return { source: context.source, merchantRef: refs?.merchantRef ?? null,
     appRef: refs?.appRef ?? null, providerOrderNo: text(trade.out_trade_no), providerTxnId: text(trade.trade_no) || null,
     status: Object.hasOwn(ALIPAY_STATUS, text(trade.trade_status)) ? ALIPAY_STATUS[text(trade.trade_status)] : "unknown",
-    amountFen: yuanToFenExact(trade.total_amount), currency: text(trade.trans_currency) || "CNY" };
+    amountFen: yuanToFenExact(trade.total_amount), currency: text(trade.trans_currency) || "CNY", refund: alipayRefund(trade) };
+}
+
+const bounded = (value: unknown) => /^[\x21-\x7e ]{1,64}$/.test(text(value)) ? text(value) : null;
+function alipayRefund(trade: Record<string, string | undefined>): ObservedRefund | null {
+  if (!trade.refund_fee && !trade.out_biz_no && !trade.gmt_refund) return null;
+  return { amountFen: yuanToFenExact(trade.refund_fee)?.toString() ?? null, batchRef: bounded(trade.out_biz_no), at: bounded(trade.gmt_refund) };
 }

@@ -89,6 +89,7 @@
     "test:caio-audit-state:mysql": "vitest run lib/caio-audit-state/audit-state.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
     "test:caio-operator:mysql": "vitest run features/caio-operator/actions.mysql.test.ts lib/caio-operator/governance-operator.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
     "billing:credit-operator": "node --import tsx --import ./scripts/node-hooks/allow-server-only.mjs scripts/billing-credit-operator.ts",
+    "billing:topup-exceptions": "node --import tsx --import ./scripts/node-hooks/allow-server-only.mjs scripts/billing-topup-exceptions.ts",
     "caio:governance-operator": "node --import tsx --import ./scripts/node-hooks/allow-server-only.mjs scripts/caio-governance-operator.ts",
     "caio:attention-control": "node --import tsx scripts/caio-attention-control.ts",
     "test:caio-attention:mysql": "CAIO_ATTENTION_MYSQL_REQUIRED=1 vitest run lib/caio-attention/schema.mysql.test.ts lib/caio-attention/control.service.mysql.test.ts lib/caio-attention/generator.mysql.test.ts lib/caio-attention/lifecycle/lifecycle.mysql.test.ts lib/caio-attention/lifecycle/disposition.mysql.test.ts lib/caio-attention/reminder-scanner.mysql.test.ts lib/caio-attention/watchdog.mysql.test.ts lib/caio-attention-runtime/page-service.mysql.test.ts lib/caio-attention-runtime/attention-e2e.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",

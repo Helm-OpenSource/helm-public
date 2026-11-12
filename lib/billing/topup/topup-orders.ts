@@ -5,8 +5,8 @@ import { writeAuditLog } from "@/lib/audit";
 import { canManageWorkspaceBilling } from "@/lib/auth/billing-governance";
 import { FundsRefusal, postFundsTransactionInTransaction, runFundsTransactionWithRetry } from "../funds/funds-journal";
 import { lockBillingAuthority, resolvePayerForWorkspaceInTransaction } from "../payer/payer-accounts";
-import { observeAlipayTrade, observeWeChatPayTransaction, type MerchantRefLookup, type ObservedPayment, type ObservedStatus,
-  type TopupProvider } from "./provider-observation";
+import { observeAlipayTrade, observeWeChatPayTransaction, type MerchantRefLookup, type ObservedPayment, type ObservedRefund,
+  type ObservedStatus, type TopupProvider } from "./provider-observation";
 
 /**
  * Billing V1 S2-b wallet top-up orders. Callbacks and active queries converge on ONE private verification entry: only an
@@ -23,14 +23,17 @@ const ORDER_NO = /^tp[wa]_[0-9a-f]{28}$/;
 const TXN_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 export type TopupRefusalCode = "topup_input_invalid" | "topup_amount_out_of_range" | "topup_forbidden" | "topup_billing_off" |
-  "topup_rate_limited" | "topup_idempotency_conflict" | "topup_order_not_closable" |
+  "topup_rate_limited" | "topup_idempotency_conflict" | "topup_order_not_closable" | "topup_observation_recorded" |
+  "topup_query_required" |
   "topup_observation_invalid" | "topup_signature_invalid" | "topup_order_unknown" | "topup_order_type_invalid" |
   "topup_provider_mismatch" | "topup_merchant_mismatch" | "topup_amount_mismatch" | "topup_currency_mismatch" |
   "topup_txn_conflict" | "topup_order_paid_by_other_txn" | "topup_invariant_breach" | "topup_observation_untrusted" |
   "payer_billing_off";
 /** A pending-reconciliation record for money a provider reports that cannot be credited (never a balance change). */
 export type PaymentException = { key: string; reason: string; paymentOrderId: string; workspaceId: string; payerAccountId: string;
-  provider: TopupProvider; providerTxnId: string | null; amountFen: string | null; source: string; observed: ObservedStatus };
+  provider: TopupProvider; providerTxnId: string | null; amountFen: string | null; source: string; observed: ObservedStatus;
+  /** Refund amount (fen), batch and time the provider reported with it, when it reported any (contract S2D §5 P2-B). */
+  refund?: ObservedRefund | null };
 export class TopupRefusal extends Error {
   constructor(readonly code: TopupRefusalCode, readonly exception?: PaymentException) { super(code); this.name = "TopupRefusal"; }
 }
@@ -262,7 +265,7 @@ async function verifyInTransaction(tx: Prisma.TransactionClient, provider: Topup
   const exception = (reason: string, ref = observed.providerTxnId ?? observed.providerOrderNo): PaymentException => ({
     key: `${reason}:${provider}:${ref}`, reason, paymentOrderId: order.id, workspaceId: order.workspaceId,
     payerAccountId: order.payerAccountId, provider, providerTxnId: observed.providerTxnId,
-    amountFen: observed.amountFen?.toString() ?? null, source: observed.source, observed: observed.status });
+    amountFen: observed.amountFen?.toString() ?? null, source: observed.source, observed: observed.status, refund: observed.refund ?? null });
 
   if (observed.status !== "paid") {
     // Closed or refund/unknown news about a credited order: record for reconciliation, never touch the balance or state.
@@ -278,6 +281,9 @@ async function verifyInTransaction(tx: Prisma.TransactionClient, provider: Topup
     await recordState(tx, order, next, { source: observed.source, observed: observed.status });
     return result("state_recorded", next);
   }
+  // #528 review P2-2: a callback "paid" for an order we saw closed or in an unknown state (e.g. refund news) may describe money
+  // already refunded. It never credits by itself: the caller re-queries the provider and the query result decides.
+  if (observed.source === "callback" && (order.state === "unknown" || order.state === "closed_unpaid")) refuse("topup_query_required");
   const txnId = observed.providerTxnId as string;
   // A signed paid report that cannot be credited means money may have arrived: refuse, and the caller records an exception.
   if (observed.currency !== order.currency) refuse("topup_currency_mismatch", exception("currency_mismatch"));
@@ -333,8 +339,9 @@ async function verifyObserved(client: PrismaClient, provider: TopupProvider, obs
   try { checkObservation(provider, observed); } catch (error) { // untrusted or malformed observations open no credit transaction
     if (error instanceof TopupRefusal && error.code === "topup_observation_invalid" && observed.status === "paid" &&
         isTopupProviderOrderNo(observed.providerOrderNo)) {
-      const pending = await recordUnparseablePaid(client, provider, observed);
-      if (pending) refuse("topup_observation_invalid", pending);
+      // Contract S2D §5 P2-A, option 甲: kept once, then answered as NOT handled so the provider keeps retrying; a fixed parser
+      // then credits on a retry (or `billing:topup-exceptions reverify`). A distinct code tells "kept" from "not kept" in logs.
+      if (await recordUnparseablePaid(client, provider, observed)) refuse("topup_observation_recorded");
     }
     throw error;
   }
@@ -351,7 +358,14 @@ async function verifyObserved(client: PrismaClient, provider: TopupProvider, obs
 export async function verifyTopupCallback(client: PrismaClient, adapter: TopupProviderAdapter, request: CallbackRequest) {
   const observed = await adapter.observeCallback(request);
   if (observed?.source !== "callback") refuse("topup_observation_invalid");
-  return verifyObserved(client, adapter.provider, observed);
+  try {
+    return await verifyObserved(client, adapter.provider, observed);
+  } catch (error) {
+    if (!(error instanceof TopupRefusal && error.code === "topup_query_required")) throw error;
+    // Provider IO stays outside any transaction: the query (same verification entry) settles it; if it fails, so does the notify.
+    const order = await client.paymentOrder.findUniqueOrThrow({ where: { providerOrderNo: observed.providerOrderNo }, select: { id: true } });
+    return verifyTopupByQuery(client, adapter, order.id);
+  }
 }
 /** Active query path (lost callback): re-query the order's ORIGINAL provider order number, never a new order. */
 export async function verifyTopupByQuery(client: PrismaClient, adapter: TopupProviderAdapter, paymentOrderId: string) {

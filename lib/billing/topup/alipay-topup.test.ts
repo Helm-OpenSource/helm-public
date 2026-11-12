@@ -52,7 +52,7 @@ describe("alipay top-up adapter", () => {
   it("maps a signed notify exactly (yuan to fen, status, configured identity) and refuses forged or ambiguous forms", async () => {
     expect(await observe(double.notify(paid))).toEqual({ source: "callback", merchantRef: `alipay-seller:${config.sellerId}`,
       appRef: `alipay-app:${config.appId}`, providerOrderNo: order, providerTxnId: paid.trade_no, status: "paid",
-      amountFen: BigInt(1230), currency: "CNY" });
+      amountFen: BigInt(1230), currency: "CNY", refund: null });
     expect((await observe(double.notify({ ...paid, trade_status: "TRADE_CLOSED" }))).status).toBe("closed");
     expect((await observe(double.notify({ ...paid, trade_status: "WAIT_BUYER_PAY" }))).status).toBe("not_paid");
     expect((await observe(double.notify({ ...paid, total_amount: "12.305" }))).amountFen).toBeNull();
@@ -76,6 +76,10 @@ describe("alipay top-up adapter", () => {
       expect((await observe(double.notify({ ...paid, ...extra }))).status).toBe("unknown");
     }
     expect((await observe(double.notify({ ...paid, refund_fee: "0.00" }))).status).toBe("paid");
+    // P2-B: the refund amount (fen), batch and time travel with the observation into reconciliation records.
+    expect((await observe(double.notify({ ...paid, refund_fee: "2.50", out_biz_no: "refund-batch-1", gmt_refund: "2026-11-12 10:00:00.000" })))
+      .refund).toEqual({ amountFen: "250", batchRef: "refund-batch-1", at: "2026-11-12 10:00:00.000" });
+    expect((await observe(double.notify({ ...paid, out_biz_no: "x".repeat(65) }))).refund).toEqual({ amountFen: null, batchRef: null, at: null });
   });
 
   it("queries with a signed request and keeps the amount only from a verified response node", async () => {

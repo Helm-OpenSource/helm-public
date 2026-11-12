@@ -32,12 +32,25 @@ queries. No route, UI, real provider call or merchant credential (S2-d1 adds the
 - Lock order `PayerAccount` -> `PaymentOrder` -> `VerifiedPayment` -> funds journal. Duplicate callbacks and callback/query race losers replay.
 - Non-paid: `not_paid` `created`->`pending`; `unknown` (any unlisted status) -> `unknown`; `closed` -> `closed_unpaid`; nothing by time.
 - **Late success**: a verified success after `closed_unpaid` credits exactly once, flagged `lateAfterClose`. 关单后迟到成功仍只入账一次并打标。
+  Since 2026-11-12 (#528 review P2-2) a **callback** "paid" for an order in `closed_unpaid` or `unknown` never credits by itself
+  (`topup_query_required`): `verifyTopupCallback` re-queries the provider (outside any transaction) and the query result decides, so a
+  closed-then-refunded trade (query `TRADE_CLOSED`) credits nothing; if the query fails the notify fails and the provider retries.
+  Not closed: a partial refund still queries as the original `TRADE_SUCCESS` amount (Q5, reconciliation via the refund record below).
 - **Payment exceptions** (outbox `aggregateType=PaymentException`, `eventType=payment_exception`, plus audit `BILLING_TOPUP_PAYMENT_EXCEPTION`;
-  idempotent per `reason:provider:txn`; never a balance change): `paid_then_closed` / `paid_then_unknown` (e.g. REFUND) for a credited order,
+  idempotent per key — `reason:provider:txn`, or `reason:provider:<order number>` for `paid_then_*`, `unknown_before_credit` and
+  `observation_invalid`, so one order keeps only its first such record; never a balance change; refund amount (fen), batch and time travel
+  in `refund` when the provider sent them): `paid_then_closed` / `paid_then_unknown` (e.g. REFUND) for a credited order,
   in the same transaction; `unknown_before_credit` (e.g. refund news reaching an uncredited order; the record survives a later credit),
   in the same transaction as the state change; `order_paid_by_other_txn`, `payer_billing_off`, `amount_mismatch`, `currency_mismatch` in
   a separate transaction after the credit rolls back; `observation_invalid` (an authenticated, merchant/app-matched `paid` report that
-  cannot be parsed, e.g. no txn id or a malformed amount) on its own transaction, keyed by the order number. A billing-off payment is credited by a later retry/query once the payer is re-enabled.
+  cannot be parsed, e.g. no txn id or a malformed amount) on its own transaction, then refused as `topup_observation_recorded` (not
+  handled, so the provider retries; contract P2-A option 甲). A billing-off payment is credited by a later retry/query once the payer is re-enabled.
+- **Who handles them / 谁处理**: platform finance (owner 2026-11-12 10:08: finance prepares, the responsible person reviews) runs
+  `npm run billing:topup-exceptions -- list` daily while top-up is open. "Unhandled" = `deliveredAt IS NULL` on the PaymentException
+  outbox row (no dispatcher reads these rows; if one is added, this marker must move). After reconciling against the merchant
+  console: `ack --key --actor-user-id --note --apply` (sets `deliveredAt`, audit `BILLING_TOPUP_PAYMENT_EXCEPTION_HANDLED`). For an
+  order a notify could not settle (e.g. `observation_invalid` after a parser fix, or older than the 72 h session window):
+  `reverify --order-id --apply` re-queries Alipay through the verification entry (credits at most once). Without `--apply` both only show.
 - Write conflicts (P2034, MySQL 1213, same-key insert) retry up to 3 times, then `funds_write_conflict`.
 
 ## Alipay adapter and notify entry / 支付宝适配器与充值通知入口（S2-d1）
@@ -62,9 +75,10 @@ notify route (`/api/billing/alipay/notify`, unchanged): top-up orders are create
   `trade_status` must then be present (signed return-page parameters are refused). `total_amount` is converted with `yuanToFenExact`. A notify carrying refund fields
   (`refund_fee` > 0, `gmt_refund`, `out_biz_no`) maps to `unknown` even if it says `TRADE_SUCCESS`: never a first credit; for a credited
   order it is a `paid_then_unknown` exception, for an uncredited one `unknown_before_credit`. No time window: late success must credit and replays are idempotent per trade.
-- **Answer**: `success` when credited, replayed, a state recorded, or a payment exception persisted (amount/currency mismatch, order paid
-  by another trade, unparseable paid report); `fail` otherwise so Alipay retries: 400 (signature, form, unknown or non-top-up order, merchant/app mismatch,
-  txn conflict), 503 (payer billing off, write conflict, database), 500 (unexpected). Logs carry a fixed reason code only.
+- **Answer**: `success` when credited, replayed, a state recorded, or a payment exception persisted where a retry cannot help (amount/currency
+  mismatch, order paid by another trade); `fail` otherwise so Alipay retries: 400 (signature, form, unknown or non-top-up order, merchant/app mismatch,
+  txn conflict, unparseable paid report — kept once, log code `topup_observation_recorded`, or not locatable, `topup_observation_invalid`),
+  503 (payer billing off, write conflict, database), 500 (unexpected, including a failed confirming query). Logs carry a fixed reason code only.
 - **Query** (`createAlipayTopupAdapter(config).queryOrder`, for `verifyTopupByQuery`): `alipay.trade.query` signed by the configured app,
   10 s timeout, redirects refused; the raw `alipay_trade_query_response` text is RSA2-verified before it is parsed and keeps `total_amount`. Identity is the
   querying app (its seller unless the response names another). `ACQ.TRADE_NOT_EXIST` is `not_paid`; other errors throw (order unchanged).
