@@ -24,7 +24,7 @@ const TXN_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 export type TopupRefusalCode = "topup_input_invalid" | "topup_amount_out_of_range" | "topup_forbidden" | "topup_billing_off" |
   "topup_rate_limited" | "topup_idempotency_conflict" | "topup_order_not_closable" | "topup_observation_recorded" |
-  "topup_query_required" |
+  "topup_query_required" | "topup_query_unconfirmed" |
   "topup_observation_invalid" | "topup_signature_invalid" | "topup_order_unknown" | "topup_order_type_invalid" |
   "topup_provider_mismatch" | "topup_merchant_mismatch" | "topup_amount_mismatch" | "topup_currency_mismatch" |
   "topup_txn_conflict" | "topup_order_paid_by_other_txn" | "topup_invariant_breach" | "topup_observation_untrusted" |
@@ -362,10 +362,27 @@ export async function verifyTopupCallback(client: PrismaClient, adapter: TopupPr
     return await verifyObserved(client, adapter.provider, observed);
   } catch (error) {
     if (!(error instanceof TopupRefusal && error.code === "topup_query_required")) throw error;
-    // Provider IO stays outside any transaction: the query (same verification entry) settles it; if it fails, so does the notify.
-    const order = await client.paymentOrder.findUniqueOrThrow({ where: { providerOrderNo: observed.providerOrderNo }, select: { id: true } });
-    return verifyTopupByQuery(client, adapter, order.id);
+    return confirmPaidCallbackByQuery(client, adapter, observed);
   }
+}
+
+/**
+ * The provider's own query decides a paid callback for a closed or unknown order (provider IO outside any transaction; a failed
+ * query fails the notify). Query paid: credit through the same entry. Query closed: the signed paid callback is discarded, so it
+ * is kept as a `paid_callback_closed` exception and acknowledged. Anything else (not paid, unknown): not acknowledged, retried.
+ */
+async function confirmPaidCallbackByQuery(client: PrismaClient, adapter: TopupProviderAdapter, callback: ObservedPayment) {
+  const order = await client.paymentOrder.findUniqueOrThrow({ where: { providerOrderNo: callback.providerOrderNo } });
+  const queried = await adapter.queryOrder(order.providerOrderNo);
+  if (queried?.source !== "query" || queried.providerOrderNo !== order.providerOrderNo) refuse("topup_observation_invalid");
+  const result = await verifyObserved(client, adapter.provider, queried);
+  if (queried.status === "paid") return result;
+  if (queried.status !== "closed") refuse("topup_query_unconfirmed");
+  await runFundsTransactionWithRetry(client, tx => recordPaymentException(tx, { key: `paid_callback_closed:${adapter.provider}:${order.providerOrderNo}`,
+    reason: "paid_callback_closed", paymentOrderId: order.id, workspaceId: order.workspaceId, payerAccountId: order.payerAccountId,
+    provider: adapter.provider, providerTxnId: callback.providerTxnId, amountFen: callback.amountFen?.toString() ?? null,
+    source: "callback", observed: "paid", refund: callback.refund ?? null }));
+  return { ...result, outcome: "exception_recorded" as const };
 }
 /** Active query path (lost callback): re-query the order's ORIGINAL provider order number, never a new order. */
 export async function verifyTopupByQuery(client: PrismaClient, adapter: TopupProviderAdapter, paymentOrderId: string) {

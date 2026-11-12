@@ -177,6 +177,16 @@ describe.skipIf(!url)("Alipay wallet top-up notify against MySQL", () => {
     double.trades.set(closed.providerOrderNo, { code: "10000", msg: "Success", ...trade(closed, { trade_status: "TRADE_CLOSED" }) });
     expect(await withGateway(() => notify(double.notify(trade(closed))))).toEqual([200, "success"]);
     expect(await effects(closed)).toEqual({ ...untouched, state: "closed_unpaid" });
+    expect(await exceptions(`paid_callback_closed:alipay:${closed.providerOrderNo}`)).toBe(1); // the discarded paid report is kept
+    // The query does not confirm payment (still waiting, or no trade at all): not acknowledged, nothing credited or kept.
+    const waiting = await order(630);
+    expect(await notify(double.notify(trade(waiting, { trade_status: "TRADE_CLOSED" })))).toEqual([200, "success"]);
+    for (const answer of [{ code: "10000", msg: "Success", ...trade(waiting, { trade_status: "WAIT_BUYER_PAY" }) }, null]) {
+      if (answer) double.trades.set(waiting.providerOrderNo, answer); else double.trades.delete(waiting.providerOrderNo);
+      expect(await withGateway(() => notify(double.notify(trade(waiting))))).toEqual([400, "fail"]);
+    }
+    expect(await effects(waiting)).toEqual({ ...untouched, state: "closed_unpaid" });
+    expect(await exceptions(`paid_callback_closed:alipay:${waiting.providerOrderNo}`)).toBe(0);
     // Refund news first (unknown), then a paid callback while the query is unavailable: nothing credits, Alipay retries.
     const unknown = await order(620);
     expect(await notify(double.notify(trade(unknown, { refund_fee: "6.20", out_biz_no: "refund-b1" })))).toEqual([200, "success"]);

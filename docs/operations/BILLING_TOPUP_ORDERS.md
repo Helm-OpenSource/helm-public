@@ -33,8 +33,9 @@ queries. No route, UI, real provider call or merchant credential (S2-d1 adds the
 - Non-paid: `not_paid` `created`->`pending`; `unknown` (any unlisted status) -> `unknown`; `closed` -> `closed_unpaid`; nothing by time.
 - **Late success**: a verified success after `closed_unpaid` credits exactly once, flagged `lateAfterClose`. 关单后迟到成功仍只入账一次并打标。
   Since 2026-11-12 (#528 review P2-2) a **callback** "paid" for an order in `closed_unpaid` or `unknown` never credits by itself
-  (`topup_query_required`): `verifyTopupCallback` re-queries the provider (outside any transaction) and the query result decides, so a
-  closed-then-refunded trade (query `TRADE_CLOSED`) credits nothing; if the query fails the notify fails and the provider retries.
+  (`topup_query_required`): `verifyTopupCallback` re-queries the provider (outside any transaction) and the query's own status decides:
+  paid credits once; closed (e.g. refunded in full) credits nothing and keeps a `paid_callback_closed` exception, then acknowledges;
+  anything else (`not_paid`, unknown, no trade) is `topup_query_unconfirmed`, not acknowledged; a failed query fails the notify too.
   Not closed: a partial refund still queries as the original `TRADE_SUCCESS` amount (Q5, reconciliation via the refund record below).
 - **Payment exceptions** (outbox `aggregateType=PaymentException`, `eventType=payment_exception`, plus audit `BILLING_TOPUP_PAYMENT_EXCEPTION`;
   idempotent per key — `reason:provider:txn`, or `reason:provider:<order number>` for `paid_then_*`, `unknown_before_credit` and
