@@ -89,6 +89,7 @@
     "test:caio-audit-state:mysql": "vitest run lib/caio-audit-state/audit-state.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
     "test:caio-operator:mysql": "vitest run features/caio-operator/actions.mysql.test.ts lib/caio-operator/governance-operator.mysql.test.ts --config vitest.public.config.ts --fileParallelism=false",
     "billing:credit-operator": "node --import tsx --import ./scripts/node-hooks/allow-server-only.mjs scripts/billing-credit-operator.ts",
+    "billing:topup-exceptions": "node --import tsx --import ./scripts/node-hooks/allow-server-only.mjs scripts/billing-topup-exceptions.ts",
     "billing:finance-grant": "node --import tsx --import ./scripts/node-hooks/allow-server-only.mjs scripts/billing-finance-grant.ts",
     "caio:governance-operator": "node --import tsx --import ./scripts/node-hooks/allow-server-only.mjs scripts/caio-governance-operator.ts",
     "caio:attention-control": "node --import tsx scripts/caio-attention-control.ts",

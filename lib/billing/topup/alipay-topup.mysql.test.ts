@@ -6,6 +6,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { bindScope, createPayerAccount } from "../payer/payer-accounts";
 import { alipayDouble } from "./alipay-gateway-fixture";
 import { createAlipayTopupAdapter, getAlipayTopupConfig } from "./alipay-topup";
+import { grantPlatformFinanceRole } from "../bank-receipts/bank-receipts";
+import { runTopupExceptionsOperator } from "./topup-exceptions-operator";
 import { createOrReplayTopupOrder, createTopupOrder, verifyTopupByQuery } from "./topup-orders";
 import { POST as createRoute } from "@/app/api/billing/v1/topup-orders/route";
 import { GET as orderRoute } from "@/app/api/billing/v1/topup-orders/[id]/route";
@@ -114,15 +116,25 @@ describe.skipIf(!url)("Alipay wallet top-up notify against MySQL", () => {
     expect(await a.billingOutbox.count({ where: { payload: { contains: o.id } } })).toBe(0);
   });
 
-  it("keeps a signed, identity-matched paid notify it cannot parse once, locatable to the order", async () => {
+  it("keeps a signed, identity-matched paid notify it cannot parse once and answers fail so Alipay retries (P2-A)", async () => {
     const o = await order(1500);
     const { trade_no: _txn, ...noTxn } = trade(o);
-    for (const body of [noTxn, trade(o, { total_amount: "15.000" }), trade(o, { trade_no: "has space" })]) {
-      expect(await notify(double.notify(body))).toEqual([200, "success"]);
-    }
+    const alerts = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      for (const body of [noTxn, trade(o, { total_amount: "15.000" }), trade(o, { trade_no: "has space" })]) {
+        expect(await notify(double.notify(body))).toEqual([400, "fail"]);
+      }
+      expect(await notify(double.notify({ ...noTxn, app_id: "2021000000000002" }))).toEqual([400, "fail"]); // other app: nothing kept
+      // Logs tell "kept" from "not kept" with fixed codes only.
+      expect(alerts.mock.calls.map(call => JSON.parse(String(call[1])).reason)).toEqual(["topup_observation_recorded",
+        "topup_observation_recorded", "topup_observation_recorded", "topup_observation_invalid"]);
+    } finally { alerts.mockRestore(); }
     expect(await exceptions(`observation_invalid:alipay:${o.providerOrderNo}`)).toBe(1);
-    expect(await notify(double.notify({ ...noTxn, app_id: "2021000000000002" }))).toEqual([400, "fail"]); // other app: nothing kept
     expect(await effects(o)).toEqual(untouched);
+    // Once the report parses (a fixed parser, or Alipay's own retry), the retry credits once and the record stays.
+    expect(await notify(double.notify(trade(o)))).toEqual([200, "success"]);
+    expect(await effects(o)).toEqual({ state: "paid_verified", payments: 1, funds: 1, wallet: BigInt(1500) * UNIT });
+    expect(await exceptions(`observation_invalid:alipay:${o.providerOrderNo}`)).toBe(1);
   });
 
   it("keeps a signed amount mismatch once for reconciliation and acknowledges it", async () => {
@@ -130,6 +142,11 @@ describe.skipIf(!url)("Alipay wallet top-up notify against MySQL", () => {
     for (let i = 0; i < 2; i += 1) expect(await notify(double.notify(trade(o, { total_amount: "7.99" })))).toEqual([200, "success"]);
     expect(await exceptions(`amount_mismatch:alipay:${trade(o).trade_no}`)).toBe(1);
     expect(await effects(o)).toEqual(untouched);
+    // Paid in full on paper but received less (a discount the merchant should not run): kept, never credited.
+    const short = await order(810);
+    expect(await notify(double.notify(trade(short, { receipt_amount: "8090.00" })))).toEqual([200, "success"]);
+    expect(await exceptions(`amount_mismatch:alipay:${trade(short).trade_no}`)).toBe(1);
+    expect(await effects(short)).toEqual(untouched);
   });
 
   it("lets exactly one of concurrent notifies and queries credit", async () => {
@@ -143,15 +160,139 @@ describe.skipIf(!url)("Alipay wallet top-up notify against MySQL", () => {
     }
   });
 
-  it("credits a success after close once (lateAfterClose) and records later refund news without touching the balance", async () => {
+  const withGateway = async <T>(run: () => Promise<T>) => {
+    vi.stubGlobal("fetch", double.fetch);
+    try { return await run(); } finally { vi.stubGlobal("fetch", () => { throw new Error("network_forbidden"); }); }
+  };
+
+  it("credits a success after close once (lateAfterClose), confirmed by a query, and records later refund news", async () => {
     const o = await order(900);
     expect(await notify(double.notify(trade(o, { trade_status: "TRADE_CLOSED" })))).toEqual([200, "success"]);
     expect((await effects(o)).state).toBe("closed_unpaid");
-    expect(await notify(double.notify(trade(o)))).toEqual([200, "success"]);
-    expect(await a.verifiedPayment.findFirstOrThrow({ where: { paymentOrderId: o.id } })).toMatchObject({ lateAfterClose: true });
+    double.trades.set(o.providerOrderNo, { code: "10000", msg: "Success", ...trade(o) });
+    expect(await withGateway(() => notify(double.notify(trade(o))))).toEqual([200, "success"]);
+    expect(await a.verifiedPayment.findFirstOrThrow({ where: { paymentOrderId: o.id } })).toMatchObject({ lateAfterClose: true, source: "query" });
     expect(await notify(double.notify(trade(o, { refund_fee: "1.00", gmt_refund: "2026-11-11 12:00:00" })))).toEqual([200, "success"]);
     expect(await exceptions(`paid_then_unknown:alipay:${o.providerOrderNo}`)).toBe(1);
     expect(await effects(o)).toEqual({ state: "paid_verified", payments: 1, funds: 1, wallet: BigInt(900) * UNIT });
+  });
+
+  it("never credits a late paid callback for a closed or unknown order unless a query confirms it (#528 P2-2)", async () => {
+    // Closed, then refunded in full: the query reports TRADE_CLOSED, so the replayed success credits nothing.
+    const closed = await order(610);
+    expect(await notify(double.notify(trade(closed, { trade_status: "TRADE_CLOSED" })))).toEqual([200, "success"]);
+    double.trades.set(closed.providerOrderNo, { code: "10000", msg: "Success", ...trade(closed, { trade_status: "TRADE_CLOSED" }) });
+    expect(await withGateway(() => notify(double.notify(trade(closed))))).toEqual([200, "success"]);
+    expect(await effects(closed)).toEqual({ ...untouched, state: "closed_unpaid" });
+    expect(await exceptions(`paid_callback_closed:alipay:${closed.providerOrderNo}`)).toBe(1); // the discarded paid report is kept
+    // The query does not confirm payment (still waiting, or no trade at all): not acknowledged, nothing credited, one record kept.
+    const waiting = await order(630);
+    expect(await notify(double.notify(trade(waiting, { trade_status: "TRADE_CLOSED" })))).toEqual([200, "success"]);
+    for (const answer of [{ code: "10000", msg: "Success", ...trade(waiting, { trade_status: "WAIT_BUYER_PAY" }) }, null]) {
+      if (answer) double.trades.set(waiting.providerOrderNo, answer); else double.trades.delete(waiting.providerOrderNo);
+      expect(await withGateway(() => notify(double.notify(trade(waiting))))).toEqual([400, "fail"]);
+    }
+    expect(await effects(waiting)).toEqual({ ...untouched, state: "closed_unpaid" });
+    expect(await exceptions(`paid_callback_closed:alipay:${waiting.providerOrderNo}`)).toBe(0);
+    expect(await exceptions(`paid_callback_unconfirmed:alipay:${waiting.providerOrderNo}`)).toBe(1); // #549 P2-2, once per order
+    // Refund news first (unknown), then a paid callback while the query is unavailable: nothing credits, Alipay retries.
+    const unknown = await order(620);
+    expect(await notify(double.notify(trade(unknown, { refund_fee: "6.20", out_biz_no: "refund-b1" })))).toEqual([200, "success"]);
+    expect(await notify(double.notify(trade(unknown)))).toEqual([500, "fail"]); // network refused in this test
+    expect(await exceptions(`paid_callback_unconfirmed:alipay:${unknown.providerOrderNo}`)).toBe(1); // kept even when the query fails
+    expect(await effects(unknown)).toEqual({ ...untouched, state: "unknown" });
+    double.trades.set(unknown.providerOrderNo, { code: "10000", msg: "Success", ...trade(unknown, { trade_status: "TRADE_CLOSED" }) });
+    expect(await withGateway(() => notify(double.notify(trade(unknown))))).toEqual([200, "success"]);
+    expect(await effects(unknown)).toEqual({ ...untouched, state: "closed_unpaid" });
+    // P2-B: the record of the refund news carries its amount and batch.
+    const record = await a.billingOutbox.findFirstOrThrow({ where: { aggregateId: `unknown_before_credit:alipay:${unknown.providerOrderNo}:refund-b1` } });
+    expect(JSON.parse(record.payload)).toMatchObject({ observed: "unknown", refund: { amountFen: "620", batchRef: "refund-b1", at: null } });
+  });
+
+  it("lets an operator list unhandled exceptions, mark one handled with an audit row, and re-verify an old order", async () => {
+    const operator = (...argv: string[]) => runTopupExceptionsOperator(a, argv, () => createAlipayTopupAdapter(config, double.fetch));
+    const o = await order(730);
+    expect(await notify(double.notify(trade(o, { total_amount: "7.31" })))).toEqual([200, "success"]); // amount mismatch, kept
+    const key = `amount_mismatch:alipay:${trade(o).trade_no}`;
+    const listed = await operator("list", "--limit=500");
+    expect(listed.exitCode).toBe(0);
+    expect((listed.output as { exceptions: Array<{ key: string }> }).exceptions.find(e => e.key === key))
+      .toMatchObject({ reason: "amount_mismatch", paymentOrderId: o.id, amountFen: "731", handledAt: null });
+    expect(await operator("ack", `--key=${key}`, `--actor-user-id=${admin}`, "--note=refunded the 7.31 by hand"))
+      .toMatchObject({ exitCode: 0, output: { applied: false } });
+    expect(await a.billingOutbox.count({ where: { aggregateId: key, deliveredAt: null } })).toBe(1); // a dry run writes nothing
+    // Two operators acking at once: both pass the read, exactly one write (and one audit row) wins.
+    const racing = await Promise.all([1, 2].map(() => runTopupExceptionsOperator(b, ["ack", `--key=${key}`, `--actor-user-id=${admin}`,
+      "--note=refunded the 7.31 by hand", "--apply"])));
+    expect(racing.map(r => r.exitCode).sort()).toEqual([0, 1]);
+    expect(racing.find(r => r.exitCode === 0)?.output).toEqual({ ok: true, command: "ack", applied: true, key });
+    expect(await operator("ack", `--key=${key}`, `--actor-user-id=${admin}`, "--note=again", "--apply"))
+      .toEqual({ exitCode: 1, output: { ok: false, code: "exception_already_handled" } });
+    expect(await a.auditLog.count({ where: { actionType: "BILLING_TOPUP_PAYMENT_EXCEPTION_HANDLED", targetId: o.id, userId: admin } })).toBe(1);
+    const after = (await operator("list", "--limit=500")).output as { exceptions: Array<{ key: string }> };
+    expect(after.exceptions.some(e => e.key === key)).toBe(false);
+    expect(((await operator("list", "--all", "--limit=500")).output as { exceptions: Array<{ key: string; handledAt: string | null }> })
+      .exceptions.find(e => e.key === key)?.handledAt).not.toBeNull();
+    // Re-verify has no 72-hour limit: an order created four days ago still credits once through the verification entry.
+    const old = await order(740);
+    await a.$executeRaw`UPDATE PaymentOrder SET createdAt = UTC_TIMESTAMP(3) - INTERVAL 96 HOUR WHERE id = ${old.id}`;
+    double.trades.set(old.providerOrderNo, { code: "10000", msg: "Success", ...trade(old) });
+    expect(await operator("reverify", `--order-id=${old.id}`)).toEqual({ exitCode: 2, output: { ok: false, code: "usage:missing:actor-user-id" } });
+    expect(await operator("reverify", `--order-id=${old.id}`, `--actor-user-id=${admin}`)).toMatchObject({ exitCode: 0, output: { applied: false } });
+    expect((await effects(old)).payments).toBe(0);
+    expect(await operator("reverify", `--order-id=${old.id}`, `--actor-user-id=${admin}`, "--apply"))
+      .toMatchObject({ exitCode: 0, output: { result: { outcome: "credited" } } });
+    expect(await a.auditLog.count({ where: { actionType: "BILLING_TOPUP_REVERIFY", targetId: old.id, userId: admin } })).toBe(1);
+    expect(await effects(old)).toEqual({ state: "paid_verified", payments: 1, funds: 1, wallet: BigInt(740) * UNIT });
+    expect(await operator("reverify", "--order-id=missing-order", `--actor-user-id=${admin}`)).toEqual({ exitCode: 1, output: { ok: false, code: "order_unknown" } });
+    expect((await operator("list", "--apply")).exitCode).toBe(2);
+  });
+
+  it("accepts exception handling only from the workspace's billing roles or a platform finance role (#549 P3-1, P3-2)", async () => {
+    const operator = (...argv: string[]) => runTopupExceptionsOperator(a, argv, () => createAlipayTopupAdapter(config, double.fetch));
+    const o = await order(760);
+    expect(await notify(double.notify(trade(o, { total_amount: "7.61" })))).toEqual([200, "success"]);
+    const key = `amount_mismatch:alipay:${trade(o).trade_no}`;
+    const outsider = `alitop-outsider-${run}`, finance = `alitop-finance-${run}`, reservedOwner = `alitop-rowner-${run}`;
+    for (const user of [outsider, finance, reservedOwner]) {
+      await a.$executeRaw`INSERT INTO User (id,name,email,updatedAt) VALUES (${user},'Synthetic',${`${user}@example.invalid`},NOW(3))`;
+    }
+    const ack = (user: string) => operator("ack", `--key=${key}`, `--actor-user-id=${user}`, "--note=checked", "--apply");
+    for (const user of [outsider, "no-such-user"]) expect(await ack(user)).toEqual({ exitCode: 1, output: { ok: false, code: "actor_forbidden" } });
+    expect(await operator("reverify", `--order-id=${o.id}`, `--actor-user-id=${outsider}`)).toEqual({ exitCode: 1, output: { ok: false, code: "actor_forbidden" } });
+    // A platform finance checker (granted by the reserved workspace's owner) may handle it without any role in the customer workspace.
+    const existing = await a.workspace.findUnique({ where: { systemKey: "helm_reserved_primary" }, select: { id: true } });
+    const reserved = existing?.id ?? `alitop-reserved-${run}`;
+    if (!existing) await a.$executeRaw`INSERT INTO Workspace (id,name,slug,workspaceClass,systemKey,updatedAt)
+      VALUES (${reserved},'Synthetic reserved',${reserved},'HELM_RESERVED','helm_reserved_primary',NOW(3))`;
+    for (const [user, role] of [[reservedOwner, "OWNER"], [finance, "MEMBER"]]) await a.$executeRaw`INSERT INTO Membership
+      (id,workspaceId,userId,role,status,updatedAt) VALUES (${`m-${reserved}-${user}`},${reserved},${user},${role},'ACTIVE',NOW(3))`;
+    await grantPlatformFinanceRole(a, { actorUserId: reservedOwner, userId: finance, role: "checker", evidenceRef: "evidence:synthetic" });
+    expect(await ack(finance)).toEqual({ exitCode: 0, output: { ok: true, command: "ack", applied: true, key } });
+    expect((await operator("list", "--limit=1")).output).toMatchObject({ unhandledTotal: expect.any(Number) });
+  });
+
+  it("keeps one record per refund batch, before and after the credit (#549 P3-3)", async () => {
+    const o = await order(950);
+    for (const batch of ["b1", "b2"]) {
+      expect(await notify(double.notify(trade(o, { refund_fee: "1.00", out_biz_no: batch })))).toEqual([200, "success"]);
+    }
+    double.trades.set(o.providerOrderNo, { code: "10000", msg: "Success", ...trade(o) });
+    expect((await query(o)).outcome).toBe("credited");
+    for (const batch of ["b3", "b3"]) expect(await notify(double.notify(trade(o, { refund_fee: "9500.00", out_biz_no: batch })))).toEqual([200, "success"]);
+    expect([await exceptions(`unknown_before_credit:alipay:${o.providerOrderNo}:b1`), await exceptions(`unknown_before_credit:alipay:${o.providerOrderNo}:b2`),
+      await exceptions(`paid_then_unknown:alipay:${o.providerOrderNo}:b3`)]).toEqual([1, 1, 1]);
+  });
+
+  it("never lets a later report credit an order whose received amount once differed (#549 P2-1)", async () => {
+    const o = await order(970);
+    expect(await notify(double.notify(trade(o, { receipt_amount: "9600.00" })))).toEqual([200, "success"]);
+    // The refresh query omits receipt_amount and reports the full amount: still refused, the record stays the case to settle.
+    double.trades.set(o.providerOrderNo, { code: "10000", msg: "Success", ...trade(o) });
+    await expect(query(o)).rejects.toThrow("topup_amount_mismatch");
+    expect(await notify(double.notify(trade(o)))).toEqual([200, "success"]); // a matching notify is acknowledged, not credited
+    expect(await effects(o)).toEqual(untouched);
+    expect(await exceptions(`amount_mismatch:alipay:${trade(o).trade_no}`)).toBe(1);
   });
 
   it("never credits a first refund notify but keeps it before a later query credit; a missing trade queries as pending", async () => {
