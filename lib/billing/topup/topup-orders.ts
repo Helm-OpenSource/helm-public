@@ -87,9 +87,13 @@ export async function createOrReplayTopupOrder(client: PrismaClient, input: Crea
   const now = input.now ?? new Date();
   const createdBy = `USER:${input.actorUserId}`;
   const requestHash = sha256(JSON.stringify([input.provider, input.amountFen.toString(), input.merchantRef, input.appRef]));
+  // READ COMMITTED (#546 review P2-1): under REPEATABLE READ a creator's first order makes the locking reads below hit an empty
+  // (workspace, creator) range and take a shared gap lock; two different creators then insert into that gap and deadlock. RC takes
+  // no gap locks. Replay and the limits keep their meaning: the creator's membership row lock still serializes one creator, the
+  // reads after it see the latest commit, and UNIQUE (workspace, creator, key) backs the replay. Needs ROW binlog, as reservations.
   return client.$transaction(async tx => {
-    // The creator's membership row lock serializes this creator's concurrent creations. The reads below are locking reads, so
-    // they see orders a previous lock holder committed (a plain read would use a snapshot taken before the lock was granted).
+    // The creator's membership row lock serializes this creator's concurrent creations; the reads below then see what a previous
+    // lock holder committed (they stay locking reads, which also keeps them correct should the isolation level ever change).
     try { await lockBillingAuthority(tx, input.actorUserId, [input.workspaceId], canManageWorkspaceBilling); } catch (error) {
       if (error instanceof Error && error.message === "payer_binding_forbidden") refuse("topup_forbidden");
       throw error;
@@ -122,7 +126,7 @@ export async function createOrReplayTopupOrder(client: PrismaClient, input: Crea
       relatedObjectId: payer.payerAccountId, payload: { provider: order.provider, providerOrderNo: order.providerOrderNo,
         amountFen: order.amountFen.toString(), billingMode: payer.billingMode } }, { client: tx });
     return { order, replayed: false };
-  }, { maxWait: 5000, timeout: 10000 });
+  }, { maxWait: 5000, timeout: 10000, isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
 }
 
 /** Contract S2D §1.6: the session-triggered query runs at most every 10 s and 30 times an hour, for unpaid orders up to 72 h old. */
@@ -161,10 +165,13 @@ export async function readTopupOrderForSession(client: PrismaClient, input: Sess
  * Admits one session-triggered provider call for the order (query, or close then query) under the per-order throttle. A credited
  * order, or one too old or not queryable, is returned as is without a provider call (`query: false`); close needs a waiting order.
  */
-export async function claimTopupOrderQuery(client: PrismaClient, input: SessionOrderInput & { purpose: "query" | "close"; now?: Date }) {
+export async function claimTopupOrderQuery(client: PrismaClient,
+  input: SessionOrderInput & { purpose: "query" | "close"; provider: TopupProvider; now?: Date }) {
   const now = input.now ?? new Date();
   return client.$transaction(async tx => {
     const order = await lockSessionOrder(tx, input);
+    // Refused before any throttle write or provider call: an order is only ever sent to its own provider.
+    if (order.provider !== input.provider) refuse("topup_provider_mismatch");
     if (input.purpose === "close" && order.state !== "created" && order.state !== "pending") refuse("topup_order_not_closable");
     if (!QUERYABLE.includes(order.state) || now.getTime() - order.createdAt.getTime() > TOPUP_QUERY_MAX_AGE_MS) {
       return { order, query: false };
@@ -275,15 +282,17 @@ async function verifyInTransaction(tx: Prisma.TransactionClient, provider: Topup
     payerAccountId: order.payerAccountId, provider, providerTxnId: observed.providerTxnId,
     amountFen: observed.amountFen?.toString() ?? null, source: observed.source, observed: observed.status, refund: observed.refund ?? null });
 
+  // One record per refund batch (#549 review P3-3: a third refund left none); news without a batch keeps one per order.
+  const refundRef = observed.refund?.batchRef ? `${observed.providerOrderNo}:${observed.refund.batchRef}` : observed.providerOrderNo;
   if (observed.status !== "paid") {
     // Closed or refund/unknown news about a credited order: record for reconciliation, never touch the balance or state.
     if (order.state === "paid_verified" && observed.status !== "not_paid") {
-      const recorded = await recordPaymentException(tx, exception(`paid_then_${observed.status}`, observed.providerOrderNo));
+      const recorded = await recordPaymentException(tx, exception(`paid_then_${observed.status}`, refundRef));
       return result(recorded ? "exception_recorded" : "unchanged", order.state);
     }
     // Unknown news (e.g. a refund) before any credit is kept too: a later query may still credit the full amount.
     const recorded = observed.status === "unknown" &&
-      await recordPaymentException(tx, exception("unknown_before_credit", observed.providerOrderNo));
+      await recordPaymentException(tx, exception("unknown_before_credit", refundRef));
     const next = nextUnpaidState(order.state, observed.status);
     if (next === order.state) return result(recorded ? "exception_recorded" : "unchanged", order.state);
     await recordState(tx, order, next, { source: observed.source, observed: observed.status });
@@ -296,6 +305,12 @@ async function verifyInTransaction(tx: Prisma.TransactionClient, provider: Topup
   // A signed paid report that cannot be credited means money may have arrived: refuse, and the caller records an exception.
   if (observed.currency !== order.currency) refuse("topup_currency_mismatch", exception("currency_mismatch"));
   if (observed.amountFen !== BigInt(order.amountFen)) refuse("topup_amount_mismatch", exception("amount_mismatch"));
+  // #549 review P2-1: once any report showed a different received amount for this order, no later report (e.g. a query that omits
+  // receipt_amount) credits it; the existing record is the case a person settles (owner 2026-11-12: credit the order amount only).
+  const [mismatch] = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM BillingOutbox WHERE aggregateType = 'PaymentException'
+    AND eventType = 'payment_exception' AND aggregateId LIKE ${`amount_mismatch:${provider}:%`}
+    AND payload LIKE ${`%"paymentOrderId":"${order.id}"%`} LIMIT 1`;
+  if (mismatch) refuse("topup_amount_mismatch", exception("amount_mismatch"));
   type PaymentRow = { id: string; paymentOrderId: string; fundsTransactionId: string; lateAfterClose: number | boolean };
   const [byTxn] = await tx.$queryRaw<PaymentRow[]>`SELECT id, paymentOrderId, fundsTransactionId, lateAfterClose
     FROM VerifiedPayment WHERE provider = ${provider} AND providerTxnId = ${txnId} FOR SHARE`;
@@ -381,15 +396,20 @@ export async function verifyTopupCallback(client: PrismaClient, adapter: TopupPr
  */
 async function confirmPaidCallbackByQuery(client: PrismaClient, adapter: TopupProviderAdapter, callback: ObservedPayment) {
   const order = await client.paymentOrder.findUniqueOrThrow({ where: { providerOrderNo: callback.providerOrderNo } });
-  const queried = await adapter.queryOrder(order.providerOrderNo);
+  // #549 review P2-2: a signed paid callback that the query does not settle leaves a record before the notify fails (once per order),
+  // so it stays visible in `billing:topup-exceptions list` even if every provider retry fails.
+  const keep = (reason: "paid_callback_closed" | "paid_callback_unconfirmed") => runFundsTransactionWithRetry(client, tx =>
+    recordPaymentException(tx, { key: `${reason}:${adapter.provider}:${order.providerOrderNo}`, reason, paymentOrderId: order.id,
+      workspaceId: order.workspaceId, payerAccountId: order.payerAccountId, provider: adapter.provider,
+      providerTxnId: callback.providerTxnId, amountFen: callback.amountFen?.toString() ?? null, source: "callback", observed: "paid",
+      refund: callback.refund ?? null }));
+  let queried: ObservedPayment;
+  try { queried = await adapter.queryOrder(order.providerOrderNo); } catch (error) { await keep("paid_callback_unconfirmed"); throw error; }
   if (queried?.source !== "query" || queried.providerOrderNo !== order.providerOrderNo) refuse("topup_observation_invalid");
   const result = await verifyObserved(client, adapter.provider, queried);
   if (queried.status === "paid") return result;
-  if (queried.status !== "closed") refuse("topup_query_unconfirmed");
-  await runFundsTransactionWithRetry(client, tx => recordPaymentException(tx, { key: `paid_callback_closed:${adapter.provider}:${order.providerOrderNo}`,
-    reason: "paid_callback_closed", paymentOrderId: order.id, workspaceId: order.workspaceId, payerAccountId: order.payerAccountId,
-    provider: adapter.provider, providerTxnId: callback.providerTxnId, amountFen: callback.amountFen?.toString() ?? null,
-    source: "callback", observed: "paid", refund: callback.refund ?? null }));
+  if (queried.status !== "closed") { await keep("paid_callback_unconfirmed"); refuse("topup_query_unconfirmed"); }
+  await keep("paid_callback_closed");
   return { ...result, outcome: "exception_recorded" as const };
 }
 /** Active query path (lost callback): re-query the order's ORIGINAL provider order number, never a new order. */

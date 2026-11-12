@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { bindScope, createPayerAccount } from "../payer/payer-accounts";
 import { alipayDouble } from "./alipay-gateway-fixture";
 import { createAlipayTopupAdapter, getAlipayTopupConfig } from "./alipay-topup";
+import { grantPlatformFinanceRole } from "../bank-receipts/bank-receipts";
 import { runTopupExceptionsOperator } from "./topup-exceptions-operator";
 import { createOrReplayTopupOrder, createTopupOrder, verifyTopupByQuery } from "./topup-orders";
 import { POST as createRoute } from "@/app/api/billing/v1/topup-orders/route";
@@ -184,7 +185,7 @@ describe.skipIf(!url)("Alipay wallet top-up notify against MySQL", () => {
     expect(await withGateway(() => notify(double.notify(trade(closed))))).toEqual([200, "success"]);
     expect(await effects(closed)).toEqual({ ...untouched, state: "closed_unpaid" });
     expect(await exceptions(`paid_callback_closed:alipay:${closed.providerOrderNo}`)).toBe(1); // the discarded paid report is kept
-    // The query does not confirm payment (still waiting, or no trade at all): not acknowledged, nothing credited or kept.
+    // The query does not confirm payment (still waiting, or no trade at all): not acknowledged, nothing credited, one record kept.
     const waiting = await order(630);
     expect(await notify(double.notify(trade(waiting, { trade_status: "TRADE_CLOSED" })))).toEqual([200, "success"]);
     for (const answer of [{ code: "10000", msg: "Success", ...trade(waiting, { trade_status: "WAIT_BUYER_PAY" }) }, null]) {
@@ -193,16 +194,18 @@ describe.skipIf(!url)("Alipay wallet top-up notify against MySQL", () => {
     }
     expect(await effects(waiting)).toEqual({ ...untouched, state: "closed_unpaid" });
     expect(await exceptions(`paid_callback_closed:alipay:${waiting.providerOrderNo}`)).toBe(0);
+    expect(await exceptions(`paid_callback_unconfirmed:alipay:${waiting.providerOrderNo}`)).toBe(1); // #549 P2-2, once per order
     // Refund news first (unknown), then a paid callback while the query is unavailable: nothing credits, Alipay retries.
     const unknown = await order(620);
     expect(await notify(double.notify(trade(unknown, { refund_fee: "6.20", out_biz_no: "refund-b1" })))).toEqual([200, "success"]);
     expect(await notify(double.notify(trade(unknown)))).toEqual([500, "fail"]); // network refused in this test
+    expect(await exceptions(`paid_callback_unconfirmed:alipay:${unknown.providerOrderNo}`)).toBe(1); // kept even when the query fails
     expect(await effects(unknown)).toEqual({ ...untouched, state: "unknown" });
     double.trades.set(unknown.providerOrderNo, { code: "10000", msg: "Success", ...trade(unknown, { trade_status: "TRADE_CLOSED" }) });
     expect(await withGateway(() => notify(double.notify(trade(unknown))))).toEqual([200, "success"]);
     expect(await effects(unknown)).toEqual({ ...untouched, state: "closed_unpaid" });
     // P2-B: the record of the refund news carries its amount and batch.
-    const record = await a.billingOutbox.findFirstOrThrow({ where: { aggregateId: `unknown_before_credit:alipay:${unknown.providerOrderNo}` } });
+    const record = await a.billingOutbox.findFirstOrThrow({ where: { aggregateId: `unknown_before_credit:alipay:${unknown.providerOrderNo}:refund-b1` } });
     expect(JSON.parse(record.payload)).toMatchObject({ observed: "unknown", refund: { amountFen: "620", batchRef: "refund-b1", at: null } });
   });
 
@@ -234,12 +237,62 @@ describe.skipIf(!url)("Alipay wallet top-up notify against MySQL", () => {
     const old = await order(740);
     await a.$executeRaw`UPDATE PaymentOrder SET createdAt = UTC_TIMESTAMP(3) - INTERVAL 96 HOUR WHERE id = ${old.id}`;
     double.trades.set(old.providerOrderNo, { code: "10000", msg: "Success", ...trade(old) });
-    expect(await operator("reverify", `--order-id=${old.id}`)).toMatchObject({ exitCode: 0, output: { applied: false } });
+    expect(await operator("reverify", `--order-id=${old.id}`)).toEqual({ exitCode: 2, output: { ok: false, code: "usage:missing:actor-user-id" } });
+    expect(await operator("reverify", `--order-id=${old.id}`, `--actor-user-id=${admin}`)).toMatchObject({ exitCode: 0, output: { applied: false } });
     expect((await effects(old)).payments).toBe(0);
-    expect(await operator("reverify", `--order-id=${old.id}`, "--apply")).toMatchObject({ exitCode: 0, output: { result: { outcome: "credited" } } });
+    expect(await operator("reverify", `--order-id=${old.id}`, `--actor-user-id=${admin}`, "--apply"))
+      .toMatchObject({ exitCode: 0, output: { result: { outcome: "credited" } } });
+    expect(await a.auditLog.count({ where: { actionType: "BILLING_TOPUP_REVERIFY", targetId: old.id, userId: admin } })).toBe(1);
     expect(await effects(old)).toEqual({ state: "paid_verified", payments: 1, funds: 1, wallet: BigInt(740) * UNIT });
-    expect(await operator("reverify", "--order-id=missing-order")).toEqual({ exitCode: 1, output: { ok: false, code: "order_unknown" } });
+    expect(await operator("reverify", "--order-id=missing-order", `--actor-user-id=${admin}`)).toEqual({ exitCode: 1, output: { ok: false, code: "order_unknown" } });
     expect((await operator("list", "--apply")).exitCode).toBe(2);
+  });
+
+  it("accepts exception handling only from the workspace's billing roles or a platform finance role (#549 P3-1, P3-2)", async () => {
+    const operator = (...argv: string[]) => runTopupExceptionsOperator(a, argv, () => createAlipayTopupAdapter(config, double.fetch));
+    const o = await order(760);
+    expect(await notify(double.notify(trade(o, { total_amount: "7.61" })))).toEqual([200, "success"]);
+    const key = `amount_mismatch:alipay:${trade(o).trade_no}`;
+    const outsider = `alitop-outsider-${run}`, finance = `alitop-finance-${run}`, reservedOwner = `alitop-rowner-${run}`;
+    for (const user of [outsider, finance, reservedOwner]) {
+      await a.$executeRaw`INSERT INTO User (id,name,email,updatedAt) VALUES (${user},'Synthetic',${`${user}@example.invalid`},NOW(3))`;
+    }
+    const ack = (user: string) => operator("ack", `--key=${key}`, `--actor-user-id=${user}`, "--note=checked", "--apply");
+    for (const user of [outsider, "no-such-user"]) expect(await ack(user)).toEqual({ exitCode: 1, output: { ok: false, code: "actor_forbidden" } });
+    expect(await operator("reverify", `--order-id=${o.id}`, `--actor-user-id=${outsider}`)).toEqual({ exitCode: 1, output: { ok: false, code: "actor_forbidden" } });
+    // A platform finance checker (granted by the reserved workspace's owner) may handle it without any role in the customer workspace.
+    const existing = await a.workspace.findUnique({ where: { systemKey: "helm_reserved_primary" }, select: { id: true } });
+    const reserved = existing?.id ?? `alitop-reserved-${run}`;
+    if (!existing) await a.$executeRaw`INSERT INTO Workspace (id,name,slug,workspaceClass,systemKey,updatedAt)
+      VALUES (${reserved},'Synthetic reserved',${reserved},'HELM_RESERVED','helm_reserved_primary',NOW(3))`;
+    for (const [user, role] of [[reservedOwner, "OWNER"], [finance, "MEMBER"]]) await a.$executeRaw`INSERT INTO Membership
+      (id,workspaceId,userId,role,status,updatedAt) VALUES (${`m-${reserved}-${user}`},${reserved},${user},${role},'ACTIVE',NOW(3))`;
+    await grantPlatformFinanceRole(a, { actorUserId: reservedOwner, userId: finance, role: "checker", evidenceRef: "evidence:synthetic" });
+    expect(await ack(finance)).toEqual({ exitCode: 0, output: { ok: true, command: "ack", applied: true, key } });
+    expect((await operator("list", "--limit=1")).output).toMatchObject({ unhandledTotal: expect.any(Number) });
+  });
+
+  it("keeps one record per refund batch, before and after the credit (#549 P3-3)", async () => {
+    const o = await order(950);
+    for (const batch of ["b1", "b2"]) {
+      expect(await notify(double.notify(trade(o, { refund_fee: "1.00", out_biz_no: batch })))).toEqual([200, "success"]);
+    }
+    double.trades.set(o.providerOrderNo, { code: "10000", msg: "Success", ...trade(o) });
+    expect((await query(o)).outcome).toBe("credited");
+    for (const batch of ["b3", "b3"]) expect(await notify(double.notify(trade(o, { refund_fee: "9500.00", out_biz_no: batch })))).toEqual([200, "success"]);
+    expect([await exceptions(`unknown_before_credit:alipay:${o.providerOrderNo}:b1`), await exceptions(`unknown_before_credit:alipay:${o.providerOrderNo}:b2`),
+      await exceptions(`paid_then_unknown:alipay:${o.providerOrderNo}:b3`)]).toEqual([1, 1, 1]);
+  });
+
+  it("never lets a later report credit an order whose received amount once differed (#549 P2-1)", async () => {
+    const o = await order(970);
+    expect(await notify(double.notify(trade(o, { receipt_amount: "9600.00" })))).toEqual([200, "success"]);
+    // The refresh query omits receipt_amount and reports the full amount: still refused, the record stays the case to settle.
+    double.trades.set(o.providerOrderNo, { code: "10000", msg: "Success", ...trade(o) });
+    await expect(query(o)).rejects.toThrow("topup_amount_mismatch");
+    expect(await notify(double.notify(trade(o)))).toEqual([200, "success"]); // a matching notify is acknowledged, not credited
+    expect(await effects(o)).toEqual(untouched);
+    expect(await exceptions(`amount_mismatch:alipay:${trade(o).trade_no}`)).toBe(1);
   });
 
   it("never credits a first refund notify but keeps it before a later query credit; a missing trade queries as pending", async () => {
@@ -323,6 +376,68 @@ describe.skipIf(!url)("Alipay wallet top-up notify against MySQL", () => {
       headers: { "content-type": "application/json", "idempotency-key": `parallel-key-${i}-000` } }))));
     expect(responses.map(r => r.status).sort()).toEqual([201, 201, 201, 201, 201, 429, 429]);
     expect(await orders(ws)).toBe(5);
+  });
+
+  it("lets different creators create their first orders concurrently (#546 review P2-1: no gap-lock deadlock)", async () => {
+    for (let round = 0; round < 4; round += 1) {
+      const spaces = await Promise.all(Array.from({ length: 4 }, () => payerWorkspace()));
+      // Two billing admins of one workspace, plus first orders in neighbouring new workspaces, all at once.
+      const second = `alitop-second-${run}-${round}`;
+      await a.$executeRaw`INSERT INTO User (id,name,email,updatedAt) VALUES (${second},'Synthetic',${`${second}@example.invalid`},NOW(3))`;
+      await a.$executeRaw`INSERT INTO Membership (id,workspaceId,userId,role,status,updatedAt) VALUES (${`m2-${spaces[0].ws}`},${spaces[0].ws},${second},'BILLING_ADMIN','ACTIVE',NOW(3))`;
+      const calls = [...spaces.map(space => [space.ws, admin]), [spaces[0].ws, second]].map(([ws, user]) =>
+        createOrReplayTopupOrder(b, { actorUserId: user, workspaceId: ws, provider: "alipay", amountFen: BigInt(10_000), ...refs,
+          idempotencyKey: `first-order-${round}-0` }));
+      const results = await Promise.allSettled(calls);
+      expect(results.map(r => r.status)).toEqual(["fulfilled", "fulfilled", "fulfilled", "fulfilled", "fulfilled"]);
+      expect(await a.paymentOrder.count({ where: { workspaceId: spaces[0].ws } })).toBe(2);
+    }
+    // T1: one key is scoped to its creator: another billing admin reusing it later gets an order of their own.
+    const { ws } = await payerWorkspace();
+    const colleague = `alitop-colleague-${run}`;
+    await a.$executeRaw`INSERT INTO User (id,name,email,updatedAt) VALUES (${colleague},'Synthetic',${`${colleague}@example.invalid`},NOW(3))`;
+    await a.$executeRaw`INSERT INTO Membership (id,workspaceId,userId,role,status,updatedAt) VALUES (${`mc-${ws}`},${ws},${colleague},'BILLING_ADMIN','ACTIVE',NOW(3))`;
+    const mine = await create(ws, { provider: "alipay", amountFen: "10000" }, "shared-key-0001");
+    const theirs = await create(ws, { provider: "alipay", amountFen: "10000" }, "shared-key-0001", colleague);
+    expect([mine.status, theirs.status, theirs.body.replayed]).toEqual([201, 201, false]);
+    expect(theirs.body.order.id).not.toBe(mine.body.order.id);
+  });
+
+  it("takes workspace, actor and merchant only from the server and the session (R2, R8, R9)", async () => {
+    const { ws } = await payerWorkspace();
+    const other = await payerWorkspace();
+    const created = await create(ws, { provider: "alipay", amountFen: "20000", workspaceId: other.ws, actorUserId: "someone-else",
+      payerAccountId: "x", merchantRef: "merchant:forged", appRef: "app:forged" });
+    expect(created.status).toBe(201);
+    expect(await a.paymentOrder.findUniqueOrThrow({ where: { id: created.body.order.id } }))
+      .toMatchObject({ workspaceId: ws, createdBy: `USER:${admin}`, ...refs });
+    expect(await orders(other.ws)).toBe(0);
+  });
+
+  it("returns a cashier URL only for an open unexpired order, and validates the key shape (R5, T15)", async () => {
+    const { ws } = await payerWorkspace();
+    const first = await create(ws, { provider: "alipay", amountFen: "30000" }, "cashier-key-0001");
+    expect(first.body.payUrl).toEqual(expect.stringContaining("alipay.trade.page.pay"));
+    for (const state of ["paid_verified", "closed_unpaid", "unknown"]) {
+      await a.$executeRaw`UPDATE PaymentOrder SET state = ${state} WHERE id = ${first.body.order.id}`;
+      expect((await create(ws, { provider: "alipay", amountFen: "30000" }, "cashier-key-0001")).body).toMatchObject({ replayed: true, payUrl: null });
+    }
+    await a.$executeRaw`UPDATE PaymentOrder SET state = 'created', expiresAt = UTC_TIMESTAMP(3) - INTERVAL 1 MINUTE WHERE id = ${first.body.order.id}`;
+    expect((await create(ws, { provider: "alipay", amountFen: "30000" }, "cashier-key-0001")).body).toMatchObject({ replayed: true, payUrl: null });
+    for (const key of ["short", "has space key", "x".repeat(129), "key/with/slash"]) {
+      expect(await create(ws, { provider: "alipay", amountFen: "30000" }, key)).toEqual({ status: 400, body: { error: "topup_input_invalid" } });
+    }
+  });
+
+  it("counts only unexpired created, pending or unknown orders against the open limit (T9, T10)", async () => {
+    const { ws } = await payerWorkspace();
+    const input = { actorUserId: admin, workspaceId: ws, provider: "alipay" as const, amountFen: BigInt(10_000), ...refs };
+    const later = new Date(Date.now() + 120_000); // outside the minute window, so only the open limit applies
+    for (let i = 0; i < 5; i += 1) await createOrReplayTopupOrder(a, { ...input, idempotencyKey: `expiry-key-${i}-000` });
+    await a.$executeRaw`UPDATE PaymentOrder SET expiresAt = UTC_TIMESTAMP(3) - INTERVAL 1 MINUTE WHERE workspaceId = ${ws}`;
+    expect((await createOrReplayTopupOrder(a, { ...input, now: later })).replayed).toBe(false); // five expired: none counts
+    await a.$executeRaw`UPDATE PaymentOrder SET expiresAt = UTC_TIMESTAMP(3) + INTERVAL 1 HOUR, state = 'unknown' WHERE workspaceId = ${ws}`;
+    await expect(createOrReplayTopupOrder(a, { ...input, now: later })).rejects.toThrow("topup_rate_limited"); // unknown counts
   });
 
   it("refuses without a key, a session or the billing role, for another provider, a bad amount or a billing-off payer", async () => {
@@ -414,6 +529,40 @@ describe.skipIf(!url)("Alipay wallet top-up notify against MySQL", () => {
   });
 
   // Prisma stores DATETIME in UTC, so test-side clock edits use UTC_TIMESTAMP (the server's NOW() may be another zone).
+  it("never sends another provider's order to Alipay, counts each refresh, and keeps the status read behind the gate", async () => {
+    const { ws } = await payerWorkspace();
+    sessionHolder.session = { user: { id: admin }, workspace: { id: ws } };
+    const wechat = await createTopupOrder(a, { actorUserId: admin, workspaceId: ws, provider: "wechat_pay", amountFen: BigInt(10_000),
+      merchantRef: "wechat-mch:synthetic", appRef: "wechat-app:synthetic" });
+    const sent = double.requests.length;
+    for (const route of [verifyRoute, closeRoute]) {
+      expect(await onOrder(route, wechat.id)).toEqual({ status: 409, body: { error: "topup_provider_mismatch" } });
+    }
+    expect(double.requests.length).toBe(sent); // nothing reached the Alipay gateway
+    expect(await a.paymentOrder.findUniqueOrThrow({ where: { id: wechat.id } })).toMatchObject({ queryCount: 0, lastQueriedAt: null });
+    // Two refreshes of an Alipay order more than 10 s apart count twice.
+    const { row } = await sessionOrder();
+    expect((await onOrder(verifyRoute, row.id, admin, row.workspaceId)).body).toMatchObject({ queried: true });
+    await a.$executeRaw`UPDATE PaymentOrder SET lastQueriedAt = UTC_TIMESTAMP(3) - INTERVAL 11 SECOND WHERE id = ${row.id}`;
+    expect((await onOrder(verifyRoute, row.id)).body).toMatchObject({ queried: true });
+    expect(await a.paymentOrder.findUniqueOrThrow({ where: { id: row.id } })).toMatchObject({ queryCount: 2 });
+    vi.stubEnv("HELM_BILLING_TOPUP_ALIPAY_ENABLED", "false");
+    try {
+      const response = await orderRoute(new Request("https://helm.invalid/x"), { params: Promise.resolve({ id: row.id }) });
+      expect([response.status, await response.text()]).toEqual([404, "Not Found"]);
+    } finally { vi.stubEnv("HELM_BILLING_TOPUP_ALIPAY_ENABLED", "true"); }
+  });
+
+  it("checks the session before the configuration on refresh and close, so unsigned requests log nothing", async () => {
+    const alerts = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.stubEnv("HELM_BILLING_TOPUP_ALIPAY_SELLER_ID", "");
+    try {
+      sessionHolder.session = null;
+      for (const route of [verifyRoute, closeRoute]) expect((await onOrder(route, "any-order")).status).toBe(401);
+      expect(alerts).not.toHaveBeenCalled();
+    } finally { vi.stubEnv("HELM_BILLING_TOPUP_ALIPAY_SELLER_ID", double.env.HELM_BILLING_TOPUP_ALIPAY_SELLER_ID); alerts.mockRestore(); }
+  });
+
   it("caps refreshes at 30 an hour per order and stops querying orders older than 72 hours", async () => {
     const { ws, row } = await sessionOrder();
     sessionHolder.session = { user: { id: admin }, workspace: { id: ws } };

@@ -32,6 +32,15 @@ describe("top-up page helpers", () => {
       "https://sub.helm.example.invalid/billing/topup", "https://127.0.0.1/billing/topup", "not a url"]) {
       expect(isOpenableTopUpUrl(url, login)).toBe(false);
     }
+    // #550 review P3-2: a password segment alone, IP literals and allow-list suffixes are refused too.
+    for (const url of ["https://:pw@helm.example.invalid/billing/topup", "https://10.0.0.1/billing/topup", "https://[::1]/billing/topup",
+      "https://evil-pay.example.invalid/billing/topup", "https://x.pay.example.invalid/billing/topup"]) {
+      expect(isOpenableTopUpUrl(url, login, ["pay.example.invalid"])).toBe(false);
+    }
+    // An IP literal is refused even when listed (or when it is the login host): hosts are names only.
+    expect(isOpenableTopUpUrl("https://10.0.0.1/billing/topup", login, ["10.0.0.1"])).toBe(false);
+    expect(isOpenableTopUpUrl("https://10.0.0.1/billing/topup", "https://10.0.0.1")).toBe(false);
+    expect(isOpenableTopUpUrl("https://[::1]/billing/topup", "https://[::1]")).toBe(false);
     // Port 443 only, even when the login origin itself runs elsewhere (a non-standard port needs a contract change first).
     expect(isOpenableTopUpUrl("https://helm.example.invalid:8443/billing/topup", "https://helm.example.invalid:8443")).toBe(false);
   });

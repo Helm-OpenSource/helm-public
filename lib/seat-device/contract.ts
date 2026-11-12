@@ -39,8 +39,14 @@ export const SEAT_DEVICE_PENDING_LIMIT_PER_BUCKET_WINDOW = 10;
 export const SEAT_DEVICE_PENDING_BUCKET_WINDOW_SECONDS = 600;
 export const SEAT_DEVICE_PENDING_LIMIT_PER_BUCKET = 200;
 export const SEAT_DEVICE_PENDING_LIMIT_GLOBAL = 300;
+// Wrong pairing codes per account: 8 in 15 minutes, then locked 15 minutes.
 export const SEAT_DEVICE_CODE_ENTRY_MAX_FAILURES = 8;
 export const SEAT_DEVICE_CODE_ENTRY_WINDOW_SECONDS = 900;
+export const SEAT_DEVICE_CODE_ENTRY_LOCK_SECONDS = 900;
+// Wrong pairing codes per trusted address bucket (one office shares it):
+// 30 in 15 minutes, then the bucket is locked 15 minutes (owner ruling
+// 2026-11-11; the per-account limit stays 8).
+export const SEAT_DEVICE_CODE_ENTRY_MAX_FAILURES_PER_SOURCE_BUCKET = 30;
 // Pairing-code unique collisions are retried this many times, then 503.
 export const SEAT_DEVICE_PAIRING_CODE_MAX_ATTEMPTS = 5;
 
@@ -69,6 +75,8 @@ export const SEAT_DEVICE_REVOKE_REASONS = [
   "seat_inactive",
   // The client refused a claim answer it could not read (design v0.3.2).
   "client_rejected",
+  // The bound workspace was CANCELED (seen on refresh; a suspension is not).
+  "workspace_cancelled",
 ] as const;
 export type SeatDeviceRevokeReason = (typeof SEAT_DEVICE_REVOKE_REASONS)[number];
 
@@ -365,12 +373,3 @@ export function parseSeatDeviceRevokeRequest(
   }
   return { ok: true, value: { refreshToken, reason: reason as SeatDeviceClientRevokeReason } };
 }
-
-// Audit details of a revoke: never a token or hash. tokenUsedAfterClaim tells
-// whether the device used its credential after claiming it (for example a
-// client_cancelled revoke of a late approval that was never used).
-export type SeatDeviceRevokeAuditDetails = {
-  deviceId: string;
-  reason: SeatDeviceRevokeReason;
-  tokenUsedAfterClaim: boolean;
-};

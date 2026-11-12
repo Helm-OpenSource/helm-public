@@ -43,6 +43,10 @@ export function TopupPanel({ canTopUp, alipayAvailable, suggestedFen, returnedOr
         headers: { "content-type": "application/json", "idempotency-key": attempt.current.key },
         body: JSON.stringify({ provider: "alipay", amountFen: String(fen) }) });
       const body = await response.json();
+      if (response.ok && body.payUrl === null) {
+        // The key replayed an order that can no longer be paid (paid, closed or expired): the next click starts a new order.
+        attempt.current = null; setMessage("上一笔同金额的订单已不能付款，请再点一次以新建订单。"); return;
+      }
       if (!response.ok || typeof body.payUrl !== "string") { setMessage(errorText(body.error)); return; }
       window.location.assign(body.payUrl);
     } catch { setMessage(errorText(null)); } finally { setBusy(false); }

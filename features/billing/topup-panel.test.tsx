@@ -75,6 +75,17 @@ it("accepts only whole multiples of 100 yuan before asking the server", async ()
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
+it("starts a new order after the key replayed one that can no longer be paid (#550 review P3-3)", async () => {
+  const fetchMock = vi.fn(async () => json({ order: { id: "o1" }, replayed: true, payUrl: null }));
+  vi.stubGlobal("fetch", fetchMock);
+  const view = await render({ suggestedFen: 10_000 });
+  await click(button(view, "去支付宝付款"));
+  expect(view.querySelector('[role="status"]')?.textContent).toContain("请再点一次以新建订单");
+  await click(button(view, "去支付宝付款"));
+  const keys = (fetchMock.mock.calls as unknown as Array<[string, RequestInit]>).map(call => (call[1].headers as Record<string, string>)["idempotency-key"]);
+  expect(keys[1]).not.toBe(keys[0]);
+});
+
 it("maps refusals to fixed text and never navigates", async () => {
   vi.stubGlobal("fetch", vi.fn(async () => json({ error: "topup_unavailable" }, 503)));
   const view = await render({ suggestedFen: 10_000 });
