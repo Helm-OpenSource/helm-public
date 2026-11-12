@@ -2455,6 +2455,72 @@ model CreditFacility {
   @@index([payerAccountId, state])
 }
 
+enum PlatformBillingOperationState {
+  drafted
+  applied
+  rejected
+}
+
+// Billing V1 E1a: maker/checker record of a platform billing operation; `kind` is a closed set in the service.
+model PlatformBillingOperation {
+  id                String                        @id @default(cuid())
+  kind              String                        @db.VarChar(32)
+  operationKey      String                        @unique @db.VarChar(191)
+  workspaceId       String                        @db.VarChar(191)
+  payerAccountId    String?                       @db.VarChar(191)
+  request           Json
+  contentHash       String                        @db.Char(64)
+  state             PlatformBillingOperationState @default(drafted)
+  draftedByUserId   String                        @db.VarChar(191)
+  evidenceRef       String                        @db.VarChar(191)
+  reviewedByUserId  String?                       @db.VarChar(191) // DB CHECK: differs from draftedByUserId
+  reviewEvidenceRef String?                       @db.VarChar(191)
+  reviewedAt        DateTime?
+  resultRef         String?                       @db.VarChar(191)
+  version           Int                           @default(1)
+  createdAt         DateTime                      @default(now())
+  updatedAt         DateTime                      @updatedAt
+
+  @@index([workspaceId, kind])
+  @@index([state, createdAt])
+}
+
+enum PlatformEmergencyRollbackState {
+  pending_review
+  confirmed
+}
+
+enum PlatformEmergencyRollbackFromMode {
+  enforce
+}
+
+enum PlatformEmergencyRollbackToMode {
+  shadow
+}
+
+// Owner 11-12: single-person enforce -> shadow, confirmed by a different person within 24 hours (never auto-reverted).
+model PlatformEmergencyRollback {
+  id                 String                            @id @default(cuid())
+  workspaceId        String                            @db.VarChar(191)
+  payerAccountId     String                            @db.VarChar(191)
+  fromMode           PlatformEmergencyRollbackFromMode
+  toMode             PlatformEmergencyRollbackToMode
+  state              PlatformEmergencyRollbackState    @default(pending_review)
+  executedByUserId   String                            @db.VarChar(191)
+  evidenceRef        String                            @db.VarChar(191)
+  executedAt         DateTime
+  reviewDueAt        DateTime // DB CHECK: executedAt + 24 hours
+  confirmedByUserId  String?                           @db.VarChar(191) // DB CHECK: differs from executedByUserId
+  confirmEvidenceRef String?                           @db.VarChar(191)
+  confirmedAt        DateTime?
+  version            Int                               @default(1)
+  createdAt          DateTime                          @default(now())
+  updatedAt          DateTime                          @updatedAt
+
+  @@unique([evidenceRef, workspaceId])
+  @@index([state, reviewDueAt])
+}
+
 model WorkerPublisherProfile {
   id                        String                     @id @default(cuid())
   workspaceId               String

@@ -35,6 +35,7 @@
     "docs/operations/BILLING_PRICE_GRANTS.md",
     "docs/operations/BILLING_RESERVATIONS.md",
     "docs/operations/BILLING_CREDIT_FACILITIES.md",
+    "docs/operations/BILLING_PLATFORM_OPERATIONS.md",
     "docs/operations/BILLING_INTERNAL_ROUTES.md",
     "docs/operations/MEMBERSHIP_AUTO_ACTIVATION.md",
     "docs/operations/HELM_OPC_WEEKLY_PACKET_TEMPLATE.md",
