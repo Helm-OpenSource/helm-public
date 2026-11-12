@@ -12,7 +12,7 @@ import type { ServiceActor } from "../reservations/reservations";
  * timestamp, nonce and body hash; database time bounds the window and a committed nonce row refuses replays. Every refusal is
  * the same `service_unauthorized` outside; signatures and bodies are never logged.
  */
-export const BILLING_SERVICE_SCOPES = ["quote", "reserve", "settle", "release", "mark-unknown", "resolve-unknown"] as const;
+export const BILLING_SERVICE_SCOPES = ["quote", "reserve", "settle", "release", "mark-unknown", "resolve-unknown", "balance-status"] as const;
 export type BillingServiceScope = (typeof BILLING_SERVICE_SCOPES)[number];
 export const BILLING_SIGNATURE_WINDOW_MS = 300_000;
 const NONCE_PURGE_MARGIN_SECONDS = 60; // purge strictly after a nonce's timestamp can no longer pass the window
