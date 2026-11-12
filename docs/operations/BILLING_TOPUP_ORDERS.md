@@ -75,8 +75,9 @@ notify route (`/api/billing/alipay/notify`, unchanged): top-up orders are create
 notify route (`/api/billing/wechat-pay/notify`, unchanged). The answer policy (which refusals are acknowledged, which are retried) is
 shared with Alipay in `notify-entry.ts`; only the wire format differs. 与旧订阅通知入口分开；订阅单号（`helm_wx_`）在开事务前即被拒。
 
-- **Gate**: `HELM_BILLING_TOPUP_WECHATPAY_ENABLED` (capability `billing_topup_wechatpay`, safe default deny) and `financial_action`;
-  otherwise a plain 404 before reading the body or the database.
+- **Gate**: `HELM_BILLING_TOPUP_WECHATPAY_ENABLED` (capability `billing_topup_wechatpay`, **default enabled**, owner 2026-11-12) and
+  `financial_action`; `false` (or an invalid value) answers a plain 404 before reading the body or the database. Enabled but any merchant
+  key missing or malformed: fail closed, `503` with alert `config_unavailable`, nothing read or credited.
 - **Config** (environment only): existing `WECHAT_PAY_APP_ID`, `WECHAT_PAY_MERCHANT_ID`, `WECHAT_PAY_MERCHANT_SERIAL_NO`,
   `WECHAT_PAY_PRIVATE_KEY` (confidential), `WECHAT_PAY_PLATFORM_PUBLIC_KEY` (the WeChat Pay public key), `WECHAT_PAY_API_V3_KEY` (confidential, 32 bytes)
   and the new public `HELM_BILLING_TOPUP_WECHATPAY_PUBLIC_KEY_ID` (`PUB_KEY_ID_<digits>`). Missing or malformed: `503`. Only the

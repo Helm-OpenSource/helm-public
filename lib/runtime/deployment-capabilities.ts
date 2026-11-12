@@ -78,7 +78,8 @@ const CAPABILITY_CONTROLS: Record<
   },
   billing_topup_wechatpay: {
     envKey: "HELM_BILLING_TOPUP_WECHATPAY_ENABLED",
-    defaultAllowed: false,
+    // Owner 2026-11-12: on by default; the entry fails closed (503, alert, no credit) until every merchant key is configured.
+    defaultAllowed: true,
   },
 };
 

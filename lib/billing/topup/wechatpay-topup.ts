@@ -1,5 +1,5 @@
 import "server-only";
-import { createDecipheriv, createSign, createVerify, randomBytes } from "node:crypto";
+import { createDecipheriv, createPrivateKey, createPublicKey, createSign, createVerify, randomBytes } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import { normalizePem } from "@/lib/billing/alipay";
 import { db } from "@/lib/db";
@@ -23,6 +23,12 @@ const IDENTIFIER = /^[0-9A-Za-z_]{1,32}$/;
 export type WeChatPayTopupConfig = { appId: string; merchantId: string; merchantSerialNo: string; privateKey: string;
   publicKey: string; publicKeyId: string; apiV3Key: Buffer };
 
+/** A malformed key must make the entry unavailable (fail closed), not surface later as a signature or query failure. */
+function isRsaKey(pem: string | null, kind: "private" | "public"): pem is string {
+  try { return Boolean(pem) && (kind === "private" ? createPrivateKey(pem!) : createPublicKey(pem!)).asymmetricKeyType === "rsa"; }
+  catch { return false; }
+}
+
 /** Reuses the existing WECHAT_PAY_* keys plus the public key id; null (unavailable) when anything is missing or malformed. */
 export function getWeChatPayTopupConfig(env: Readonly<Record<string, string | undefined>> = process.env): WeChatPayTopupConfig | null {
   const appId = env.WECHAT_PAY_APP_ID?.trim() ?? "", merchantId = env.WECHAT_PAY_MERCHANT_ID?.trim() ?? "";
@@ -32,7 +38,8 @@ export function getWeChatPayTopupConfig(env: Readonly<Record<string, string | un
   const publicKey = normalizePem(env.WECHAT_PAY_PLATFORM_PUBLIC_KEY?.trim(), "PUBLIC KEY");
   const apiV3Key = Buffer.from(env.WECHAT_PAY_API_V3_KEY?.trim() ?? "", "utf8");
   if (!IDENTIFIER.test(appId) || !IDENTIFIER.test(merchantId) || !/^[0-9A-Fa-f]{1,64}$/.test(merchantSerialNo) ||
-      !/^PUB_KEY_ID_[0-9]{1,64}$/.test(publicKeyId) || !privateKey || !publicKey || apiV3Key.length !== 32) return null;
+      !/^PUB_KEY_ID_[0-9]{1,64}$/.test(publicKeyId) || !isRsaKey(privateKey, "private") || !isRsaKey(publicKey, "public") ||
+      apiV3Key.length !== 32) return null;
   return { appId, merchantId, merchantSerialNo, privateKey, publicKey, publicKeyId, apiV3Key };
 }
 

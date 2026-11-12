@@ -60,8 +60,9 @@ describe("wechat pay top-up adapter", () => {
   it("checks the timestamp window in both directions before the signature", async () => {
     expect((await observe(double.notify(paid, { skewSeconds: -290 }))).status).toBe("paid");
     expect((await observe(double.notify(paid, { skewSeconds: 290 }))).status).toBe("paid");
-    await expect(observe(double.notify(paid, { skewSeconds: -301 }))).rejects.toThrow("topup_signature_invalid");
-    await expect(observe(double.notify(paid, { skewSeconds: 301 }))).rejects.toThrow("topup_signature_invalid");
+    // The double signs whole seconds and the check uses milliseconds, so the refused cases sit two seconds past the window.
+    await expect(observe(double.notify(paid, { skewSeconds: -302 }))).rejects.toThrow("topup_signature_invalid");
+    await expect(observe(double.notify(paid, { skewSeconds: 302 }))).rejects.toThrow("topup_signature_invalid");
   });
 
   it("refuses resources it cannot decrypt or that are not AEAD transactions", async () => {
@@ -72,6 +73,8 @@ describe("wechat pay top-up adapter", () => {
     await refused({ resource: r => ({ ...r, ciphertext: Buffer.from(Buffer.from(r.ciphertext, "base64").map((b, i) => (i === 0 ? b ^ 1 : b))).toString("base64") }) });
     await refused({ resource: r => ({ ...r, algorithm: "AEAD_AES_128_GCM" }) });
     await refused({ resource: r => ({ ...r, original_type: "refund" }) });
+    const plain = JSON.stringify({ ...JSON.parse(double.notify(paid).body), resource_type: "plain-resource" });
+    await expect(observe({ body: plain, headers: double.signHeaders(plain) })).rejects.toThrow("topup_signature_invalid"); // validly signed
   });
 
   it("queries with a signed request and trusts only a verified answer", async () => {
@@ -96,7 +99,7 @@ describe("wechat pay top-up adapter", () => {
 
 describe("wechat pay top-up notify entry", () => {
   it("is a plain 404 while either gate is off, before the body or database", async () => {
-    for (const env of [{}, { HELM_BILLING_TOPUP_WECHATPAY_ENABLED: "yes" }, { HELM_BILLING_TOPUP_WECHATPAY_ENABLED: "true", HELM_FINANCIAL_ACTIONS_ENABLED: "false" }]) {
+    for (const env of [{ HELM_BILLING_TOPUP_WECHATPAY_ENABLED: "false" }, { HELM_BILLING_TOPUP_WECHATPAY_ENABLED: "yes" }, { HELM_BILLING_TOPUP_WECHATPAY_ENABLED: "true", HELM_FINANCIAL_ACTIONS_ENABLED: "false" }]) {
       vi.stubEnv("HELM_BILLING_TOPUP_WECHATPAY_ENABLED", undefined); vi.stubEnv("HELM_FINANCIAL_ACTIONS_ENABLED", undefined);
       for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
       const { body, headers } = double.notify(paid);
@@ -106,9 +109,29 @@ describe("wechat pay top-up notify entry", () => {
     }
   });
 
-  it("refuses unconfigured, non-JSON, oversized and unauthenticated bodies without touching the database", async () => {
+  it("is on by default but fails closed with an alert while any merchant key is missing or malformed", async () => {
+    vi.stubEnv("HELM_BILLING_TOPUP_WECHATPAY_ENABLED", undefined); vi.stubEnv("HELM_FINANCIAL_ACTIONS_ENABLED", undefined);
+    const alerts = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      for (const name of Object.keys(double.env)) vi.stubEnv(name, undefined);
+      const nothing = await post(double.notify(paid));
+      expect([nothing.status, await nothing.json()]).toEqual([503, { code: "FAIL", message: "失败" }]);
+      for (const name of Object.keys(double.env)) { // each key alone: missing, then malformed
+        for (const value of [undefined, "x y"]) {
+          for (const [key, configured] of Object.entries(double.env)) vi.stubEnv(key, key === name ? value : configured);
+          expect((await post(double.notify(paid))).status).toBe(503);
+        }
+      }
+      expect(alerts.mock.calls.length).toBe(1 + Object.keys(double.env).length * 2);
+      expect(alerts.mock.calls.every(([tag, line]) => tag === "[billing-topup-wechatpay]" &&
+        line === JSON.stringify({ event: "notify_refused", reason: "config_unavailable" }))).toBe(true);
+      for (const [key, value] of Object.entries(double.env)) vi.stubEnv(key, value);
+      expect((await post(double.notify(paid, { forge: true }))).status).toBe(400); // fully configured: the entry is live
+    } finally { alerts.mockRestore(); }
+  });
+
+  it("refuses non-JSON, oversized and unauthenticated bodies without touching the database", async () => {
     enable();
-    expect((await post(double.notify(paid))).status).toBe(503); // WECHAT_PAY_* not configured
     for (const [key, value] of Object.entries(double.env)) vi.stubEnv(key, value);
     const signed = double.notify(paid);
     expect((await post({ ...signed, headers: { ...signed.headers, "content-type": "application/x-www-form-urlencoded" } })).status).toBe(415);
