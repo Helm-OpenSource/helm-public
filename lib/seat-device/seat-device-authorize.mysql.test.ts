@@ -351,6 +351,32 @@ describeMysql("seat device authorization (request, decide, cancel) on MySQL", ()
     await wrongCodes(1, null);
   });
 
+  // The bucket window is 15 minutes from its first failure: a failure at
+  // +899 seconds still counts (the 30th locks), one at +900 opens a new window.
+  it("keeps a failure at +899 seconds in the bucket window and opens a new one at +900", async () => {
+    const start = at(nextClock(), 5);
+    const wrongCodes = async (source: string, count: number, now: Date) => {
+      for (let done = 0; done < count; done += 8) {
+        const who = await member();
+        const sessionId = await session(who, at(now, -60));
+        for (let index = done; index < Math.min(count, done + 8); index += 1) {
+          await expectCode(
+            lookupSeatDeviceAuthorization({ authSessionId: sessionId, userId: who.userId, pairingCode: "ZZZZZZZZ", source, now }),
+            "pairing_code_invalid",
+          );
+        }
+      }
+    };
+    const counter = (source: string) =>
+      db.failedLoginAttempt.findUniqueOrThrow({ where: { identifierHash: hashLoginIdentifier(`seat-device-code:ip:${source.replace(/10$/, "0")}/24`) } });
+    const [inWindow, nextWindow] = [freshSource(), freshSource()];
+    for (const source of [inWindow, nextWindow]) await wrongCodes(source, 29, start);
+    await wrongCodes(inWindow, 1, at(start, 899));
+    expect(await counter(inWindow)).toMatchObject({ attemptCount: 30, windowStartedAt: start, lockedUntil: at(start, 899 + 900) });
+    await wrongCodes(nextWindow, 1, at(start, 900));
+    expect(await counter(nextWindow)).toMatchObject({ attemptCount: 1, windowStartedAt: at(start, 900), lockedUntil: null });
+  });
+
   it("counts concurrent wrong codes against the limit, never past it", async () => {
     const now = nextClock();
     const who = await member();
