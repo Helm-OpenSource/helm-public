@@ -66,9 +66,10 @@ describe.skipIf(!url)("wallet top-up orders against MySQL", () => {
     await a.$executeRaw`UPDATE PayerAccount SET billingMode = ${mode} WHERE id = ${payer.id}`; // no mode API yet
     return { ws, payerId: payer.id };
   }
+  const UNIT = BigInt(10_000); // test amounts are in hundreds of yuan (owner 11-12: whole multiples of 100 yuan)
   const order = async (amount = 1000, mode: "shadow" | "enforce" = "enforce") => {
     const { ws, payerId } = await workspace(mode);
-    return { ...await createTopupOrder(a, { actorUserId: admin, workspaceId: ws, provider: "wechat_pay", amountFen: BigInt(amount),
+    return { ...await createTopupOrder(a, { actorUserId: admin, workspaceId: ws, provider: "wechat_pay", amountFen: BigInt(amount) * UNIT,
       merchantRef: "merchant:synthetic", appRef: "app:synthetic" }), payerId };
   };
   type Order = { id: string; providerOrderNo: string; amountFen: bigint };
@@ -91,7 +92,7 @@ describe.skipIf(!url)("wallet top-up orders against MySQL", () => {
 
   it("creates orders only for OWNER/BILLING_ADMIN of a bound shadow/enforce payer", async () => {
     const { ws } = await workspace("shadow");
-    const input = { workspaceId: ws, provider: "alipay" as const, amountFen: BigInt(500), merchantRef: "merchant:synthetic", appRef: "app:synthetic" };
+    const input = { workspaceId: ws, provider: "alipay" as const, amountFen: BigInt(50_000), merchantRef: "merchant:synthetic", appRef: "app:synthetic" };
     const created = await createTopupOrder(a, { ...input, actorUserId: owner });
     expect(created).toMatchObject({ orderType: "wallet_topup", state: "created", currency: "CNY", createdBy: `USER:${owner}` });
     expect(created.providerOrderNo).toMatch(/^tpa_[0-9a-f]{28}$/);
@@ -105,7 +106,7 @@ describe.skipIf(!url)("wallet top-up orders against MySQL", () => {
     expect(await callback(fact(o))).toMatchObject({ outcome: "credited", state: "paid_verified", lateAfterClose: false });
     expect((await callback(fact(o), b)).outcome).toBe("replayed");
     expect((await query(o, fact(o))).outcome).toBe("replayed");
-    expect(await effects(o)).toEqual({ state: "paid_verified", payments: 1, funds: 1, audits: 1, outbox: 1, wallet: BigInt(1234) });
+    expect(await effects(o)).toEqual({ state: "paid_verified", payments: 1, funds: 1, audits: 1, outbox: 1, wallet: BigInt(1234) * UNIT });
     const funds = await a.fundsTransaction.findFirstOrThrow({ where: { payerAccountId: o.payerId } });
     expect(funds).toMatchObject({ kind: "topup", operationKey: `topup:wechat_pay:${fact(o).transaction_id}`, evidenceRef: `payment-order:${o.id}` });
   });
@@ -129,7 +130,7 @@ describe.skipIf(!url)("wallet top-up orders against MySQL", () => {
       const o = await order(300 + i);
       const results = await Promise.all([callback(fact(o), a), query(o, fact(o), b), callback(fact(o), b)]);
       expect(results.map(r => r.outcome).sort()).toEqual(["credited", "replayed", "replayed"]);
-      expect(await effects(o)).toEqual({ state: "paid_verified", payments: 1, funds: 1, audits: 1, outbox: 1, wallet: BigInt(300 + i) });
+      expect(await effects(o)).toEqual({ state: "paid_verified", payments: 1, funds: 1, audits: 1, outbox: 1, wallet: BigInt(300 + i) * UNIT });
     }
   });
   it("credits one of two concurrent provider transactions for one order and records the other once", async () => {
@@ -140,7 +141,7 @@ describe.skipIf(!url)("wallet top-up orders against MySQL", () => {
     const loser = (await a.verifiedPayment.findFirstOrThrow({ where: { paymentOrderId: o.id } })).providerTxnId === "wx-race-a" ? "wx-race-b" : "wx-race-a";
     await expect(callback(fact(o, { transaction_id: loser }))).rejects.toThrow("topup_order_paid_by_other_txn");
     expect(await exceptions(`order_paid_by_other_txn:wechat_pay:${loser}`)).toBe(1);
-    expect(await effects(o)).toEqual({ state: "paid_verified", payments: 1, funds: 1, audits: 1, outbox: 1, wallet: BigInt(260) });
+    expect(await effects(o)).toEqual({ state: "paid_verified", payments: 1, funds: 1, audits: 1, outbox: 1, wallet: BigInt(260) * UNIT });
   });
   it("records unknown and unpaid states without credit and credits a later verified success", async () => {
     const o = await order(450, "shadow");
@@ -159,14 +160,14 @@ describe.skipIf(!url)("wallet top-up orders against MySQL", () => {
     expect(await exceptions(`paid_then_unknown:wechat_pay:${o.providerOrderNo}`)).toBe(1);
     expect(await exceptions(`paid_then_closed:wechat_pay:${o.providerOrderNo}`)).toBe(1);
     expect(await a.auditLog.count({ where: { targetId: o.id, actionType: "BILLING_TOPUP_PAYMENT_EXCEPTION" } })).toBe(2);
-    expect(await effects(o)).toEqual({ state: "paid_verified", payments: 1, funds: 1, audits: 1, outbox: 1, wallet: BigInt(330) });
+    expect(await effects(o)).toEqual({ state: "paid_verified", payments: 1, funds: 1, audits: 1, outbox: 1, wallet: BigInt(330) * UNIT });
   });
   it("credits a verified success after close exactly once, flagged lateAfterClose", async () => {
     const o = await order(900);
     expect((await query(o, fact(o, { trade_state: "CLOSED" }))).state).toBe("closed_unpaid");
     expect(await callback(fact(o))).toMatchObject({ outcome: "credited", state: "paid_verified", lateAfterClose: true });
     expect(await query(o, fact(o))).toMatchObject({ outcome: "replayed", lateAfterClose: true });
-    expect(await effects(o)).toEqual({ state: "paid_verified", payments: 1, funds: 1, audits: 1, outbox: 1, wallet: BigInt(900) });
+    expect(await effects(o)).toEqual({ state: "paid_verified", payments: 1, funds: 1, audits: 1, outbox: 1, wallet: BigInt(900) * UNIT });
   });
   it("never credits legacy subscription orders and refuses a provider transaction reused across orders", async () => {
     const legacy = { id: "legacy", providerOrderNo: "helm_wx_synthetic_20261110", amountFen: BigInt(100) };

@@ -56,14 +56,15 @@ describe.skipIf(!url)("WeChat Pay wallet top-up notify against MySQL", () => {
   });
   afterAll(async () => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); await Promise.all([a?.$disconnect(), b?.$disconnect()]); });
 
-  async function order(amountFen = 1000) {
+  const UNIT = BigInt(10_000); // helper amounts are in hundreds of yuan (owner 11-12: whole multiples of 100 yuan)
+  async function order(amount = 1000) {
     const ws = `wxtop-ws-${run}-${(seq += 1)}`;
     await a.$executeRaw`INSERT INTO Workspace (id,name,slug,updatedAt) VALUES (${ws},'Synthetic topup',${ws},NOW(3))`;
     await a.$executeRaw`INSERT INTO Membership (id,workspaceId,userId,role,status,updatedAt) VALUES (${`m-${ws}`},${ws},${admin},'OWNER','ACTIVE',NOW(3))`;
     const payer = await createPayerAccount(a, { actorUserId: admin, workspaceId: ws, kind: "enterprise_contract", contractSubjectRef: "subject-wxtop" });
     await bindScope(a, { actorUserId: admin, payerAccountId: payer.id, expectedPayerVersion: 1, scopeKind: "workspace", scopeRef: ws, evidenceRef: "contract:synthetic" });
     await a.$executeRaw`UPDATE PayerAccount SET billingMode = 'enforce' WHERE id = ${payer.id}`;
-    const created = await createTopupOrder(a, { actorUserId: admin, workspaceId: ws, provider: "wechat_pay", amountFen: BigInt(amountFen), ...refs });
+    const created = await createTopupOrder(a, { actorUserId: admin, workspaceId: ws, provider: "wechat_pay", amountFen: BigInt(amount) * UNIT, ...refs });
     return { ...created, payerId: payer.id };
   }
   type Order = Awaited<ReturnType<typeof order>>;
@@ -92,9 +93,9 @@ describe.skipIf(!url)("WeChat Pay wallet top-up notify against MySQL", () => {
     expect(await notify(double.notify(trade(o)))).toEqual(ok); // WeChat Pay re-sends with fresh headers
     double.trades.set(o.providerOrderNo, { appid: config.appId, mchid: config.merchantId, ...trade(o) });
     expect((await query(o)).outcome).toBe("replayed");
-    expect(await effects(o)).toEqual({ state: "paid_verified", payments: 1, funds: 1, wallet: BigInt(1234) });
+    expect(await effects(o)).toEqual({ state: "paid_verified", payments: 1, funds: 1, wallet: BigInt(1234) * UNIT });
     expect(await a.verifiedPayment.findFirstOrThrow({ where: { paymentOrderId: o.id } }))
-      .toMatchObject({ provider: "wechat_pay", providerTxnId: trade(o).transaction_id, amountFen: BigInt(1234), source: "callback" });
+      .toMatchObject({ provider: "wechat_pay", providerTxnId: trade(o).transaction_id, amountFen: BigInt(1234) * UNIT, source: "callback" });
   });
 
   it("refuses forged, stale or undecryptable notifies, another merchant or app, and subscription order numbers", async () => {
@@ -111,10 +112,10 @@ describe.skipIf(!url)("WeChat Pay wallet top-up notify against MySQL", () => {
 
   it("keeps a verified amount or currency mismatch once for reconciliation and acknowledges it", async () => {
     const o = await order(800);
-    const short = trade(o, { amount: { total: 799, payer_total: 799, currency: "CNY" } });
+    const short = trade(o, { amount: { total: 7_990_000, payer_total: 7_990_000, currency: "CNY" } });
     for (let i = 0; i < 2; i += 1) expect(await notify(double.notify(short))).toEqual(ok);
     expect(await exceptions(`amount_mismatch:wechat_pay:${trade(o).transaction_id}`)).toBe(1);
-    expect(await notify(double.notify(trade(o, { amount: { total: 800, currency: "USD" } })))).toEqual(ok);
+    expect(await notify(double.notify(trade(o, { amount: { total: 8_000_000, currency: "USD" } })))).toEqual(ok);
     expect(await exceptions(`currency_mismatch:wechat_pay:${trade(o).transaction_id}`)).toBe(1);
     expect(await effects(o)).toEqual(untouched);
   });
@@ -126,7 +127,7 @@ describe.skipIf(!url)("WeChat Pay wallet top-up notify against MySQL", () => {
       const results = await Promise.all([notify(double.notify(trade(o))), query(o, b), notify(double.notify(trade(o))), query(o, a)]);
       expect([results[0], results[2]]).toEqual([ok, ok]);
       expect([results[1], results[3]].map(r => (r as { outcome: string }).outcome).every(x => x === "credited" || x === "replayed")).toBe(true);
-      expect(await effects(o)).toEqual({ state: "paid_verified", payments: 1, funds: 1, wallet: BigInt(300 + i) });
+      expect(await effects(o)).toEqual({ state: "paid_verified", payments: 1, funds: 1, wallet: BigInt(300 + i) * UNIT });
     }
   });
 
@@ -147,7 +148,7 @@ describe.skipIf(!url)("WeChat Pay wallet top-up notify against MySQL", () => {
     expect((await notify(double.notify(trade(o))))[0]).toBe(503);
     await a.$executeRaw`UPDATE PayerAccount SET billingMode = 'enforce' WHERE id = ${o.payerId}`;
     expect(await notify(double.notify(trade(o)))).toEqual(ok);
-    expect(await effects(o)).toEqual({ state: "paid_verified", payments: 1, funds: 1, wallet: BigInt(720) });
+    expect(await effects(o)).toEqual({ state: "paid_verified", payments: 1, funds: 1, wallet: BigInt(720) * UNIT });
   });
 
   it("is a plain 404 with the gate off and reads nothing", async () => {
