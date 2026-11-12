@@ -15,6 +15,8 @@ import type { ServiceActor } from "../reservations/reservations";
 export const BILLING_SERVICE_SCOPES = ["quote", "reserve", "settle", "release", "mark-unknown", "resolve-unknown", "balance-status"] as const;
 export type BillingServiceScope = (typeof BILLING_SERVICE_SCOPES)[number];
 export const BILLING_SIGNATURE_WINDOW_MS = 300_000;
+/** Grant ids the request header accepts; a row with any other id can never authenticate. */
+export const BILLING_SERVICE_GRANT_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{2,63}$/;
 const NONCE_PURGE_MARGIN_SECONDS = 60; // purge strictly after a nonce's timestamp can no longer pass the window
 const HEADERS = { grant: "x-helm-billing-grant", timestamp: "x-helm-billing-timestamp", nonce: "x-helm-billing-nonce",
   signature: "x-helm-billing-signature" } as const;
@@ -67,7 +69,7 @@ export async function authenticateBillingService(client: PrismaClient, request: 
   headers: Headers; body: Uint8Array }, scope: BillingServiceScope, env: Readonly<Record<string, string | undefined>> = process.env) {
   const grantId = request.headers.get(HEADERS.grant) ?? "", timestamp = request.headers.get(HEADERS.timestamp) ?? "";
   const nonce = request.headers.get(HEADERS.nonce) ?? "", signature = request.headers.get(HEADERS.signature) ?? "";
-  if (!/^[a-z0-9][a-z0-9_-]{2,63}$/.test(grantId) || !/^[1-9][0-9]{12}$/.test(timestamp) ||
+  if (!BILLING_SERVICE_GRANT_ID_PATTERN.test(grantId) || !/^[1-9][0-9]{12}$/.test(timestamp) ||
       !/^[A-Za-z0-9_-]{16,64}$/.test(nonce) || !/^v1=[A-Za-z0-9+/]{86}==$/.test(signature)) refuse("headers_invalid");
   const pins = readPins(env.HELM_BILLING_SERVICE_GRANT_PINS);
   if (!Object.hasOwn(pins, grantId)) refuse("grant_untrusted"); // unpinned ids never reach the database
@@ -79,11 +81,11 @@ export async function authenticateBillingService(client: PrismaClient, request: 
   if (!grant || grant.id !== grantId) refuse("grant_unknown");
   if (pins[grant.id] !== grant.contentHash ||
       billingServiceGrantHash(grant) !== grant.contentHash) refuse("grant_untrusted");
-  const key = publicKey(grant);
+  const key = billingServiceGrantPublicKey(grant);
   const parts = { method: request.method, path: request.path, grantId, timestamp, nonce, body: request.body };
   if (!verify(null, canonicalRequest(parts), key, signatureBytes)) refuse("signature_invalid");
   if (grant.revokedAt !== null || grant.validFrom > grant.now || grant.validUntil <= grant.now) refuse("grant_inactive");
-  if (!grantScopes(grant.scopesJson).includes(scope)) refuse("scope_denied");
+  if (!billingServiceGrantScopes(grant.scopesJson).includes(scope)) refuse("scope_denied");
   const signedAt = Number(timestamp);
   if (Math.abs(grant.now.getTime() - signedAt) > BILLING_SIGNATURE_WINDOW_MS) refuse("timestamp_outside_window");
   await client.$executeRaw`DELETE FROM BillingServiceNonce
@@ -101,7 +103,7 @@ export async function authenticateBillingService(client: PrismaClient, request: 
 }
 
 /** The pinned row's key must be an Ed25519 SPKI public key (never a private PEM) matching its stored fingerprint. */
-function publicKey(grant: BillingServiceGrantRow): KeyObject {
+export function billingServiceGrantPublicKey(grant: Pick<BillingServiceGrantRow, "publicKeyPem" | "keyFingerprint">): KeyObject {
   if (!grant.publicKeyPem.startsWith("-----BEGIN PUBLIC KEY-----\n")) refuse("grant_key_invalid");
   let key: KeyObject;
   try { key = createPublicKey(grant.publicKeyPem); } catch { return refuse("grant_key_invalid"); }
@@ -110,7 +112,7 @@ function publicKey(grant: BillingServiceGrantRow): KeyObject {
 }
 
 /** Canonical (sorted, unique, known) scope list; anything else trusts no scope. */
-function grantScopes(scopesJson: string): readonly string[] {
+export function billingServiceGrantScopes(scopesJson: string): readonly string[] {
   let scopes: unknown;
   try { scopes = JSON.parse(scopesJson); } catch { return []; }
   if (!Array.isArray(scopes) || scopes.some(s => !BILLING_SERVICE_SCOPES.includes(s)) ||
