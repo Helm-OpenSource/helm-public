@@ -89,8 +89,15 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
       ...(auth.contentLength ? { "content-length": auth.contentLength } : {}) } }));
     return { status: response.status, body: await response.json() };
   }
+  let workspaces = 0;
+  /** A payer governed by `ws` and bound to a fresh workspace of its own (reserve requires the subject's binding to name it). */
   async function payer(mode: "shadow" | "enforce", walletFen: number) {
+    const workspaceId = `bir-sw-${run}-${++workspaces}`;
+    await a.$executeRaw`INSERT INTO Workspace (id,name,slug,updatedAt) VALUES (${workspaceId},'Synthetic subject',${workspaceId},NOW(3))`;
+    await a.$executeRaw`INSERT INTO Membership (id,workspaceId,userId,role,status,updatedAt) VALUES (${`m-${workspaceId}`},${workspaceId},${owner},'OWNER','ACTIVE',NOW(3))`;
     const account = await createPayerAccount(a, { actorUserId: owner, workspaceId: ws, kind: "enterprise_contract", contractSubjectRef: "subject-bir" });
+    await bindScope(a, { actorUserId: owner, payerAccountId: account.id, expectedPayerVersion: 1, scopeKind: "workspace",
+      scopeRef: workspaceId, evidenceRef: "consent:bind" });
     await a.$executeRaw`UPDATE PayerAccount SET billingMode = ${mode} WHERE id = ${account.id}`; // no mode API yet
     if (walletFen > 0) await a.$transaction(tx => postFundsTransactionInTransaction(tx, { payerAccountId: account.id, kind: "topup",
       operationKey: `topup:${account.id}`, actor: { type: "SYSTEM", ref: "synthetic" }, evidenceRef: "verified-payment:synthetic",
@@ -100,10 +107,11 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
       operationKey: "grant:bir", evidenceRef: "consent:synthetic", validFrom: new Date("2026-11-01T00:00:00Z"),
       validUntil: new Date("2027-02-01T00:00:00Z"), limits: { perChargeLimitFen: BigInt(500), dailyLimitFen: BigInt(1000), monthlyLimitFen: BigInt(3000) } });
     await changeSpendGrant(a, { actorUserId: owner, grantId: spend.id, expectedVersion: 1, action: "activate", evidenceRef: "consent:on" });
-    return { payerRef: account.id, grantId: spend.id };
+    return { payerRef: account.id, grantId: spend.id, workspaceId };
   }
-  const reserveBody = (ids: { payerRef: string; grantId: string }, key: string, quantity = 2, extra: object = {}) => ({
-    idempotencyKey: `idem:${key}:${run}`, operationRef: `op:${key}:${run}`, ...ids, priceVersionId: priceId, billingEventRef: event,
+  const reserveBody = (ids: { payerRef: string; grantId: string; workspaceId: string }, key: string, quantity = 2, extra: object = {}) => ({
+    idempotencyKey: `idem:${key}:${run}`, operationRef: `op:${key}:${run}`, subjectScope: { kind: "workspace" as const, workspaceId: ids.workspaceId },
+    payerRef: ids.payerRef, grantId: ids.grantId, priceVersionId: priceId, billingEventRef: event,
     meterUnit: "document", quantity: String(quantity), ...extra });
   const refused = (status: number, code: string) => ({ status, body: { ok: false, code } });
   const reservations = (payerAccountId: string) => a.billingReservation.count({ where: { payerAccountId } });
@@ -209,6 +217,10 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
     const invalid = refused(400, "request_invalid");
     expect(await call("reserve", { ...reserveBody(ids, "s1"), amountFen: "1" }, { grantId: service })).toEqual(invalid);
     expect(await call("reserve", { ...reserveBody(ids, "s2"), quantity: 2 }, { grantId: service })).toEqual(invalid);
+    const { subjectScope: _scope, ...unscoped } = reserveBody(ids, "s7");
+    expect(await call("reserve", unscoped, { grantId: service })).toEqual(invalid); // P1-1: the subject is required
+    expect(await call("reserve", { ...reserveBody(ids, "s8"), subjectScope: { kind: "workspace", workspaceId: `bir-qws-none-${run}` } },
+      { grantId: service })).toEqual(refused(422, "grant_not_active")); // a workspace not bound to this payer
     expect(await call("reserve", "{", { grantId: service })).toEqual(invalid);
     expect(await call("reserve", reserveBody(ids, "s3", 0), { grantId: service })).toEqual(invalid);
     expect(await call("reserve", { ...reserveBody(ids, "s4"), idempotencyKey: "short" }, { grantId: service })).toEqual(invalid);
@@ -238,7 +250,7 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
     const business = await grant("biz", ["quote", "reserve", "settle", "release", "mark-unknown"]);
     const recon = await grant("recon", ["resolve-unknown"]);
     const ids = await payer("enforce", 1000);
-    await bindScope(a, { actorUserId: owner, payerAccountId: ids.payerRef, expectedPayerVersion: 1, scopeKind: "workspace",
+    await bindScope(a, { actorUserId: owner, payerAccountId: ids.payerRef, expectedPayerVersion: 2, scopeKind: "workspace",
       scopeRef: qws, evidenceRef: "consent:bind" });
     const quoteBody = { subjectScope: { kind: "workspace", workspaceId: qws }, billingEventRef: event, meterUnit: "document", quantity: "2" };
     expect(await call("quote", quoteBody, { grantId: business })).toEqual({ status: 200, body: { ok: true, payerRef: ids.payerRef,
@@ -255,6 +267,9 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
       expect(await call(op, step(r1, `x-${op}`, { operationRef: `op:e1:${run}`, ...extra }), { grantId: other }))
         .toEqual(refused(409, "reservation_state_conflict"));
     }
+    // settle takes the frozen reservation's payer: a payerRef is not part of its shape (P1-1)
+    expect(await call("settle", step(r1, "e1p", { quantityUsed: "1", payerRef: ids.payerRef }), { grantId: business }))
+      .toEqual(refused(400, "request_invalid"));
     const settled = await call("settle", step(r1, "e1", { quantityUsed: "1" }), { grantId: business });
     expect(settled).toMatchObject({ status: 200, body: { ok: true, state: "settled", chargeFen: "100" } });
     expect(Object.keys(settled.body).sort()).toEqual(["chargeFen", "chargeId", "ok", "state"]);
