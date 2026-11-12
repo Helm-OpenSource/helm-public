@@ -22,7 +22,7 @@ import "server-only";
 // No plaintext token or pairing code is stored, logged or put in an error or
 // audit payload: only sha256 hashes reach the database.
 
-import { ActorType, MembershipStatus, Prisma, type WorkspaceRole } from "@prisma/client";
+import { ActorType, MembershipStatus, Prisma, WorkspaceStatus, type WorkspaceRole } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { externalScopeOf } from "@/lib/auth/external-member-scope";
 import { evaluateLock, hashLoginIdentifier, nextStateOnFailure, type FailureLimit } from "@/lib/auth/login-rate-limit";
@@ -383,16 +383,18 @@ export type SeatDeviceClaimAnswer =
     };
 
 // The bound member must still be the one approved: same ACTIVE, internal
-// membership and unchanged password. Read outside the transaction (P2-7).
+// membership and unchanged password; then the workspace must still be ACTIVE
+// with its flag on (review of #551: a flag switched off after approval no
+// longer hands out a pair). Read outside the transaction (P2-7).
 async function loadClaimIdentity(row: {
   workspaceId: string | null;
   userId: string | null;
   membershipId: string | null;
   userPasswordSetAt: Date | null;
-}): Promise<SeatDeviceIdentity | null> {
+}): Promise<SeatDeviceIdentity | "workspace_not_enabled" | null> {
   if (!row.workspaceId || !row.userId) return null;
   const [workspace, membership, user] = await Promise.all([
-    db.workspace.findUnique({ where: { id: row.workspaceId }, select: { id: true, name: true } }),
+    db.workspace.findUnique({ where: { id: row.workspaceId }, select: { id: true, name: true, status: true, featureFlagsJson: true } }),
     db.membership.findUnique({
       where: { workspaceId_userId: { workspaceId: row.workspaceId, userId: row.userId } },
       select: { id: true, role: true, status: true, accessScope: true },
@@ -410,7 +412,10 @@ async function loadClaimIdentity(row: {
   ) {
     return null;
   }
-  return seatDeviceIdentity({ userId: row.userId, displayName: user.name, workspace, role: membership.role });
+  if (workspace.status !== WorkspaceStatus.ACTIVE || !isSeatDeviceWorkspaceEnabled(workspace.featureFlagsJson)) {
+    return "workspace_not_enabled";
+  }
+  return seatDeviceIdentity({ userId: row.userId, displayName: user.name, workspace: { id: workspace.id, name: workspace.name }, role: membership.role });
 }
 
 // "The pair was never used" is read from two columns this slice never sets:
@@ -478,6 +483,8 @@ export async function claimSeatDeviceAuthorization(input: {
     // Design §4.2: every other claim refusal is poll_token_invalid, including
     // a member who changed since approval.
     if (!identity) throw new SeatDeviceAuthError("poll_token_invalid");
+    // Switched off is not revoked (design §15.2): the request stays claimable.
+    if (identity === "workspace_not_enabled") throw new SeatDeviceAuthError("workspace_not_enabled");
     const pair = {
       accessTokenHash: access.tokenHash,
       accessExpiresAt: new Date(now.getTime() + SEAT_DEVICE_ACCESS_TOKEN_TTL_SECONDS * 1000),
