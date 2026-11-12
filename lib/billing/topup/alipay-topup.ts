@@ -1,12 +1,12 @@
 import "server-only";
 import { createPrivateKey, createPublicKey, createSign, createVerify } from "node:crypto";
-import { Prisma, type PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 import { buildAlipaySignContent, normalizePem } from "@/lib/billing/alipay";
 import { db } from "@/lib/db";
 import { isDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabilities";
-import { FundsRefusal } from "../funds/funds-journal";
 import type { MerchantRefLookup } from "./provider-observation";
-import { defineTopupProviderAdapter, TopupRefusal, verifyTopupCallback } from "./topup-orders";
+import { readNotifyBody, settleTopupNotify } from "./notify-entry";
+import { defineTopupProviderAdapter } from "./topup-orders";
 
 /**
  * Billing V1 S2-d1 Alipay (computer website payment) wallet top-up adapter and its own notify entry
@@ -14,7 +14,6 @@ import { defineTopupProviderAdapter, TopupRefusal, verifyTopupCallback } from ".
  * Secrets come from the environment only and never reach logs, errors or responses.
  */
 const GATEWAY_DEFAULT = "https://openapi.alipay.com/gateway.do";
-const MAX_BODY_BYTES = 16_384;
 const MAX_QUERY_RESPONSE_CHARS = 65_536;
 const QUERY_TIMEOUT_MS = 10_000;
 const IDENTIFIER = /^[0-9A-Za-z]{1,32}$/;
@@ -186,45 +185,14 @@ function alert(reason: string) { console.error("[billing-topup-alipay]", JSON.st
 const reply = (status: number, body: "success" | "fail") =>
   new Response(body, { status, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
 
-async function readBoundedText(request: Request): Promise<string | null> {
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  if (request.body) {
-    const reader = request.body.getReader();
-    for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
-      size += chunk.value.byteLength;
-      if (size > MAX_BODY_BYTES) { await reader.cancel(); return null; }
-      chunks.push(chunk.value);
-    }
-  }
-  return new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks));
-}
-
-/**
- * Alipay retries anything but the body `success`. `success` = the observation is durably handled (credited, replayed, state
- * recorded, or a payment exception persisted where a retry cannot help); retryable conditions answer non-success.
- */
+/** Alipay retries anything but the body `success` (answer policy shared in notify-entry.ts). */
 export async function handleAlipayTopupNotify(request: Request, client: PrismaClient = db) {
   const config = resolveAlipayTopup("notify");
   if (config === "off") return new Response("Not Found", { status: 404 });
   if (config === "unavailable") return reply(503, "fail"); // never credits; Alipay retries once configuration is complete
   if (!/^application\/x-www-form-urlencoded(\s*;|$)/i.test(request.headers.get("content-type") ?? "")) return reply(415, "fail");
-  if (!(Number(request.headers.get("content-length") ?? "0") <= MAX_BODY_BYTES)) return reply(413, "fail");
-  let rawBody: string | null;
-  try { rawBody = await readBoundedText(request); } catch { return reply(400, "fail"); }
-  if (rawBody === null) return reply(413, "fail");
-  try {
-    await verifyTopupCallback(client, createAlipayTopupAdapter(config), { headers: {}, rawBody });
-    return reply(200, "success");
-  } catch (error) {
-    if (error instanceof TopupRefusal) {
-      alert(error.code);
-      if (error.code === "payer_billing_off") return reply(503, "fail"); // recorded once; a later retry credits once re-enabled
-      return error.exception ? reply(200, "success") : reply(400, "fail");
-    }
-    const retryable = (error instanceof FundsRefusal && error.code === "funds_write_conflict") ||
-      error instanceof Prisma.PrismaClientInitializationError || error instanceof Prisma.PrismaClientKnownRequestError;
-    alert(error instanceof FundsRefusal ? error.code : retryable ? "database_unavailable" : "unexpected_error");
-    return reply(retryable ? 503 : 500, "fail");
-  }
+  const rawBody = await readNotifyBody(request);
+  if (typeof rawBody === "number") return reply(rawBody, "fail");
+  const { acknowledged, status } = await settleTopupNotify(client, createAlipayTopupAdapter(config), { headers: {}, rawBody }, alert);
+  return reply(status, acknowledged ? "success" : "fail");
 }
