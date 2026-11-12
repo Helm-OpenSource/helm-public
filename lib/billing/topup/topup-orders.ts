@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
-import { ActorType, Prisma, type PaymentOrderState, type PrismaClient } from "@prisma/client";
+import { ActorType, Prisma, type PaymentOrder, type PaymentOrderState, type PrismaClient } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { canManageWorkspaceBilling } from "@/lib/auth/billing-governance";
 import { FundsRefusal, postFundsTransactionInTransaction, runFundsTransactionWithRetry } from "../funds/funds-journal";
@@ -16,13 +16,14 @@ import { observeAlipayTrade, observeWeChatPayTransaction, type MerchantRefLookup
  */
 export const TOPUP_MIN_FEN = BigInt(100); // 1 yuan
 export const TOPUP_MAX_FEN = BigInt(5_000_000); // 50 000 yuan per order; provisional until finance approves limits
-const ORDER_TTL_MS = 2 * 60 * 60 * 1000;
+export const TOPUP_ORDER_TTL_MS = 2 * 60 * 60 * 1000;
 const VERIFIER = { type: "SYSTEM" as const, ref: "billing-topup-verifier" };
 const SOURCE_PAGE = "/billing/topup";
 const ORDER_NO = /^tp[wa]_[0-9a-f]{28}$/;
 const TXN_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 export type TopupRefusalCode = "topup_input_invalid" | "topup_amount_out_of_range" | "topup_forbidden" | "topup_billing_off" |
+  "topup_rate_limited" | "topup_idempotency_conflict" |
   "topup_observation_invalid" | "topup_signature_invalid" | "topup_order_unknown" | "topup_order_type_invalid" |
   "topup_provider_mismatch" | "topup_merchant_mismatch" | "topup_amount_mismatch" | "topup_currency_mismatch" |
   "topup_txn_conflict" | "topup_order_paid_by_other_txn" | "topup_invariant_breach" | "topup_observation_untrusted" |
@@ -47,34 +48,69 @@ function newProviderOrderNo(provider: TopupProvider) {
 
 export type CreateTopupOrderInput = { actorUserId: string; workspaceId: string; provider: TopupProvider; amountFen: bigint;
   /** Resolved by the server from merchant configuration, never from the client. */
-  merchantRef: string; appRef: string; now?: Date };
+  merchantRef: string; appRef: string; now?: Date;
+  /** S2-d2 route: the caller's Idempotency-Key; the same key with the same request replays the order, with another conflicts. */
+  idempotencyKey?: string };
+
+/** Contract S2D §2: per creator and workspace at most 5 open unpaid orders and 5 creations a minute. */
+export const TOPUP_OPEN_ORDER_LIMIT = 5;
+export const TOPUP_CREATIONS_PER_MINUTE = 5;
+const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{8,128}$/;
 
 /** OWNER or BILLING_ADMIN of the workspace; the payer is resolved server-side and must be in shadow or enforce mode. */
 export async function createTopupOrder(client: PrismaClient, input: CreateTopupOrderInput) {
+  return (await createOrReplayTopupOrder(client, input)).order as PaymentOrder; // without a key nothing is replayed
+}
+
+export type ReplayedTopupOrder = Pick<PaymentOrder, "id" | "provider" | "providerOrderNo" | "amountFen" | "state" | "expiresAt">;
+
+/** As createTopupOrder, with Idempotency-Key replay and the creation limits; `replayed` marks an earlier order returned again. */
+export async function createOrReplayTopupOrder(client: PrismaClient, input: CreateTopupOrderInput):
+  Promise<{ order: PaymentOrder | ReplayedTopupOrder; replayed: boolean }> {
   reference(input.actorUserId); reference(input.workspaceId); reference(input.merchantRef); reference(input.appRef);
   if (input.provider !== "wechat_pay" && input.provider !== "alipay") refuse("topup_input_invalid");
   if (typeof input.amountFen !== "bigint" || input.amountFen < TOPUP_MIN_FEN || input.amountFen > TOPUP_MAX_FEN) {
     refuse("topup_amount_out_of_range");
   }
+  if (input.idempotencyKey !== undefined && !IDEMPOTENCY_KEY.test(input.idempotencyKey)) refuse("topup_input_invalid");
   const now = input.now ?? new Date();
+  const createdBy = `USER:${input.actorUserId}`;
+  const requestHash = sha256(JSON.stringify([input.provider, input.amountFen.toString(), input.merchantRef, input.appRef]));
   return client.$transaction(async tx => {
+    // The creator's membership row lock serializes this creator's concurrent creations. The reads below are locking reads, so
+    // they see orders a previous lock holder committed (a plain read would use a snapshot taken before the lock was granted).
     try { await lockBillingAuthority(tx, input.actorUserId, [input.workspaceId], canManageWorkspaceBilling); } catch (error) {
       if (error instanceof Error && error.message === "payer_binding_forbidden") refuse("topup_forbidden");
       throw error;
     }
+    if (input.idempotencyKey !== undefined) {
+      const [earlier] = await tx.$queryRaw<Array<ReplayedTopupOrder & { requestHash: string | null }>>`
+        SELECT id, provider, providerOrderNo, amountFen, state, expiresAt, requestHash FROM PaymentOrder
+        WHERE workspaceId = ${input.workspaceId} AND createdBy = ${createdBy} AND idempotencyKey = ${input.idempotencyKey} FOR SHARE`;
+      if (earlier) {
+        if (earlier.requestHash !== requestHash) refuse("topup_idempotency_conflict");
+        const { requestHash: _hash, ...order } = earlier;
+        return { order: { ...order, amountFen: BigInt(order.amountFen) }, replayed: true };
+      }
+    }
+    const [{ open, recent }] = await tx.$queryRaw<Array<{ open: bigint | null; recent: bigint | null }>>`
+      SELECT SUM(state IN ('created', 'pending', 'unknown') AND expiresAt > ${now}) AS open,
+        SUM(createdAt > ${new Date(now.getTime() - 60_000)}) AS recent
+      FROM PaymentOrder WHERE workspaceId = ${input.workspaceId} AND createdBy = ${createdBy} FOR SHARE`;
+    if (Number(open ?? 0) >= TOPUP_OPEN_ORDER_LIMIT || Number(recent ?? 0) >= TOPUP_CREATIONS_PER_MINUTE) refuse("topup_rate_limited");
     const payer = await resolvePayerForWorkspaceInTransaction(tx, input.workspaceId);
     if (payer.billingMode !== "shadow" && payer.billingMode !== "enforce") refuse("topup_billing_off");
     const order = await tx.paymentOrder.create({ data: { payerAccountId: payer.payerAccountId, payerBindingId: payer.bindingId,
       workspaceId: input.workspaceId, orderType: "wallet_topup", provider: input.provider,
       providerOrderNo: newProviderOrderNo(input.provider), amountFen: input.amountFen, currency: "CNY",
-      merchantRef: input.merchantRef, appRef: input.appRef, expiresAt: new Date(now.getTime() + ORDER_TTL_MS),
-      createdBy: `USER:${input.actorUserId}` } });
+      merchantRef: input.merchantRef, appRef: input.appRef, expiresAt: new Date(now.getTime() + TOPUP_ORDER_TTL_MS), createdBy,
+      idempotencyKey: input.idempotencyKey ?? null, requestHash: input.idempotencyKey === undefined ? null : requestHash } });
     await writeAuditLog({ workspaceId: input.workspaceId, userId: input.actorUserId, actor: input.actorUserId,
       actorType: ActorType.USER, actionType: "BILLING_TOPUP_ORDER_CREATED", targetType: "PaymentOrder", targetId: order.id,
       summary: "Created wallet top-up order", sourcePage: SOURCE_PAGE, relatedObjectType: "PayerAccount",
       relatedObjectId: payer.payerAccountId, payload: { provider: order.provider, providerOrderNo: order.providerOrderNo,
         amountFen: order.amountFen.toString(), billingMode: payer.billingMode } }, { client: tx });
-    return order;
+    return { order, replayed: false };
   }, { maxWait: 5000, timeout: 10000 });
 }
 

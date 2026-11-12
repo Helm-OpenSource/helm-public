@@ -73,6 +73,28 @@ notify route (`/api/billing/alipay/notify`, unchanged): top-up orders are create
   `npm run test:billing:mysql` (forged signature, app/seller mismatch, subscription order number, amount mismatch, duplicate notify,
   concurrent notify and query, late success after close, refund news, billing off, gate off). Roll back: set the gate to `false`; no migration.
 
+## Order creation and cashier URL / 建单与支付链接（S2-d2a）
+
+Route `POST /api/billing/v1/topup-orders` (`app/api/billing/v1/topup-orders/route.ts`), migration
+`20261112120000_billing_topup_order_idempotency` (rollback `prisma/rollback/20261112_rollback_billing_topup_order_idempotency.sql`).
+
+- **Gate**: the same `resolveAlipayTopup("create")` as the notify entry, plus `APP_URL` must be an https origin on the default port
+  (`topupAppOrigin`); off → 404, incomplete → `503 {"error":"topup_unavailable"}` (充值暂不可用) and one alert. Nothing is created.
+- **Request**: session required (401); header `Idempotency-Key` (8–128 of `[A-Za-z0-9._:-]`, 400 without it); JSON body
+  `{"provider":"alipay","amountFen":"<integer string>"}`, anything else in the body is ignored. `wechat_pay` answers
+  `topup_provider_unavailable` until its adapter lands. Workspace, payer, merchant/app refs and the order number are server-side.
+- **Rules** (`createOrReplayTopupOrder`, one transaction after the creator's membership row lock): OWNER/BILLING_ADMIN (403), payer
+  bound and `shadow|enforce` (409 `topup_billing_off`), 1–50 000 yuan (400); the same key with the same request replays the order (200,
+  `replayed: true`), with a different request 409 `topup_idempotency_conflict`; per creator and workspace at most 5 open unpaid orders and
+  5 creations a minute (429 `topup_rate_limited`). The reads after the lock are locking reads, so concurrent requests serialize.
+- **Cashier URL** (`buildAlipayTopupPayUrl`, built, never sent by the server): signed `alipay.trade.page.pay` GET URL with
+  `notify_url = APP_URL + /api/billing/v1/topup-notify/alipay`, `return_url = APP_URL + /billing/topup?order=<order id>`,
+  `product_code=FAST_INSTANT_TRADE_PAY`, `total_amount` formatted exactly from fen, fixed `subject`, `time_expire` = order expiry
+  (Beijing time), and **no `passback_params`**. Returned only while the order is `created|pending` and unexpired.
+- **Legacy guard**: the subscription notify route `/api/billing/alipay/notify` answers `400 fail` for any verified `tpa_`/`tpw_`
+  `out_trade_no` before recording a callback event or resolving a workspace (no write). 旧订阅入口拒绝充值单号。The WeChat Pay
+  subscription route gets the same guard in the WeChat d2 slice.
+
 ## Verification and rollback / 验证与回滚
 
 - Unit `topup-orders.test.ts`; `npm run test:billing:mysql` (CI `mysql:8.4`) with a synthetic HMAC adapter covers the rules above,

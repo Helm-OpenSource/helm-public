@@ -22,7 +22,7 @@ const IDENTIFIER = /^[0-9A-Za-z]{1,32}$/;
 export type AlipayTopupConfig = { appId: string; sellerId: string; privateKey: string; alipayPublicKey: string; gatewayUrl: string };
 
 export type AlipayTopupConfigProblem = "app_id_invalid" | "seller_id_invalid" | "private_key_invalid" | "public_key_invalid" |
-  "gateway_invalid";
+  "gateway_invalid" | "app_url_invalid";
 const parses = (parse: () => unknown) => { try { parse(); return true; } catch { return false; } };
 
 /** Fixed problem codes only (never values). Keys must parse as PEM, so a malformed key closes the entry instead of failing later. */
@@ -47,6 +47,18 @@ export function getAlipayTopupConfig(env: Readonly<Record<string, string | undef
 }
 
 /**
+ * Origin for every URL we hand to Alipay or the browser (notify_url, return_url, top-up page): APP_URL only, https on the default
+ * port, no credentials or path. Anything else is null, which closes order creation (contract S2D §6, §10.3).
+ */
+export function topupAppOrigin(env: Readonly<Record<string, string | undefined>> = process.env) {
+  const raw = env.APP_URL?.trim() ?? "";
+  if (!URL.canParse(raw)) return null;
+  const url = new URL(raw);
+  return url.protocol === "https:" && url.port === "" && !url.username && !url.password && url.pathname === "/" && !url.search &&
+    !url.hash ? url.origin : null;
+}
+
+/**
  * The one availability decision for every Alipay top-up entry (notify now; order creation and query in S2-d2). The gate is on
  * by default (owner 2026-11-12), so incomplete merchant configuration is what keeps the entry closed: "unavailable" never
  * credits or creates anything, and each refusal logs one alert event with fixed problem codes.
@@ -55,6 +67,7 @@ export function resolveAlipayTopup(entry: "notify" | "create" | "query",
   env: Readonly<Record<string, string | undefined>> = process.env): AlipayTopupConfig | "off" | "unavailable" {
   if (!isDeploymentCapabilityEnabled("billing_topup_alipay", env) || !isDeploymentCapabilityEnabled("financial_action", env)) return "off";
   const { problems, config } = getAlipayTopupConfigProblems(env);
+  if (entry === "create" && !topupAppOrigin(env)) problems.push("app_url_invalid");
   if (problems.length === 0) return config;
   console.error("[billing-topup-alipay]", JSON.stringify({ event: "topup_unavailable", reason: "config_unavailable", entry, problems }));
   return "unavailable";
@@ -111,12 +124,13 @@ function rawNode(raw: string, key: string) {
   throw new Error("query_response_invalid");
 }
 
-const beijingTimestamp = () => new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 19).replace("T", " ");
+
+const beijingTime = (at: Date) => new Date(at.getTime() + 8 * 3_600_000).toISOString().slice(0, 19).replace("T", " ");
 
 /** alipay.trade.query signed by the configured app; the response node is signature-verified and keeps the amount. */
 async function queryTrade(config: AlipayTopupConfig, fetchImpl: typeof fetch, providerOrderNo: string) {
   const params: Record<string, string> = { app_id: config.appId, method: "alipay.trade.query", charset: "utf-8", sign_type: "RSA2",
-    timestamp: beijingTimestamp(), version: "1.0", biz_content: JSON.stringify({ out_trade_no: providerOrderNo }) };
+    timestamp: beijingTime(new Date()), version: "1.0", biz_content: JSON.stringify({ out_trade_no: providerOrderNo }) };
   params.sign = createSign("RSA-SHA256").update(buildAlipaySignContent(params), "utf8").sign(config.privateKey, "base64");
   const response = await fetchImpl(config.gatewayUrl, { method: "POST", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(QUERY_TIMEOUT_MS),
     headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" }, body: new URLSearchParams(params).toString() });
@@ -135,6 +149,30 @@ async function queryTrade(config: AlipayTopupConfig, fetchImpl: typeof fetch, pr
   if (trade.code !== "10000") throw new Error("query_failed");
   return { ...identity, out_trade_no: str(trade.out_trade_no), trade_no: str(trade.trade_no), trade_status: str(trade.trade_status),
     total_amount: str(trade.total_amount), trans_currency: str(trade.trans_currency) };
+}
+
+export const ALIPAY_TOPUP_NOTIFY_PATH = "/api/billing/v1/topup-notify/alipay";
+export const TOPUP_PAGE_PATH = "/billing/topup";
+/** Fixed text: nothing we write into a signed Alipay field comes from a user (contract S2D §6). */
+export const ALIPAY_TOPUP_SUBJECT = "Helm 钱包充值";
+const fenToYuan = (fen: bigint) => `${fen / BigInt(100)}.${(fen % BigInt(100)).toString().padStart(2, "0")}`;
+
+/**
+ * Signed `alipay.trade.page.pay` cashier URL for one top-up order; built only, never sent from here (the browser opens it).
+ * notify_url is always the top-up entry and there is no passback_params, so a misrouted notify never resolves a workspace on the
+ * legacy subscription route. The cashier closes when the order expires.
+ */
+export function buildAlipayTopupPayUrl(config: AlipayTopupConfig, appOrigin: string,
+  order: { id: string; providerOrderNo: string; amountFen: bigint; expiresAt: Date }, now = new Date()) {
+  const params: Record<string, string> = { app_id: config.appId, method: "alipay.trade.page.pay", charset: "utf-8", sign_type: "RSA2",
+    timestamp: beijingTime(now), version: "1.0", notify_url: `${appOrigin}${ALIPAY_TOPUP_NOTIFY_PATH}`,
+    return_url: `${appOrigin}${TOPUP_PAGE_PATH}?order=${encodeURIComponent(order.id)}`,
+    biz_content: JSON.stringify({ out_trade_no: order.providerOrderNo, product_code: "FAST_INSTANT_TRADE_PAY",
+      total_amount: fenToYuan(order.amountFen), subject: ALIPAY_TOPUP_SUBJECT, time_expire: beijingTime(order.expiresAt) }) };
+  params.sign = createSign("RSA-SHA256").update(buildAlipaySignContent(params), "utf8").sign(config.privateKey, "base64");
+  const url = new URL(config.gatewayUrl);
+  for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+  return url.toString();
 }
 
 export function createAlipayTopupAdapter(config: AlipayTopupConfig, fetchImpl: typeof fetch = fetch) {
