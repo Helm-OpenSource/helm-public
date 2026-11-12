@@ -65,7 +65,7 @@ async function ack(client: PrismaClient, args: Args) {
   if (!args.apply) return { ok: true, command: "ack", applied: false, exception: view(row!) };
   const exception = view(row!);
   await client.$transaction(async tx => {
-    const changed = await tx.$executeRaw`UPDATE BillingOutbox SET deliveredAt = CURRENT_TIMESTAMP(3) WHERE aggregateType = 'PaymentException'
+    const changed = await tx.$executeRaw`UPDATE BillingOutbox SET deliveredAt = ${new Date()} WHERE aggregateType = 'PaymentException'
       AND eventType = 'payment_exception' AND aggregateId = ${key} AND deliveredAt IS NULL`;
     if (changed !== 1) fail("exception_already_handled");
     await writeAuditLog({ workspaceId: exception.workspaceId, userId: actorUserId, actor: actorUserId, actorType: ActorType.USER,
