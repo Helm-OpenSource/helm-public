@@ -36,10 +36,14 @@ queries. No route, UI, real provider call or merchant credential (S2-d1 adds the
   (`topup_query_required`): `verifyTopupCallback` re-queries the provider (outside any transaction) and the query's own status decides:
   paid credits once; closed (e.g. refunded in full) credits nothing and keeps a `paid_callback_closed` exception, then acknowledges;
   anything else (`not_paid`, unknown, no trade) is `topup_query_unconfirmed`, not acknowledged; a failed query fails the notify too.
+  Both unsettled cases first keep one `paid_callback_unconfirmed` exception per order, so they stay visible after Alipay stops retrying.
+- **Received amount**: once any report recorded an `amount_mismatch` for an order, no later report credits it (a refresh query that
+  omits `receipt_amount` included); the record is the case a person settles.
   Not closed: a partial refund still queries as the original `TRADE_SUCCESS` amount (Q5, reconciliation via the refund record below).
 - **Payment exceptions** (outbox `aggregateType=PaymentException`, `eventType=payment_exception`, plus audit `BILLING_TOPUP_PAYMENT_EXCEPTION`;
-  idempotent per key — `reason:provider:txn`, or `reason:provider:<order number>` for `paid_then_*`, `unknown_before_credit` and
-  `observation_invalid`, so one order keeps only its first such record; never a balance change; refund amount (fen), batch and time travel
+  idempotent per key — `reason:provider:txn`; `reason:provider:<order number>` for `observation_invalid` and `paid_callback_*`; and for
+  `paid_then_*` / `unknown_before_credit` `reason:provider:<order number>:<refund batch>` when the report names a batch (one record
+  per refund), else per order; never a balance change; refund amount (fen), batch and time travel
   in `refund` when the provider sent them): `paid_then_closed` / `paid_then_unknown` (e.g. REFUND) for a credited order,
   in the same transaction; `unknown_before_credit` (e.g. refund news reaching an uncredited order; the record survives a later credit),
   in the same transaction as the state change; `order_paid_by_other_txn`, `payer_billing_off`, `amount_mismatch`, `currency_mismatch` in
@@ -51,7 +55,14 @@ queries. No route, UI, real provider call or merchant credential (S2-d1 adds the
   outbox row (no dispatcher reads these rows; if one is added, this marker must move). After reconciling against the merchant
   console: `ack --key --actor-user-id --note --apply` (sets `deliveredAt`, audit `BILLING_TOPUP_PAYMENT_EXCEPTION_HANDLED`). For an
   order a notify could not settle (e.g. `observation_invalid` after a parser fix, or older than the 72 h session window):
-  `reverify --order-id --apply` re-queries Alipay through the verification entry (credits at most once). Without `--apply` both only show.
+  `reverify --order-id --actor-user-id --apply` re-queries the order's provider through the verification entry (credits at most once;
+  audit `BILLING_TOPUP_REVERIFY`). Without `--apply` both only show. The actor must be the order workspace's OWNER/BILLING_ADMIN or
+  hold an active platform finance role (maker or checker); anyone else is `actor_forbidden`. `list` also reports `unhandledTotal`.
+- **Operating rule (owner 2026-11-12) / 运营规则**: an uncredited top-up order is **never refunded in the merchant console first** —
+  run `reverify` first. A paid notify that is retried after a refund made behind the system's back would otherwise credit in full.
+- **Before real collection (sandbox, owner authorization)**: confirm the actual shape of `receipt_amount` in `alipay.trade.query`
+  answers (string, absent, or `"0.00"`): absent lets a query credit without the received-amount check (guarded only by an earlier
+  `amount_mismatch` record), `"0.00"` would refuse every query credit.
 - Write conflicts (P2034, MySQL 1213, same-key insert) retry up to 3 times, then `funds_write_conflict`.
 
 ## Alipay adapter and notify entry / 支付宝适配器与充值通知入口（S2-d1）

@@ -1,7 +1,11 @@
 import "server-only";
-import { ActorType, type PrismaClient } from "@prisma/client";
+import { ActorType, type Prisma, type PrismaClient } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
+import { canManageWorkspaceBilling } from "@/lib/auth/billing-governance";
+import { findPlatformFinanceActorInTransaction } from "../bank-receipts/bank-receipts";
+import { lockBillingAuthority } from "../payer/payer-accounts";
 import { createAlipayTopupAdapter, resolveAlipayTopup } from "./alipay-topup";
+import { createWeChatPayTopupAdapter, getWeChatPayTopupConfig } from "./wechatpay-topup";
 import { TopupRefusal, verifyTopupByQuery, type PaymentException, type TopupProviderAdapter } from "./topup-orders";
 
 /**
@@ -12,9 +16,12 @@ import { TopupRefusal, verifyTopupByQuery, type PaymentException, type TopupProv
  *
  *   npm run billing:topup-exceptions -- list [--all] [--limit=<1-500>]
  *   npm run billing:topup-exceptions -- ack --key=<exception key> --actor-user-id=<id> --note=<text> [--apply]
- *   npm run billing:topup-exceptions -- reverify --order-id=<id> [--apply]
+ *   npm run billing:topup-exceptions -- reverify --order-id=<id> --actor-user-id=<id> [--apply]
+ *
+ * The acting person must be the order workspace's OWNER/BILLING_ADMIN or hold an active platform finance role (maker or checker,
+ * the existing PlatformFinanceGrant); `ack` and `reverify --apply` each write one audit row naming them.
  */
-const COMMANDS: Record<string, string[]> = { list: ["all", "limit"], ack: ["key", "actor-user-id", "note"], reverify: ["order-id"] };
+const COMMANDS: Record<string, string[]> = { list: ["all", "limit"], ack: ["key", "actor-user-id", "note"], reverify: ["order-id", "actor-user-id"] };
 const REF = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,190}$/;
 const SOURCE_PAGE = "/billing/topup";
 
@@ -51,7 +58,18 @@ async function list(client: PrismaClient, args: Args) {
   const rows = await client.billingOutbox.findMany({ where: { aggregateType: "PaymentException", eventType: "payment_exception",
     ...(args.flags.has("all") ? {} : { deliveredAt: null }) }, orderBy: { createdAt: "asc" }, take: Number(limit),
     select: { aggregateId: true, payload: true, createdAt: true, deliveredAt: true } });
-  return { ok: true, command: "list", unhandledOnly: !args.flags.has("all"), exceptions: rows.map(view) };
+  const unhandledTotal = await client.billingOutbox.count({ where: { aggregateType: "PaymentException", eventType: "payment_exception",
+    deliveredAt: null } });
+  return { ok: true, command: "list", unhandledOnly: !args.flags.has("all"), unhandledTotal, exceptions: rows.map(view) };
+}
+
+/** OWNER/BILLING_ADMIN of the workspace, or an active platform finance maker/checker; anyone else (or no such user) is refused. */
+async function assertOperator(tx: Prisma.TransactionClient, actorUserId: string, workspaceId: string) {
+  if (await findPlatformFinanceActorInTransaction(tx, actorUserId, ["maker", "checker"])) return;
+  try { await lockBillingAuthority(tx, actorUserId, [workspaceId], canManageWorkspaceBilling); } catch (error) {
+    if (error instanceof Error && error.message === "payer_binding_forbidden") fail("actor_forbidden");
+    throw error;
+  }
 }
 
 async function ack(client: PrismaClient, args: Args) {
@@ -65,6 +83,7 @@ async function ack(client: PrismaClient, args: Args) {
   if (!args.apply) return { ok: true, command: "ack", applied: false, exception: view(row!) };
   const exception = view(row!);
   await client.$transaction(async tx => {
+    await assertOperator(tx, actorUserId, exception.workspaceId);
     const changed = await tx.$executeRaw`UPDATE BillingOutbox SET deliveredAt = ${new Date()} WHERE aggregateType = 'PaymentException'
       AND eventType = 'payment_exception' AND aggregateId = ${key} AND deliveredAt IS NULL`;
     if (changed !== 1) fail("exception_already_handled");
@@ -80,17 +99,27 @@ async function reverify(client: PrismaClient, args: Args, adapterFor: (provider:
   const order = await client.paymentOrder.findUnique({ where: { id: ref(args, "order-id") }, select: { id: true, provider: true,
     providerOrderNo: true, state: true, amountFen: true, workspaceId: true, createdAt: true } });
   if (!order) fail("order_unknown");
+  const actorUserId = ref(args, "actor-user-id");
+  await client.$transaction(tx => assertOperator(tx, actorUserId, order!.workspaceId));
   if (!args.apply) return { ok: true, command: "reverify", applied: false, order };
-  try {
-    return { ok: true, command: "reverify", applied: true, result: await verifyTopupByQuery(client, adapterFor(order!.provider), order!.id) };
-  } catch (error) {
-    if (error instanceof TopupRefusal) fail(error.code);
-    return fail("provider_query_failed"); // fixed code: never provider text
+  let result: Awaited<ReturnType<typeof verifyTopupByQuery>> | null = null, code: string | null = null;
+  try { result = await verifyTopupByQuery(client, adapterFor(order!.provider), order!.id); } catch (error) {
+    // Fixed codes only, never provider text.
+    code = error instanceof TopupRefusal || error instanceof TopupExceptionsOperatorError ? error.code : "provider_query_failed";
   }
+  await writeAuditLog({ workspaceId: order!.workspaceId, userId: actorUserId, actor: actorUserId, actorType: ActorType.USER,
+    actionType: "BILLING_TOPUP_REVERIFY", targetType: "PaymentOrder", targetId: order!.id, summary: "Top-up order re-verified by an operator",
+    sourcePage: SOURCE_PAGE, payload: { outcome: result?.outcome ?? null, state: result?.state ?? null, code } }, { client });
+  if (code) fail(code);
+  return { ok: true, command: "reverify", applied: true, result };
 }
 
-/** Alipay only for now; the WeChat Pay adapter plugs in here when it lands. */
+/** The order's own provider, with that provider's configuration; incomplete configuration is a fixed refusal. */
 function liveAdapter(provider: string): TopupProviderAdapter {
+  if (provider === "wechat_pay") {
+    const config = getWeChatPayTopupConfig();
+    return config ? createWeChatPayTopupAdapter(config) : fail("provider_unavailable:wechat_pay");
+  }
   const config = provider === "alipay" ? resolveAlipayTopup("query") : "off";
   if (typeof config === "string") return fail(`provider_unavailable:${provider}`);
   return createAlipayTopupAdapter(config);

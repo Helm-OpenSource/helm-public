@@ -6,7 +6,7 @@
  *
  *   npm run billing:topup-exceptions -- list [--all] [--limit=<n>]
  *   npm run billing:topup-exceptions -- ack --key=<key> --actor-user-id=<id> --note=<text> [--apply]
- *   npm run billing:topup-exceptions -- reverify --order-id=<id> [--apply]
+ *   npm run billing:topup-exceptions -- reverify --order-id=<id> --actor-user-id=<id> [--apply]
  *
  * Output is one JSON document; exit 0 ok, 1 refusal, 2 usage.
  */
