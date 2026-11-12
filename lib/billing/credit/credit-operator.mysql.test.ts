@@ -261,15 +261,30 @@ describe.skipIf(!url)("credit operator CLI against MySQL", () => {
     const racers = [await workspace(), await workspace()];
     const race = list(racers.map(item => ({ ...item, limitFen: 5000 })));
     const dry = await dryRun(race);
-    const b = new PrismaClient({ datasources: { db: { url } } });
+    const [b, c] = [0, 1].map(() => new PrismaClient({ datasources: { db: { url } } }));
     try {
       const argv = ["batch", `--list-file=${race}`, "--step=propose", `--actor-user-id=${maker}`, `--expect-list-sha=${dry.out.listSha}`,
         `--expect-plan-sha=${dry.out.planSha}`, "--apply"];
-      const results = await Promise.all([a, b].map(client => runCreditOperator(client, argv, path => Buffer.from(files.get(path) ?? ""))));
+      // Barrier: hold the first payer's lock until both runs wait on it, so both proposes are open before either commits.
+      let release = () => {};
+      let held = () => {};
+      const isHeld = new Promise<void>(resolve => { held = resolve; });
+      const barrier = c.$transaction(async tx => {
+        await tx.$queryRaw`SELECT id FROM PayerAccount WHERE id = ${racers[0].payer} FOR UPDATE`;
+        held();
+        await new Promise<void>(resolve => { release = resolve; });
+      }, { timeout: 10000 });
+      await isHeld;
+      const runs = [a, b].map(client => runCreditOperator(client, argv, path => Buffer.from(files.get(path) ?? "")));
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      release();
+      await barrier;
+      const results = await Promise.all(runs);
       const codes = results.flatMap(result => (result.output as { rows: Array<{ status: string; code?: string }> }).rows)
         .filter(item => item.status === "failed").map(item => item.code);
+      expect(codes.length).toBeGreaterThan(0); // the race was really exercised
       expect(codes.every(code => code === "credit_write_conflict")).toBe(true);
-    } finally { await b.$disconnect(); }
+    } finally { await Promise.all([b.$disconnect(), c.$disconnect()]); }
     for (const { payer } of racers) expect(await a.creditFacility.count({ where: { payerAccountId: payer } })).toBe(1);
   });
 });
