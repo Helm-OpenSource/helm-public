@@ -2,7 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 import { FundsRefusal, isRetryableFundsConflict, runFundsTransactionWithRetry } from "../funds/funds-journal";
 import { observeAlipayTrade, observeWeChatPayTransaction, yuanToFenExact, type ObservedPayment } from "./provider-observation";
-import { createTopupOrder, defineTopupProviderAdapter, nextUnpaidState, verifyTopupCallback } from "./topup-orders";
+import { checkTopupAmountFen, createTopupOrder, defineTopupProviderAdapter, nextUnpaidState, verifyTopupCallback } from "./topup-orders";
 
 const refs = (mch: string, app: string) => (mch === "mch-1" && app === "app-1" ? { merchantRef: "merchant:a", appRef: "app:a" } : null);
 const ctx = { source: "callback" as const, refs };
@@ -54,11 +54,16 @@ describe("top-up trust boundary", () => {
   });
   it("refuses out-of-range amounts before opening a transaction", async () => {
     const client = { $transaction: vi.fn() };
-    for (const amountFen of [BigInt(99), BigInt(5_000_001), 100 as unknown as bigint]) {
+    for (const amountFen of [BigInt(9_999), BigInt(0), BigInt(10_000_010_000), 10_000 as unknown as bigint]) {
       await expect(createTopupOrder(db(client), { actorUserId: "u", workspaceId: "w", provider: "alipay", amountFen,
         merchantRef: "m", appRef: "a" })).rejects.toThrow("topup_amount_out_of_range");
     }
     expect(client.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("accepts only whole multiples of 100 yuan with no business cap (owner 2026-11-12), one rule for every provider", () => {
+    for (const fen of [10_000, 50_000, 1_000_000_000, 10_000_000_000]) expect(() => checkTopupAmountFen(BigInt(fen))).not.toThrow();
+    for (const fen of [10_050, 15_000, 99_999, 1_000_000_001]) expect(() => checkTopupAmountFen(BigInt(fen))).toThrow("topup_amount_not_multiple");
   });
 });
 

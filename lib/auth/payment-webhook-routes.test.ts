@@ -133,6 +133,21 @@ describe("payment webhook routes", () => {
     auditMock.writeAuditLog.mockResolvedValue(undefined);
   });
 
+  it("refuses a verified wallet top-up order number on the legacy Alipay subscription notify before any write", async () => {
+    for (const outTradeNo of ["tpa_0123456789abcdef0123456789ab", "tpw_0123456789abcdef0123456789ab", "tpa_malformed"]) {
+      alipayMock.verifyAlipayNotifyPayload.mockReturnValue({ out_trade_no: outTradeNo, trade_no: "trade-1",
+        trade_status: "TRADE_SUCCESS", passback_params: "workspace-1" });
+      const response = await alipayNotifyRoute(new Request("http://localhost/api/billing/alipay/notify", {
+        method: "POST", body: `out_trade_no=${outTradeNo}` }));
+      expect([response.status, await response.text()]).toEqual([400, "fail"]);
+    }
+    expect(alipayMock.verifyAlipayNotifyPayload).toHaveBeenCalledTimes(3);
+    expect(callbackStoreMock.beginPaymentWebhookCallbackEvent).not.toHaveBeenCalled();
+    expect(governanceMock.resolveAlipayNotifyTenancy).not.toHaveBeenCalled();
+    expect(integrationMock.syncWorkspacePaymentStatusFromCallbackEvent).not.toHaveBeenCalled();
+    expect(auditMock.writeAuditLog).not.toHaveBeenCalled();
+  });
+
   it("rejects every payment webhook before verification or database writes when financial actions are closed", async () => {
     process.env.HELM_FINANCIAL_ACTIONS_ENABLED = "false";
     const routes = [

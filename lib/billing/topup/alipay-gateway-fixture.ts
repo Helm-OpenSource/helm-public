@@ -11,7 +11,8 @@ export function alipayDouble() {
   const app = pem(), alipay = pem(), stranger = pem();
   const sign = (content: string, key = alipay.privateKey) => createSign("RSA-SHA256").update(content, "utf8").sign(key, "base64");
   const env = { ALIPAY_APP_ID: "2021000000000001", HELM_BILLING_TOPUP_ALIPAY_SELLER_ID: "2088000000000001",
-    ALIPAY_PRIVATE_KEY: app.privateKey, ALIPAY_PUBLIC_KEY: alipay.publicKey, ALIPAY_GATEWAY_URL: "https://gateway.alipay.invalid/gateway.do" };
+    ALIPAY_PRIVATE_KEY: app.privateKey, ALIPAY_PUBLIC_KEY: alipay.publicKey, ALIPAY_GATEWAY_URL: "https://gateway.alipay.invalid/gateway.do",
+    APP_URL: "https://helm.example.invalid" };
   /** Form-encoded notify signed like Alipay (all params but sign/sign_type); `forge` signs with a key Alipay never had. */
   const notify = (params: Record<string, string>, forge = false) => {
     const body = { app_id: env.ALIPAY_APP_ID, seller_id: env.HELM_BILLING_TOPUP_ALIPAY_SELLER_ID, charset: "utf-8",
@@ -37,6 +38,6 @@ export function alipayDouble() {
       : `{"alipay_trade_query_response":${body},"sign":"${mode === "empty_sign" ? "" : signature}"}`;
     return new Response(text, { status: mode === "http_500" ? 500 : 200, headers: { "Content-Type": "application/json;charset=utf-8" } });
   }) as typeof globalThis.fetch;
-  return { env, notify, fetch, trades, requests, strangerPrivateKey: stranger.privateKey, setTamper(value: boolean) { tamper = value; },
+  return { env, notify, fetch, trades, requests, strangerPrivateKey: stranger.privateKey, appPublicKey: app.publicKey, setTamper(value: boolean) { tamper = value; },
     setMode(value: typeof mode) { mode = value; } };
 }
