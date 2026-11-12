@@ -21,6 +21,9 @@ export const LOGIN_RATE_LIMIT = {
   lockMs: 15 * 60 * 1000,
 } as const;
 
+/** A failure counter's window, threshold and lock; password login uses LOGIN_RATE_LIMIT. */
+export type FailureLimit = { windowMs: number; maxAttempts: number; lockMs: number };
+
 export type FailedLoginAttemptState = {
   attemptCount: number;
   windowStartedAt: Date;
@@ -58,9 +61,10 @@ export function evaluateLock(
 export function nextStateOnFailure(
   record: FailedLoginAttemptState | null,
   now: Date,
+  limit: FailureLimit = LOGIN_RATE_LIMIT,
 ): FailedLoginAttemptState {
   const windowExpired =
-    !record || now.getTime() - record.windowStartedAt.getTime() >= LOGIN_RATE_LIMIT.windowMs;
+    !record || now.getTime() - record.windowStartedAt.getTime() >= limit.windowMs;
 
   // A still-active lock is left in place; a fresh window starts otherwise.
   if (windowExpired) {
@@ -69,8 +73,8 @@ export function nextStateOnFailure(
 
   const attemptCount = record.attemptCount + 1;
   const lockedUntil =
-    attemptCount >= LOGIN_RATE_LIMIT.maxAttempts
-      ? new Date(now.getTime() + LOGIN_RATE_LIMIT.lockMs)
+    attemptCount >= limit.maxAttempts
+      ? new Date(now.getTime() + limit.lockMs)
       : record.lockedUntil ?? null;
 
   return { attemptCount, windowStartedAt: record.windowStartedAt, lockedUntil };
