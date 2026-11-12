@@ -2328,6 +2328,10 @@ model PaymentOrder {
   // S2-d2 order creation: the caller's Idempotency-Key (per workspace and creator) and the hash of what it asked for.
   idempotencyKey  String?              @db.VarChar(128)
   requestHash     String?              @db.Char(64)
+  // S2-d2b session-triggered provider query throttle: at least 10 s apart, at most 30 per rolling hour window.
+  lastQueriedAt        DateTime?
+  queryWindowStartedAt DateTime?
+  queryCount           Int       @default(0)
 
   @@unique([workspaceId, createdBy, idempotencyKey], map: "PaymentOrder_creator_idempotency_key")
   @@index([payerAccountId, createdAt])

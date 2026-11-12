@@ -8,6 +8,9 @@ import { alipayDouble } from "./alipay-gateway-fixture";
 import { createAlipayTopupAdapter, getAlipayTopupConfig } from "./alipay-topup";
 import { createOrReplayTopupOrder, createTopupOrder, verifyTopupByQuery } from "./topup-orders";
 import { POST as createRoute } from "@/app/api/billing/v1/topup-orders/route";
+import { GET as orderRoute } from "@/app/api/billing/v1/topup-orders/[id]/route";
+import { POST as closeRoute } from "@/app/api/billing/v1/topup-orders/[id]/close/route";
+import { POST as verifyRoute } from "@/app/api/billing/v1/topup-orders/[id]/verify/route";
 import { POST as notifyRoute } from "@/app/api/billing/v1/topup-notify/alipay/route";
 
 // The real notify route runs against the isolated database: only the app's client handle is swapped (never DATABASE_URL).
@@ -271,6 +274,68 @@ describe.skipIf(!url)("Alipay wallet top-up notify against MySQL", () => {
     try { expect(await create(ws, { provider: "alipay", amountFen: "500" })).toEqual({ status: 404, body: "Not Found" }); }
     finally { vi.stubEnv("HELM_BILLING_TOPUP_ALIPAY_ENABLED", "true"); }
     expect(await orders(ws)).toBe(0);
+  });
+
+  const onOrder = async (route: typeof verifyRoute, id: string, user = admin, ws?: string) => {
+    if (ws) sessionHolder.session = { user: { id: user }, workspace: { id: ws } };
+    vi.stubGlobal("fetch", double.fetch);
+    try {
+      const response = await route(new Request("https://helm.invalid/x", { method: "POST" }), { params: Promise.resolve({ id }) });
+      return { status: response.status, body: await response.json() as Record<string, unknown> & { order?: { state: string } } };
+    } finally { vi.stubGlobal("fetch", () => { throw new Error("network_forbidden"); }); }
+  };
+  const sessionOrder = async () => {
+    const { ws, member } = await payerWorkspace();
+    const created = await create(ws, { provider: "alipay", amountFen: "880" });
+    const row = await a.paymentOrder.findUniqueOrThrow({ where: { id: created.body.order.id } });
+    return { ws, member, row };
+  };
+
+  it("reads and refreshes only the session workspace's order, crediting a paid query once", async () => {
+    const { ws, member, row } = await sessionOrder();
+    expect((await onOrder(orderRoute as typeof verifyRoute, row.id, admin, ws)).body.order).toMatchObject({ id: row.id, state: "created", amountFen: "880" });
+    expect(await onOrder(verifyRoute, row.id, member, ws)).toEqual({ status: 403, body: { error: "topup_forbidden" } });
+    sessionHolder.session = null;
+    for (const route of [orderRoute as typeof verifyRoute, verifyRoute, closeRoute]) {
+      expect(await onOrder(route, row.id)).toEqual({ status: 401, body: { error: "UNAUTHORIZED" } });
+    }
+    const other = await payerWorkspace();
+    expect(await onOrder(verifyRoute, row.id, admin, other.ws)).toEqual({ status: 404, body: { error: "topup_order_unknown" } });
+    expect(await onOrder(orderRoute as typeof verifyRoute, row.id, admin, other.ws)).toEqual({ status: 404, body: { error: "topup_order_unknown" } });
+    expect(await onOrder(verifyRoute, row.id, admin, ws)).toMatchObject({ status: 200, body: { queried: true, order: { state: "pending" } } });
+    expect(await onOrder(verifyRoute, row.id)).toEqual({ status: 429, body: { error: "topup_rate_limited" } }); // within 10 s
+    double.trades.set(row.providerOrderNo, { code: "10000", msg: "Success", out_trade_no: row.providerOrderNo,
+      trade_no: `2026111222${row.providerOrderNo.slice(4, 22)}`, trade_status: "TRADE_SUCCESS", total_amount: "8.80" });
+    await a.$executeRaw`UPDATE PaymentOrder SET lastQueriedAt = UTC_TIMESTAMP(3) - INTERVAL 11 SECOND WHERE id = ${row.id}`;
+    expect(await onOrder(verifyRoute, row.id)).toMatchObject({ status: 200, body: { queried: true, queryError: null, order: { state: "paid_verified" } } });
+    expect(await onOrder(verifyRoute, row.id)).toMatchObject({ status: 200, body: { queried: false, order: { state: "paid_verified" } } });
+    expect(await a.verifiedPayment.count({ where: { paymentOrderId: row.id } })).toBe(1);
+  });
+
+  // Prisma stores DATETIME in UTC, so test-side clock edits use UTC_TIMESTAMP (the server's NOW() may be another zone).
+  it("caps refreshes at 30 an hour per order and stops querying orders older than 72 hours", async () => {
+    const { ws, row } = await sessionOrder();
+    sessionHolder.session = { user: { id: admin }, workspace: { id: ws } };
+    await a.$executeRaw`UPDATE PaymentOrder SET queryCount = 30, queryWindowStartedAt = UTC_TIMESTAMP(3) - INTERVAL 30 MINUTE,
+      lastQueriedAt = UTC_TIMESTAMP(3) - INTERVAL 1 MINUTE WHERE id = ${row.id}`;
+    expect((await onOrder(verifyRoute, row.id)).status).toBe(429);
+    await a.$executeRaw`UPDATE PaymentOrder SET queryWindowStartedAt = UTC_TIMESTAMP(3) - INTERVAL 61 MINUTE WHERE id = ${row.id}`;
+    expect((await onOrder(verifyRoute, row.id)).body).toMatchObject({ queried: true });
+    expect(await a.paymentOrder.findUniqueOrThrow({ where: { id: row.id } })).toMatchObject({ queryCount: 1 });
+    await a.$executeRaw`UPDATE PaymentOrder SET createdAt = UTC_TIMESTAMP(3) - INTERVAL 73 HOUR, lastQueriedAt = NULL WHERE id = ${row.id}`;
+    expect((await onOrder(verifyRoute, row.id)).body).toMatchObject({ queried: false });
+  });
+
+  it("closes a waiting order only through Alipay's confirmation and refuses to close a credited one", async () => {
+    const { ws, row } = await sessionOrder();
+    sessionHolder.session = { user: { id: admin }, workspace: { id: ws } };
+    expect(await onOrder(closeRoute, row.id)).toMatchObject({ status: 200, body: { close: "not_created", order: { state: "pending" } } });
+    double.trades.set(row.providerOrderNo, { code: "10000", msg: "Success", out_trade_no: row.providerOrderNo,
+      trade_no: `2026111233${row.providerOrderNo.slice(4, 22)}`, trade_status: "WAIT_BUYER_PAY", total_amount: "8.80" });
+    await a.$executeRaw`UPDATE PaymentOrder SET lastQueriedAt = NULL WHERE id = ${row.id}`;
+    expect(await onOrder(closeRoute, row.id)).toMatchObject({ status: 200, body: { close: "closed", order: { state: "closed_unpaid" } } });
+    expect(await onOrder(closeRoute, row.id)).toEqual({ status: 409, body: { error: "topup_order_not_closable" } });
+    expect(await effects({ ...row, payerId: row.payerAccountId })).toMatchObject({ payments: 0, wallet: BigInt(0) });
   });
 
   it("is a plain 404 with the gate off and reads nothing", async () => {

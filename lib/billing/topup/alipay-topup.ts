@@ -58,6 +58,11 @@ export function topupAppOrigin(env: Readonly<Record<string, string | undefined>>
     !url.hash ? url.origin : null;
 }
 
+/** Both deployment gates only (no configuration check): read-only status views use this alone. */
+export function alipayTopupGateOpen(env: Readonly<Record<string, string | undefined>> = process.env) {
+  return isDeploymentCapabilityEnabled("billing_topup_alipay", env) && isDeploymentCapabilityEnabled("financial_action", env);
+}
+
 /**
  * The one availability decision for every Alipay top-up entry (notify now; order creation and query in S2-d2). The gate is on
  * by default (owner 2026-11-12), so incomplete merchant configuration is what keeps the entry closed: "unavailable" never
@@ -65,7 +70,7 @@ export function topupAppOrigin(env: Readonly<Record<string, string | undefined>>
  */
 export function resolveAlipayTopup(entry: "notify" | "create" | "query",
   env: Readonly<Record<string, string | undefined>> = process.env): AlipayTopupConfig | "off" | "unavailable" {
-  if (!isDeploymentCapabilityEnabled("billing_topup_alipay", env) || !isDeploymentCapabilityEnabled("financial_action", env)) return "off";
+  if (!alipayTopupGateOpen(env)) return "off";
   const { problems, config } = getAlipayTopupConfigProblems(env);
   if (entry === "create" && !topupAppOrigin(env)) problems.push("app_url_invalid");
   if (problems.length === 0) return config;
@@ -127,19 +132,28 @@ function rawNode(raw: string, key: string) {
 
 const beijingTime = (at: Date) => new Date(at.getTime() + 8 * 3_600_000).toISOString().slice(0, 19).replace("T", " ");
 
-/** alipay.trade.query signed by the configured app; the response node is signature-verified and keeps the amount. */
-async function queryTrade(config: AlipayTopupConfig, fetchImpl: typeof fetch, providerOrderNo: string) {
-  const params: Record<string, string> = { app_id: config.appId, method: "alipay.trade.query", charset: "utf-8", sign_type: "RSA2",
+/**
+ * One signed gateway call (`alipay.trade.query` / `alipay.trade.close`) with a verified response node: the raw text of
+ * `<method>_response` is RSA2-verified against the Alipay public key before it is parsed. Errors carry fixed codes only.
+ */
+async function gatewayCall(config: AlipayTopupConfig, fetchImpl: typeof fetch, method: "alipay.trade.query" | "alipay.trade.close",
+  providerOrderNo: string) {
+  const params: Record<string, string> = { app_id: config.appId, method, charset: "utf-8", sign_type: "RSA2",
     timestamp: beijingTime(new Date()), version: "1.0", biz_content: JSON.stringify({ out_trade_no: providerOrderNo }) };
   params.sign = createSign("RSA-SHA256").update(buildAlipaySignContent(params), "utf8").sign(config.privateKey, "base64");
   const response = await fetchImpl(config.gatewayUrl, { method: "POST", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(QUERY_TIMEOUT_MS),
     headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" }, body: new URLSearchParams(params).toString() });
   const raw = await response.text();
   if (!response.ok || raw.length > MAX_QUERY_RESPONSE_CHARS) throw new Error("query_unavailable");
-  const node = rawNode(raw, "alipay_trade_query_response");
+  const node = rawNode(raw, `${method.replaceAll(".", "_")}_response`);
   const sign = str((JSON.parse(raw) as Record<string, unknown>).sign);
   if (!sign || !rsaVerify(node, sign, config.alipayPublicKey)) throw new Error("query_signature_invalid");
-  const trade = JSON.parse(node) as Record<string, unknown>;
+  return JSON.parse(node) as Record<string, unknown>;
+}
+
+/** alipay.trade.query signed by the configured app; the response node is signature-verified and keeps the amount. */
+async function queryTrade(config: AlipayTopupConfig, fetchImpl: typeof fetch, providerOrderNo: string) {
+  const trade = await gatewayCall(config, fetchImpl, "alipay.trade.query", providerOrderNo);
   // The response names no app; the query was signed by the configured app, so the identity is that app (and its merchant
   // unless the response states another seller, which then fails the merchant check).
   const identity = { app_id: config.appId, seller_id: str(trade.seller_id) ?? config.sellerId };
@@ -149,6 +163,21 @@ async function queryTrade(config: AlipayTopupConfig, fetchImpl: typeof fetch, pr
   if (trade.code !== "10000") throw new Error("query_failed");
   return { ...identity, out_trade_no: str(trade.out_trade_no), trade_no: str(trade.trade_no), trade_status: str(trade.trade_status),
     total_amount: str(trade.total_amount), trans_currency: str(trade.trans_currency) };
+}
+
+/**
+ * alipay.trade.close for a waiting order (built, signed and sent by an explicit user action only). "closed": Alipay closed the
+ * trade, which can then no longer be paid; "not_created": no trade exists yet (the cashier was never submitted; whether an old
+ * cashier link still works afterwards is not documented). The order state itself only changes from a follow-up query.
+ */
+export async function closeAlipayTopupTrade(config: AlipayTopupConfig, providerOrderNo: string, fetchImpl: typeof fetch = fetch) {
+  const result = await gatewayCall(config, fetchImpl, "alipay.trade.close", providerOrderNo);
+  if (result.code === "10000") {
+    if (result.out_trade_no !== providerOrderNo) throw new Error("query_response_invalid");
+    return "closed" as const;
+  }
+  if (result.code === "40004" && result.sub_code === "ACQ.TRADE_NOT_EXIST") return "not_created" as const;
+  throw new Error("close_failed"); // e.g. ACQ.TRADE_STATUS_ERROR: no longer waiting for payment; the follow-up query tells
 }
 
 export const ALIPAY_TOPUP_NOTIFY_PATH = "/api/billing/v1/topup-notify/alipay";
