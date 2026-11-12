@@ -5,6 +5,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { MAX_FEN } from "../funds/money";
 import { canManageWorkspaceBilling } from "@/lib/auth/billing-governance";
 import { lockBillingAuthority } from "../payer/payer-accounts";
+import { findPlatformFinanceActorInTransaction } from "../bank-receipts/bank-receipts";
 
 /**
  * Billing V1 S3-a: immutable price versions and default-off spend grants; no reservation, charge or route. A grant binds one
@@ -77,28 +78,30 @@ export function normalizePriceVersion(input: PublishPriceVersionInput) {
 }
 
 /** Appends version N of a product (creating the product at version 1). Versions are never edited (DB trigger). */
-export async function publishPriceVersion(client: PrismaClient, input: PublishPriceVersionInput) {
+export function publishPriceVersion(client: PrismaClient, input: PublishPriceVersionInput) {
+  return run(client, tx => publishPriceVersionInTransaction(tx, input));
+}
+/** Same as publishPriceVersion inside the caller's transaction (E1a/E1b platform maker/checker approval). */
+export async function publishPriceVersionInTransaction(tx: Prisma.TransactionClient, input: PublishPriceVersionInput) {
   const { productCode, createdBy, ...price } = normalizePriceVersion(input);
-  return run(client, async tx => {
-    const [found] = await tx.$queryRaw<Array<{ id: string }>>`
-      SELECT id FROM BillingProduct WHERE code = ${productCode} FOR UPDATE`;
-    let productId = found?.id;
-    if (!productId) {
-      if (price.version !== 1) refuse("price_version_sequence_invalid");
-      productId = (await tx.billingProduct.create({ data: { code: productCode, createdBy } })).id;
-    }
-    const [existing] = await tx.$queryRaw<BillingPriceRow[]>`SELECT id, contentHash FROM BillingPriceVersion
-      WHERE productId = ${productId} AND version = ${price.version} FOR SHARE`;
-    if (existing) {
-      if (existing.contentHash !== price.contentHash) refuse("price_version_conflict");
-      return { priceVersion: await tx.billingPriceVersion.findUniqueOrThrow({ where: { id: existing.id } }), replayed: true };
-    }
-    const [{ latest }] = await tx.$queryRaw<Array<{ latest: number | bigint }>>`
-      SELECT COALESCE(MAX(version), 0) AS latest FROM BillingPriceVersion WHERE productId = ${productId} FOR SHARE`;
-    if (price.version !== Number(latest) + 1) refuse("price_version_sequence_invalid");
-    const priceVersion = await tx.billingPriceVersion.create({ data: { ...price, productId, createdBy } });
-    return { priceVersion, replayed: false };
-  });
+  const [found] = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM BillingProduct WHERE code = ${productCode} FOR UPDATE`;
+  let productId = found?.id;
+  if (!productId) {
+    if (price.version !== 1) refuse("price_version_sequence_invalid");
+    productId = (await tx.billingProduct.create({ data: { code: productCode, createdBy } })).id;
+  }
+  const [existing] = await tx.$queryRaw<BillingPriceRow[]>`SELECT id, contentHash FROM BillingPriceVersion
+    WHERE productId = ${productId} AND version = ${price.version} FOR SHARE`;
+  if (existing) {
+    if (existing.contentHash !== price.contentHash) refuse("price_version_conflict");
+    return { priceVersion: await tx.billingPriceVersion.findUniqueOrThrow({ where: { id: existing.id } }), replayed: true };
+  }
+  const [{ latest }] = await tx.$queryRaw<Array<{ latest: number | bigint }>>`
+    SELECT COALESCE(MAX(version), 0) AS latest FROM BillingPriceVersion WHERE productId = ${productId} FOR SHARE`;
+  if (price.version !== Number(latest) + 1) refuse("price_version_sequence_invalid");
+  const priceVersion = await tx.billingPriceVersion.create({ data: { ...price, productId, createdBy } });
+  return { priceVersion, replayed: false };
 }
 
 /** Charge for a quantity at a rational unit price: exact BigInt product, one half-up rounding to fen (ADR 3). */
@@ -139,8 +142,18 @@ async function lockPayer(tx: Prisma.TransactionClient, payerAccountId: string) {
   return payer;
 }
 const assertPayerActive = (payer: PayerRow) => { if (payer.status !== "active") refuse("payer_account_unavailable"); };
-/** Grant writes: OWNER/BILLING_ADMIN of the payer's governing workspace (S0 §6), a human user only, then the payer lock. */
-async function lockPayerForGrantWrite(tx: Prisma.TransactionClient, actorUserId: string, payerAccountId: string) {
+/**
+ * Grant writes: OWNER/BILLING_ADMIN of the payer's governing workspace (S0 §6), a human user only, then the payer lock. The
+ * `platform_checker` authority (E1b) is instead an active platform finance checker grant, re-checked here in the same transaction.
+ */
+export type GrantWriteAuthority = "workspace" | "platform_checker";
+async function lockPayerForGrantWrite(tx: Prisma.TransactionClient, actorUserId: string, payerAccountId: string,
+  authority: GrantWriteAuthority) {
+  if (authority === "platform_checker") {
+    if (!await findPlatformFinanceActorInTransaction(tx, actorUserId, ["checker"])) refuse("grant_forbidden");
+    const payer = await lockPayer(tx, payerAccountId);
+    return { ...payer, governingWorkspaceId: payer.governingWorkspaceId! };
+  }
   const head = await tx.payerAccount.findUnique({ where: { id: payerAccountId }, select: { governingWorkspaceId: true } });
   if (!head?.governingWorkspaceId) refuse("payer_account_unavailable");
   try { await lockBillingAuthority(tx, actorUserId, [head.governingWorkspaceId], canManageWorkspaceBilling); } catch (error) {
@@ -168,6 +181,14 @@ export type CreateSpendGrantInput = { actorUserId: string; payerAccountId: strin
 
 /** Creates a grant in state `disabled` (limits default 0). Same key + same content replays; other content conflicts. */
 export async function createSpendGrant(client: PrismaClient, input: CreateSpendGrantInput) {
+  const prepared = prepareSpendGrant(input); // input errors refuse before a transaction opens
+  return run(client, tx => insertSpendGrant(tx, input, prepared, "workspace"));
+}
+/** Same as createSpendGrant inside the caller's transaction (E1b platform checker approval). */
+export function createSpendGrantInTransaction(tx: Prisma.TransactionClient, input: CreateSpendGrantInput, authority: GrantWriteAuthority) {
+  return insertSpendGrant(tx, input, prepareSpendGrant(input), authority);
+}
+function prepareSpendGrant(input: CreateSpendGrantInput) {
   reference(input?.actorUserId, "grant_forbidden");
   for (const ref of [input.payerAccountId, input.priceVersionId, input.operationKey, input.evidenceRef]) reference(ref, "grant_input_invalid");
   date(input.validFrom, "grant_input_invalid"); date(input.validUntil, "grant_input_invalid"); if (input.validUntil <= input.validFrom) refuse("grant_input_invalid");
@@ -178,29 +199,31 @@ export async function createSpendGrant(client: PrismaClient, input: CreateSpendG
   const contentHash = hashOf({ v: 1, payerAccountId: input.payerAccountId, priceVersionId: input.priceVersionId,
     operationKey: input.operationKey, evidenceRef: input.evidenceRef, validFrom: input.validFrom, validUntil: input.validUntil,
     triggerKind, grantLimits });
-  return run(client, async tx => {
-    const payer = await lockPayerForGrantWrite(tx, input.actorUserId, input.payerAccountId);
-    const existing = await readGrant(tx, Prisma.sql`payerAccountId = ${input.payerAccountId}
-      AND operationKey = ${input.operationKey}`, Prisma.sql`FOR UPDATE`);
-    if (existing) {
-      if (existing.contentHash !== contentHash) refuse("grant_operation_conflict");
-      return { grant: await tx.spendGrant.findUniqueOrThrow({ where: { id: existing.id } }), replayed: true };
-    }
-    assertPayerActive(payer);
-    const price = await readPrice(tx, input.priceVersionId);
-    if (!price || price.id !== input.priceVersionId) refuse("price_version_unavailable");
-    // Enterprise payers only in S3-a (S1-c refuses consumer payers); a consumer-scoped price cannot back this grant.
-    if (price.scopeKind !== "workspace") refuse("grant_scope_not_enabled");
-    const grant = await tx.spendGrant.create({ data: { payerAccountId: payer.id, productId: price.productId,
-      priceVersionId: price.id, triggerKind, ...grantLimits, validFrom: input.validFrom, validUntil: input.validUntil,
-      operationKey: input.operationKey, contentHash, createdByUserId: input.actorUserId, evidenceRef: input.evidenceRef } });
-    await writeAuditLog({ workspaceId: payer.governingWorkspaceId, userId: input.actorUserId, actor: input.actorUserId,
-      actorType: ActorType.USER, actionType: "BILLING_SPEND_GRANT_CREATED", targetType: "SpendGrant", targetId: grant.id,
-      summary: "Created spend grant (disabled)", sourcePage: SOURCE_PAGE, relatedObjectType: "PayerAccount",
-      relatedObjectId: payer.id, payload: { priceVersionId: price.id, priceVersion: Number(price.version), state: grant.state,
-        version: grant.version, limits: limitStrings(grantLimits), evidenceRef: input.evidenceRef } }, { client: tx });
-    return { grant, replayed: false };
-  });
+  return { triggerKind, grantLimits, contentHash };
+}
+async function insertSpendGrant(tx: Prisma.TransactionClient, input: CreateSpendGrantInput,
+  { triggerKind, grantLimits, contentHash }: ReturnType<typeof prepareSpendGrant>, authority: GrantWriteAuthority) {
+  const payer = await lockPayerForGrantWrite(tx, input.actorUserId, input.payerAccountId, authority);
+  const existing = await readGrant(tx, Prisma.sql`payerAccountId = ${input.payerAccountId}
+    AND operationKey = ${input.operationKey}`, Prisma.sql`FOR UPDATE`);
+  if (existing) {
+    if (existing.contentHash !== contentHash) refuse("grant_operation_conflict");
+    return { grant: await tx.spendGrant.findUniqueOrThrow({ where: { id: existing.id } }), replayed: true };
+  }
+  assertPayerActive(payer);
+  const price = await readPrice(tx, input.priceVersionId);
+  if (!price || price.id !== input.priceVersionId) refuse("price_version_unavailable");
+  // Enterprise payers only in S3-a (S1-c refuses consumer payers); a consumer-scoped price cannot back this grant.
+  if (price.scopeKind !== "workspace") refuse("grant_scope_not_enabled");
+  const grant = await tx.spendGrant.create({ data: { payerAccountId: payer.id, productId: price.productId,
+    priceVersionId: price.id, triggerKind, ...grantLimits, validFrom: input.validFrom, validUntil: input.validUntil,
+    operationKey: input.operationKey, contentHash, createdByUserId: input.actorUserId, evidenceRef: input.evidenceRef } });
+  await writeAuditLog({ workspaceId: payer.governingWorkspaceId, userId: input.actorUserId, actor: input.actorUserId,
+    actorType: ActorType.USER, actionType: "BILLING_SPEND_GRANT_CREATED", targetType: "SpendGrant", targetId: grant.id,
+    summary: "Created spend grant (disabled)", sourcePage: SOURCE_PAGE, relatedObjectType: "PayerAccount",
+    relatedObjectId: payer.id, payload: { priceVersionId: price.id, priceVersion: Number(price.version), state: grant.state,
+      version: grant.version, limits: limitStrings(grantLimits), evidenceRef: input.evidenceRef } }, { client: tx });
+  return { grant, replayed: false };
 }
 
 export type SpendGrantAction = "activate" | "pause" | "resume" | "revoke" | "set_limits";
@@ -216,7 +239,8 @@ export type ChangeSpendGrantInput = { actorUserId: string; grantId: string; expe
 export function changeSpendGrant(client: PrismaClient, input: ChangeSpendGrantInput) {
   return run(client, tx => changeSpendGrantInTransaction(tx, input));
 }
-export async function changeSpendGrantInTransaction(tx: Prisma.TransactionClient, input: ChangeSpendGrantInput) {
+export async function changeSpendGrantInTransaction(tx: Prisma.TransactionClient, input: ChangeSpendGrantInput,
+  authority: GrantWriteAuthority = "workspace") {
   reference(input?.actorUserId, "grant_forbidden"); reference(input.grantId, "grant_unavailable"); reference(input.evidenceRef, "grant_input_invalid");
   if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1) refuse("grant_input_invalid");
   if (!Object.prototype.hasOwnProperty.call(TRANSITIONS, input.action)) refuse("grant_transition_invalid");
@@ -224,7 +248,7 @@ export async function changeSpendGrantInTransaction(tx: Prisma.TransactionClient
   if ((input.action === "set_limits") !== (input.limits !== undefined)) refuse("grant_input_invalid");
   const head = await tx.spendGrant.findUnique({ where: { id: input.grantId }, select: { payerAccountId: true } });
   if (!head) refuse("grant_unavailable");
-  const payer = await lockPayerForGrantWrite(tx, input.actorUserId, head.payerAccountId);
+  const payer = await lockPayerForGrantWrite(tx, input.actorUserId, head.payerAccountId, authority);
   const grant = await readGrant(tx, Prisma.sql`id = ${input.grantId}`, Prisma.sql`FOR UPDATE`);
   const [{ now }] = await tx.$queryRaw<Array<{ now: Date }>>`SELECT UTC_TIMESTAMP(3) AS now`;
   if (!grant || grant.id !== input.grantId || grant.payerAccountId !== payer.id) refuse("grant_unavailable");

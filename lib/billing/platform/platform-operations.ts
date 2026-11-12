@@ -4,6 +4,8 @@ import { ActorType, Prisma, type PlatformBillingOperation, type PrismaClient } f
 import { writeAuditLog } from "@/lib/audit";
 import { findPlatformFinanceActorInTransaction, type PlatformFinanceRoleName } from "../bank-receipts/bank-receipts";
 import { availableCreditFen } from "../credit/credit-facilities";
+import { changeSpendGrantInTransaction, createSpendGrantInTransaction, normalizePriceVersion,
+  publishPriceVersionInTransaction } from "../grants/price-grants";
 
 /**
  * Billing V1 E1a platform billing operations: a platform finance maker drafts, a different checker approves or rejects; approval
@@ -11,15 +13,26 @@ import { availableCreditFen } from "../credit/credit-facilities";
  * OWNER/BILLING_ADMIN and service identities have no path. Evidence is an owner-ruling reference, not a customer action.
  * Lock order: finance grant + reserved Membership (share) -> PayerAccount FOR UPDATE -> PlatformBillingOperation FOR UPDATE ->
  * PayerScopeBinding (share). Switching to `enforce` is not enablement: real charging has separate prerequisites (docs).
+ * E1b adds `price_publish` (append a price version; never 0) and `spend_grant` (create -> set_limits -> activate on approval).
  */
 export type PlatformBillingMode = "off" | "shadow" | "enforce";
 export type PlatformOperationRequest =
   | { kind: "payer_onboard"; workspaceId: string; contractSubjectRef: string }
-  | { kind: "billing_mode"; workspaceId: string; fromMode: PlatformBillingMode; toMode: PlatformBillingMode };
+  | { kind: "billing_mode"; workspaceId: string; fromMode: PlatformBillingMode; toMode: PlatformBillingMode }
+  /** Amounts are decimal strings (JSON has no BigInt), times ISO-8601 UTC. `priceLabel` is part of the reviewed content. */
+  | { kind: "price_publish"; productCode: string; version: number; billingEventRef: string; meterUnit: string; acceptanceRef: string;
+      unitPriceFenNumerator: string; unitPriceDenominator: string; effectiveFrom: string; effectiveUntil: string | null;
+      approvalRef: string; priceLabel: PriceLabel }
+  | { kind: "spend_grant"; workspaceId: string; productCode: string; priceVersion: number; validFrom: string; validUntil: string;
+      perChargeLimitFen: string; dailyLimitFen: string; monthlyLimitFen: string };
+/** Closed set; the owner-chosen price (财模规划价) is a planning estimate. The ruling itself goes in the list's `approvalRef`. */
+export type PriceLabel = "planning_estimate_not_a_quote";
+export const PRICE_LABEL_TEXT: Record<PriceLabel, string> = { planning_estimate_not_a_quote: "规划试算价，不作为报价" };
 export type PlatformOperationRefusalCode = "platform_operation_input_invalid" | "platform_operation_forbidden" |
   "platform_operation_self_review_forbidden" | "platform_operation_conflict" | "platform_operation_unavailable" |
   "platform_operation_not_pending" | "platform_enforce_not_confirmed" | "platform_write_conflict" | "billing_mode_conflict" |
-  "workspace_unavailable" | "payer_scope_already_bound" | "payer_unresolved" | "enforce_grant_not_ready" | "enforce_headroom_insufficient";
+  "workspace_unavailable" | "payer_scope_already_bound" | "payer_unresolved" | "enforce_grant_not_ready" | "enforce_headroom_insufficient" |
+  "price_zero_refused" | "price_version_unavailable" | "grant_active_exists" | "platform_operation_stale_replay";
 
 export class PlatformOperationRefusal extends Error {
   constructor(readonly code: PlatformOperationRefusalCode) { super(code); this.name = "PlatformOperationRefusal"; }
@@ -33,6 +46,21 @@ function reference(value: unknown, code: PlatformOperationRefusalCode = "platfor
   if (typeof value !== "string" || !REF.test(value)) refuse(code);
 }
 const sha256 = (value: object) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const DIGITS = /^(0|[1-9][0-9]{0,15})$/;
+function digits(value: unknown): asserts value is string { if (typeof value !== "string" || !DIGITS.test(value)) refuse("platform_operation_input_invalid"); }
+function isoTime(value: unknown): asserts value is string {
+  if (typeof value !== "string" || Number.isNaN(Date.parse(value)) || new Date(value).toISOString() !== value) refuse("platform_operation_input_invalid");
+}
+function positiveInt(value: unknown): asserts value is number {
+  if (!Number.isSafeInteger(value) || (value as number) < 1 || (value as number) > 2147483647) refuse("platform_operation_input_invalid");
+}
+/** The publish input this request becomes; `normalizePriceVersion` (S3-a) validates it. */
+const priceInput = (request: Extract<PlatformOperationRequest, { kind: "price_publish" }>, actorRef: string) => ({
+  actor: { type: "SYSTEM" as const, ref: actorRef }, productCode: request.productCode, version: request.version,
+  billingEventRef: request.billingEventRef, meterUnit: request.meterUnit, acceptanceRef: request.acceptanceRef, scopeKind: "workspace" as const,
+  unitPriceFenNumerator: BigInt(request.unitPriceFenNumerator), unitPriceDenominator: BigInt(request.unitPriceDenominator),
+  effectiveFrom: new Date(request.effectiveFrom), effectiveUntil: request.effectiveUntil === null ? null : new Date(request.effectiveUntil),
+  approvalRef: request.approvalRef });
 
 /**
  * Pure validation. The operation key is derived from (evidence, kind, workspace, mode step), so a re-run of the same ruling finds the
@@ -41,20 +69,41 @@ const sha256 = (value: object) => createHash("sha256").update(JSON.stringify(val
 export function normalizePlatformOperation(evidenceRef: unknown, request: PlatformOperationRequest) {
   reference(evidenceRef);
   if (!request || typeof request !== "object") refuse("platform_operation_input_invalid");
-  reference(request.workspaceId);
+  if (request.kind !== "price_publish") reference(request.workspaceId);
   let canonical: PlatformOperationRequest;
-  if (request.kind === "payer_onboard") {
+  let identity: Record<string, unknown>;
+  if (request.kind === "price_publish") {
+    digits(request.unitPriceFenNumerator); digits(request.unitPriceDenominator); isoTime(request.effectiveFrom);
+    if (request.effectiveUntil !== null) isoTime(request.effectiveUntil);
+    if (!Object.hasOwn(PRICE_LABEL_TEXT, request.priceLabel)) refuse("platform_operation_input_invalid");
+    // A zero price can never be used (reserve refuses grant_charge_zero), so it is never published through this path.
+    if (request.unitPriceFenNumerator === "0") refuse("price_zero_refused");
+    canonical = { kind: request.kind, productCode: request.productCode, version: request.version, billingEventRef: request.billingEventRef,
+      meterUnit: request.meterUnit, acceptanceRef: request.acceptanceRef, unitPriceFenNumerator: request.unitPriceFenNumerator,
+      unitPriceDenominator: request.unitPriceDenominator, effectiveFrom: request.effectiveFrom, effectiveUntil: request.effectiveUntil,
+      approvalRef: request.approvalRef, priceLabel: request.priceLabel };
+    try { normalizePriceVersion(priceInput(canonical, "platform-op")); } catch { refuse("platform_operation_input_invalid"); }
+    identity = { productCode: canonical.productCode, version: canonical.version };
+  } else if (request.kind === "spend_grant") {
+    reference(request.productCode); positiveInt(request.priceVersion); isoTime(request.validFrom); isoTime(request.validUntil);
+    for (const value of [request.perChargeLimitFen, request.dailyLimitFen, request.monthlyLimitFen]) digits(value);
+    canonical = { kind: request.kind, workspaceId: request.workspaceId, productCode: request.productCode, priceVersion: request.priceVersion,
+      validFrom: request.validFrom, validUntil: request.validUntil, perChargeLimitFen: request.perChargeLimitFen,
+      dailyLimitFen: request.dailyLimitFen, monthlyLimitFen: request.monthlyLimitFen };
+    identity = { workspaceId: canonical.workspaceId, productCode: canonical.productCode, priceVersion: canonical.priceVersion };
+  } else if (request.kind === "payer_onboard") {
     reference(request.contractSubjectRef);
     canonical = { kind: request.kind, workspaceId: request.workspaceId, contractSubjectRef: request.contractSubjectRef };
+    identity = { workspaceId: canonical.workspaceId, step: null };
   } else if (request.kind === "billing_mode") {
     if (!MODES.includes(request.fromMode) || !MODES.includes(request.toMode) || request.fromMode === request.toMode) {
       refuse("platform_operation_input_invalid");
     }
     canonical = { kind: request.kind, workspaceId: request.workspaceId, fromMode: request.fromMode, toMode: request.toMode };
+    identity = { workspaceId: canonical.workspaceId, step: `${canonical.fromMode}>${canonical.toMode}` };
   } else refuse("platform_operation_input_invalid");
-  const identity = { v: 1, evidenceRef, kind: canonical.kind, workspaceId: canonical.workspaceId,
-    step: canonical.kind === "billing_mode" ? `${canonical.fromMode}>${canonical.toMode}` : null };
-  return { evidenceRef, request: canonical, operationKey: `pbo:${canonical.kind}:${sha256(identity).slice(0, 40)}`,
+  const key = sha256({ v: 1, evidenceRef, kind: canonical.kind, ...identity }).slice(0, 40);
+  return { evidenceRef, request: canonical, operationKey: `pbo:${canonical.kind}:${key}`,
     contentHash: sha256({ v: 1, evidenceRef, ...canonical }) };
 }
 const isEnforce = (request: PlatformOperationRequest) => request.kind === "billing_mode" && request.toMode === "enforce";
@@ -110,20 +159,26 @@ export async function draftPlatformOperation(client: PrismaClient, input: DraftP
     const existing = await lockOperation(tx, op.operationKey);
     if (existing) {
       if (existing.contentHash !== op.contentHash) refuse("platform_operation_conflict");
+      // A mode step already taken under this ruling must not report success once the mode has moved on (e.g. a second rollback).
+      if (op.request.kind === "billing_mode" && existing.state === "applied" &&
+          (await activeBinding(tx, op.request.workspaceId))?.billingMode !== op.request.toMode) refuse("platform_operation_stale_replay");
       return { operation: existing, replayed: true };
     }
     const { request } = op;
-    await assertTargetWorkspace(tx, request.workspaceId);
-    const binding = await activeBinding(tx, request.workspaceId);
-    if (request.kind === "payer_onboard" && binding) refuse("payer_scope_already_bound");
-    if (request.kind === "billing_mode") {
-      if (!binding) refuse("payer_unresolved");
-      if (binding.billingMode !== request.fromMode) refuse("billing_mode_conflict");
+    // A price is platform-wide: its operation is filed under the reserved workspace and checks no customer workspace.
+    const workspaceId = request.kind === "price_publish" ? reservedWorkspaceId : request.workspaceId;
+    let payerAccountId: string | null = null;
+    if (request.kind !== "price_publish") {
+      await assertTargetWorkspace(tx, request.workspaceId);
+      const binding = await activeBinding(tx, request.workspaceId);
+      if (request.kind === "payer_onboard" && binding) refuse("payer_scope_already_bound");
+      if (request.kind !== "payer_onboard" && !binding) refuse("payer_unresolved");
+      if (request.kind === "billing_mode" && binding!.billingMode !== request.fromMode) refuse("billing_mode_conflict");
+      payerAccountId = request.kind === "payer_onboard" ? null : binding!.payerAccountId;
     }
     const operation = await tx.platformBillingOperation.create({ data: { kind: request.kind, operationKey: op.operationKey,
-      workspaceId: request.workspaceId, payerAccountId: request.kind === "billing_mode" ? binding!.payerAccountId : null,
-      request, contentHash: op.contentHash, draftedByUserId: input.actorUserId, evidenceRef: op.evidenceRef } });
-    await audit(tx, [reservedWorkspaceId, request.workspaceId], input.actorUserId, "BILLING_PLATFORM_OPERATION_DRAFTED",
+      workspaceId, payerAccountId, request, contentHash: op.contentHash, draftedByUserId: input.actorUserId, evidenceRef: op.evidenceRef } });
+    await audit(tx, [reservedWorkspaceId, workspaceId], input.actorUserId, "BILLING_PLATFORM_OPERATION_DRAFTED",
       { type: "PlatformBillingOperation", id: operation.id }, { ...request, evidenceRef: op.evidenceRef, batchRef: input.batchRef ?? null });
     return { operation, replayed: false };
   });
@@ -153,6 +208,8 @@ export async function reviewPlatformOperation(client: PrismaClient, input: Revie
     if (!row) refuse("platform_operation_unavailable");
     if (row.contentHash !== op.contentHash) refuse("platform_operation_conflict");
     if (row.state === (approve ? "applied" : "rejected") && row.reviewedByUserId === input.actorUserId) {
+      if (approve && op.request.kind === "billing_mode" &&
+          (await activeBinding(tx, op.request.workspaceId))?.billingMode !== op.request.toMode) refuse("platform_operation_stale_replay");
       return { operation: row, replayed: true };
     }
     if (row.state !== "drafted") refuse("platform_operation_not_pending");
@@ -174,6 +231,10 @@ export async function reviewPlatformOperation(client: PrismaClient, input: Revie
 
 async function applyInTransaction(tx: Prisma.TransactionClient, request: PlatformOperationRequest, row: PlatformBillingOperation,
   actorUserId: string) {
+  if (request.kind === "price_publish") {
+    const { priceVersion } = await publishPriceVersionInTransaction(tx, priceInput(request, `platform-op:${row.id}`));
+    return priceVersion.id;
+  }
   await assertTargetWorkspace(tx, request.workspaceId);
   const binding = await activeBinding(tx, request.workspaceId);
   if (request.kind === "payer_onboard") {
@@ -188,6 +249,7 @@ async function applyInTransaction(tx: Prisma.TransactionClient, request: Platfor
     return payer.id;
   }
   if (!binding || binding.payerAccountId !== row.payerAccountId) refuse("payer_unresolved");
+  if (request.kind === "spend_grant") return openSpendGrant(tx, request, row, binding.payerAccountId, actorUserId);
   if (request.toMode === "enforce") await assertEnforceReady(tx, binding.payerAccountId);
   // CAS: the expected old mode stays in the UPDATE's own WHERE (the payer row is already locked FOR UPDATE above).
   const changed = await tx.$executeRaw`UPDATE PayerAccount SET billingMode = ${request.toMode}, version = version + 1,
@@ -213,4 +275,30 @@ async function assertEnforceReady(tx: Prisma.TransactionClient, payerAccountId: 
     WHERE payerAccountId = ${payerAccountId} AND account = 'customer_wallet_available'`;
   const headroom = BigInt(wallet?.balanceFen ?? 0) + await availableCreditFen(tx, payerAccountId) - BigInt(held);
   if (headroom <= BigInt(0)) refuse("enforce_headroom_insufficient");
+}
+
+/**
+ * Approval of `spend_grant`: create (disabled, limits 0) -> set_limits -> activate through the S3-a service under the platform
+ * checker authority, each step audited there. Refuses while the payer already holds a non-terminal grant for the product, since
+ * quote needs exactly one active grant per event and unit (replacing a price is a separate, later step).
+ */
+async function openSpendGrant(tx: Prisma.TransactionClient, request: Extract<PlatformOperationRequest, { kind: "spend_grant" }>,
+  row: PlatformBillingOperation, payerAccountId: string, actorUserId: string) {
+  const [price] = await tx.$queryRaw<Array<{ id: string; productId: string }>>`SELECT v.id, v.productId FROM BillingPriceVersion v
+    JOIN BillingProduct p ON p.id = v.productId WHERE p.code = ${request.productCode} AND v.version = ${request.priceVersion} FOR SHARE`;
+  if (!price) refuse("price_version_unavailable");
+  const [open] = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM SpendGrant WHERE payerAccountId = ${payerAccountId}
+    AND productId = ${price.productId} AND state IN ('disabled', 'active', 'paused') LIMIT 1 FOR SHARE`;
+  if (open) refuse("grant_active_exists");
+  const common = { actorUserId, evidenceRef: row.evidenceRef };
+  const { grant } = await createSpendGrantInTransaction(tx, { ...common, payerAccountId, priceVersionId: price.id,
+    operationKey: `platform-op:${row.id}`, validFrom: new Date(request.validFrom), validUntil: new Date(request.validUntil) },
+  "platform_checker");
+  const limits = { perChargeLimitFen: BigInt(request.perChargeLimitFen), dailyLimitFen: BigInt(request.dailyLimitFen),
+    monthlyLimitFen: BigInt(request.monthlyLimitFen) };
+  const limited = await changeSpendGrantInTransaction(tx, { ...common, grantId: grant.id, expectedVersion: grant.version,
+    action: "set_limits", limits }, "platform_checker");
+  await changeSpendGrantInTransaction(tx, { ...common, grantId: grant.id, expectedVersion: limited.version, action: "activate" },
+    "platform_checker");
+  return grant.id;
 }
