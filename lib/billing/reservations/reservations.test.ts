@@ -6,7 +6,7 @@ import { asBillingResult, markUnknownInTransaction, normalizeReserve, releaseInT
 
 const service = { type: "SYSTEM" as const, ref: "metering" };
 const req = (extra: Partial<ReserveRequest> = {}): ReserveRequest => ({ idempotencyKey: "idem:0001", operationRef: "op:bill/1",
-  payerRef: "payer-1", grantId: "grant-1", priceVersionId: "pv-1", billingEventRef: "service-billing-event-v1:bill_parsed",
+  subjectScope: { kind: "workspace", workspaceId: "ws-1" }, payerRef: "payer-1", grantId: "grant-1", priceVersionId: "pv-1", billingEventRef: "service-billing-event-v1:bill_parsed",
   meterUnit: "document", quantity: "2", ...extra });
 const noDb = {} as Prisma.TransactionClient; // input refusals must happen before any database call
 const noDbClient = { $transaction: (body: (tx: Prisma.TransactionClient) => unknown) => body(noDb) } as unknown as PrismaClient;
@@ -19,13 +19,15 @@ describe("reservation protocol normalization", () => {
     expect(base.contentHash).toMatch(/^[a-f0-9]{64}$/);
     expect(normalizeReserve({ type: "SYSTEM", ref: "other" }, req({ idempotencyKey: "idem:0002" })).contentHash).toBe(base.contentHash);
     for (const changed of [{ quantity: "3" }, { grantId: "grant-2" }, { priceVersionId: "pv-2" }, { operationRef: "op:bill/2" },
-      { billingEventRef: "event:other" }, { meterUnit: "page" }, { payerRef: "payer-2" }]) {
+      { billingEventRef: "event:other" }, { meterUnit: "page" }, { payerRef: "payer-2" },
+      { subjectScope: { kind: "workspace" as const, workspaceId: "ws-2" } }]) {
       expect(normalizeReserve(service, req(changed)).contentHash).not.toBe(base.contentHash);
     }
   });
   it("refuses user actors, non-canonical quantities and malformed references before the database", async () => {
     for (const bad of [{ quantity: "0" }, { quantity: "02" }, { quantity: "-1" }, { quantity: "1.5" }, { quantity: 2 },
-      { quantity: "9007199254740992" }, { idempotencyKey: "" }, { idempotencyKey: "short:1" }, { idempotencyKey: "idem/0001" }, { payerRef: "a b" }, { meterUnit: "Document" }]) {
+      { quantity: "9007199254740992" }, { idempotencyKey: "" }, { idempotencyKey: "short:1" }, { idempotencyKey: "idem/0001" }, { payerRef: "a b" }, { meterUnit: "Document" },
+      { subjectScope: undefined }, { subjectScope: { kind: "vault", vaultId: "v-1" } }, { subjectScope: { kind: "workspace", workspaceId: "a b" } }]) {
       await expect(reserve(noDbClient, service, req(bad as Partial<ReserveRequest>))).resolves.toEqual(invalid);
     }
     await expect(reserve(noDbClient, { type: "USER", ref: "u1" } as never, req())).resolves.toEqual(invalid);

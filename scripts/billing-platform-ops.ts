@@ -2,9 +2,10 @@
 
 /**
  * Billing V1 platform billing operations (maker drafts, a different checker reviews); docs/operations/BILLING_PLATFORM_OPERATIONS.md.
- *   npm run billing:platform-ops -- --command=draft --list-file=<list.json> --actor-user-id=<maker> [--confirm-enforce] [--apply --list-sha=<sha256>]
+ * --apply needs both sha values printed by the dry run just before it.
+ *   npm run billing:platform-ops -- --command=draft --list-file=<list.json> --actor-user-id=<maker> [--confirm-enforce] [--apply --list-sha=<sha256> --plan-sha=<sha256>]
  *   npm run billing:platform-ops -- --command=review --list-file=<list.json> --actor-user-id=<checker> --decision=approve|reject \
- *     --review-evidence-ref=<ref> [--confirm-enforce] [--apply --list-sha=<sha256>]
+ *     --review-evidence-ref=<ref> [--confirm-enforce] [--apply --list-sha=<sha256> --plan-sha=<sha256>]
  *   Emergency (one person, enforce -> shadow only; a different checker confirms within 24 hours):
  *   npm run billing:platform-ops -- --command=emergency-rollback --workspace-id=<id> --actor-user-id=<id> --evidence-ref=<ref> [--apply]
  *   npm run billing:platform-ops -- --command=confirm-rollback --rollback-id=<id> --actor-user-id=<checker> --evidence-ref=<ref> [--apply]

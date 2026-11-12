@@ -13,7 +13,7 @@ import { draftPlatformOperation, normalizePlatformOperation, PlatformOperationRe
  */
 export type PlatformOperationList = { sha256: string; evidenceRef: string; entries: PlatformOperationRequest[] };
 export type PlatformBatchArgs = { command: "draft" | "review"; listFile: string; actorUserId: string; apply: boolean;
-  listSha: string | null; decision: "approve" | "reject" | null; reviewEvidenceRef: string | null; confirmEnforce: boolean };
+  listSha: string | null; planSha: string | null; decision: "approve" | "reject" | null; reviewEvidenceRef: string | null; confirmEnforce: boolean };
 
 const FIELDS: Record<string, string[]> = { payer_onboard: ["contractSubjectRef", "kind", "workspaceId"],
   billing_mode: ["fromMode", "kind", "toMode", "workspaceId"],
@@ -50,7 +50,7 @@ export function parseOperationList(bytes: Buffer): PlatformOperationList {
 
 export function parsePlatformBatchArgs(argv: readonly string[]): PlatformBatchArgs | { invalid: string } {
   const flags = new Set(["--apply", "--confirm-enforce"]);
-  const known = new Set(["command", "list-file", "actor-user-id", "list-sha", "decision", "review-evidence-ref"]);
+  const known = new Set(["command", "list-file", "actor-user-id", "list-sha", "plan-sha", "decision", "review-evidence-ref"]);
   const values = new Map<string, string>();
   for (const arg of argv) {
     if (flags.has(arg)) { if (values.has(arg)) return { invalid: "duplicate_argument" }; values.set(arg, ""); continue; }
@@ -64,9 +64,9 @@ export function parsePlatformBatchArgs(argv: readonly string[]): PlatformBatchAr
   const decision = values.get("decision") ?? null, reviewEvidenceRef = values.get("review-evidence-ref") ?? null;
   if (command === "review" ? (decision !== "approve" && decision !== "reject") || !reviewEvidenceRef
     : decision !== null || reviewEvidenceRef !== null) return { invalid: "review_arguments_invalid" };
-  const apply = values.has("--apply"), listSha = values.get("list-sha") ?? null;
-  if (apply !== (listSha !== null)) return { invalid: "apply_requires_list_sha" };
-  return { command, listFile, actorUserId, apply, listSha, decision: decision as PlatformBatchArgs["decision"], reviewEvidenceRef,
+  const apply = values.has("--apply"), listSha = values.get("list-sha") ?? null, planSha = values.get("plan-sha") ?? null;
+  if (apply !== (listSha !== null) || apply !== (planSha !== null)) return { invalid: "apply_requires_list_and_plan_sha" };
+  return { command, listFile, actorUserId, apply, listSha, planSha, decision: decision as PlatformBatchArgs["decision"], reviewEvidenceRef,
     confirmEnforce: values.has("--confirm-enforce") };
 }
 
@@ -74,11 +74,11 @@ export function parsePlatformBatchArgs(argv: readonly string[]): PlatformBatchAr
 async function limitUnits(client: PrismaClient, request: Extract<PlatformOperationRequest, { kind: "spend_grant" }>) {
   const product = await client.billingProduct.findUnique({ where: { code: request.productCode }, select: { id: true } });
   const price = product && await client.billingPriceVersion.findFirst({ where: { productId: product.id, version: request.priceVersion },
-    select: { meterUnit: true, unitPriceFenNumerator: true, unitPriceDenominator: true } });
-  if (!price) return { limitUnits: null };
+    select: { meterUnit: true, unitPriceFenNumerator: true, unitPriceDenominator: true, contentHash: true } });
+  if (!price) return { limitUnits: null, priceContentHash: null };
   const units = (fen: string) => (BigInt(fen) * price.unitPriceDenominator / price.unitPriceFenNumerator).toString();
   return { limitUnits: { meterUnit: price.meterUnit, perCharge: units(request.perChargeLimitFen), daily: units(request.dailyLimitFen),
-    monthly: units(request.monthlyLimitFen) } };
+    monthly: units(request.monthlyLimitFen) }, priceContentHash: price.contentHash };
 }
 
 export async function runPlatformBatch(client: PrismaClient, args: PlatformBatchArgs, list: PlatformOperationList) {
@@ -86,19 +86,23 @@ export async function runPlatformBatch(client: PrismaClient, args: PlatformBatch
   const base = { command: args.command, listSha: list.sha256, evidenceRef: list.evidenceRef, entries: list.entries.length,
     // Switching to enforce is not enablement: real charging has separate prerequisites (BILLING_PLATFORM_OPERATIONS.md).
     enforceNotEnablement: enforce };
-  if (!args.apply) {
-    const plan = [];
-    for (const [index, request] of list.entries.entries()) {
-      const { operationKey } = normalizePlatformOperation(list.evidenceRef, request);
-      const operation = await client.platformBillingOperation.findUnique({ where: { operationKey }, select: { state: true } });
-      const binding = request.kind === "price_publish" ? null : await client.payerScopeBinding.findFirst({
-        where: { scopeKind: "workspace", activeScopeRef: request.workspaceId }, select: { payerAccountId: true } });
-      const payer = binding && await client.payerAccount.findUnique({ where: { id: binding.payerAccountId }, select: { billingMode: true } });
-      plan.push({ index, ...request, ...subject(request), ...(request.kind === "spend_grant" ? await limitUnits(client, request) : {}), operationKey, operationState: operation?.state ?? null, currentMode: payer?.billingMode ?? null });
-    }
-    return { ok: true, applied: false, ...base, plan };
+  // The database state the operator reviewed (payer and binding per workspace, operation state, mode, the price a grant would use);
+  // --apply re-reads it and must match `planSha`, so a rebinding or another run between the dry run and the apply stops before any write.
+  const plan = [];
+  for (const [index, request] of list.entries.entries()) {
+    const { operationKey } = normalizePlatformOperation(list.evidenceRef, request);
+    const operation = await client.platformBillingOperation.findUnique({ where: { operationKey }, select: { state: true } });
+    const binding = request.kind === "price_publish" ? null : await client.payerScopeBinding.findFirst({
+      where: { scopeKind: "workspace", activeScopeRef: request.workspaceId }, select: { id: true, payerAccountId: true } });
+    const payer = binding && await client.payerAccount.findUnique({ where: { id: binding.payerAccountId }, select: { billingMode: true } });
+    plan.push({ index, ...request, ...subject(request), ...(request.kind === "spend_grant" ? await limitUnits(client, request) : {}),
+      operationKey, operationState: operation?.state ?? null, payerAccountId: binding?.payerAccountId ?? null, bindingId: binding?.id ?? null,
+      currentMode: payer?.billingMode ?? null });
   }
+  const planSha = createHash("sha256").update(JSON.stringify(plan)).digest("hex");
+  if (!args.apply) return { ok: true, applied: false, ...base, planSha, plan };
   if (args.listSha !== list.sha256) return { ok: false, applied: false, ...base, code: "list_sha_mismatch" };
+  if (args.planSha !== planSha) return { ok: false, applied: false, ...base, planSha, code: "plan_sha_mismatch" };
   const results = [];
   for (const [index, request] of list.entries.entries()) {
     const common = { actorUserId: args.actorUserId, evidenceRef: list.evidenceRef, request, confirmEnforce: args.confirmEnforce,
