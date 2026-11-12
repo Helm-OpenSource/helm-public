@@ -95,8 +95,9 @@ goes through the service above: finance roles, maker ≠ checker, version CAS, A
 - **Idempotency / resume**: the operation key is `credit-batch:<batchRef>` per payer; every step re-reads state and acts only on
   entries at that step, so a rerun continues where it stopped. A step that ran nothing while entries wait for another step returns
   `step_nothing_to_do` (exit 1). A propose replays only for the same maker and content (`credit_operation_conflict` otherwise: resume
-  with the same maker, or a new `batchRef` after revoking the old batch's draft or approved facilities); two identical proposes
-  racing may report `credit_write_conflict` for the slower one (nothing written; a rerun replays). Each entry is its own transaction;
+  with the same maker, or a new `batchRef` after revoking the old batch's draft or approved facilities); of two identical proposes
+  racing, one creates and the other replays (the service replays from a locking read; a residual Prisma P2025 on CreditFacility
+  would still map to `credit_write_conflict`, nothing written, a rerun replays). Each entry is its own transaction;
   a refusal is recorded and the rest continue; the summary counts actions and results.
 
 ### Issuance runbook / 发放 runbook

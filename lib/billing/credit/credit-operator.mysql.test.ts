@@ -244,7 +244,7 @@ describe.skipIf(!url)("credit operator CLI against MySQL", () => {
       .toEqual({ exitCode: 2, out: { ok: false, code: "usage:list_duplicate_payer" } });
   });
 
-  it("never acts on a batchRef reused with another amount (before or after activation), and maps a racing propose to a conflict", async () => {
+  it("never acts on a batchRef reused with another amount (before or after activation), and replays a racing identical propose", async () => {
     const w = await workspace();
     const batchRef = `reuse-${run}`;
     const first = list([{ ...w, limitFen: 5000 }], batchRef);
@@ -280,10 +280,15 @@ describe.skipIf(!url)("credit operator CLI against MySQL", () => {
       release();
       await barrier;
       const results = await Promise.all(runs);
-      const codes = results.flatMap(result => (result.output as { rows: Array<{ status: string; code?: string }> }).rows)
-        .filter(item => item.status === "failed").map(item => item.code);
-      expect(codes.length).toBeGreaterThan(0); // the race was really exercised
-      expect(codes.every(code => code === "credit_write_conflict")).toBe(true);
+      type RaceRow = { workspaceId: string; status: string; detail?: { replayed: boolean; facility: { id: string } } };
+      const rows = results.flatMap(result => (result.output as { rows: RaceRow[] }).rows);
+      // The service replays from a locking read: no entry fails, one run creates and the other replays the same row.
+      expect(rows.filter(item => item.status !== "applied")).toEqual([]);
+      for (const { ws } of racers) {
+        const mine = rows.filter(item => item.workspaceId === ws);
+        expect(mine.map(item => item.detail!.replayed).sort()).toEqual([false, true]);
+        expect(mine[0].detail!.facility.id).toBe(mine[1].detail!.facility.id);
+      }
     } finally { await Promise.all([b.$disconnect(), c.$disconnect()]); }
     for (const { payer } of racers) expect(await a.creditFacility.count({ where: { payerAccountId: payer } })).toBe(1);
   });

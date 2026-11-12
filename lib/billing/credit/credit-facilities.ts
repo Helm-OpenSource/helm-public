@@ -100,7 +100,10 @@ export async function proposeCreditFacility(client: PrismaClient, input: Propose
     const existing = await lockFacility(tx, Prisma.sql`payerAccountId = ${data.payerAccountId} AND operationKey = ${data.operationKey}`);
     if (existing) {
       if (existing.contentHash !== data.contentHash) refuse("credit_operation_conflict");
-      return { facility: await tx.creditFacility.findUniqueOrThrow({ where: { id: existing.id } }), replayed: true };
+      // Locking (current) read, already held by lockFacility: a plain read would use this transaction's snapshot, which can
+      // predate a concurrent identical proposal that committed while we waited on the payer lock (Prisma P2025).
+      const [facility] = await tx.$queryRaw<CreditFacility[]>`SELECT * FROM CreditFacility WHERE id = ${existing.id} FOR UPDATE`;
+      return { facility, replayed: true };
     }
     if (payer.status !== "active" || payer.currency !== "CNY") refuse("payer_account_unavailable");
     const facility = await tx.creditFacility.create({ data });
