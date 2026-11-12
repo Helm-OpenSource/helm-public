@@ -3,12 +3,16 @@ import type { Prisma } from "@prisma/client";
 import { canManageWorkspaceBilling } from "@/lib/auth/billing-governance";
 import { resolvePayerForWorkspaceInTransaction } from "../payer/payer-accounts";
 import { fenToDecimalString } from "../funds/money";
+import { readPayerBalanceSummaries } from "../balance/balance-status";
 
 /** Billing V1 S2-c wallet read, finance visibility only: payer resolved server-side; reader is an ACTIVE, unscoped OWNER/BILLING_ADMIN.
- * Projection balance plus wallet deltas newest first (keyset cursor); no evidence, operation keys or business data; fen strings. */
+ * Projection balance plus wallet deltas newest first (keyset cursor); no evidence, operation keys or business data; fen strings.
+ * `availableFen` keeps its meaning (wallet projection only); C-BAL adds the summary's balanceFen (may be negative), headroomFen and
+ * arrears (balance-status.ts); headroomFen includes remaining credit and must never be displayed as a balance. */
 export const WALLET_PAGE_MAX = 100;
 export type WalletQuery = { workspaceId: string; actorUserId: string; cursor?: string | null; limit?: number };
 export type WalletView = { currency: "CNY"; billingMode: "off" | "shadow" | "enforce"; availableFen: string;
+  balanceFen: string; headroomFen: string; arrears: boolean;
   transactions: Array<{ id: string; kind: string; walletDeltaFen: string; reversalOfId: string | null; createdAt: string }>;
   nextCursor: string | null };
 
@@ -48,8 +52,13 @@ export async function getWalletInTransaction(tx: Prisma.TransactionClient, query
       AND (${after ? 1 : 0} = 0 OR t.createdAt < ${after?.createdAt ?? null} OR (t.createdAt = ${after?.createdAt ?? null} AND t.id < ${after?.id ?? null}))
     ORDER BY t.createdAt DESC, t.id DESC LIMIT ${limit + 1}`;
   const page = rows.slice(0, limit);
+  const summary = (await readPayerBalanceSummaries(tx, [query.workspaceId])).get(query.workspaceId);
+  // Under REPEATABLE READ this plain read uses the snapshot of the transaction's first read, so a binding created between that
+  // read and the locking resolve above is not seen here: refused as payer_unresolved (404), never a wrong number.
+  if (!summary) fail("payer_unresolved");
   return { currency: "CNY", billingMode: payer.billingMode,
     availableFen: fenToDecimalString(projection ? BigInt(projection.balanceFen) : BigInt(0)),
+    balanceFen: fenToDecimalString(summary.balanceFen), headroomFen: fenToDecimalString(summary.headroomFen), arrears: summary.arrears,
     transactions: page.map(row => ({ id: row.id, kind: row.kind, reversalOfId: row.reversalOfId, createdAt: row.createdAt.toISOString(),
       walletDeltaFen: fenToDecimalString(row.amountFen == null ? BigInt(0)
         : row.direction === "credit" ? BigInt(row.amountFen) : -BigInt(row.amountFen)) })),
