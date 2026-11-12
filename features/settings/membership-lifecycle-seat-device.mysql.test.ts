@@ -14,9 +14,23 @@ const caller = vi.hoisted(() => ({
   user: { id: "", name: "管理员" },
   workspace: { id: "", defaultLocale: "zh-CN" },
   membership: { id: "", role: "OWNER", userId: "" },
+  failAfterRevoke: false,
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+// Fails the caller's transaction right after the real revoke, to prove the
+// revoke ran inside it.
+vi.mock("@/lib/seat-device/store-tokens", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/seat-device/store-tokens")>();
+  return {
+    ...actual,
+    revokeSeatDevicesInTx: async (...args: Parameters<typeof actual.revokeSeatDevicesInTx>) => {
+      const revoked = await actual.revokeSeatDevicesInTx(...args);
+      if (caller.failAfterRevoke) throw new Error("injected failure after revoke");
+      return revoked;
+    },
+  };
+});
 vi.mock("@/lib/auth/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/session")>()),
   requireCurrentUser: async () => caller.user,
@@ -111,6 +125,22 @@ describeMysql("membership lifecycle revokes seat desktop devices on MySQL", () =
       updateOrganizationMembershipLifecycleAction({ membershipId: leaving.membershipId, nextStatus: MembershipStatus.ACTIVE }),
     ).resolves.toMatchObject({ ok: true });
     expect((await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: devices[0] } })).status).toBe("revoked");
+  });
+
+  it("revokes in the deactivation's own transaction: a failure after it undoes both", async () => {
+    const leaving = await member();
+    const device = await activeDevice(leaving);
+    caller.failAfterRevoke = true;
+    try {
+      await expect(
+        updateOrganizationMembershipLifecycleAction({ membershipId: leaving.membershipId, nextStatus: MembershipStatus.INACTIVE }),
+      ).rejects.toThrow("injected failure after revoke");
+    } finally {
+      caller.failAfterRevoke = false;
+    }
+    expect((await db.membership.findUniqueOrThrow({ where: { id: leaving.membershipId } })).status).toBe(MembershipStatus.ACTIVE);
+    expect((await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: device } })).status).toBe("active");
+    expect(await db.auditLog.count({ where: { targetId: device, actionType: "SEAT_DEVICE_REVOKED" } })).toBe(0);
   });
 
   // Switch off (the default): the in-service action never touches the device

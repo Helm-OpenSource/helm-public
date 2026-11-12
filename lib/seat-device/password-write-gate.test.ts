@@ -6,10 +6,13 @@
 // device of the member alive.
 //
 // Heuristic by design: it finds Prisma `<client>.user.<write>(...)` calls
-// and raw `UPDATE User SET` / `INSERT INTO User (...)` statements, and
-// checks each data/create/update object (or statement) that names
-// passwordHash for passwordSetAt. A nested write into User from another
-// model's call is not seen. The extension's own User writes live in its
+// and raw `UPDATE User SET` / `INSERT INTO User (...)` statements (with
+// plain, quoted or escaped-backtick identifiers, as written inside a tagged
+// template), and checks each data/create/update object (or statement) that
+// names passwordHash for passwordSetAt. A data/create/update value it cannot
+// read (a variable, a shorthand, a call) fails closed: the write must spell
+// its object out. A nested write into User from another model's call is not
+// seen. The extension's own User writes live in its
 // repository and are gated there.
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -22,11 +25,14 @@ const SOURCE_FILE = /\.(ts|tsx|mts|cts|js|mjs|cjs)$/;
 const TEST_FILE = /\.test\.[a-z]+$/;
 
 const USER_WRITE = /\.user\.(?:create|createMany|update|updateMany|upsert)\s*\(/g;
-const WRITE_OBJECT = /\b(?:data|create|update)\s*:\s*\{/g;
-const SQL_USER_UPDATE = /\bUPDATE\s+[`"]?User[`"]?\s+SET\b/gi;
-const SQL_USER_INSERT = /\bINSERT\s+INTO\s+[`"]?User[`"]?\s*\(/gi;
+// A write key and the first character of its value; shorthand `data,` or
+// `data }` has none.
+const WRITE_KEY = /\b(?:data|create|update)\b\s*(?::\s*(\S)|(?=[,}]))/g;
+// An identifier may be bare, quoted, or a backtick escaped inside a template.
+const SQL_USER_UPDATE = /\bUPDATE\s+(?:\\?[`"])?User(?:\\?[`"])?\s+SET\b/gi;
+const SQL_USER_INSERT = /\bINSERT\s+INTO\s+(?:\\?[`"])?User(?:\\?[`"])?\s*\(/gi;
 
-type PasswordWrite = { line: number; setsPasswordSetAt: boolean };
+type PasswordWrite = { line: number; setsPasswordSetAt: boolean; unreadable?: true };
 
 // Text from the bracket at `open` to its partner (same bracket kind only;
 // strings are not parsed, which is enough for the write shapes in use).
@@ -51,14 +57,15 @@ export function findPasswordWrites(source: string): PasswordWrite[] {
   for (const call of source.matchAll(USER_WRITE)) {
     const args = enclosed(source, call.index + call[0].length - 1);
     if (!args) continue;
-    for (const object of args.matchAll(WRITE_OBJECT)) {
-      const body = enclosed(args, object.index + object[0].length - 1);
+    for (const key of args.matchAll(WRITE_KEY)) {
+      const body = key[1] === "{" ? enclosed(args, key.index + key[0].length - 1) : null;
       if (body) record(call.index, body);
+      else writes.push({ line: lineOf(source, call.index), setsPasswordSetAt: false, unreadable: true });
     }
   }
   for (const statement of source.matchAll(SQL_USER_UPDATE)) {
     const rest = source.slice(statement.index);
-    const end = rest.search(/\bWHERE\b|;|`\s*[,)]/i);
+    const end = rest.search(/\bWHERE\b|;|(?<!\\)`\s*[,)]/i);
     record(statement.index, end === -1 ? rest : rest.slice(0, end));
   }
   for (const statement of source.matchAll(SQL_USER_INSERT)) {
@@ -101,5 +108,13 @@ describe("password write gate", () => {
     expect(flagged("tx.$executeRaw`UPDATE `User` SET `passwordHash` = ${hash} WHERE `id` = ${id}`")).toEqual([false]);
     expect(flagged("tx.$executeRaw`UPDATE User SET passwordHash = ?, passwordSetAt = ? WHERE id = ?`")).toEqual([true]);
     expect(flagged("INSERT INTO `User` (`id`, `email`, `passwordHash`) VALUES (?, ?, ?)")).toEqual([false]);
+    // Raw SQL inside a tagged template, as the repository writes it.
+    expect(flagged("tx.$executeRaw`UPDATE \\`User\\` SET \\`passwordHash\\` = ${hash} WHERE \\`id\\` = ${id}`")).toEqual([false]);
+    expect(flagged("tx.$executeRaw`UPDATE \\`User\\` SET \\`passwordHash\\` = ${hash}, \\`passwordSetAt\\` = ${now} WHERE \\`id\\` = ${id}`")).toEqual([true]);
+    expect(flagged("tx.$executeRaw`INSERT INTO \\`User\\` (\\`id\\`, \\`passwordHash\\`) VALUES (${id}, ${hash})`")).toEqual([false]);
+    // A write object the gate cannot read fails closed, password or not.
+    expect(findPasswordWrites("const data = { passwordHash: next }; await db.user.update({ where: { id }, data });")).toEqual([{ line: 1, setsPasswordSetAt: false, unreadable: true }]);
+    expect(flagged("await db.user.update({ where: { id }, data: buildUserPatch(input) });")).toEqual([false]);
+    expect(flagged("await db.user.upsert({ where, create: createInput, update: { name } });")).toEqual([false]);
   });
 });
