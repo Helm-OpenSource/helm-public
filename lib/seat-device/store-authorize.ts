@@ -22,7 +22,7 @@ import "server-only";
 // No plaintext token or pairing code is stored, logged or put in an error or
 // audit payload: only sha256 hashes reach the database.
 
-import { ActorType, MembershipStatus, Prisma } from "@prisma/client";
+import { ActorType, MembershipStatus, Prisma, type WorkspaceRole } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { externalScopeOf } from "@/lib/auth/external-member-scope";
 import { evaluateLock, hashLoginIdentifier, nextStateOnFailure, type FailureLimit } from "@/lib/auth/login-rate-limit";
@@ -95,7 +95,7 @@ export class SeatDeviceAuthDisabledError extends Error {
   }
 }
 
-function assertDeploymentEnabled() {
+export function assertDeploymentEnabled() {
   if (!isSeatDeviceAuthDeploymentEnabled()) throw new SeatDeviceAuthDisabledError();
 }
 
@@ -114,7 +114,7 @@ function isContentionError(error: unknown) {
 // conflict that outlasts the retries, or contention for a connection, never
 // leaves as a raw database error: it becomes `exhausted`, a closed code with a
 // Retry-After, so callers answer it like any other refusal.
-async function retried<T>(
+export async function retried<T>(
   transaction: () => Promise<T>,
   exhausted: SeatDeviceErrorCode,
   isConflict: (error: unknown) => boolean = isWriteConflictError,
@@ -325,7 +325,7 @@ export async function cancelSeatDeviceAuthorization(input: {
 // A CAS that loses after the row was re-read in the same transaction means a
 // concurrent writer slipped in; the message matches isWriteConflictError, so
 // it is retried like any other conflict.
-function casLost(): never {
+export function casLost(): never {
   throw new Error("seat device write conflict");
 }
 
@@ -340,7 +340,7 @@ async function clearLapsedPairingCode(
   });
 }
 
-async function auditDevice(
+export async function auditDevice(
   tx: Prisma.TransactionClient,
   row: { id: string; workspaceId: string | null; userId: string | null; clientType: string },
   actionType: string,
@@ -529,7 +529,7 @@ export async function claimSeatDeviceAuthorization(input: {
 // Website: pairing-code entry (lookup, approve, reject)
 // ---------------------------------------------------------------------------
 
-type MemberContext = {
+export type MemberContext = {
   authSessionId: string;
   providerType: string | null;
   userId: string;
@@ -537,12 +537,13 @@ type MemberContext = {
   passwordSetAt: Date | null;
   workspace: { id: string; name: string; enabled: boolean };
   membershipId: string;
+  role: WorkspaceRole;
 };
 
 // Re-reads the session row itself instead of trusting the caller's view of
 // it: usable, owned by the user, seated on a workspace where the user is an
 // ACTIVE, non-external member. The workspace bound later is this one.
-async function loadMemberContext(authSessionId: string, userId: string, now: Date): Promise<MemberContext> {
+export async function loadMemberContext(authSessionId: string, userId: string, now: Date): Promise<MemberContext> {
   const session = await db.authSession.findUnique({
     where: { id: authSessionId },
     select: { userId: true, activeWorkspaceId: true, providerType: true, revokedAt: true, expiresAt: true },
@@ -555,7 +556,7 @@ async function loadMemberContext(authSessionId: string, userId: string, now: Dat
     db.workspace.findUnique({ where: { id: workspaceId }, select: { id: true, name: true, featureFlagsJson: true } }),
     db.membership.findUnique({
       where: { workspaceId_userId: { workspaceId, userId } },
-      select: { id: true, status: true, accessScope: true },
+      select: { id: true, role: true, status: true, accessScope: true },
     }),
     db.user.findUnique({ where: { id: userId }, select: { name: true, passwordSetAt: true } }),
   ]);
@@ -570,6 +571,7 @@ async function loadMemberContext(authSessionId: string, userId: string, now: Dat
     passwordSetAt: user.passwordSetAt,
     workspace: { id: workspace.id, name: workspace.name, enabled: isSeatDeviceWorkspaceEnabled(workspace.featureFlagsJson) },
     membershipId: membership.id,
+    role: membership.role,
   };
 }
 
