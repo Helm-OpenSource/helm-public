@@ -43,9 +43,6 @@ import { refreshSeatDeviceToken, revokeSeatDeviceWithRefreshToken } from "@/lib/
 // The largest valid body is an authorization request (a 200-character device
 // name); anything far above it is not a client of this contract.
 const MAX_BODY_CHARACTERS = 4096;
-// Used when a 429 or 503 comes without its own hint (a pairing-code redraw
-// that ran out, or a failure outside the closed set).
-const DEFAULT_RETRY_AFTER_SECONDS = 1;
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 
 export type SeatDeviceOperation = "authorize" | "cancel" | "claim" | "refresh" | "revoke";
@@ -66,7 +63,9 @@ export function seatDeviceErrorResponse(code: SeatDeviceErrorCode, retryAfterSec
   const status = SEAT_DEVICE_ERROR_STATUS[code];
   const headers: Record<string, string> = { ...NO_STORE };
   if (status === 429 || status === 503) {
-    headers["Retry-After"] = String(Math.max(1, Math.ceil(retryAfterSeconds ?? DEFAULT_RETRY_AFTER_SECONDS)));
+    // At least 1 second, also when the refusal carries no hint of its own (a
+    // pairing-code redraw that ran out, a failure outside the closed set).
+    headers["Retry-After"] = String(Math.max(1, Math.ceil(retryAfterSeconds ?? 0)));
   }
   return NextResponse.json({ error: { code } }, { status, headers });
 }

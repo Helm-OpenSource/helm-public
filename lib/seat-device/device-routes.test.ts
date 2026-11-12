@@ -115,7 +115,9 @@ describe("seat device endpoints with the switch on, before the store", () => {
   it.each(Object.entries(ROUTES))("%s refuses malformed, non-object and oversized bodies as invalid_input", async (path, route) => {
     vi.stubEnv("HELM_SEAT_DEVICE_AUTH_ENABLED", "true");
     vi.stubEnv("APP_URL", "https://seat.example.test");
-    for (const body of ["{not json", "", "[]", "null", `"text"`, JSON.stringify({ padding: "x".repeat(5000) })]) {
+    // The last one is a well-formed body padded past the size cap.
+    const padded = " ".repeat(5000) + JSON.stringify({ refreshToken: `hsdr_${"a".repeat(43)}` });
+    for (const body of ["{not json", "", "[]", "null", `"text"`, padded]) {
       const response = await route.POST(
         new Request(`https://seat.example.test/api/public-auth/seat-device/${path}`, { method: "POST", body }),
       );

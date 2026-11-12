@@ -165,6 +165,8 @@ describeMysql("seat device endpoints on MySQL", () => {
     const claimed = await post("claim", { requestId: grant.requestId, pollToken: grant.pollToken }, source);
     expect(claimed.status).toBe(200);
     const body = claimed.body as { accessToken: string; refreshToken: string };
+    // The claim binds the trusted source the pair went to (re-claim, grace).
+    expect(await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: grant.requestId } })).toMatchObject({ lastIp: source, rotationSource: source });
     return { owner, source, deviceId: grant.requestId, ...body };
   }
 
@@ -211,6 +213,20 @@ describeMysql("seat device endpoints on MySQL", () => {
     const row = await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: grant.requestId } });
     expect(row.sourceIp).toBe(source);
     expect(row.pollTokenHash).toBe(hashSeatDeviceToken(grant.pollToken));
+  });
+
+  it("resolves the public origin before storing anything", async () => {
+    nextDay();
+    const before = await db.seatDeviceAuthorization.count();
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("APP_URL", "http://plain-http.example.test");
+    try {
+      expect(await post("authorize", DEVICE, freshSource())).toMatchObject({ status: 503, body: errorOf("temporarily_unavailable") });
+    } finally {
+      vi.stubEnv("NODE_ENV", "test");
+      vi.stubEnv("APP_URL", APP_ORIGIN);
+    }
+    expect(await db.seatDeviceAuthorization.count()).toBe(before);
   });
 
   it("refuses unknown fields on every endpoint and an unsupported client type", async () => {
@@ -272,6 +288,7 @@ describeMysql("seat device endpoints on MySQL", () => {
     const rotated = await post("refresh", { refreshToken: first.refreshToken }, first.source);
     expect(rotated.status).toBe(200);
     expect(Object.keys(rotated.body as object).sort()).toEqual(["accessToken", "expiresInSeconds", "refreshExpiresInSeconds", "refreshToken"]);
+    expect((await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: first.deviceId } })).rotationSource).toBe(first.source);
     tick(61);
     // The previous token after the grace window is reuse: the device is revoked.
     expect(await post("refresh", { refreshToken: first.refreshToken }, first.source)).toMatchObject({ status: 401, body: errorOf("token_revoked") });
