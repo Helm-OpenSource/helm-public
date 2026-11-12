@@ -38,12 +38,12 @@ outbound voice provider, and are not an outbound voice deployment gate.
 | SMS send | `HELM_SMS_SENDS_ENABLED` | Safe default deny | No public Core provider binding; reserved as a required gate for a future separately reviewed adapter |
 | Financial action | `HELM_FINANCIAL_ACTIONS_ENABLED` | Legacy-compatible allow | Billing settings actions, billing integration and payment-provider adapters, and Stripe, Alipay, and WeChat Pay webhooks before verification or writes |
 | Billing internal route | `HELM_BILLING_INTERNAL_ROUTES_ENABLED` | Safe default deny | `/api/internal/billing/v1/*` answers 404 before reading the body or the service grant ([contract](BILLING_INTERNAL_ROUTES.md)) |
-| Billing Alipay top-up | `HELM_BILLING_TOPUP_ALIPAY_ENABLED` | Safe default deny | `/api/billing/v1/topup-notify/alipay` answers 404 before reading the body or the database; also requires `financial_action` ([contract](BILLING_TOPUP_ORDERS.md)) |
+| Billing Alipay top-up | `HELM_BILLING_TOPUP_ALIPAY_ENABLED` | Default allow (owner 2026-11-12: public collection entry); fail-closed on merchant configuration | `false` makes `/api/billing/v1/topup-notify/alipay` answer 404 before reading the body or the database; also requires `financial_action`. While on, missing or malformed Alipay keys or seller id close every top-up entry (`503`, one `topup_unavailable` alert) ([contract](BILLING_TOPUP_ORDERS.md)) |
 | Billing WeChat Pay top-up | `HELM_BILLING_TOPUP_WECHATPAY_ENABLED` | Default enabled (owner 2026-11-12) | `false` makes `/api/billing/v1/topup-notify/wechatpay` answer 404 before reading the body or the database; while enabled, any missing or malformed merchant key fails closed (503, alert, no credit); also requires `financial_action` ([contract](BILLING_TOPUP_ORDERS.md)) |
 
-The generated `.env.example` sets every gate to `false`, except
-`HELM_BILLING_TOPUP_WECHATPAY_ENABLED`, which is empty and therefore **on** (owner 2026-11-12);
-set it to `false` on deployments that do not collect WeChat Pay. That is a safe
+The generated `.env.example` sets every gate to `false` except the two top-up gates (owner 2026-11-12):
+`HELM_BILLING_TOPUP_ALIPAY_ENABLED="true"` and `HELM_BILLING_TOPUP_WECHATPAY_ENABLED` (empty, therefore on). Both still need
+`financial_action` and complete merchant configuration; set them to `false` on deployments that do not collect. That is a safe
 fresh-deployment example, not the missing-key compatibility rule. Production
 contracts should set every key explicitly and validate the observed values
 before startup.
