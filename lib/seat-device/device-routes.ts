@@ -6,7 +6,7 @@ import "server-only";
 // bind a path to an operation here.
 //
 // Order: deployment switch (off answers 404 with no body, before the body is
-// read), then the request body as strict JSON, then the store. No cookie is
+// read), then the request body as bounded, strict JSON, then the store. No cookie is
 // read: the device is identified by its poll or refresh token alone.
 //
 // Every answer carries Cache-Control: no-store (server design §1A item 8),
@@ -39,9 +39,9 @@ import {
 } from "@/lib/seat-device/store-authorize";
 import { refreshSeatDeviceToken, revokeSeatDeviceWithRefreshToken } from "@/lib/seat-device/store-tokens";
 
-// The largest valid body is an authorization request (a 200-character device
-// name); anything far above it is not a client of this contract.
-const MAX_BODY_CHARACTERS = 4096;
+// The largest valid body is an authorization request: a device name of at
+// most 200 characters stays near 1.2 KB even fully \u-escaped.
+const MAX_BODY_BYTES = 4096;
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 
 export type SeatDeviceOperation = "authorize" | "cancel" | "claim" | "refresh" | "revoke";
@@ -69,11 +69,27 @@ export function seatDeviceErrorResponse(code: SeatDeviceErrorCode, retryAfterSec
   return NextResponse.json({ error: { code } }, { status, headers });
 }
 
+// JSON only: a cross-site page can post text/plain without a preflight,
+// never application/json (and OPTIONS answers 404). Bounded like
+// lib/billing/internal/internal-routes.ts: the declared length first, then
+// the bytes as they stream (chunked too); reading stops past the limit.
 async function readJson(request: Request): Promise<unknown> {
-  const text = await request.text();
-  if (text.length > MAX_BODY_CHARACTERS) throw new InvalidBody();
+  const type = request.headers.get("content-type")?.split(";")[0].trim().toLowerCase();
+  if (type !== "application/json") throw new InvalidBody();
+  if (!(Number(request.headers.get("content-length") ?? "0") <= MAX_BODY_BYTES)) throw new InvalidBody();
+  const chunks: Uint8Array[] = [];
+  const reader = request.body?.getReader();
+  let size = 0;
+  for (let chunk = await reader?.read(); chunk && !chunk.done; chunk = await reader?.read()) {
+    size += chunk.value.byteLength;
+    if (size > MAX_BODY_BYTES) {
+      await reader?.cancel();
+      throw new InvalidBody();
+    }
+    chunks.push(chunk.value);
+  }
   try {
-    return JSON.parse(text);
+    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
   } catch {
     throw new InvalidBody();
   }

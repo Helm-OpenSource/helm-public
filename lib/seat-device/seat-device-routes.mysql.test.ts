@@ -88,6 +88,7 @@ async function post(endpoint: Endpoint, body: unknown, source: string | null = n
     }),
   );
   expect(response.headers.get("cache-control"), `${endpoint} ${response.status}`).toBe("no-store");
+  expect(response.headers.get("set-cookie")).toBeNull();
   const text = await response.text();
   const parsed: unknown = text === "" ? null : JSON.parse(text);
   if (parsed && typeof parsed === "object") {
@@ -108,6 +109,8 @@ async function post(endpoint: Endpoint, body: unknown, source: string | null = n
 }
 
 const errorOf = (code: string) => ({ error: { code } });
+// For exact assertions: the status and the whole body, nothing more.
+const only = ({ status, body }: Answer) => ({ status, body });
 const DEVICE = { deviceName: "前台电脑", clientType: "seat_desktop", clientVersion: "1.0.0" };
 
 describeMysql("seat device endpoints on MySQL", () => {
@@ -227,6 +230,7 @@ describeMysql("seat device endpoints on MySQL", () => {
       vi.stubEnv("APP_URL", APP_ORIGIN);
     }
     expect(await db.seatDeviceAuthorization.count()).toBe(before);
+    expect(logLines.at(-1)).toBe(`[seat-device] ${JSON.stringify({ event: "device_endpoint_failed", operation: "authorize", reason: "public_origin_invalid" })}`);
   });
 
   it("refuses unknown fields on every endpoint and an unsupported client type", async () => {
@@ -256,7 +260,7 @@ describeMysql("seat device endpoints on MySQL", () => {
     const owner = await member();
     const { grant, source } = await authorize();
     const poll = { requestId: grant.requestId, pollToken: grant.pollToken };
-    expect(await post("claim", poll, source)).toMatchObject({ status: 200, body: { status: "pending" } });
+    expect(only(await post("claim", poll, source))).toEqual({ status: 200, body: { status: "pending" } });
     const throttled = await post("claim", poll, source);
     expect(throttled).toMatchObject({ status: 429, body: errorOf("slow_down") });
     expect(Number(throttled.headers.get("retry-after"))).toBe(5);
@@ -265,6 +269,8 @@ describeMysql("seat device endpoints on MySQL", () => {
     tick(5);
     const claimed = await post("claim", poll, source);
     expect(claimed.status).toBe(200);
+    expect(Object.keys(claimed.body as object).sort()).toEqual(["accessToken", "deviceId", "expiresInSeconds", "identity", "refreshExpiresInSeconds", "refreshToken", "status"]);
+    expect(Object.keys((claimed.body as { identity: object }).identity).sort()).toEqual(["displayName", "kind", "roles", "subjectId", "workspace"]);
     expect(claimed.body).toMatchObject({
       status: "approved",
       expiresInSeconds: 900,
@@ -272,14 +278,14 @@ describeMysql("seat device endpoints on MySQL", () => {
       identity: { subjectId: `user:${owner.userId}`, kind: "member", workspace: { id: workspaceId } },
     });
     // Cancel: a wrong poll token reads expired; the claimed, never used pair is revoked.
-    expect(await post("cancel", { ...poll, pollToken: mintSeatDeviceToken("poll").token })).toMatchObject({ status: 200, body: { status: "expired" } });
-    expect(await post("cancel", poll)).toMatchObject({ status: 200, body: { status: "cancelled" } });
-    expect(await post("cancel", poll)).toMatchObject({ status: 200, body: { status: "revoked" } });
+    expect(only(await post("cancel", { ...poll, pollToken: mintSeatDeviceToken("poll").token }))).toEqual({ status: 200, body: { status: "expired" } });
+    expect(only(await post("cancel", poll))).toEqual({ status: 200, body: { status: "cancelled" } });
+    expect(only(await post("cancel", poll))).toEqual({ status: 200, body: { status: "revoked" } });
     // A pending request cancels to cancelled and then claims as expired.
     const second = await authorize();
     const secondPoll = { requestId: second.grant.requestId, pollToken: second.grant.pollToken };
-    expect(await post("cancel", secondPoll)).toMatchObject({ status: 200, body: { status: "cancelled" } });
-    expect(await post("claim", secondPoll, second.source)).toMatchObject({ status: 200, body: { status: "expired" } });
+    expect(only(await post("cancel", secondPoll))).toEqual({ status: 200, body: { status: "cancelled" } });
+    expect(only(await post("claim", secondPoll, second.source))).toEqual({ status: 200, body: { status: "expired" } });
   });
 
   it("rotates, detects reuse, and answers every revoking code with 401", async () => {
@@ -359,12 +365,12 @@ describeMysql("seat device endpoints on MySQL", () => {
     const owned = await device();
     const rotated = await post("refresh", { refreshToken: owned.refreshToken }, owned.source);
     expect(rotated.status).toBe(200);
-    expect(await post("revoke", { refreshToken: mintSeatDeviceToken("refresh").token })).toMatchObject({ status: 200, body: {} });
+    expect(only(await post("revoke", { refreshToken: mintSeatDeviceToken("refresh").token }))).toEqual({ status: 200, body: {} });
     // The previous token still finds the device after a lost answer.
-    expect(await post("revoke", { refreshToken: owned.refreshToken, reason: "client_cancelled" })).toMatchObject({ status: 200, body: {} });
+    expect(only(await post("revoke", { refreshToken: owned.refreshToken, reason: "client_cancelled" }))).toEqual({ status: 200, body: {} });
     const row = await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: owned.deviceId } });
     expect(row).toMatchObject({ status: "revoked", revokeReason: "client_cancelled" });
-    expect(await post("revoke", { refreshToken: owned.refreshToken })).toMatchObject({ status: 200, body: {} });
+    expect(only(await post("revoke", { refreshToken: owned.refreshToken }))).toEqual({ status: 200, body: {} });
   });
 
   it("answers every endpoint 404 with no body while the switch is off, and stores nothing", async () => {

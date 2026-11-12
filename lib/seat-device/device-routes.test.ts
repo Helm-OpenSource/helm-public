@@ -88,42 +88,53 @@ describe("seat device endpoints with the deployment switch off", () => {
 });
 
 describe("seat device endpoints with the switch on, before the store", () => {
-  it("refuses a misconfigured public origin before anything is stored, with a fixed log line", async () => {
-    vi.stubEnv("HELM_SEAT_DEVICE_AUTH_ENABLED", "true");
-    vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("APP_URL", "http://plain-http.example.test");
-    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
-    try {
-      const request = new Request("https://seat.example.test/api/public-auth/seat-device/device-authorizations", {
-        method: "POST",
-        body: JSON.stringify({ deviceName: "前台电脑", clientType: "seat_desktop", clientVersion: "1.0.0" }),
-      });
-      const response = await authorizeRoute.POST(request);
-      expect(response.status).toBe(503);
-      expect(response.headers.get("cache-control")).toBe("no-store");
-      expect(response.headers.get("retry-after")).toBe("1");
-      expect(await response.json()).toEqual({ error: { code: "temporarily_unavailable" } });
-      expect(request.bodyUsed).toBe(false);
-      expect(logged.mock.calls).toEqual([
-        ["[seat-device]", JSON.stringify({ event: "device_endpoint_failed", operation: "authorize", reason: "public_origin_invalid" })],
-      ]);
-    } finally {
-      logged.mockRestore();
-    }
-  });
+  const url = (path: string) => `https://seat.example.test/api/public-auth/seat-device/${path}`;
+  const json = { "content-type": "application/json" };
+  const refreshBody = JSON.stringify({ refreshToken: `hsdr_${"a".repeat(43)}` });
 
-  it.each(Object.entries(ROUTES))("%s refuses malformed, non-object and oversized bodies as invalid_input", async (path, route) => {
+  it.each(Object.entries(ROUTES))("%s refuses malformed, non-object, non-JSON-typed and oversized bodies as invalid_input", async (path, route) => {
     vi.stubEnv("HELM_SEAT_DEVICE_AUTH_ENABLED", "true");
     vi.stubEnv("APP_URL", "https://seat.example.test");
-    // The last one is a well-formed body padded past the size cap.
-    const padded = " ".repeat(5000) + JSON.stringify({ refreshToken: `hsdr_${"a".repeat(43)}` });
-    for (const body of ["{not json", "", "[]", "null", `"text"`, padded]) {
-      const response = await route.POST(
-        new Request(`https://seat.example.test/api/public-auth/seat-device/${path}`, { method: "POST", body }),
-      );
+    const requests = [
+      ...["{not json", "", "[]", "null", `"text"`].map((body) => new Request(url(path), { method: "POST", headers: json, body })),
+      // A well-formed body as text/plain (what a cross-site form can send) or without a type.
+      new Request(url(path), { method: "POST", headers: { "content-type": "text/plain" }, body: refreshBody }),
+      new Request(url(path), { method: "POST", body: refreshBody }),
+      // A declared length past the cap is refused before the body is read.
+      new Request(url(path), { method: "POST", headers: { ...json, "content-length": "999999999" }, body: refreshBody }),
+    ];
+    for (const request of requests) {
+      const response = await route.POST(request);
       expect(response.status).toBe(400);
       expect(response.headers.get("cache-control")).toBe("no-store");
       expect(await response.json()).toEqual({ error: { code: "invalid_input" } });
     }
+    expect(requests.slice(5).map((request) => request.bodyUsed)).toEqual([false, false, false]);
+  });
+
+  it("stops reading a streamed body once it passes 4096 bytes", async () => {
+    vi.stubEnv("HELM_SEAT_DEVICE_AUTH_ENABLED", "true");
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1;
+        if (pulled > 64) controller.close();
+        else controller.enqueue(new Uint8Array(1024).fill(0x20));
+      },
+    });
+    const response = await refreshRoute.POST(new Request(url("device-tokens/refresh"), { method: "POST", headers: json, body, duplex: "half" } as RequestInit));
+    expect(response.status).toBe(400);
+    expect(pulled).toBeLessThanOrEqual(6);
+  });
+
+  it("reads a body of exactly 4096 bytes and refuses 4097", async () => {
+    vi.stubEnv("HELM_SEAT_DEVICE_AUTH_ENABLED", "true");
+    vi.stubEnv("APP_URL", "https://seat.example.test");
+    // An unsupported client type is refused after the body was read and parsed.
+    const object = JSON.stringify({ deviceName: "前台电脑", clientType: "other", clientVersion: "1.0.0" });
+    const padded = (bytes: number) => " ".repeat(bytes - Buffer.byteLength(object)) + object;
+    const answer = async (body: string) => (await authorizeRoute.POST(new Request(url("device-authorizations"), { method: "POST", headers: json, body }))).json();
+    expect(await answer(padded(4096))).toEqual({ error: { code: "client_not_supported" } });
+    expect(await answer(padded(4097))).toEqual({ error: { code: "invalid_input" } });
   });
 });
