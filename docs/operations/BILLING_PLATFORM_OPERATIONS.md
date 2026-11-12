@@ -9,7 +9,7 @@ public_safety: Public source contract and synthetic test verification only. No d
 # Billing platform operations / 平台计费运营操作
 
 Billing V1 E1a (Core): migration `20261112120000_billing_platform_operations`, `lib/billing/platform/platform-operations.ts`.
-No HTTP route or UI; the command line is the only intended caller (next slice).
+CLI `npm run billing:platform-ops` (`lib/billing/platform/platform-batch.ts`); no HTTP route or UI.
 平台代客户建付款主体与绑定、切换计费模式；制单与复核必须是两个不同的平台财务人员，证据为 owner 裁定编号，不要求客户 OWNER 操作。
 
 ## Authority / 权限
@@ -43,10 +43,26 @@ No HTTP route or UI; the command line is the only intended caller (next slice).
   content refuses `platform_operation_conflict`; the same checker repeating a decision replays. Repeating a mode step already taken
   under one ruling replays it, so a second identical step needs a new ruling reference.
 
-## Command line / 命令行
+## Batch CLI / 批量命令
 
-The operator CLI (`npm run billing:platform-ops`: list file, dry run by default, list sha, resumable) ships in the next slice on top of
-this one; until then nothing calls this module.
+The roster is supplied by operations from the owner ruling; nothing in code names an institution.
+
+```json
+{ "evidenceRef": "owner-ruling:OWNER_RULINGS_BILLING_TO_MAIN_20261111:example",
+  "entries": [{ "kind": "payer_onboard", "workspaceId": "<workspace id>", "contractSubjectRef": "<contract ref>" },
+              { "kind": "billing_mode", "workspaceId": "<workspace id>", "fromMode": "off", "toMode": "enforce" }] }
+```
+
+1. Dry run (default, read-only): `npm run billing:platform-ops -- --command=draft --list-file=list.json --actor-user-id=<maker>`
+   prints `listSha` (sha256 of the file bytes), each entry's operation key and state, the workspace's current `payerAccountId`,
+   `bindingId` and mode, and `planSha` (sha256 of that plan). It only reads state: it does not predict draft or approval refusals.
+2. Maker: add `--apply --list-sha=<listSha> --plan-sha=<planSha>` (plus `--confirm-enforce` if any entry goes to enforce). The apply
+   re-reads the plan first; any change since the dry run (a rebinding, another run, a mode change) refuses `plan_sha_mismatch` with no
+   write, so dry-run again right before every apply.
+3. Checker: `--command=review --decision=approve|reject --review-evidence-ref=<ref>`, dry run, then `--apply` with both sha values.
+- One transaction per entry in file order; stops at the first refusal (`stoppedAt`); re-running the same list resumes (committed entries
+  replay; take the new `planSha`). Put at most **one mode step per workspace** in a list: a second step for the same workspace only
+  drafts after the first is approved, and replays of earlier steps refuse once the mode has moved on. A changed list has a new sha and is dry-run again. Fields are closed, refs ASCII; output carries ids, states and codes only.
 
 ## Verification and rollback / 验证与回滚
 

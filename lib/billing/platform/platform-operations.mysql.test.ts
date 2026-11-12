@@ -7,6 +7,7 @@ import { grantPlatformFinanceRole, revokePlatformFinanceRole } from "../bank-rec
 import { changeCreditFacility, proposeCreditFacility } from "../credit/credit-facilities";
 import { changeSpendGrant, createSpendGrant, publishPriceVersion } from "../grants/price-grants";
 import { revokeBinding } from "../payer/payer-accounts";
+import { parseOperationList, runPlatformBatch, type PlatformBatchArgs } from "./platform-batch";
 import { draftPlatformOperation, reviewPlatformOperation, type PlatformOperationRequest } from "./platform-operations";
 
 // Runs only against a fully migrated, explicitly isolated database; never DATABASE_URL or the app's connection.
@@ -228,5 +229,51 @@ describe.skipIf(!url)("platform billing operations against MySQL", () => {
     expect(await a.payerAccount.count({ where: { governingWorkspaceId: ws } })).toBe(0);
     expect(await a.auditLog.count({ where: { workspaceId: ws, actionType: { not: "BILLING_PLATFORM_OPERATION_DRAFTED" } } })).toBe(0);
     expect((await a.platformBillingOperation.findFirstOrThrow({ where: { workspaceId: ws } })).state).toBe("drafted");
+  });
+
+  it("runs a list: dry run writes nothing, apply needs the list and plan sha, stops at a refusal and resumes idempotently", async () => {
+    const [w1, w2, w3] = [await workspace(), await workspace(), await workspace()];
+    const bytes = (entries: PlatformOperationRequest[]) => Buffer.from(JSON.stringify({ evidenceRef: ruling, entries }));
+    const list = parseOperationList(bytes([onboard(w1), onboard(w2), onboard(w3)]));
+    const args = (extra: Partial<PlatformBatchArgs>): PlatformBatchArgs => ({ command: "draft", listFile: "-", actorUserId: maker,
+      apply: true, listSha: list.sha256, planSha: null, decision: null, reviewEvidenceRef: null, confirmEnforce: false, ...extra });
+    const dryRun = (extra: Partial<PlatformBatchArgs> = {}) => runPlatformBatch(a, args({ ...extra, apply: false, listSha: null }), list);
+    /** Dry run, then apply with the plan sha it printed (the operator's two steps). */
+    const apply = async (extra: Partial<PlatformBatchArgs> = {}) => runPlatformBatch(a, args({ ...extra, planSha: (await dryRun(extra)).planSha }), list);
+    const dry = await dryRun();
+    expect(dry).toMatchObject({ ok: true, applied: false, listSha: list.sha256, planSha: expect.stringMatching(/^[a-f0-9]{64}$/) });
+    expect(await a.platformBillingOperation.count({ where: { workspaceId: { in: [w1, w2, w3] } } })).toBe(0);
+    expect(await runPlatformBatch(a, args({ listSha: "0".repeat(64), planSha: dry.planSha }), list)).toMatchObject({ ok: false, code: "list_sha_mismatch" });
+    expect(await runPlatformBatch(a, args({ planSha: "0".repeat(64) }), list)).toMatchObject({ ok: false, code: "plan_sha_mismatch" });
+    await a.$executeRaw`UPDATE Workspace SET status = 'SUSPENDED' WHERE id = ${w2}`;
+    const stopped = await apply();
+    expect(stopped).toMatchObject({ ok: false, stoppedAt: { index: 1, code: "workspace_unavailable" } });
+    expect(stopped.results).toHaveLength(1);
+    await a.$executeRaw`UPDATE Workspace SET status = 'ACTIVE' WHERE id = ${w2}`;
+    expect(await runPlatformBatch(a, args({ planSha: dry.planSha }), list)).toMatchObject({ code: "plan_sha_mismatch" }); // state moved on
+    const resumed = await apply();
+    expect(resumed.ok && resumed.results?.map(row => row.replayed)).toEqual([true, false, false]);
+    const reviewArgs = { command: "review" as const, actorUserId: checker, decision: "approve" as const, reviewEvidenceRef: "review:synthetic" };
+    expect((await apply(reviewArgs)).ok).toBe(true);
+    expect((await apply(reviewArgs)).results?.every(row => row.replayed && row.state === "applied")).toBe(true);
+    const after = await dryRun();
+    expect(after.plan?.map(row => [row.operationState, row.currentMode])).toEqual([["applied", "off"], ["applied", "off"], ["applied", "off"]]);
+    expect(after.plan?.[0]).toMatchObject({ payerAccountId: (await payerOf(w1)).id, bindingId: expect.any(String) });
+  });
+
+  it("stops an apply whose workspace was rebound to another payer after the dry run", async () => {
+    const ws = await onboarded();
+    const list = parseOperationList(Buffer.from(JSON.stringify({ evidenceRef: `${ruling}-drift`, entries: [mode(ws, "off", "shadow")] })));
+    const args: PlatformBatchArgs = { command: "draft", listFile: "-", actorUserId: maker, apply: false, listSha: null, planSha: null,
+      decision: null, reviewEvidenceRef: null, confirmEnforce: false };
+    const dry = await runPlatformBatch(a, args, list);
+    const bound = await a.payerScopeBinding.findFirstOrThrow({ where: { activeScopeRef: ws } });
+    await revokeBinding(a, { actorUserId: owner, bindingId: bound.id, expectedVersion: bound.version, evidenceRef: ruling });
+    const rebind = { actorUserId: maker, evidenceRef: `${ruling}-drift-rebind`, request: onboard(ws) };
+    await draftPlatformOperation(a, rebind);
+    await reviewPlatformOperation(a, { ...rebind, actorUserId: checker, decision: "approve", reviewEvidenceRef: "review:synthetic" });
+    expect(await runPlatformBatch(a, { ...args, apply: true, listSha: list.sha256, planSha: dry.planSha }, list))
+      .toMatchObject({ ok: false, code: "plan_sha_mismatch" });
+    expect(await a.platformBillingOperation.count({ where: { workspaceId: ws, kind: "billing_mode" } })).toBe(0);
   });
 });
