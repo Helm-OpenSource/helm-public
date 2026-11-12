@@ -14,15 +14,25 @@ import { observeAlipayTrade, observeWeChatPayTransaction, type MerchantRefLookup
  * provider txn, in one Core transaction with the order transition, VerifiedPayment, funds journal, audit and outbox.
  * Lock order: PayerAccount -> PaymentOrder -> VerifiedPayment -> funds journal (S2-a). Nothing here calls a provider.
  */
-export const TOPUP_MIN_FEN = BigInt(100); // 1 yuan
-export const TOPUP_MAX_FEN = BigInt(5_000_000); // 50 000 yuan per order; provisional until finance approves limits
+/** Owner 2026-11-12 11:24 「100 的整倍数，上不封顶」: whole multiples of 100 yuan, at least 100 yuan, for every provider. */
+export const TOPUP_UNIT_FEN = BigInt(10_000);
+export const TOPUP_MIN_FEN = TOPUP_UNIT_FEN;
+/** No business cap. Technical bound only: Alipay's documented total_amount maximum (100 000 000 yuan). */
+export const TOPUP_MAX_FEN = BigInt(10_000_000_000);
+
+/** The one amount rule shared by every top-up provider (closed codes). */
+export function checkTopupAmountFen(amountFen: unknown): asserts amountFen is bigint {
+  if (typeof amountFen !== "bigint" || amountFen < TOPUP_MIN_FEN || amountFen > TOPUP_MAX_FEN) refuse("topup_amount_out_of_range");
+  if (amountFen % TOPUP_UNIT_FEN !== BigInt(0)) refuse("topup_amount_not_multiple");
+}
 export const TOPUP_ORDER_TTL_MS = 2 * 60 * 60 * 1000;
 const VERIFIER = { type: "SYSTEM" as const, ref: "billing-topup-verifier" };
 const SOURCE_PAGE = "/billing/topup";
 const ORDER_NO = /^tp[wa]_[0-9a-f]{28}$/;
 const TXN_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
-export type TopupRefusalCode = "topup_input_invalid" | "topup_amount_out_of_range" | "topup_forbidden" | "topup_billing_off" |
+export type TopupRefusalCode = "topup_input_invalid" | "topup_amount_out_of_range" | "topup_amount_not_multiple" |
+  "topup_forbidden" | "topup_billing_off" |
   "topup_rate_limited" | "topup_idempotency_conflict" | "topup_order_not_closable" |
   "topup_observation_invalid" | "topup_signature_invalid" | "topup_order_unknown" | "topup_order_type_invalid" |
   "topup_provider_mismatch" | "topup_merchant_mismatch" | "topup_amount_mismatch" | "topup_currency_mismatch" |
@@ -69,9 +79,7 @@ export async function createOrReplayTopupOrder(client: PrismaClient, input: Crea
   Promise<{ order: PaymentOrder | ReplayedTopupOrder; replayed: boolean }> {
   reference(input.actorUserId); reference(input.workspaceId); reference(input.merchantRef); reference(input.appRef);
   if (input.provider !== "wechat_pay" && input.provider !== "alipay") refuse("topup_input_invalid");
-  if (typeof input.amountFen !== "bigint" || input.amountFen < TOPUP_MIN_FEN || input.amountFen > TOPUP_MAX_FEN) {
-    refuse("topup_amount_out_of_range");
-  }
+  checkTopupAmountFen(input.amountFen);
   if (input.idempotencyKey !== undefined && !IDEMPOTENCY_KEY.test(input.idempotencyKey)) refuse("topup_input_invalid");
   const now = input.now ?? new Date();
   const createdBy = `USER:${input.actorUserId}`;
