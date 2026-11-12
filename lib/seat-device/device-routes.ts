@@ -32,7 +32,6 @@ import {
   type SeatDeviceErrorCode,
 } from "@/lib/seat-device/contract";
 import {
-  SeatDeviceAuthDisabledError,
   SeatDeviceAuthError,
   cancelSeatDeviceAuthorization,
   claimSeatDeviceAuthorization,
@@ -137,8 +136,6 @@ export async function handleSeatDeviceRequest(operation: SeatDeviceOperation, re
   } catch (error) {
     if (error instanceof InvalidBody) return seatDeviceErrorResponse("invalid_input");
     if (error instanceof SeatDeviceAuthError) return seatDeviceErrorResponse(error.code, error.retryAfterSeconds);
-    // The switch was turned off while the request was in flight.
-    if (error instanceof SeatDeviceAuthDisabledError) return seatDeviceNotFound();
     // The class name and a driver code such as P2024 only, both fixed shapes.
     const name = error instanceof Error && /^[A-Za-z]{1,64}$/.test(error.name) ? error.name : "unknown";
     const driverCode = (error as { code?: unknown } | null)?.code;

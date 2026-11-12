@@ -324,11 +324,16 @@ describeMysql("seat device endpoints on MySQL", () => {
     } finally {
       await db.workspace.update({ where: { id: workspaceId }, data: { featureFlagsJson: JSON.stringify({ seatDesktop: true }), status: WorkspaceStatus.ACTIVE } });
     }
-    // A SUSPENDED workspace also reads workspace_not_enabled and keeps the device.
+    // A SUSPENDED workspace reads workspace_not_enabled and keeps the device;
+    // 1b judges it before the member, so an inactive member reads it too.
+    const suspendedLeaver = await device();
+    await db.membership.update({ where: { id: suspendedLeaver.owner.membershipId }, data: { status: MembershipStatus.INACTIVE } });
     await db.workspace.update({ where: { id: workspaceId }, data: { status: WorkspaceStatus.SUSPENDED } });
     try {
       tick(1);
       expect(await post("refresh", { refreshToken: standing.refreshToken }, standing.source)).toMatchObject({ status: 403, body: errorOf("workspace_not_enabled") });
+      expect(await post("refresh", { refreshToken: suspendedLeaver.refreshToken }, suspendedLeaver.source)).toMatchObject({ status: 403, body: errorOf("workspace_not_enabled") });
+      expect((await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: suspendedLeaver.deviceId } })).status).toBe("active");
     } finally {
       await db.workspace.update({ where: { id: workspaceId }, data: { status: WorkspaceStatus.ACTIVE } });
     }
