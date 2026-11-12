@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { alipayDouble } from "./alipay-gateway-fixture";
 import { createVerify } from "node:crypto";
 import { buildAlipaySignContent } from "@/lib/billing/alipay";
-import { ALIPAY_TOPUP_SUBJECT, buildAlipayTopupPayUrl, createAlipayTopupAdapter, getAlipayTopupConfig, getAlipayTopupConfigProblems,
+import { ALIPAY_TOPUP_SUBJECT, buildAlipayTopupPayUrl, closeAlipayTopupTrade, createAlipayTopupAdapter, getAlipayTopupConfig, getAlipayTopupConfigProblems,
   handleAlipayTopupNotify, resolveAlipayTopup, topupAppOrigin } from "./alipay-topup";
 
 // Pure adapter and entry checks: no database (a client that throws proves none is reached), no network (gateway double).
@@ -107,6 +107,26 @@ describe("alipay top-up adapter", () => {
     // The gateway refuses a request not signed by the app's key; nothing unsigned is ever trusted back.
     await expect(createAlipayTopupAdapter({ ...config, privateKey: double.strangerPrivateKey }, double.fetch).queryOrder(order))
       .rejects.toThrow("query_response_invalid");
+  });
+});
+
+describe("alipay top-up close", () => {
+  it("closes a waiting trade with a signed request, reports a trade never created, and refuses anything unverified", async () => {
+    double.trades.set(order, { code: "10000", ...paid, trade_status: "WAIT_BUYER_PAY" });
+    expect(await closeAlipayTopupTrade(config, order, double.fetch)).toBe("closed");
+    expect(double.requests.at(-1)).toMatchObject({ app_id: config.appId, method: "alipay.trade.close", sign_type: "RSA2" });
+    expect(JSON.parse(double.requests.at(-1)!.biz_content)).toEqual({ out_trade_no: order });
+    expect(double.trades.get(order)?.trade_status).toBe("TRADE_CLOSED");
+    await expect(closeAlipayTopupTrade(config, order, double.fetch)).rejects.toThrow("close_failed"); // no longer waiting
+    expect(await closeAlipayTopupTrade(config, "tpa_eeeeeeeeeeeeeeeeeeeeeeeeeeee", double.fetch)).toBe("not_created");
+    double.trades.set(order, { code: "10000", ...paid, trade_status: "WAIT_BUYER_PAY" });
+    double.setMode("empty_sign");
+    try { await expect(closeAlipayTopupTrade(config, order, double.fetch)).rejects.toThrow("query_signature_invalid"); }
+    finally { double.setMode("ok"); }
+    expect(double.trades.get(order)?.trade_status).toBe("TRADE_CLOSED"); // the double closed it; our side saw nothing trusted
+    double.closeOverrides.set(order, { code: "10000", msg: "Success", out_trade_no: "tpa_ffffffffffffffffffffffffffff" });
+    try { await expect(closeAlipayTopupTrade(config, order, double.fetch)).rejects.toThrow("query_response_invalid"); }
+    finally { double.closeOverrides.clear(); }
   });
 });
 

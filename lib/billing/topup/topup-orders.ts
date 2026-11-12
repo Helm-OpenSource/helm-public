@@ -33,7 +33,7 @@ const TXN_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 export type TopupRefusalCode = "topup_input_invalid" | "topup_amount_out_of_range" | "topup_amount_not_multiple" |
   "topup_forbidden" | "topup_billing_off" |
-  "topup_rate_limited" | "topup_idempotency_conflict" |
+  "topup_rate_limited" | "topup_idempotency_conflict" | "topup_order_not_closable" |
   "topup_observation_invalid" | "topup_signature_invalid" | "topup_order_unknown" | "topup_order_type_invalid" |
   "topup_provider_mismatch" | "topup_merchant_mismatch" | "topup_amount_mismatch" | "topup_currency_mismatch" |
   "topup_txn_conflict" | "topup_order_paid_by_other_txn" | "topup_invariant_breach" | "topup_observation_untrusted" |
@@ -125,6 +125,63 @@ export async function createOrReplayTopupOrder(client: PrismaClient, input: Crea
     return { order, replayed: false };
   }, { maxWait: 5000, timeout: 10000, isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
 }
+
+/** Contract S2D §1.6: the session-triggered query runs at most every 10 s and 30 times an hour, for unpaid orders up to 72 h old. */
+export const TOPUP_QUERY_MIN_INTERVAL_MS = 10_000;
+export const TOPUP_QUERIES_PER_HOUR = 30;
+export const TOPUP_QUERY_MAX_AGE_MS = 72 * 60 * 60 * 1000;
+const QUERYABLE: PaymentOrderState[] = ["created", "pending", "unknown", "closed_unpaid"];
+export type TopupOrderView = { id: string; provider: TopupProvider; state: PaymentOrderState; amountFen: string; expiresAt: string;
+  createdAt: string };
+type SessionOrderInput = { actorUserId: string; workspaceId: string; paymentOrderId: string };
+type SessionOrder = Pick<PaymentOrder, "id" | "provider" | "providerOrderNo" | "state" | "amountFen" | "expiresAt" | "createdAt" |
+  "lastQueriedAt" | "queryWindowStartedAt" | "queryCount">;
+const view = (order: SessionOrder): TopupOrderView => ({ id: order.id, provider: order.provider, state: order.state,
+  amountFen: order.amountFen.toString(), expiresAt: order.expiresAt.toISOString(), createdAt: order.createdAt.toISOString() });
+
+/** The order of the session's workspace, for its OWNER/BILLING_ADMIN; any other order is unknown (never another workspace's). */
+async function lockSessionOrder(tx: Prisma.TransactionClient, input: SessionOrderInput) {
+  reference(input.actorUserId); reference(input.workspaceId); reference(input.paymentOrderId);
+  try { await lockBillingAuthority(tx, input.actorUserId, [input.workspaceId], canManageWorkspaceBilling); } catch (error) {
+    if (error instanceof Error && error.message === "payer_binding_forbidden") refuse("topup_forbidden");
+    throw error;
+  }
+  // A locking read of every column used: a plain read would see the snapshot from before the membership lock was granted.
+  const [row] = await tx.$queryRaw<SessionOrder[]>`SELECT id, provider, providerOrderNo, state, amountFen, expiresAt, createdAt,
+    lastQueriedAt, queryWindowStartedAt, queryCount FROM PaymentOrder WHERE id = ${input.paymentOrderId}
+    AND workspaceId = ${input.workspaceId} AND orderType = 'wallet_topup' FOR UPDATE`;
+  if (!row) refuse("topup_order_unknown");
+  return { ...row, amountFen: BigInt(row.amountFen), queryCount: Number(row.queryCount) };
+}
+
+export async function readTopupOrderForSession(client: PrismaClient, input: SessionOrderInput) {
+  return client.$transaction(async tx => view(await lockSessionOrder(tx, input)), { maxWait: 5000, timeout: 10000 });
+}
+
+/**
+ * Admits one session-triggered provider call for the order (query, or close then query) under the per-order throttle. A credited
+ * order, or one too old or not queryable, is returned as is without a provider call (`query: false`); close needs a waiting order.
+ */
+export async function claimTopupOrderQuery(client: PrismaClient,
+  input: SessionOrderInput & { purpose: "query" | "close"; provider: TopupProvider; now?: Date }) {
+  const now = input.now ?? new Date();
+  return client.$transaction(async tx => {
+    const order = await lockSessionOrder(tx, input);
+    // Refused before any throttle write or provider call: an order is only ever sent to its own provider.
+    if (order.provider !== input.provider) refuse("topup_provider_mismatch");
+    if (input.purpose === "close" && order.state !== "created" && order.state !== "pending") refuse("topup_order_not_closable");
+    if (!QUERYABLE.includes(order.state) || now.getTime() - order.createdAt.getTime() > TOPUP_QUERY_MAX_AGE_MS) {
+      return { order, query: false };
+    }
+    if (order.lastQueriedAt && now.getTime() - order.lastQueriedAt.getTime() < TOPUP_QUERY_MIN_INTERVAL_MS) refuse("topup_rate_limited");
+    const fresh = !order.queryWindowStartedAt || now.getTime() - order.queryWindowStartedAt.getTime() >= 3_600_000;
+    if (!fresh && order.queryCount >= TOPUP_QUERIES_PER_HOUR) refuse("topup_rate_limited");
+    await tx.$executeRaw`UPDATE PaymentOrder SET lastQueriedAt = ${now}, queryWindowStartedAt = ${fresh ? now : order.queryWindowStartedAt},
+      queryCount = ${fresh ? 1 : order.queryCount + 1} WHERE id = ${order.id}`; // throttle only: neither state nor version changes
+    return { order, query: true };
+  }, { maxWait: 5000, timeout: 10000 });
+}
+export { view as topupOrderView };
 
 /** Non-paid observations: `closed` (provider-confirmed) closes, `unknown` parks, `not_paid` marks pending; nothing by time. */
 export function nextUnpaidState(state: PaymentOrderState, status: Exclude<ObservedStatus, "paid">): PaymentOrderState {
