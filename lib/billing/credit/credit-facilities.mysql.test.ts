@@ -138,6 +138,30 @@ describe.skipIf(!url)("credit facilities against MySQL", () => {
     await expect(proposeCreditFacility(a, input)).resolves.toMatchObject({ replayed: true, facility: { id: first.facility.id } });
     await expect(proposeCreditFacility(a, { ...input, limitFen: fen(501) })).rejects.toThrow("credit_operation_conflict");
   });
+  it("replays a concurrent identical proposal from a current read: one creates, the other replays, no P2025", async () => {
+    const p = await payer();
+    const input = { actorUserId: maker, payerAccountId: p, limitFen: fen(700), validUntil: null, operationKey: `race:${run}`, evidenceRef: "owner-ruling:x" };
+    const c = new PrismaClient({ datasources: { db: { url } } });
+    try {
+      // Barrier: hold the payer lock until both proposals wait on it, so both transactions are open before either commits.
+      let release = () => {}, held = () => {};
+      const isHeld = new Promise<void>(resolve => { held = resolve; });
+      const barrier = c.$transaction(async tx => {
+        await tx.$queryRaw`SELECT id FROM PayerAccount WHERE id = ${p} FOR UPDATE`;
+        held();
+        await new Promise<void>(resolve => { release = resolve; });
+      }, { timeout: 10000 });
+      await isHeld;
+      const racing = [a, b].map(client => proposeCreditFacility(client, input));
+      await sleep(1000);
+      release();
+      await barrier;
+      const results = await Promise.all(racing);
+      expect(results.map(result => result.replayed).sort()).toEqual([false, true]);
+      expect(results[0].facility).toMatchObject({ id: results[1].facility.id, state: "draft", limitFen: fen(700), usedFen: fen(0), version: 1 });
+      expect(await a.creditFacility.count({ where: { payerAccountId: p } })).toBe(1);
+    } finally { await c.$disconnect(); }
+  });
   it("draws as one balanced entry into the wallet, replays by sourceRef and fails closed beyond the line", async () => {
     const p = await payer();
     const facility = await activeFacility(p, 1000);

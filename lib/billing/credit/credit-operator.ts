@@ -216,7 +216,8 @@ function refusalCode(error: unknown) {
   if (error instanceof CreditFacilityRefusal || error instanceof CreditOperatorError) return error.code;
   // A concurrent identical propose: the S3-e replay read (non-locking, REPEATABLE READ snapshot) misses the row the other run
   // just committed. Nothing was written here; a rerun replays it.
-  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") return "credit_write_conflict";
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025" &&
+      error.meta?.modelName === "CreditFacility") return "credit_write_conflict";
   return error instanceof Error && /^payer_/.test(error.message) ? error.message : "unexpected_error";
 }
 
