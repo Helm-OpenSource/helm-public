@@ -24,12 +24,13 @@ function operation<S extends z.ZodType>(schema: S, run: (client: PrismaClient, a
   };
 }
 const resolution = { idempotencyKey: text, reservationId: text, operationRef: text, evidenceRef: text };
+const subjectScope = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("workspace"), workspaceId: text }).strict(), z.object({ kind: z.literal("vault"), vaultId: text }).strict()]);
 const OPERATIONS = {
-  quote: operation(z.object({ subjectScope: z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("workspace"), workspaceId: text }).strict(), z.object({ kind: z.literal("vault"), vaultId: text }).strict()]),
-  billingEventRef: text, meterUnit: text, quantity: text }).strict(), quote),
-  reserve: operation(z.object({ idempotencyKey: text, operationRef: text, payerRef: text, grantId: text, priceVersionId: text,
-    billingEventRef: text, meterUnit: text, quantity: text, expectedMode: z.enum(["shadow", "enforce"]).optional() }).strict(), reserve),
+  quote: operation(z.object({ subjectScope, billingEventRef: text, meterUnit: text, quantity: text }).strict(), quote),
+  reserve: operation(z.object({ idempotencyKey: text, operationRef: text, subjectScope, payerRef: text, grantId: text,
+    priceVersionId: text, billingEventRef: text, meterUnit: text, quantity: text,
+    expectedMode: z.enum(["shadow", "enforce"]).optional() }).strict(), reserve),
   settle: operation(z.object({ ...resolution, quantityUsed: text }).strict(), settle),
   release: operation(z.object({ ...resolution, reasonCode: z.enum(["not_executed", "failed", "partial_unusable"]) }).strict(), release),
   "mark-unknown": operation(z.object(resolution).strict(), markUnknown),
