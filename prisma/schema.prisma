@@ -2455,6 +2455,36 @@ model CreditFacility {
   @@index([payerAccountId, state])
 }
 
+enum PlatformBillingOperationState {
+  drafted
+  applied
+  rejected
+}
+
+// Billing V1 E1a: maker/checker record of a platform billing operation; `kind` is a closed set in the service.
+model PlatformBillingOperation {
+  id                String                        @id @default(cuid())
+  kind              String                        @db.VarChar(32)
+  operationKey      String                        @unique @db.VarChar(191)
+  workspaceId       String                        @db.VarChar(191)
+  payerAccountId    String?                       @db.VarChar(191)
+  request           Json
+  contentHash       String                        @db.Char(64)
+  state             PlatformBillingOperationState @default(drafted)
+  draftedByUserId   String                        @db.VarChar(191)
+  evidenceRef       String                        @db.VarChar(191)
+  reviewedByUserId  String?                       @db.VarChar(191) // DB CHECK: differs from draftedByUserId
+  reviewEvidenceRef String?                       @db.VarChar(191)
+  reviewedAt        DateTime?
+  resultRef         String?                       @db.VarChar(191)
+  version           Int                           @default(1)
+  createdAt         DateTime                      @default(now())
+  updatedAt         DateTime                      @updatedAt
+
+  @@index([workspaceId, kind])
+  @@index([state, createdAt])
+}
+
 model WorkerPublisherProfile {
   id                        String                     @id @default(cuid())
   workspaceId               String
