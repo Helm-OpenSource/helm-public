@@ -11,7 +11,7 @@
 // file never clears a table: its clock starts years after the authorize
 // file's, so rows left by either never count toward the other's limits.
 
-import { MembershipStatus, WorkspaceRole } from "@prisma/client";
+import { MembershipStatus, WorkspaceRole, WorkspaceStatus } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { db } from "@/lib/db";
@@ -26,6 +26,7 @@ import {
 import {
   classifySeatDeviceAccessToken,
   pinSeatDeviceAudienceInTx,
+  refreshSeatDeviceToken,
   revokeSeatDeviceByMember,
   revokeSeatDeviceWithRefreshToken,
   revokeSeatDevicesInTx,
@@ -49,6 +50,7 @@ async function expectCode(promise: Promise<unknown>, code: SeatDeviceAuthError["
   const error = await promise.then(() => null, (caught: unknown) => caught);
   expect(error).toBeInstanceOf(SeatDeviceAuthError);
   expect((error as SeatDeviceAuthError).code).toBe(code);
+  return (error as SeatDeviceAuthError).retryAfterSeconds;
 }
 
 // Request limits count per address bucket and the clock repeats on every
@@ -374,5 +376,302 @@ describeMysql("seat device credentials (classify, pin, revoke) on MySQL", () => 
     await revokeSeatDeviceWithRefreshToken({ refreshToken: fresh.refreshToken, reason: "device_logout", now });
     await expect(pin("astra-registration:r1", fresh.deviceId)).resolves.toBe("not_active");
     expect((await row(fresh.deviceId)).audiencePin).toBeNull();
+  });
+
+  // -------------------------------------------------------------------------
+  // Refresh
+  // -------------------------------------------------------------------------
+
+  const refreshAt = (refreshToken: string, now: Date, source: string | null) => refreshSeatDeviceToken({ refreshToken, source, now });
+
+  it("rotates the pair, keeps the old access token for at most 60 s and retires the pair before it", async () => {
+    const now = nextClock();
+    const live = await device(now);
+    const first = await refreshAt(live.refreshToken, at(now, 100), live.source);
+    expect(first).toMatchObject({ expiresInSeconds: 900, refreshExpiresInSeconds: 30 * 24 * 3600 - 100 });
+    expect(first.refreshToken).toMatch(/^hsdr_[A-Za-z0-9_-]{43}$/);
+    expect(await row(live.deviceId)).toMatchObject({
+      refreshTokenHash: hashSeatDeviceToken(first.refreshToken),
+      previousRefreshTokenHash: hashSeatDeviceToken(live.refreshToken),
+      accessTokenHash: hashSeatDeviceToken(first.accessToken),
+      accessExpiresAt: at(now, 1000),
+      previousAccessTokenHash: hashSeatDeviceToken(live.accessToken),
+      previousAccessExpiresAt: at(now, 160),
+      rotatedAt: at(now, 100),
+      rotationSource: live.source,
+      refreshTokenUsed: false,
+      graceUsed: false,
+      refreshWindowCount: 1,
+      lastUsedAt: at(now, 100),
+      expiresAt: at(now, 30 * 24 * 3600),
+    });
+    // The overlap: the old access token works until rotation + 60 s.
+    await expect(classifySeatDeviceAccessToken(live.accessToken, at(now, 159))).resolves.toMatchObject({ ok: true });
+    await expect(classifySeatDeviceAccessToken(live.accessToken, at(now, 160))).resolves.toEqual({ ok: false, code: "access_token_expired" });
+    await expect(classifySeatDeviceAccessToken(first.accessToken, at(now, 160))).resolves.toMatchObject({ ok: true });
+
+    // Rotating near the old token's own expiry: the overlap never outlives it.
+    const second = await refreshAt(first.refreshToken, at(now, 990), live.source);
+    expect(await row(live.deviceId)).toMatchObject({
+      previousRefreshTokenHash: hashSeatDeviceToken(first.refreshToken),
+      previousAccessExpiresAt: at(now, 1000),
+      refreshWindowCount: 1,
+    });
+    const history = await db.seatDeviceTokenHistory.findMany({ where: { deviceId: live.deviceId } });
+    expect(history.map((entry) => [entry.kind, entry.tokenHash]).sort()).toEqual(
+      [["access", hashSeatDeviceToken(live.accessToken)], ["refresh", hashSeatDeviceToken(live.refreshToken)]].sort(),
+    );
+    const audits = await db.auditLog.findMany({ where: { targetId: live.deviceId, actionType: "SEAT_DEVICE_REFRESHED" } });
+    expect(audits).toHaveLength(2);
+    for (const text of audits.flatMap((audit) => [audit.payload ?? "", audit.summary])) {
+      for (const token of [live.refreshToken, first.refreshToken, second.refreshToken, second.accessToken]) {
+        expect(text).not.toContain(token);
+        expect(text).not.toContain(hashSeatDeviceToken(token));
+      }
+    }
+    expect(JSON.stringify(await row(live.deviceId))).not.toContain(second.refreshToken);
+  });
+
+  it("revokes the whole device when a retired token of the family comes back", async () => {
+    const now = nextClock();
+    const live = await device(now);
+    const first = await refreshAt(live.refreshToken, at(now, 100), live.source);
+    const second = await refreshAt(first.refreshToken, at(now, 200), live.source);
+    await expectCode(refreshAt(live.refreshToken, at(now, 300), live.source), "token_revoked");
+    expect(await row(live.deviceId)).toMatchObject({ status: "revoked", revokeReason: "refresh_reuse", revokedAt: at(now, 300) });
+    const audit = await db.auditLog.findFirstOrThrow({ where: { targetId: live.deviceId, actionType: "SEAT_DEVICE_REVOKED" } });
+    expect(JSON.parse(audit.payload ?? "{}")).toMatchObject({ reason: "refresh_reuse", refreshTokenMatched: "retired" });
+    // The legitimate client is out with the attacker.
+    await expectCode(refreshAt(second.refreshToken, at(now, 301), live.source), "device_revoked");
+    await expect(classifySeatDeviceAccessToken(second.accessToken, at(now, 301))).resolves.toEqual({ ok: false, code: "device_revoked" });
+    await expectCode(refreshAt(`hsdr_${"Q".repeat(43)}`, at(now, 301), live.source), "token_revoked");
+  });
+
+  it("re-mints once for a lost answer: previous token, within 60 s, current pair unused, same trusted source", async () => {
+    const now = nextClock();
+    const live = await device(now);
+    const lost = await refreshAt(live.refreshToken, at(now, 100), live.source); // answer never arrives
+    const again = await refreshAt(live.refreshToken, at(now, 130), live.source);
+    expect(again.refreshToken).not.toBe(lost.refreshToken);
+    expect(await row(live.deviceId)).toMatchObject({
+      status: "active",
+      refreshTokenHash: hashSeatDeviceToken(again.refreshToken),
+      previousRefreshTokenHash: hashSeatDeviceToken(live.refreshToken),
+      accessTokenHash: hashSeatDeviceToken(again.accessToken),
+      // The undelivered access token takes the "previous" slot.
+      previousAccessTokenHash: hashSeatDeviceToken(lost.accessToken),
+      previousAccessExpiresAt: at(now, 190),
+      graceUsed: true,
+      rotatedAt: at(now, 100),
+    });
+    const retired = await db.seatDeviceTokenHistory.findMany({ where: { deviceId: live.deviceId } });
+    expect(retired.map((entry) => entry.tokenHash)).toEqual(
+      expect.arrayContaining([hashSeatDeviceToken(lost.refreshToken), hashSeatDeviceToken(live.accessToken)]),
+    );
+    expect(await db.auditLog.count({ where: { targetId: live.deviceId, actionType: "SEAT_DEVICE_REFRESH_GRACE_REMINTED" } })).toBe(1);
+    // Only once per rotation, even still inside the 60 s.
+    await expectCode(refreshAt(live.refreshToken, at(now, 131), live.source), "token_revoked");
+    expect(await row(live.deviceId)).toMatchObject({ status: "revoked", revokeReason: "refresh_reuse" });
+
+    // The undelivered refresh token is retired: presenting it is reuse.
+    const other = await device(now);
+    const undelivered = await refreshAt(other.refreshToken, at(now, 100), other.source);
+    await refreshAt(other.refreshToken, at(now, 110), other.source);
+    await expectCode(refreshAt(undelivered.refreshToken, at(now, 120), other.source), "token_revoked");
+    expect((await row(other.deviceId)).revokeReason).toBe("refresh_reuse");
+
+    // The grace resets with the next real rotation.
+    const third = await device(now);
+    await refreshAt(third.refreshToken, at(now, 100), third.source);
+    const regraced = await refreshAt(third.refreshToken, at(now, 110), third.source);
+    const next = await refreshAt(regraced.refreshToken, at(now, 200), third.source);
+    expect((await row(third.deviceId)).graceUsed).toBe(false);
+    await expect(refreshAt(regraced.refreshToken, at(now, 210), third.source)).resolves.toMatchObject({ expiresInSeconds: 900 });
+    expect(next.refreshToken).toBeTruthy();
+  });
+
+  it("treats the previous token as reuse when any grace condition fails", async () => {
+    const now = nextClock();
+    const cases: [string, (live: Awaited<ReturnType<typeof device>>) => Promise<unknown>][] = [
+      ["past 60 s", (live) => refreshAt(live.refreshToken, at(now, 161), live.source)],
+      ["another trusted source", (live) => refreshAt(live.refreshToken, at(now, 130), freshSource())],
+      ["no trusted source", (live) => refreshAt(live.refreshToken, at(now, 130), null)],
+    ];
+    for (const [label, present] of cases) {
+      const live = await device(now);
+      await refreshAt(live.refreshToken, at(now, 100), live.source);
+      await expectCode(present(live) as Promise<unknown>, "token_revoked");
+      expect({ label, ...(await row(live.deviceId)) }).toMatchObject({ label, status: "revoked", revokeReason: "refresh_reuse" });
+    }
+    // The current pair was used: its refresh token was presented (refused
+    // while the workspace was off), so a grace can no longer trust it.
+    const live = await device(now);
+    const current = await refreshAt(live.refreshToken, at(now, 100), live.source);
+    await db.workspace.update({ where: { id: workspaceId }, data: { featureFlagsJson: "{}" } });
+    try {
+      await expectCode(refreshAt(current.refreshToken, at(now, 110), live.source), "workspace_not_enabled");
+    } finally {
+      await db.workspace.update({ where: { id: workspaceId }, data: { featureFlagsJson: JSON.stringify({ seatDesktop: true }) } });
+    }
+    expect(await row(live.deviceId)).toMatchObject({ status: "active", refreshTokenUsed: true });
+    await expectCode(refreshAt(live.refreshToken, at(now, 120), live.source), "token_revoked");
+    expect(await row(live.deviceId)).toMatchObject({ status: "revoked", revokeReason: "refresh_reuse" });
+  });
+
+  it("re-checks the member like the device channel and revokes a member who changed", async () => {
+    const now = nextClock();
+    const inactive = await device(now);
+    await db.membership.update({ where: { id: inactive.owner.membershipId }, data: { status: MembershipStatus.INACTIVE } });
+    const reset = await device(now);
+    await db.user.update({ where: { id: reset.owner.userId }, data: { passwordSetAt: at(now, 1) } });
+    const external = await device(now);
+    await db.membership.update({ where: { id: external.owner.membershipId }, data: { accessScope: "partner_portal" } });
+    const replaced = await device(now);
+    const old = await db.membership.findUniqueOrThrow({ where: { id: replaced.owner.membershipId } });
+    await db.membership.delete({ where: { id: old.id } });
+    await db.membership.create({ data: { workspaceId: old.workspaceId, userId: old.userId, role: old.role, status: MembershipStatus.ACTIVE } });
+    for (const [live, reason] of [
+      [inactive, "membership_inactive"],
+      [reset, "password_reset"],
+      [external, "membership_inactive"],
+      [replaced, "membership_inactive"],
+    ] as const) {
+      await expectCode(refreshAt(live.refreshToken, at(now, 100), live.source), "account_disabled");
+      expect(await row(live.deviceId)).toMatchObject({ status: "revoked", revokeReason: reason, accessTokenHash: hashSeatDeviceToken(live.accessToken) });
+      await expect(classifySeatDeviceAccessToken(live.accessToken, at(now, 101))).resolves.toEqual({ ok: false, code: "device_revoked" });
+    }
+  });
+
+  // Owner coordination 2026-11-12 (review P3-3, option a): a suspension can
+  // be lifted, so the client keeps its credential and backs off; a canceled
+  // workspace revokes the device.
+  it("keeps the device of a SUSPENDED workspace and revokes the device of a CANCELED one", async () => {
+    const now = nextClock();
+    const suspended = await device(now);
+    const canceled = await device(now);
+    await db.workspace.update({ where: { id: workspaceId }, data: { status: WorkspaceStatus.SUSPENDED } });
+    try {
+      await expectCode(refreshAt(suspended.refreshToken, at(now, 100), suspended.source), "workspace_not_enabled");
+    } finally {
+      await db.workspace.update({ where: { id: workspaceId }, data: { status: WorkspaceStatus.ACTIVE } });
+    }
+    expect(await row(suspended.deviceId)).toMatchObject({ status: "active", refreshTokenUsed: true, revokedAt: null });
+    await expect(refreshAt(suspended.refreshToken, at(now, 110), suspended.source)).resolves.toMatchObject({ expiresInSeconds: 900 });
+
+    await db.workspace.update({ where: { id: workspaceId }, data: { status: WorkspaceStatus.CANCELED } });
+    try {
+      await expectCode(refreshAt(canceled.refreshToken, at(now, 100), canceled.source), "account_disabled");
+    } finally {
+      await db.workspace.update({ where: { id: workspaceId }, data: { status: WorkspaceStatus.ACTIVE } });
+    }
+    expect(await row(canceled.deviceId)).toMatchObject({ status: "revoked", revokeReason: "workspace_cancelled" });
+    await expect(classifySeatDeviceAccessToken(canceled.accessToken, at(now, 101))).resolves.toEqual({ ok: false, code: "device_revoked" });
+  });
+
+  // Reuse is judged before the member: a replayed token of a member who also
+  // changed is recorded as reuse, the stronger signal.
+  it("records reuse, not the member change, when both happen", async () => {
+    const now = nextClock();
+    const live = await device(now);
+    await refreshAt(live.refreshToken, at(now, 100), live.source);
+    await db.membership.update({ where: { id: live.owner.membershipId }, data: { status: MembershipStatus.INACTIVE } });
+    await expectCode(refreshAt(live.refreshToken, at(now, 300), live.source), "token_revoked");
+    expect(await row(live.deviceId)).toMatchObject({ status: "revoked", revokeReason: "refresh_reuse" });
+  });
+
+  it("keeps the device while the workspace is not enabled", async () => {
+    const now = nextClock();
+    const live = await device(now);
+    await db.workspace.update({ where: { id: workspaceId }, data: { featureFlagsJson: "{}" } });
+    try {
+      await expectCode(refreshAt(live.refreshToken, at(now, 100), live.source), "workspace_not_enabled");
+    } finally {
+      await db.workspace.update({ where: { id: workspaceId }, data: { featureFlagsJson: JSON.stringify({ seatDesktop: true }) } });
+    }
+    expect(await row(live.deviceId)).toMatchObject({ status: "active", refreshTokenHash: hashSeatDeviceToken(live.refreshToken) });
+    await expect(refreshAt(live.refreshToken, at(now, 110), live.source)).resolves.toMatchObject({ expiresInSeconds: 900 });
+  });
+
+  it("limits a device to six refreshes a minute, after reuse detection", async () => {
+    const now = nextClock();
+    const live = await device(now);
+    let token = live.refreshToken;
+    for (let index = 0; index < 6; index += 1) token = (await refreshAt(token, at(now, 100 + index), live.source)).refreshToken;
+    const limited = await expectCode(refreshAt(token, at(now, 110), live.source), "rate_limited");
+    expect(limited).toBe(50);
+    expect(await row(live.deviceId)).toMatchObject({ status: "active", refreshTokenHash: hashSeatDeviceToken(token), refreshTokenUsed: true });
+    token = (await refreshAt(token, at(now, 160), live.source)).refreshToken;
+    expect((await row(live.deviceId)).refreshWindowCount).toBe(1);
+    // A replay is still caught while the window is full.
+    for (let index = 0; index < 5; index += 1) token = (await refreshAt(token, at(now, 161 + index), live.source)).refreshToken;
+    await expectCode(refreshAt(live.refreshToken, at(now, 170), live.source), "token_revoked");
+    expect((await row(live.deviceId)).revokeReason).toBe("refresh_reuse");
+  });
+
+  it("refuses an expired credential and is unreachable while the switch is off", async () => {
+    const now = nextClock();
+    const live = await device(now);
+    await expectCode(refreshAt(live.refreshToken, at(now, 30 * 24 * 3600), live.source), "device_expired");
+    expect((await row(live.deviceId)).status).toBe("active");
+    process.env.HELM_SEAT_DEVICE_AUTH_ENABLED = "false";
+    try {
+      await expect(refreshAt(live.refreshToken, at(now, 100), live.source)).rejects.toBeInstanceOf(SeatDeviceAuthDisabledError);
+    } finally {
+      process.env.HELM_SEAT_DEVICE_AUTH_ENABLED = "true";
+    }
+    expect((await row(live.deviceId)).refreshTokenHash).toBe(hashSeatDeviceToken(live.refreshToken));
+  });
+
+  it("notifies the member when a trusted source moves to another address bucket", async () => {
+    const now = nextClock();
+    const live = await device(now);
+    const notes = () => db.notification.count({ where: { userId: live.owner.userId, title: "坐席客户端设备从新的网络位置登录" } });
+    let token = (await refreshAt(live.refreshToken, at(now, 100), live.source.replace(/10$/, "77"))).refreshToken; // same /24
+    expect(await notes()).toBe(0);
+    token = (await refreshAt(token, at(now, 200), null)).refreshToken; // untrusted: nothing learned
+    expect(await notes()).toBe(0);
+    expect((await row(live.deviceId)).lastIp).toBe(live.source.replace(/10$/, "77"));
+    const moved = freshSource();
+    await refreshAt(token, at(now, 300), moved);
+    expect(await notes()).toBe(1);
+    expect(await row(live.deviceId)).toMatchObject({ status: "active", lastIp: moved });
+    const audit = await db.auditLog.findFirstOrThrow({ where: { targetId: live.deviceId, actionType: "SEAT_DEVICE_REFRESHED" }, orderBy: { createdAt: "desc" } });
+    expect(JSON.parse(audit.payload ?? "{}")).toMatchObject({ sourceBucketChanged: true });
+  });
+
+  // One client must refresh single-flight (design §4.7). Racing the same
+  // token: without a trusted source the loser is reuse and the device is
+  // revoked; with one, the loser lands in the grace re-mint and both get a
+  // pair, and only the later pair stays usable.
+  it("pins what two racing refreshes of one token do", async () => {
+    const now = nextClock();
+    for (let round = 0; round < 3; round += 1) {
+      const untrusted = await device(now);
+      const results = await Promise.allSettled([0, 1].map(() => refreshAt(untrusted.refreshToken, at(now, 100), null)));
+      expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+      const lost = results.find((result) => result.status === "rejected") as PromiseRejectedResult;
+      expect((lost.reason as SeatDeviceAuthError).code).toBe("token_revoked");
+      expect(await row(untrusted.deviceId)).toMatchObject({ status: "revoked", revokeReason: "refresh_reuse" });
+
+      const trusted = await device(now);
+      const pairs = await Promise.all([0, 1].map(() => refreshAt(trusted.refreshToken, at(now, 100), trusted.source)));
+      const stored = await row(trusted.deviceId);
+      expect(stored).toMatchObject({ status: "active", graceUsed: true });
+      expect(pairs.map((pair) => hashSeatDeviceToken(pair.refreshToken))).toContain(stored.refreshTokenHash);
+    }
+  });
+
+  it("lets a racing revoke win over a refresh", async () => {
+    const now = nextClock();
+    for (let round = 0; round < 3; round += 1) {
+      const live = await device(now);
+      const [refreshed] = await Promise.allSettled([
+        refreshAt(live.refreshToken, at(now, 100), live.source),
+        revokeSeatDeviceWithRefreshToken({ refreshToken: live.refreshToken, reason: "device_logout", now: at(now, 100) }),
+      ]);
+      expect(await row(live.deviceId)).toMatchObject({ status: "revoked", revokeReason: "device_logout" });
+      if (refreshed.status === "rejected") expect((refreshed.reason as SeatDeviceAuthError).code).toBe("device_revoked");
+      else await expect(classifySeatDeviceAccessToken(refreshed.value.accessToken, at(now, 101))).resolves.toEqual({ ok: false, code: "device_revoked" });
+    }
   });
 });
