@@ -2210,6 +2210,9 @@ model BillingReservation {
   state                 BillingReservationState @default(held)
   version               Int                     @default(1)
   createdBy             String                  @db.VarChar(191)
+  subjectWorkspaceId    String                  @db.VarChar(191) // the workspace the caller declared (reserve subjectScope)
+  payerBindingId        String                  @db.VarChar(191) // its active PayerScopeBinding at reserve time; names payerAccountId
+  payerBindingVersion   Int
   unknownKey            String?                 @db.VarChar(191)
   unknownEvidenceRef    String?                 @db.VarChar(191)
   unknownAt             DateTime?
