@@ -146,7 +146,7 @@ Only an order of the session's workspace, for its OWNER/BILLING_ADMIN (403); any
 - Return: Alipay returns to `/billing/topup?order=<order id>`; the page shows that order of the session workspace read-only and
   「刷新状态」 calls `POST /{id}/verify`. Nothing in the return URL is ever a credit.
 - Client URL rule (contract S2D §10.3 as ruled by the owner 2026-11-12): `buildTopUpUrl(APP_URL origin, suggestedFen?)` and the
-  reference check `isOpenableTopUpUrl` — https, port 443, the login host or an exact allow-listed host, no credentials; **no path check**.
+  reference check `isOpenableTopUpUrl` — https, port 443, the login host or an exact allow-listed host, no user name or password; **no path check**.
 
 ## Verification and rollback / 验证与回滚
 
