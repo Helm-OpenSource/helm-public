@@ -163,7 +163,7 @@ async function queryTrade(config: AlipayTopupConfig, fetchImpl: typeof fetch, pr
   }
   if (trade.code !== "10000") throw new Error("query_failed");
   return { ...identity, out_trade_no: str(trade.out_trade_no), trade_no: str(trade.trade_no), trade_status: str(trade.trade_status),
-    total_amount: str(trade.total_amount), trans_currency: str(trade.trans_currency) };
+    total_amount: str(trade.total_amount), receipt_amount: str(trade.receipt_amount), trans_currency: str(trade.trans_currency) };
 }
 
 /**

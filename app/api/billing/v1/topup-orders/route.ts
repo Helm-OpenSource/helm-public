@@ -9,7 +9,8 @@ export const dynamic = "force-dynamic";
 
 // Billing V1 S2-d2: create (or replay) a wallet top-up order for the session's workspace and hand back the signed cashier URL.
 // The client sends only the provider and the amount in fen; payer, merchant, order number and every signed field are server-side.
-const STATUS: Record<string, number> = { topup_input_invalid: 400, topup_amount_out_of_range: 400, topup_forbidden: 403,
+const STATUS: Record<string, number> = { topup_input_invalid: 400, topup_amount_out_of_range: 400, topup_amount_not_multiple: 400,
+  topup_forbidden: 403,
   payer_unresolved: 404, payer_account_unavailable: 404, topup_billing_off: 409, topup_idempotency_conflict: 409,
   topup_rate_limited: 429 };
 const MAX_BODY_CHARS = 1024;

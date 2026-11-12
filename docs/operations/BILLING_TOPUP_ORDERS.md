@@ -21,7 +21,7 @@ queries. No route, UI, real provider call or merchant credential (S2-d1 adds the
 ## Service / 服务（`lib/billing/topup/`）
 
 - `createTopupOrder`: OWNER or BILLING_ADMIN (`topup_forbidden`); payer resolved server-side; `billingMode` `shadow`|`enforce`
-  (`topup_billing_off`); 100 – 5 000 000 fen (provisional). `lockBillingAuthority` now requires an explicit role rule.
+  (`topup_billing_off`); amount rule `checkTopupAmountFen` (see S2-d2a below). `lockBillingAuthority` now requires an explicit role rule.
 - Trust: only `defineTopupProviderAdapter(provider, io)` mints observations (frozen, registered in a module-private WeakSet); anything else
   is `topup_observation_untrusted`. `io.verifyCallback` authenticates the raw notify itself and throws on failure (`topup_signature_invalid`);
   no caller-supplied trust flag exists. Public entries: `verifyTopupCallback(client, adapter, request)` and
@@ -73,7 +73,8 @@ notify route (`/api/billing/alipay/notify`, unchanged): top-up orders are create
   values are not re-checked; they are covered by the signature), no duplicate names,
   `sign_type=RSA2`, RSA2 signature over every parameter but `sign`/`sign_type` (`buildAlipaySignContent`), `charset` utf-8 if present.
   Unknown fields are signed, accepted and ignored. Empty values are outside the signature and are dropped after verification;
-  `trade_status` must then be present (signed return-page parameters are refused). `total_amount` is converted with `yuanToFenExact`. A notify carrying refund fields
+  `trade_status` must then be present (signed return-page parameters are refused). `total_amount` is converted with `yuanToFenExact`; a `receipt_amount` (notify or query) that differs from it becomes the observed
+  amount (owner 2026-11-12: no merchant discounts, credit the order amount only), so it is an `amount_mismatch` exception, never a credit. A notify carrying refund fields
   (`refund_fee` > 0, `gmt_refund`, `out_biz_no`) maps to `unknown` even if it says `TRADE_SUCCESS`: never a first credit; for a credited
   order it is a `paid_then_unknown` exception, for an uncredited one `unknown_before_credit`. No time window: late success must credit and replays are idempotent per trade.
 - **Answer**: `success` when credited, replayed, a state recorded, or a payment exception persisted where a retry cannot help (amount/currency
@@ -99,7 +100,9 @@ Route `POST /api/billing/v1/topup-orders` (`app/api/billing/v1/topup-orders/rout
   `{"provider":"alipay","amountFen":"<integer string>"}`, anything else in the body is ignored. `wechat_pay` answers
   `topup_provider_unavailable` until its adapter lands. Workspace, payer, merchant/app refs and the order number are server-side.
 - **Rules** (`createOrReplayTopupOrder`, one transaction after the creator's membership row lock): OWNER/BILLING_ADMIN (403), payer
-  bound and `shadow|enforce` (409 `topup_billing_off`), 1–50 000 yuan (400); the same key with the same request replays the order (200,
+  bound and `shadow|enforce` (409 `topup_billing_off`); amount (`checkTopupAmountFen`, the one rule for every provider, owner
+  2026-11-12 11:24 「100 的整倍数，上不封顶」): whole multiples of 100 yuan (400 `topup_amount_not_multiple`), at least 100 yuan and no
+  business cap — only Alipay's documented 100 000 000 yuan maximum as a technical bound (400 `topup_amount_out_of_range`); the same key with the same request replays the order (200,
   `replayed: true`), with a different request 409 `topup_idempotency_conflict`; per creator and workspace at most 5 open unpaid orders and
   5 creations a minute (429 `topup_rate_limited`). The reads after the lock are locking reads, so concurrent requests serialize.
 - **Cashier URL** (`buildAlipayTopupPayUrl`, built, never sent by the server): signed `alipay.trade.page.pay` GET URL with
