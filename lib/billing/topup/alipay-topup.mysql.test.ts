@@ -223,6 +223,16 @@ describe.skipIf(!url)("Alipay wallet top-up notify against MySQL", () => {
     expect(await orders(ws)).toBe(1);
   });
 
+  it("holds the creation limit under concurrent requests with different keys", async () => {
+    const { ws } = await payerWorkspace();
+    sessionHolder.session = { user: { id: admin }, workspace: { id: ws } };
+    const responses = await Promise.all(Array.from({ length: 7 }, (_, i) => createRoute(new Request("https://helm.invalid/x", {
+      method: "POST", body: JSON.stringify({ provider: "alipay", amountFen: "100" }),
+      headers: { "content-type": "application/json", "idempotency-key": `parallel-key-${i}-000` } }))));
+    expect(responses.map(r => r.status).sort()).toEqual([201, 201, 201, 201, 201, 429, 429]);
+    expect(await orders(ws)).toBe(5);
+  });
+
   it("refuses without a key, a session or the billing role, for another provider, a bad amount or a billing-off payer", async () => {
     const { ws, member } = await payerWorkspace();
     expect(await create(ws, { provider: "alipay", amountFen: "500" }, null)).toEqual({ status: 400, body: { error: "idempotency_key_required" } });
