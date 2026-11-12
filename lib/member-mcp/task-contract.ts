@@ -42,7 +42,7 @@ export const MEMBER_TASK_NOTE_MAX = 2000;
 export const MEMBER_TASK_MAX_EVIDENCE_REFS = 10;
 
 // Evidence refs are opaque `<kind>:<id>` references, never URLs or free text.
-const EVIDENCE_REF_PATTERN = /^[a-z][a-z0-9_-]{0,39}:[A-Za-z0-9][A-Za-z0-9._:-]{0,179}$/;
+export const EVIDENCE_REF_PATTERN = /^[a-z][a-z0-9_-]{0,39}:[A-Za-z0-9][A-Za-z0-9._:-]{0,179}$/;
 const CONTROL_CHARACTERS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
 
 export type MemberTaskReportInput = {

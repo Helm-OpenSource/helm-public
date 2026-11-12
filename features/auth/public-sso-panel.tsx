@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { Building2, ScanQrCode } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { readBrowserLoginCallback, withLoginCallback } from "@/lib/auth/login-callback";
 import type { UiLocale } from "@/lib/i18n/config";
 
 export type PublicSsoOption = {
@@ -260,7 +261,7 @@ export function PublicSsoPanel({
 
         if (payload.completeUrl) {
           disposed = true;
-          window.location.assign(payload.completeUrl);
+          window.location.assign(withLoginCallback(payload.completeUrl, readBrowserLoginCallback()));
           return;
         }
       } catch (error) {
@@ -402,6 +403,10 @@ export function PublicSsoPanel({
         {activeOption?.ready && activeQrUrl ? (
           <a
             href={activeQrUrl}
+            onClick={(event) => {
+              if (!activeQrUrl.startsWith("/api/public-auth/")) return;
+              event.currentTarget.href = withLoginCallback(activeQrUrl, readBrowserLoginCallback());
+            }}
             aria-label={
               activeOption.provider === "dingtalk"
                 ? english

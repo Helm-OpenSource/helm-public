@@ -29,6 +29,7 @@ import {
   organizationAuditActionLabels,
 } from "@/features/settings/formatters/governance-formatters";
 import type { SettingsClientProps } from "@/features/settings/types/settings-client-props";
+import { RECENT_AUDIT_LOOKBACK_DAYS } from "@/lib/audit/capped-count";
 import { Info } from "./settings-display";
 
 type SettingsOrganizationAudit = SettingsClientProps["data"]["organizationAudit"];
@@ -94,8 +95,8 @@ export function RecentOrgAdminAudit({
         </p>
         <p className="mt-1 text-sm leading-6 text-[color:var(--muted-foreground)]">
           {english
-            ? "Key member and ownership actions stay readable here so org-admin changes do not disappear into aggregate counts only."
-            : "这里会保留关键成员和负责人动作的最近回放，避免组织管理员操作只剩聚合数量。"}
+            ? `Key member and ownership actions stay readable here so org-admin changes do not disappear into aggregate counts only. Shows up to 8 events from the last ${RECENT_AUDIT_LOOKBACK_DAYS} days.`
+            : `这里会保留关键成员和负责人动作的最近回放，避免组织管理员操作只剩聚合数量。只显示近 ${RECENT_AUDIT_LOOKBACK_DAYS} 天内最多 8 条。`}
         </p>
       </div>
       {canReadOrganizationAudit ? (
@@ -123,11 +124,15 @@ export function RecentOrgAdminAudit({
           </div>
         ) : (
           <EmptyState
-            title={english ? "No recent org-admin audit yet" : "最近还没有新的组织管理员审计"}
+            title={
+              english
+                ? `No org-admin audit in the last ${RECENT_AUDIT_LOOKBACK_DAYS} days`
+                : `近 ${RECENT_AUDIT_LOOKBACK_DAYS} 天没有组织管理员审计`
+            }
             description={
               english
-                ? "Once member or ownership actions happen, the latest audit replay will appear here."
-                : "一旦发生成员或负责人动作，最近的审计回放会显示在这里。"
+                ? `Member or ownership actions from the last ${RECENT_AUDIT_LOOKBACK_DAYS} days appear here. Older actions stay in the audit log but are not listed here.`
+                : `近 ${RECENT_AUDIT_LOOKBACK_DAYS} 天内的成员或负责人动作会显示在这里。更早的动作仍保存在审计日志中，这里不再列出。`
             }
           />
         )
@@ -918,6 +923,11 @@ export function OrgAdminGovernanceSupportPack({
             <p className="text-sm font-semibold text-[color:var(--foreground)]">
               {english ? "Recent data-governance audit" : "最近的数据治理审计"}
             </p>
+            <p className="text-xs leading-5 text-[color:var(--muted-foreground)]">
+              {english
+                ? `Shows up to 8 events from the last ${RECENT_AUDIT_LOOKBACK_DAYS} days.`
+                : `只显示近 ${RECENT_AUDIT_LOOKBACK_DAYS} 天内最多 8 条。`}
+            </p>
             {organizationGovernance.recentDataGovernanceAudit.length ? (
               <div data-testid="organization-governance-audit-feed" className="space-y-3">
                 {organizationGovernance.recentDataGovernanceAudit.map((item) => (
@@ -942,11 +952,15 @@ export function OrgAdminGovernanceSupportPack({
               </div>
             ) : (
               <EmptyState
-                title={english ? "No recent governance audit yet" : "最近还没有新的治理审计"}
+                title={
+                  english
+                    ? `No governance audit in the last ${RECENT_AUDIT_LOOKBACK_DAYS} days`
+                    : `近 ${RECENT_AUDIT_LOOKBACK_DAYS} 天没有治理审计`
+                }
                 description={
                   english
-                    ? "Once session, retention, export, delete, or program-governance actions happen, the latest governance replay will appear here."
-                    : "一旦发生会话、保留期、导出、删除或合作项目治理动作，这里会显示最新回放。"
+                    ? `Session, retention, export, delete, or program-governance actions from the last ${RECENT_AUDIT_LOOKBACK_DAYS} days appear here. Older actions stay in the audit log but are not listed here.`
+                    : `近 ${RECENT_AUDIT_LOOKBACK_DAYS} 天内的会话、保留期、导出、删除或合作项目治理动作会显示在这里。更早的动作仍保存在审计日志中，这里不再列出。`
                 }
               />
             )}

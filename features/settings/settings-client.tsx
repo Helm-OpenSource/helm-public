@@ -242,11 +242,13 @@ import {
   listWorkspaceRolePresetOptions,
   resolveWorkspaceRolePresetKey,
 } from "@/lib/definitions/workspace-role-preset-catalog";
+import { formatCappedAuditCount } from "@/lib/audit/capped-count";
 
 const isDefined = <T,>(value: T | undefined): value is T => value !== undefined;
 
 const DEFAULT_GOVERNANCE_SUMMARY: SettingsClientProps["data"]["governanceSummary"] = {
   auditEvents7d: 0,
+  auditEvents7dCapped: false,
   pendingApprovals: 0,
   llmFallbacks7d: 0,
   approvalProtectedActions: 0,
@@ -579,6 +581,11 @@ export function SettingsClient({
     featureFlags,
   });
   const english = locale === "en-US";
+  const auditEvents7dLabel = formatCappedAuditCount(
+    data.governanceSummary.auditEvents7d,
+    data.governanceSummary.auditEvents7dCapped,
+    english,
+  );
   const dataIntakeLevels = getDataIntakeLevels(english);
   const resourceAccessCatalog = getResourceAccessCatalog(english);
   const proofPackageFiles = getProofPackageFiles(english);
@@ -1267,8 +1274,8 @@ export function SettingsClient({
     {
       label: english ? "Pending review" : "待处理复核",
       value: english
-        ? `${data.governanceSummary.pendingApprovals} pending reviews · ${data.governanceSummary.auditEvents7d} recorded actions / 7d`
-        : `${data.governanceSummary.pendingApprovals} 条待复核 · 近 7 天 ${data.governanceSummary.auditEvents7d} 条有记录操作`,
+        ? `${data.governanceSummary.pendingApprovals} pending reviews · ${auditEvents7dLabel} recorded actions / 7d`
+        : `${data.governanceSummary.pendingApprovals} 条待复核 · 近 7 天 ${auditEvents7dLabel} 条有记录操作`,
     },
     {
       label: english ? "Next step" : "下一步",
@@ -1433,8 +1440,8 @@ export function SettingsClient({
     {
       label: english ? "Leadership readout" : "经营读数",
       value: english
-        ? `${data.governanceSummary.auditEvents7d} recorded actions / 7d`
-        : `近 7 天 ${data.governanceSummary.auditEvents7d} 条有记录操作`,
+        ? `${auditEvents7dLabel} recorded actions / 7d`
+        : `近 7 天 ${auditEvents7dLabel} 条有记录操作`,
       description: english
         ? "Weekly reports should reflect these source and review choices without turning settings into a dashboard."
         : "周报会反映这些入口和复核选择，不把设置页变成看板。",

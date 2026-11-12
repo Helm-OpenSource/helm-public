@@ -26,6 +26,7 @@ import {
 } from "@/lib/auth/session";
 import { canSelfCreateOrganization } from "@/lib/auth/organization-creation-policy";
 import { isEmailEntryEnabled } from "@/lib/auth/email-entry-policy";
+import { resolveLoginCallbackDestination } from "@/lib/auth/login-callback";
 import { FIRST_LOGIN_IDENTITY_SETUP_COOKIE } from "@/lib/auth/session-cookies";
 import { AUTH_SESSION_PROVIDER_TYPES, type AuthSessionProviderType } from "@/lib/auth/provider-seam";
 import { createSelfServeTrialOrganization } from "@/lib/auth/trial-onboarding";
@@ -48,6 +49,7 @@ import {
   verifyPassword,
 } from "@/lib/auth/formal-auth";
 import { recordUserLastLogin } from "@/lib/auth/login-activity";
+import { externalMemberPostLoginPath, externalScopeOf } from "@/lib/auth/external-member-scope";
 import {
   PUBLIC_OAUTH_SIGNUP_PREFILL_COOKIE,
   readPublicOauthSignupPrefillCookie,
@@ -210,6 +212,7 @@ type AuthUser = {
     workspaceId: string;
     role: WorkspaceRole;
     status: MembershipStatus;
+    accessScope?: string | null;
     workspace: Workspace;
   }>;
 };
@@ -267,6 +270,7 @@ async function finalizeLoginForUser(
   sourcePage: string,
   providerType: AuthSessionProviderType,
   locale: UiLocale,
+  callback?: string,
 ) {
   const english = locale === "en-US";
   const cookieStore = await cookies();
@@ -292,27 +296,44 @@ async function finalizeLoginForUser(
   await recordUserLastLogin(user.id);
   const workspaceConfig = normalizeWorkspaceUiConfig(activeMembership.workspace);
   const requiresIdentityCompletion =
-    !workspaceConfig.demoMode && shouldRequireFirstLoginIdentityCompletion(user);
+    externalScopeOf(activeMembership) === null && !workspaceConfig.demoMode && shouldRequireFirstLoginIdentityCompletion(user);
   const entryKind = workspaceConfig.demoMode
     ? "demo"
     : activeMembership.status === MembershipStatus.INVITED
       ? "invited"
       : "workspace";
 
-  if (
-    activeMembership.status === MembershipStatus.INVITED &&
-    !requiresWorkspaceSelection
-  ) {
-    await activateMembershipIfInvited({
-      workspaceId: activeMembership.workspaceId,
-      userId: user.id,
-    });
+  let loginWorkspaceId: string | null = activeMembership.workspaceId;
+  let loginMembership = activeMembership;
+  if (activeMembership.status === MembershipStatus.INVITED) {
+    if (requiresWorkspaceSelection) {
+      // Do not bind a multi-workspace login to a preferred INVITED workspace.
+      // The member will choose it explicitly in the selector.
+      loginWorkspaceId = null;
+    } else {
+      const resultingMembership = await activateMembershipIfInvited({
+        workspaceId: activeMembership.workspaceId,
+        userId: user.id,
+      });
+      if (resultingMembership?.status !== MembershipStatus.ACTIVE) {
+        await clearSession();
+        return {
+          ok: true as const,
+          redirectTo: "/invite-pending",
+          workspaceName: activeMembership.workspace.name ?? (english ? "your workspace" : "\u5f53\u524d\u5de5\u4f5c\u533a"),
+          entryKind: "invited",
+          requiresWorkspaceSelection: false,
+          invitationPending: true,
+        };
+      }
+      loginMembership = { ...activeMembership, status: MembershipStatus.ACTIVE };
+    }
   }
 
   await createSession({
     userId: user.id,
     email: user.email,
-    workspaceId: activeMembership.workspaceId,
+    workspaceId: loginWorkspaceId,
     sourcePage,
     providerType,
   });
@@ -329,13 +350,14 @@ async function finalizeLoginForUser(
     cookieStore.delete(FIRST_LOGIN_IDENTITY_SETUP_COOKIE);
   }
 
-  const redirectTo = requiresWorkspaceSelection
-    ? LOGIN_WORKSPACE_SELECTOR_PATH
-    : requiresIdentityCompletion
-      ? FIRST_LOGIN_IDENTITY_SETUP_PATH
-      : resolveDeploymentPostLoginPath(
-          resolvePostLoginRedirectPath(activeMembership),
-        );
+  const redirectTo = externalMemberPostLoginPath(loginMembership, resolveLoginCallbackDestination(
+    requiresWorkspaceSelection
+      ? LOGIN_WORKSPACE_SELECTOR_PATH
+      : requiresIdentityCompletion
+        ? FIRST_LOGIN_IDENTITY_SETUP_PATH
+        : resolveDeploymentPostLoginPath(resolvePostLoginRedirectPath(loginMembership)),
+    callback,
+  ));
 
   await logEvent({
     workspaceId: activeMembership.workspaceId,
@@ -769,7 +791,7 @@ const DEMO_ENTRY_EMAILS: ReadonlySet<string> = new Set(
     .map((profile) => normalizeEmailAddress(profile.accountEmail)),
 );
 
-export async function loginAction(input: string | z.infer<typeof legacyEmailLoginSchema>) {
+export async function loginAction(input: string | z.infer<typeof legacyEmailLoginSchema>, callback?: string) {
   const actionInput = typeof input === "string" ? { email: input } : input;
   const locale = resolveActionInputLocale(actionInput);
   const english = locale === "en-US";
@@ -836,6 +858,7 @@ export async function loginAction(input: string | z.infer<typeof legacyEmailLogi
       "/login",
       AUTH_SESSION_PROVIDER_TYPES.EMAIL_ENTRY,
       locale,
+      callback,
     );
   }
 
@@ -847,6 +870,7 @@ export async function loginAction(input: string | z.infer<typeof legacyEmailLogi
       "/login",
       AUTH_SESSION_PROVIDER_TYPES.EMAIL_ENTRY,
       locale,
+      callback,
     );
   }
 
@@ -1242,6 +1266,7 @@ export async function completeTrialSignupVerificationAction(
   // revoked is not an invite — and a separate flag could disagree with the value
   // it is supposed to describe.
   let workspaceIdForSession: string | null = null;
+  let invitationHandled = false;
   let redirectTo = "/setup?onboarding=trial";
 
   if (invitedWorkspaceId) {
@@ -1300,6 +1325,7 @@ export async function completeTrialSignupVerificationAction(
     // it declines the join and falls through to the self-serve path below,
     // exactly as it does for a user who was never invited.
     if (existingMembership?.status !== MembershipStatus.INACTIVE) {
+      invitationHandled = true;
       await db.membership.upsert({
         where: {
           workspaceId_userId: {
@@ -1311,7 +1337,7 @@ export async function completeTrialSignupVerificationAction(
           workspaceId: invitedWorkspace.id,
           userId: savedUser.id,
           role: existingMembership?.role ?? WorkspaceRole.MEMBER,
-          status: MembershipStatus.ACTIVE,
+          status: MembershipStatus.INVITED,
           ...(invitedMembershipTitle ? { title: invitedMembershipTitle } : {}),
           ...(invitedMembershipPersona ? { persona: invitedMembershipPersona } : {}),
         },
@@ -1333,30 +1359,18 @@ export async function completeTrialSignupVerificationAction(
         },
       });
 
-      // The INVITED -> ACTIVE transition, with the pre-state inside the UPDATE.
-      // Same shape and same reason as markInvitedMembershipActive in
-      // lib/auth/session.ts: Prisma's updateMany can select ids and then update
-      // by id, so its count is not a sound compare-and-swap under concurrency.
-      // A row revoked in the meantime does not match, and stays revoked.
-      await db.$executeRaw`
-        UPDATE \`Membership\`
-           SET \`status\` = ${MembershipStatus.ACTIVE},
-               \`joinedAt\` = UTC_TIMESTAMP(3),
-               \`updatedAt\` = UTC_TIMESTAMP(3)
-         WHERE \`workspaceId\` = ${invitedWorkspace.id}
-           AND \`userId\` = ${savedUser.id}
-           AND \`status\` = ${MembershipStatus.INVITED}
-      `;
-
-      workspaceIdForSession = invitedWorkspace.id;
-      redirectTo = resolveDeploymentPostLoginPath(
-        "/dashboard",
-        deploymentConfig,
-      );
+      const resultingMembership = await activateMembershipIfInvited({
+        workspaceId: invitedWorkspace.id,
+        userId: savedUser.id,
+      });
+      if (resultingMembership?.status === MembershipStatus.ACTIVE) {
+        workspaceIdForSession = invitedWorkspace.id;
+        redirectTo = externalMemberPostLoginPath(resultingMembership, resolveDeploymentPostLoginPath("/dashboard", deploymentConfig));
+      }
     }
   }
 
-  if (!workspaceIdForSession) {
+  if (!workspaceIdForSession && !invitationHandled) {
     // Recheck after invite resolution: an invitation may have been revoked since
     // the entry check. It must never turn into permission to create a workspace.
     if (!canSelfCreateOrganization() || !deploymentConfig.selfServeSignupEnabled) {
@@ -1377,13 +1391,20 @@ export async function completeTrialSignupVerificationAction(
     workspaceIdForSession = workspace.id;
   }
 
-  await createSession({
-    userId: savedUser.id,
-    email: savedUser.email,
-    workspaceId: workspaceIdForSession,
-    sourcePage: "/login",
-    providerType: AUTH_SESSION_PROVIDER_TYPES.VERIFIED_SIGNUP,
-  });
+  if (invitationHandled && !workspaceIdForSession) {
+    // Signup is a public verified-identity flow and can be started from a
+    // browser that already has a session. When the invite remains pending, do
+    // not leave that prior session available to resolve workspace access.
+    await clearSession();
+  } else {
+    await createSession({
+      userId: savedUser.id,
+      email: savedUser.email,
+      workspaceId: workspaceIdForSession,
+      sourcePage: "/login",
+      providerType: AUTH_SESSION_PROVIDER_TYPES.VERIFIED_SIGNUP,
+    });
+  }
 
   cookieStore.set(UI_LOCALE_COOKIE, enrollmentLocale, {
     httpOnly: false,
@@ -1399,11 +1420,12 @@ export async function completeTrialSignupVerificationAction(
   return {
     ok: true,
     workspaceId: workspaceIdForSession,
-    redirectTo,
+    redirectTo: invitationHandled && !workspaceIdForSession ? "/invite-pending" : redirectTo,
+    invitationPending: invitationHandled && !workspaceIdForSession,
   };
 }
 
-export async function passwordLoginAction(input: z.infer<typeof passwordLoginSchema>) {
+export async function passwordLoginAction(input: z.infer<typeof passwordLoginSchema>, callback?: string) {
   const locale = resolveActionInputLocale(input);
   const english = locale === "en-US";
   const parsed = passwordLoginSchema.safeParse(input);
@@ -1480,6 +1502,7 @@ export async function passwordLoginAction(input: z.infer<typeof passwordLoginSch
     "/login",
     AUTH_SESSION_PROVIDER_TYPES.PASSWORD,
     locale,
+    callback,
   );
 }
 
@@ -1673,6 +1696,7 @@ export async function beginPublicPhoneEntryAction(
 
 export async function loginWithPhoneCodeAction(
   input: z.infer<typeof phoneCodeLoginSchema>,
+  callback?: string,
 ) {
   const locale = resolveActionInputLocale(input);
   const english = locale === "en-US";
@@ -1747,11 +1771,12 @@ export async function loginWithPhoneCodeAction(
     };
   }
 
-  return finalizeLoginForUser(user, "/login", AUTH_SESSION_PROVIDER_TYPES.PHONE_CODE, locale);
+  return finalizeLoginForUser(user, "/login", AUTH_SESSION_PROVIDER_TYPES.PHONE_CODE, locale, callback);
 }
 
 export async function completeFirstLoginIdentityCompletionAction(
   input: z.infer<typeof firstLoginIdentityCompletionSchema>,
+  callback?: string,
 ) {
   const cookieStore = await cookies();
   const locale = resolveActionInputLocale(input);
@@ -1822,9 +1847,10 @@ export async function completeFirstLoginIdentityCompletionAction(
     }
     return {
       ok: true,
-      redirectTo: resolveDeploymentPostLoginPath(
-        resolvePostLoginRedirectPath(membership),
-      ),
+      redirectTo: externalMemberPostLoginPath(membership, resolveLoginCallbackDestination(
+        resolveDeploymentPostLoginPath(resolvePostLoginRedirectPath(membership)),
+        callback,
+      )),
     };
   }
 
@@ -1842,9 +1868,10 @@ export async function completeFirstLoginIdentityCompletionAction(
     }
     return {
       ok: true,
-      redirectTo: resolveDeploymentPostLoginPath(
-        resolvePostLoginRedirectPath(membership),
-      ),
+      redirectTo: externalMemberPostLoginPath(membership, resolveLoginCallbackDestination(
+        resolveDeploymentPostLoginPath(resolvePostLoginRedirectPath(membership)),
+        callback,
+      )),
     };
   }
 
@@ -1920,14 +1947,16 @@ export async function completeFirstLoginIdentityCompletionAction(
 
   return {
     ok: true,
-    redirectTo: resolveDeploymentPostLoginPath(
-      resolvePostLoginRedirectPath(membership),
-    ),
+    redirectTo: externalMemberPostLoginPath(membership, resolveLoginCallbackDestination(
+      resolveDeploymentPostLoginPath(resolvePostLoginRedirectPath(membership)),
+      callback,
+    )),
   };
 }
 
 export async function selectLoginWorkspaceAction(
   input: z.infer<typeof loginWorkspaceSelectionSchema>,
+  callback?: string,
 ) {
   const parsed = loginWorkspaceSelectionSchema.safeParse(input);
   const english = resolveActionInputLocale(parsed.success ? parsed.data : input) === "en-US";
@@ -1962,29 +1991,44 @@ export async function selectLoginWorkspaceAction(
     };
   }
 
-  await setActiveWorkspace(parsed.data.workspaceId);
-
+  let selectedMembership = membership;
   if (membership.status === MembershipStatus.INVITED) {
-    await activateMembershipIfInvited({
+    const resultingMembership = await activateMembershipIfInvited({
       workspaceId: parsed.data.workspaceId,
       userId: user.id,
     });
+    if (!resultingMembership) {
+      return {
+        ok: false,
+        error: english ? "The selected organization is unavailable." : "选择的组织当前不可用。",
+      };
+    }
+    if (resultingMembership.status === MembershipStatus.INVITED) {
+      return { ok: true, redirectTo: "/invite-pending", invitationPending: true };
+    }
+    if (resultingMembership.status !== MembershipStatus.ACTIVE) {
+      return {
+        ok: false,
+        error: english ? "The selected organization is unavailable." : "选择的组织当前不可用。",
+      };
+    }
+    selectedMembership = { ...membership, status: resultingMembership.status };
   }
 
-  const requiresIdentityCompletion = shouldRequireFirstLoginIdentityCompletion(user);
-  const redirectTo = requiresIdentityCompletion
-    ? FIRST_LOGIN_IDENTITY_SETUP_PATH
-    : resolveDeploymentPostLoginPath(
-        resolvePostLoginRedirectPath(
-          membership.status === MembershipStatus.INVITED
-            ? { ...membership, status: MembershipStatus.ACTIVE }
-            : membership,
-        ),
-      );
+  await setActiveWorkspace(parsed.data.workspaceId);
+
+  const requiresIdentityCompletion = externalScopeOf(selectedMembership) === null && shouldRequireFirstLoginIdentityCompletion(user);
+  const redirectTo = externalMemberPostLoginPath(selectedMembership, resolveLoginCallbackDestination(
+    requiresIdentityCompletion
+      ? FIRST_LOGIN_IDENTITY_SETUP_PATH
+      : resolveDeploymentPostLoginPath(resolvePostLoginRedirectPath(selectedMembership)),
+    callback,
+  ));
 
   return {
     ok: true,
     redirectTo,
+    invitationPending: false,
   };
 }
 

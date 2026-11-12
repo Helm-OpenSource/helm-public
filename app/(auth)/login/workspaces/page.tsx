@@ -1,41 +1,43 @@
+import { resolveLoginCallbackDestination, withLoginCallback } from "@/lib/auth/login-callback";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { WorkspaceSelectorPanel } from "@/features/auth/workspace-selector-panel";
-import { getCurrentUser } from "@/lib/auth/session";
+import { getCurrentExternalMemberScope, getCurrentUser } from "@/lib/auth/session";
+import { externalLandingPath, externalMemberPostLoginPath } from "@/lib/auth/external-member-scope";
 import {
-  filterDeploymentMemberships,
   resolveDeploymentPostLoginPath,
 } from "@/lib/auth/deployment-entry";
 import { resolvePostLoginRedirectPath } from "@/lib/auth/first-login-identity-completion";
 import { resolveUiLocale } from "@/lib/i18n/config";
-import { getLocalizedRoleLabels } from "@/lib/i18n/labels";
+import { getWorkspaceChoices } from "@/lib/auth/workspace-choices";
 
-export default async function LoginWorkspaceSelectionPage() {
+export default async function LoginWorkspaceSelectionPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ callback?: string | string[] }>;
+}) {
+  const callback = (await searchParams)?.callback;
+  const external = await getCurrentExternalMemberScope();
+  if (external !== null) redirect(externalLandingPath(external));
   const user = await getCurrentUser();
   if (!user) {
-    redirect("/login");
+    redirect(withLoginCallback("/login", callback));
   }
 
   const locale = resolveUiLocale((await cookies()).get("helm-ui-locale")?.value);
-  const roleLabels = getLocalizedRoleLabels(locale);
-
-  const memberships = filterDeploymentMemberships(
-    user.memberships.filter((membership) => membership.status !== "INACTIVE"),
-  )
-    .sort((left, right) => {
-      if (left.status !== right.status) {
-        return left.status === "ACTIVE" ? -1 : 1;
-      }
-      return left.workspace.name.localeCompare(right.workspace.name);
-    });
+  const choices = getWorkspaceChoices(user.memberships, locale);
+  const memberships = user.memberships.filter((membership) =>
+    choices.some((choice) => choice.workspaceId === membership.workspaceId),
+  );
 
   if (memberships.length <= 1) {
     const membership = memberships[0];
     redirect(
       membership
-        ? resolveDeploymentPostLoginPath(
-            resolvePostLoginRedirectPath(membership),
-          )
+        ? externalMemberPostLoginPath(membership, resolveLoginCallbackDestination(
+            resolveDeploymentPostLoginPath(resolvePostLoginRedirectPath(membership)),
+            callback,
+          ))
         : "/login",
     );
   }
@@ -45,12 +47,7 @@ export default async function LoginWorkspaceSelectionPage() {
       <div className="mx-auto max-w-3xl">
         <WorkspaceSelectorPanel
           locale={locale}
-          options={memberships.map((membership) => ({
-            workspaceId: membership.workspaceId,
-            workspaceName: membership.workspace.name,
-            roleLabel: roleLabels[membership.role],
-            status: membership.status === "ACTIVE" ? "ACTIVE" : "INVITED",
-          }))}
+          options={choices}
         />
       </div>
     </div>

@@ -367,6 +367,10 @@ export function formatSettingsBoundaryNote(text: string, english: boolean) {
       /Billing, registry, participant-portal, program-governance, and settlement follow-through remain tenant-scoped governance readouts, not a finance or marketplace platform\./gi,
       "计费、登记、贡献方门户、合作计划治理和结算跟进仍是租户范围内的治理读数，不是财务或公开市场平台。",
     )
+    .replace(
+      /Recent org-admin and data-governance audit lists hold at most 8 events from the last (\d+) days; older events stay in the audit log and are not part of these lists\./gi,
+      "最近的组织管理员审计和数据治理审计列表只包含近 $1 天内最多 8 条事件；更早的事件仍保存在审计日志中，不在这两份列表里。",
+    )
     .replace(/finance or marketplace platform/gi, "财务或公开市场平台")
     .replace(/marketplace platform/gi, "公开市场平台")
     .replace(/execution authority/gi, "执行权限")

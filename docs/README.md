@@ -43,6 +43,9 @@ the next layer.
 `/tmp/helm-golden-path-proof` 本地证据包；它不是客户部署、发布 ready、
 connector 授权、写回、外发或审批证明。
 
+
+顶部姓名／组织区域支持在当前账号可进入的工作区间切换；详见 [开发者上手指引](getting-started.md#工作区切换)。
+
 ## 从这里开始 / Start Here
 
 - [README](../README.md) / [README English](../README.en.md)
@@ -64,6 +67,7 @@ connector 授权、写回、外发或审批证明。
 - [Helm CAIO 模型准入与数据出域治理 / Helm CAIO model admission and data egress governance](product/HELM_CAIO_MODEL_ADMISSION_AND_EGRESS.md) — 租户策略、adapter readiness、调用前决定、单次 claim、append-only 回执与受限 fallback；Public Core 默认无生产 adapter
 - [Helm CAIO 模型准入与数据出域 Runbook / Helm CAIO model admission and data egress runbook](operations/HELM_CAIO_MODEL_EGRESS_RUNBOOK.md) — 空库重放、隔离 MySQL、事故处置与回滚；不把合成或本地证据提升为生产事实
 - [WorkBuddy 固定路由准入 / WorkBuddy fixed route admission](operations/CAIO_WORKBUDDY_ROUTE_ADMISSION.md) — 源码固定关闭/未知绑定在凭据、请求和数据库加载前拒绝；Core 默认保留旧入口，不代表已安装或生产授权。
+- [Membership auto-activation operations](operations/MEMBERSHIP_AUTO_ACTIVATION.md) — workspace setting semantics, legacy compatibility default, owner/admin opt-out, and member-owned activation boundary.
 - [腾讯 WorkBuddy 与 Helm CAIO Pro 内网协作设计 / Tencent WorkBuddy and Helm CAIO Pro LAN collaboration design](superpowers/specs/2026-07-23-workbuddy-caio-lan-collaboration-design.md) — CEO macOS 通过 LAN-only MCP Gateway 主动提问、读取 P1C canonical Portfolio、接收 typed prompt 并复核建议；设计已确认、实现未开始，不构成生产可用或外部执行授权
 - [Helm CAIO Pro P1C 入口图 / Helm CAIO Pro P1C entry map](superpowers/specs/2026-07-23-caio-pro-p1c-entry-map.md) — 记录 canonical 10 题 Portfolio、CEO 选 0-3 题、现有 DecisionRecord 绑定与 OWNER-only 只读入口；本地参考实现已验证，WorkBuddy/Gateway、远程 mutation、部署与生产回执仍需下一层
 - [QoderWork 一把手经营闭环 / QoderWork owner operating loop](product/HELM_QODERWORK_OWNER_LOOP.md) — Public Core 契约与默认关闭实现；不是设备凭证、runtime 激活或生产部署证明
@@ -82,6 +86,14 @@ connector 授权、写回、外发或审批证明。
 - [外部智能体输入 PRD / External agent intake PRD](product/HELM_EXTERNAL_AGENT_INTAKE_PRD.md)
 - [独立用量证据与同事务核销 / Independent usage evidence](operations/LLM_TRUSTED_USAGE_EVIDENCE.md) — generic controlled HTTP、insert-only collector 与原账本同事务核验；仅合成协议，默认无生产 roots。
 - [LLM spend charge contract v2](operations/LLM_SPEND_RESERVATION_CONTRACT.md) — maximum-charge/provenance state machine and candidate MySQL transaction adapter; authoritative pricing, gateway dispatch coupling, full charge-path coverage, and production activation remain separate prerequisites.
+- [工作区用量去重与更正 / Scoped usage observations](operations/USAGE_OBSERVATION_IDEMPOTENCY.md) - opt-in logical operation identity and append-only correction, not invoicing or provider cost authority.
+- [付款主体与范围绑定 / Billing payer accounts](operations/BILLING_PAYER_ACCOUNTS.md) - payer identity and one-active-binding scope contract, default billingMode off; no balance, charge or payment.
+- [资金分录与余额投影 / Billing funds journal](operations/BILLING_FUNDS_JOURNAL.md) - append-only balanced fen journal, rebuildable projection and durable outbox; no payment entry, charge or route.
+- [钱包充值订单与支付核验 / Billing wallet top-up orders](operations/BILLING_TOPUP_ORDERS.md) - wallet_topup orders and one callback/query verification entry crediting once; no route, real provider or merchant credential.
+- [对公到账复核与钱包查询 / Billing bank receipts](operations/BILLING_BANK_RECEIPTS.md) - maker/checker corporate bank receipts posting `bank_topup`, platform finance grants and read-only wallet query; no bank import or UI.
+- [价格版本与消费授权 / Billing price versions and spend grants](operations/BILLING_PRICE_GRANTS.md) - immutable price versions and default-off, version-bound spend grants; no reservation, charge or route.
+- [预算桶与预占 / Billing budget buckets and reservations](operations/BILLING_RESERVATIONS.md) - per grant day/month buckets, protocol-shaped reserve, settle-once charge posting, release and unknown holds (shadow never moves money); no route.
+- [授信额度 / Billing credit facilities](operations/BILLING_CREDIT_FACILITIES.md) - maker/checker credit lines per payer, default 0, balanced shortfall credit draws for S3-b; no batch issuance, repayment or route.
 - [LLM 智能深化 v1 / LLM intelligence deepening v1](product/HELM_LLM_INTELLIGENCE_DEEPENING_V1.md)
 - [LLM 智能深化 v2 / LLM intelligence deepening v2](product/HELM_LLM_INTELLIGENCE_DEEPENING_V2.md)
 - [LLM 智能深化 v3 / LLM intelligence deepening v3](product/HELM_LLM_INTELLIGENCE_DEEPENING_V3.md)
@@ -102,7 +114,7 @@ connector 授权、写回、外发或审批证明。
 - [Stage 1 一把手经营闭环方法 / Stage 1 owner operating loop method](product/HELM_STAGE1_OWNER_LOOP_METHOD.md) — owner-authorized、read-only 到 review-first 的公共参考切片；不是生产连接器或自治授权
 - [Helm CAIO Pro 产品与实施需求 / Helm CAIO Pro product and implementation requirements](product/HELM_CAIO_PRO_IMPLEMENTATION_REQUIREMENTS.md) — 全资产目录、逐源只读授权、G0、10 题/选 0-3 题、模型出域和员工同意边界
 - [默认经营工作区重构蓝图 / Default operating workspace refactor blueprint](product/HELM_DEFAULT_OPERATING_WORKSPACE_REFACTOR_BLUEPRINT.md) — design-only 设计蓝图；不是实现、API freeze、路由删除批准或执行授权
-- [Solution extension 协议 / Solution extension protocol](product/HELM_SOLUTION_EXTENSION_PROTOCOL_V1.md)
+- [Solution extension 协议 / Solution extension protocol](product/HELM_SOLUTION_EXTENSION_PROTOCOL_V1.md) — 含外部成员登录落地优先级与服务端页面边界。
 - [扩展目录与命名协议 / Extension directory and naming protocol](product/HELM_MULTI_TENANT_EXTENSION_DIRECTORY_AND_NAMING_PROTOCOL_V1.md)
 - [经营信号首公里方法 / Signal First Mile method](product/HELM_SIGNAL_FIRST_MILE_METHOD.md)
 - [经营信号首公里 quickstart / Signal First Mile quickstart](product/HELM_SIGNAL_FIRST_MILE_QUICKSTART.md)
@@ -157,6 +169,7 @@ Those materials belong in private repositories or private issue / PR records,
 not in `helm-public`.
 
 - [CAIO governed read extension](product/CAIO_GOVERNED_READ_EXTENSION.md) — explicit, default-off read composition; deployment identity and source ports required.
+- [CAIO 运营关注事项页面 / attention pages](product/HELM_CAIO_ATTENTION_PAGES.md) — 默认关闭；页面只经授权 loader 读取，确认、处置、复核由真人完成。Default-off; reads only through the authorized loader.
 
 LLM 预算交付请核对 [签名金额元数据注册与原子预约边界](operations/LLM_SPEND_RESERVATION_CONTRACT.md)：默认无发行记录且收费权威未启用；本地合成验证不证明真实定价、用量或生产限额。
 

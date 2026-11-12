@@ -1,8 +1,14 @@
 import { ObjectType } from "@prisma/client";
+import { z } from "zod";
 import { buildBriefingPrompt, briefingSchema, llmPromptVersions } from "@/lib/llm/prompt-registry";
 import { executeLLMTask } from "@/lib/llm/provider-registry";
 import type { MemoryRetrievalPackSurfaceTrace } from "@/lib/memory/retrieval-pack-adapter";
-import { parseLlmJsonOrThrow } from "@/lib/llm/output-parse-error";
+import { LlmOutputSchemaError, parseLlmJsonOrThrow } from "@/lib/llm/output-parse-error";
+
+const acceptedBriefingSchema = z.object({
+  summary: z.string(), recommendedQuestions: z.array(z.string()),
+  recommendedNextSteps: z.array(z.string()), importantFactHighlights: z.array(z.string()),
+}).strict();
 
 type BriefingLikePayload = {
   summary: string;
@@ -63,13 +69,18 @@ export async function generateBriefingWithLLM(input: BriefingWorkflowInput) {
       importantFactHighlights: input.fallbackPayload.recentFacts.map((item) => String(item.content ?? item.title ?? "")).slice(0, 3),
     },
     ordinaryOperationId: input.ordinaryOperationId,
-    parseOutput: (rawText) =>
-      parseLlmJsonOrThrow<{
+    parseOutput: (rawText) => {
+      const parsed = parseLlmJsonOrThrow<{
         summary: string;
         recommendedQuestions: string[];
         recommendedNextSteps: string[];
         importantFactHighlights: string[];
-      }>(rawText),
+      }>(rawText);
+      if (!input.ordinaryOperationId) return parsed;
+      const accepted = acceptedBriefingSchema.safeParse(parsed);
+      if (!accepted.success) throw new LlmOutputSchemaError("briefing_output_schema_invalid");
+      return accepted.data;
+    },
   });
 
   const payload: BriefingLikePayload = {

@@ -1,5 +1,7 @@
 "use client";
 
+import { readBrowserLoginCallback } from "@/lib/auth/login-callback";
+
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, LogIn } from "lucide-react";
@@ -9,12 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { selectLoginWorkspaceAction } from "@/features/auth/actions";
 import type { UiLocale } from "@/lib/i18n/config";
 
-type WorkspaceChoice = {
-  workspaceId: string;
-  workspaceName: string;
-  roleLabel: string;
-  status: "ACTIVE" | "INVITED";
-};
+import type { WorkspaceChoice } from "@/lib/auth/workspace-choices";
 
 export function WorkspaceSelectorPanel({
   locale,
@@ -29,7 +26,7 @@ export function WorkspaceSelectorPanel({
 
   const chooseWorkspace = (workspaceId: string) => {
     startTransition(async () => {
-      const result = await selectLoginWorkspaceAction({ workspaceId, locale });
+      const result = await selectLoginWorkspaceAction({ workspaceId, locale }, readBrowserLoginCallback());
       if (!result.ok || !result.redirectTo) {
         toast.error(
           result.error ??
@@ -38,7 +35,11 @@ export function WorkspaceSelectorPanel({
         return;
       }
 
-      toast.success(english ? "Organization selected" : "组织已选择");
+      toast.success(result.invitationPending
+        ? english
+          ? "Your invitation is still pending."
+          : "你的邀请仍待处理。"
+        : english ? "Organization selected" : "组织已选择");
       router.push(result.redirectTo);
       router.refresh();
     });

@@ -61,6 +61,11 @@ HELM_ORGANIZATION_CREATION_MODE="self-service"
 # 1-128 ASCII characters: [A-Za-z0-9][A-Za-z0-9._:-]*.
 HELM_HEALTH_ATTESTATION_MODE="reachability"
 HELM_RUNTIME_DEPLOYMENT_ID=""
+# CAIO attention node identity (per host, non-secret). Unset: no RuntimeNode
+# heartbeat and no readiness proof, so attention intake stays paused. Role is
+# the heartbeat's process role, [a-z][a-z0-9_-]{0,31}; empty means http.
+HELM_RUNTIME_NODE_ID=""
+HELM_RUNTIME_NODE_ROLE=""
 
 # Optional public deployment identity for /terms and /privacy. The display name
 # may be configured independently. The legal name is rendered only when the
@@ -107,9 +112,24 @@ HELM_OUTBOUND_VOICE_ASR_ENABLED="false"
 HELM_AUTOMATED_CUSTOMER_CALLS_ENABLED="false"
 HELM_SMS_SENDS_ENABLED="false"
 HELM_FINANCIAL_ACTIONS_ENABLED="false"
+# Billing internal service routes (/api/internal/billing/v1/*); off answers 404. Grant pins are non-secret JSON
+# {"<grantId>":"sha256:<contentHash>"} for reviewed BillingServiceGrant rows (Ed25519 public keys); empty trusts none.
+HELM_BILLING_INTERNAL_ROUTES_ENABLED="false"
+HELM_BILLING_SERVICE_GRANT_PINS=""
+# Corporate bank receipts: public (not confidential) JSON array of opaque lowercase references to our own receiving accounts (never account
+# numbers), e.g. ["recv:bank-a-main"]; empty registers none and every bank receipt draft is refused.
+HELM_BILLING_BANK_RECEIVING_ACCOUNTS=""
+# Alipay wallet top-up notify (/api/billing/v1/topup-notify/alipay); off answers 404. Uses ALIPAY_* below.
+HELM_BILLING_TOPUP_ALIPAY_ENABLED="false"
+# WeChat Pay wallet top-up notify (/api/billing/v1/topup-notify/wechatpay); on when empty, "false" answers 404.
+# Fails closed (503, no credit) until every WECHAT_PAY_* key below and the public key id are set and well-formed.
+HELM_BILLING_TOPUP_WECHATPAY_ENABLED=""
 
 SIGNAL_COLLECTION_SCHEDULER_ENABLED="false"
 LIGHT_CHAIN_FOLLOW_THROUGH_CRON_ENABLED="false"
+# CAIO attention reminders + evaluation watchdog (5-minute in-app scan). Inert
+# until an overlay registers the tenant policy.
+HELM_CAIO_ATTENTION_REMINDERS_ENABLED="false"
 
 # QoderWork external-agent MCP stays fail-closed unless both this deployment
 # flag and the owner-authorized workspace feature flag are enabled. Origins are
@@ -117,6 +137,12 @@ LIGHT_CHAIN_FOLLOW_THROUGH_CRON_ENABLED="false"
 HELM_QODERWORK_MCP_ENABLED="false"
 # Member MCP entry (/api/mcp/member): members connect their own AI clients; also needs workspace featureFlags.memberMcp.
 HELM_MEMBER_MCP_ENABLED="false"
+# Seat desktop device authorization (lib/seat-device): device sign-in for the seat
+# desktop client; also needs workspace featureFlags.seatDesktop. Off returns 404.
+HELM_SEAT_DEVICE_AUTH_ENABLED="false"
+# Proxies in front of the app that append to x-forwarded-for; the source is the
+# Nth entry from the right. 0 (default) treats the device source as untrusted.
+HELM_SEAT_DEVICE_TRUSTED_PROXY_HOPS="0"
 # CAIO review supplement: workspace-aggregated member feedback volume by type (counts only).
 HELM_CAIO_MEMBER_FEEDBACK_SUPPLEMENT_ENABLED="false"
 HELM_MCP_ALLOWED_ORIGINS=""
@@ -145,12 +171,15 @@ STRIPE_WEBHOOK_SECRET=""
 ALIPAY_APP_ID=""
 ALIPAY_PRIVATE_KEY=""
 ALIPAY_PUBLIC_KEY=""
+HELM_BILLING_TOPUP_ALIPAY_SELLER_ID=""
 WECHAT_PAY_APP_ID=""
 WECHAT_PAY_MERCHANT_ID=""
 WECHAT_PAY_MERCHANT_SERIAL_NO=""
 WECHAT_PAY_PRIVATE_KEY=""
 WECHAT_PAY_PLATFORM_PUBLIC_KEY=""
 WECHAT_PAY_API_V3_KEY=""
+# WeChat Pay public key id (PUB_KEY_ID_...) matching WECHAT_PAY_PLATFORM_PUBLIC_KEY; top-up accepts only this Wechatpay-Serial.
+HELM_BILLING_TOPUP_WECHATPAY_PUBLIC_KEY_ID=""
 
 HUBSPOT_CLIENT_ID=""
 HUBSPOT_CLIENT_SECRET=""

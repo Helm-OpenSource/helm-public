@@ -9,8 +9,11 @@ import type { UiLocale } from "@/lib/i18n/config";
 import type { ShellChromeProfile } from "@/lib/shell/shell-chrome";
 import type { WorkspaceFeatureFlags } from "@/lib/workspace-ops";
 import type { MemberRoleHomeWorkstation } from "@/lib/shell/member-role-home";
+import type { WorkspaceChoice } from "@/lib/auth/workspace-choices";
 
 type AppShellProps = {
+  workspaceId: string;
+  workspaceChoices: WorkspaceChoice[];
   workspaceName: string;
   /** 租户品牌行覆盖(workspace.configuration.shellBrandLabel);null → 默认品牌。 */
   brandLabel?: string | null;
@@ -49,12 +52,15 @@ type AppShellProps = {
   shellChromeProfiles: ReadonlyArray<ShellChromeProfile>;
   basePresetKey: string | null;
   showCaioPrimaryNavigation: boolean;
+  showCaioAttentionNavigation?: boolean;
   canReviewGovernedActions: boolean;
   workstationHomeEntry: MemberRoleHomeWorkstation | null;
   children: React.ReactNode;
 };
 
 export function AppShell({
+  workspaceId,
+  workspaceChoices,
   workspaceName,
   brandLabel = null,
   userName,
@@ -75,6 +81,7 @@ export function AppShell({
   shellChromeProfiles,
   basePresetKey,
   showCaioPrimaryNavigation,
+  showCaioAttentionNavigation = false,
   canReviewGovernedActions,
   workstationHomeEntry,
   children,
@@ -106,6 +113,7 @@ export function AppShell({
             navExtensionClusters={navExtensionClusters}
             basePresetKey={basePresetKey}
             showCaioPrimaryNavigation={showCaioPrimaryNavigation}
+            showCaioAttentionNavigation={showCaioAttentionNavigation}
             canReviewGovernedActions={canReviewGovernedActions}
             workstationHomeEntry={workstationHomeEntry}
           />
@@ -118,6 +126,7 @@ export function AppShell({
               navExtensionClusters={navExtensionClusters}
               basePresetKey={basePresetKey}
               showCaioPrimaryNavigation={showCaioPrimaryNavigation}
+              showCaioAttentionNavigation={showCaioAttentionNavigation}
               canReviewGovernedActions={canReviewGovernedActions}
               workstationHomeEntry={workstationHomeEntry}
             />
@@ -125,6 +134,8 @@ export function AppShell({
         )}
         <div className="min-w-0 flex-1 overflow-x-hidden px-0 pb-6">
           <Topbar
+            workspaceId={workspaceId}
+            workspaceChoices={workspaceChoices}
             workspaceName={workspaceName}
             brandLabel={brandLabel}
             userName={userName}
@@ -133,6 +144,7 @@ export function AppShell({
             alerts={alerts}
             quickCreateData={quickCreateData}
             showCaioPrimaryNavigation={showCaioPrimaryNavigation}
+            showCaioAttentionNavigation={showCaioAttentionNavigation}
           />
           <main className="mx-auto flex min-w-0 w-full max-w-[1580px] flex-col gap-6 px-4 pt-5 lg:px-8 lg:pt-6">
             {false ? <DemoTourBanner /> : null}

@@ -1371,6 +1371,82 @@ model MemberAgentApproverGrant {
   @@index([workspaceId, groupTag, revokedAt], map: "MAApproverGrant_ws_group_revoked_idx")
 }
 
+/// Seat desktop device authorization (D1): a device-initiated request that a
+/// member approves on the website, then the device's rotating credential. id is
+/// both requestId and deviceId; identity columns stay null until approval.
+/// Tokens and the pairing code are stored as sha256 hashes only. Lifecycle
+/// writes are CAS on version; "expired" is derived (lib/seat-device/contract.ts).
+/// expiresAt is fixed at approval and never extended by a refresh.
+/// devicePublicKeyThumbprint is reserved for proof of possession: not read or
+/// written in D1. audiencePin is written once by the consuming extension.
+model SeatDeviceAuthorization {
+  id                        String    @id @default(cuid())
+  clientType                String    @db.VarChar(32)
+  deviceLabel               String    @db.VarChar(80)
+  clientVersion             String?   @db.VarChar(40)
+  status                    String    @db.VarChar(16)
+  version                   Int       @default(0)
+  pollTokenHash             String    @unique @db.Char(64)
+  pairingCodeHash           String?   @unique @db.Char(64)
+  sourceIp                  String?   @db.VarChar(64)
+  sourceBucket              String?   @db.VarChar(64)
+  requestedAt               DateTime
+  requestExpiresAt          DateTime
+  pollIntervalSec           Int       @default(5)
+  lastPolledAt              DateTime?
+  claimedAt                 DateTime?
+  reclaimed                 Boolean   @default(false)
+  workspaceId               String?
+  userId                    String?
+  membershipId              String?
+  userPasswordSetAt         DateTime?
+  approvalSource            String?   @db.VarChar(64)
+  approvedAuthSessionId     String?
+  decidedByUserId           String?
+  decidedAt                 DateTime?
+  audiencePin               String?
+  devicePublicKeyThumbprint String?   @db.Char(64)
+  accessTokenHash           String?   @unique @db.Char(64)
+  accessExpiresAt           DateTime?
+  previousAccessTokenHash   String?   @unique @db.Char(64)
+  previousAccessExpiresAt   DateTime?
+  refreshTokenHash          String?   @unique @db.Char(64)
+  refreshTokenUsed          Boolean   @default(false)
+  previousRefreshTokenHash  String?   @unique @db.Char(64)
+  rotatedAt                 DateTime?
+  rotationSource            String?   @db.VarChar(64)
+  graceUsed                 Boolean   @default(false)
+  issuedAt                  DateTime?
+  expiresAt                 DateTime?
+  refreshWindowStartedAt    DateTime?
+  refreshWindowCount        Int       @default(0)
+  lastUsedAt                DateTime?
+  lastIp                    String?   @db.VarChar(64)
+  revokedAt                 DateTime?
+  revokedByUserId           String?
+  revokeReason              String?   @db.VarChar(32)
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+
+  @@index([workspaceId, userId, status])
+  @@index([workspaceId, membershipId, status])
+  @@index([status, requestExpiresAt])
+  @@index([sourceBucket, requestedAt])
+}
+
+/// Seat desktop token history: append-only record of every token hash a
+/// device retired (kind: refresh | access | poll), so presenting a superseded
+/// token is recognised as reuse of that device's token family.
+model SeatDeviceTokenHistory {
+  id        String   @id @default(cuid())
+  deviceId  String
+  kind      String   @db.VarChar(8)
+  tokenHash String   @unique @db.Char(64)
+  retiredAt DateTime
+
+  @@index([deviceId, retiredAt])
+}
+
 /// Member MCP P1b: asynchronous prompt-response intake. The online MCP route
 /// only records the member's confirmed response here (it may not reach the
 /// CAIO governance validators); scripts/member-prompt-response-worker.ts
@@ -1838,11 +1914,537 @@ model UsageLedger {
   sourcePage  String?
   recordedAt  DateTime  @default(now())
   createdAt   DateTime  @default(now())
+  // Optional observation identity; legacy rows remain unkeyed. No monetary authority.
+  operationKey String?  @db.VarChar(191)
+  contentHash  String?  @db.VarChar(64)
+  reversalOfId String?  @unique @db.VarChar(191)
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, recordedAt])
   @@index([workspaceId, usageType, recordedAt])
+  @@unique([workspaceId, operationKey])
+}
+
+// Billing V1 payer identity (S1-c). Not a wallet, balance or subscription; BillingAccount stays unchanged.
+enum PayerAccountKind {
+  consumer
+  enterprise_contract
+}
+
+enum PayerBillingMode {
+  off
+  shadow
+  enforce
+}
+
+enum PayerAccountStatus {
+  active
+  suspended
+  closed
+}
+
+enum PayerScopeKind {
+  workspace
+  consumer_principal
+}
+
+enum PayerScopeBindingState {
+  active
+  revoked
+}
+
+model PayerAccount {
+  id                   String              @id @default(cuid())
+  kind                 PayerAccountKind
+  // Workspace whose OWNER/BILLING_ADMIN governs this payer; required for enterprise_contract.
+  governingWorkspaceId String?             @db.VarChar(191)
+  contractSubjectRef   String              @db.VarChar(191)
+  collectionSubjectRef String?             @db.VarChar(191)
+  currency             String              @default("CNY") @db.VarChar(3)
+  billingMode          PayerBillingMode    @default(off)
+  status               PayerAccountStatus  @default(active)
+  version              Int                 @default(1)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  bindings             PayerScopeBinding[]
+
+  @@index([kind, contractSubjectRef])
+  @@index([governingWorkspaceId])
+}
+
+model PayerScopeBinding {
+  id                 String                 @id @default(cuid())
+  payerAccountId     String
+  scopeKind          PayerScopeKind
+  scopeRef           String                 @db.VarChar(191)
+  state              PayerScopeBindingState @default(active)
+  // Equals scopeRef while active, NULL once revoked: the unique key admits one active binding per scope.
+  activeScopeRef     String?                @db.VarChar(191)
+  version            Int                    @default(1)
+  authorizedByUserId String                 @db.VarChar(191)
+  evidenceRef        String                 @db.VarChar(191)
+  effectiveFrom      DateTime               @default(now())
+  revokedAt          DateTime?
+  revokedByUserId    String?                @db.VarChar(191)
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  payerAccount       PayerAccount           @relation(fields: [payerAccountId], references: [id], onDelete: Restrict)
+
+  @@unique([scopeKind, activeScopeRef])
+  @@index([payerAccountId, state])
+  @@index([scopeKind, scopeRef])
+}
+
+// Billing V1 funds journal (S2-a). Append-only, balanced double entry in integer fen; projections are rebuildable.
+enum FundsTransactionKind {
+  topup
+  correction
+  bank_topup // S2-c
+  charge // S3-b2 (the DB ENUM also holds S3-e's credit_draw from the agreed-union MODIFY; S3-e adds it here)
+  credit_draw // S3-e
+}
+
+enum FundsAccount {
+  customer_wallet_available
+  topup_clearing
+  correction_suspense
+  bank_clearing // S2-c
+  charge_revenue // S3-b2 (DB ENUM also holds S3-e's credit_receivable; S3-e adds it here)
+  credit_receivable // S3-e
+}
+
+enum FundsEntryDirection {
+  debit
+  credit
+}
+
+model FundsTransaction {
+  id             String               @id @default(cuid())
+  payerAccountId String               @db.VarChar(191)
+  kind           FundsTransactionKind
+  operationKey   String               @db.VarChar(191)
+  contentHash    String               @db.Char(64)
+  reversalOfId   String?              @unique @db.VarChar(191) // mirror reversal; one per original
+  currency       String               @default("CNY") @db.VarChar(3)
+  evidenceRef    String               @db.VarChar(191)
+  createdBy      String               @db.VarChar(191)
+  createdAt      DateTime             @default(now())
+  entries        FundsJournalEntry[]
+
+  @@unique([payerAccountId, operationKey])
+}
+
+model FundsJournalEntry {
+  id             String              @id @default(cuid())
+  transactionId  String              @db.VarChar(191)
+  lineNo         Int
+  payerAccountId String              @db.VarChar(191)
+  account        FundsAccount
+  direction      FundsEntryDirection
+  amountFen      BigInt
+  createdAt      DateTime            @default(now())
+  transaction    FundsTransaction    @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+
+  @@unique([transactionId, lineNo])
+  @@unique([transactionId, account])
+  @@index([payerAccountId, account])
+}
+
+model FundsAccountProjection {
+  payerAccountId String       @db.VarChar(191)
+  account        FundsAccount
+  balanceFen     BigInt       @default(0) // credit-normal wallet; debit-normal clearing/suspense
+  version        Int          @default(0)
+  updatedAt      DateTime     @updatedAt
+
+  @@id([payerAccountId, account])
+}
+
+model BillingOutbox {
+  id            String    @id @default(cuid())
+  aggregateType String    @db.VarChar(64)
+  aggregateId   String    @db.VarChar(191)
+  eventType     String    @db.VarChar(64)
+  payload       String    @db.Text
+  payloadHash   String    @db.Char(64)
+  createdAt     DateTime  @default(now())
+  deliveredAt   DateTime?
+
+  @@unique([aggregateType, aggregateId, eventType])
+  @@index([deliveredAt, createdAt])
+}
+
+// Billing V1 catalog and spend grants (S3-a). Products and price versions are immutable; a grant binds one price version.
+enum BillingPriceRounding {
+  half_up
+}
+
+enum SpendGrantState {
+  disabled
+  active
+  paused
+  revoked
+  expired
+}
+
+enum SpendGrantTrigger {
+  user_initiated
+  scheduled
+}
+
+model BillingProduct {
+  id        String   @id @default(cuid())
+  code      String   @unique @db.VarChar(64)
+  createdBy String   @db.VarChar(191)
+  createdAt DateTime @default(now())
+}
+
+model BillingPriceVersion {
+  id                    String               @id @default(cuid())
+  productId             String               @db.VarChar(191)
+  version               Int
+  billingEventRef       String               @db.VarChar(191)
+  meterUnit             String               @db.VarChar(32)
+  acceptanceRef         String               @db.VarChar(191)
+  scopeKind             PayerScopeKind
+  unitPriceFenNumerator BigInt // unit price = numerator / denominator fen, rounded once per line
+  unitPriceDenominator  BigInt
+  rounding              BillingPriceRounding
+  currency              String               @default("CNY") @db.VarChar(3)
+  effectiveFrom         DateTime
+  effectiveUntil        DateTime?
+  approvalRef           String               @db.VarChar(191)
+  contentHash           String               @db.Char(64)
+  createdBy             String               @db.VarChar(191)
+  createdAt             DateTime             @default(now())
+
+  @@unique([productId, version])
+}
+
+model SpendGrant {
+  id                String            @id @default(cuid())
+  payerAccountId    String            @db.VarChar(191)
+  productId         String            @db.VarChar(191)
+  priceVersionId    String            @db.VarChar(191)
+  state             SpendGrantState   @default(disabled)
+  triggerKind       SpendGrantTrigger @default(user_initiated)
+  perChargeLimitFen BigInt            @default(0)
+  dailyLimitFen     BigInt            @default(0)
+  monthlyLimitFen   BigInt            @default(0)
+  validFrom         DateTime
+  validUntil        DateTime
+  operationKey      String            @db.VarChar(191)
+  contentHash       String            @db.Char(64)
+  version           Int               @default(1)
+  createdByUserId   String            @db.VarChar(191)
+  evidenceRef       String            @db.VarChar(191)
+  revokedAt         DateTime?
+  revokedByUserId   String?           @db.VarChar(191)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@unique([payerAccountId, operationKey])
+  @@index([payerAccountId, state])
+}
+
+// Billing V1 budget buckets and reservations (S3-b): counters move only under the PayerAccount lock; reservation snapshots are
+// frozen (DB triggers). Shadow runs the full lifecycle in its own bucket counters and never moves money (protocol v2).
+enum BillingReservationMode {
+  shadow
+  enforce
+}
+
+enum BudgetPeriodKind {
+  day
+  month
+}
+
+enum BillingReservationState {
+  held
+  unknown
+  settled
+  released
+}
+
+enum BillingReleaseReason {
+  not_executed
+  failed
+  partial_unusable
+  unknown_released // resolveUnknown (reconciliation channel), S3-b2
+}
+
+model BudgetBucket {
+  grantId        String                 @db.VarChar(191)
+  billingMode    BillingReservationMode // shadow counts never consume enforce limits
+  periodKind     BudgetPeriodKind
+  periodKey      String           @db.VarChar(10) // Asia/Shanghai YYYY-MM-DD or YYYY-MM
+  payerAccountId String           @db.VarChar(191)
+  settledFen     BigInt           @default(0)
+  reservedFen    BigInt           @default(0) // held + unknown reservations
+  version        Int              @default(0)
+  updatedAt      DateTime         @updatedAt
+
+  @@id([grantId, billingMode, periodKind, periodKey])
+}
+
+model BillingReservation {
+  id                    String                  @id @default(cuid())
+  payerAccountId        String                  @db.VarChar(191)
+  idempotencyKey        String                  @db.VarChar(191)
+  operationRef          String                  @db.VarChar(191) // the business operation; one reservation per payer
+  contentHash           String                  @db.Char(64)
+  grantId               String                  @db.VarChar(191)
+  grantVersion          Int
+  productId             String                  @db.VarChar(191)
+  priceVersionId        String                  @db.VarChar(191)
+  priceContentHash      String                  @db.Char(64)
+  billingEventRef       String                  @db.VarChar(191)
+  meterUnit             String                  @db.VarChar(32)
+  quantity              BigInt
+  chargeFen             BigInt // the hold: priced from the bound price row at reserve time
+  billingMode           BillingReservationMode
+  reservedAt            DateTime // database UTC_TIMESTAMP(3) of the admission, never a caller value
+  dayKey                String                  @db.VarChar(10)
+  monthKey              String                  @db.VarChar(7)
+  state                 BillingReservationState @default(held)
+  version               Int                     @default(1)
+  createdBy             String                  @db.VarChar(191)
+  subjectWorkspaceId    String                  @db.VarChar(191) // the workspace the caller declared (reserve subjectScope)
+  payerBindingId        String                  @db.VarChar(191) // its active PayerScopeBinding at reserve time; names payerAccountId
+  payerBindingVersion   Int
+  unknownKey            String?                 @db.VarChar(191)
+  unknownEvidenceRef    String?                 @db.VarChar(191)
+  unknownAt             DateTime?
+  resolutionKey         String?                 @db.VarChar(191)
+  releaseReason         BillingReleaseReason?
+  resolutionEvidenceRef String?                 @db.VarChar(191)
+  resolvedBy            String?                 @db.VarChar(191)
+  resolvedAt            DateTime?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  @@unique([payerAccountId, idempotencyKey])
+  @@unique([payerAccountId, operationRef])
+  @@unique([payerAccountId, unknownKey])
+  @@unique([payerAccountId, resolutionKey])
+  @@index([payerAccountId, state])
+}
+
+// Billing V1 settled charge (S3-b2): immutable, one per reservation; enforce charges have exactly one `charge` funds transaction.
+model BillingCharge {
+  id                 String                 @id @default(cuid())
+  reservationId      String                 @unique @db.VarChar(191)
+  payerAccountId     String                 @db.VarChar(191)
+  grantId            String                 @db.VarChar(191)
+  operationRef       String                 @db.VarChar(191)
+  idempotencyKey     String                 @db.VarChar(191) // the settle call's key
+  billingMode        BillingReservationMode
+  fundsTransactionId String?                @unique @db.VarChar(191) // null for shadow or 0 fen: never posted
+  priceVersionId     String                 @db.VarChar(191)
+  priceContentHash   String                 @db.Char(64)
+  quantity           BigInt
+  chargeFen          BigInt // 0..capFen: repriced from the frozen price for the used quantity
+  capFen             BigInt
+  dayKey             String                 @db.VarChar(10) // the reservation's frozen periods, not settle time
+  monthKey           String                 @db.VarChar(7)
+  evidenceRef        String                 @db.VarChar(191)
+  createdBy          String                 @db.VarChar(191)
+  createdAt          DateTime               @default(now())
+
+  @@index([payerAccountId, createdAt])
+}
+
+// Billing V1 internal route service identity (S3-b3), modeled on LLMSpendIssuerGrant: the caller's Ed25519 public key only
+// (no shared secret), trusted while governed config pins contentHash; immutable except one-way revocation; no issuance API.
+model BillingServiceGrant {
+  id          String    @id @db.VarChar(64)
+  issuerRef   String    @db.VarChar(191)
+  scopesJson  String    @db.VarChar(255) // canonical JSON array; resolve-unknown only alone
+  publicKeyPem String   @db.Text
+  keyFingerprint String @unique @db.VarChar(71) // sha256 of the SPKI DER
+  approvalRef String    @db.VarChar(191)
+  createdBy   String    @db.VarChar(191)
+  contentHash String    @db.VarChar(71)
+  validFrom   DateTime  @db.DateTime(3)
+  validUntil  DateTime  @db.DateTime(3)
+  revokedAt   DateTime? @db.DateTime(3)
+  revokedBy   String?   @db.VarChar(191)
+  createdAt   DateTime  @default(now()) @db.DateTime(3)
+}
+
+// Replay window state for signed internal billing requests; rows past expiresAt are purged.
+model BillingServiceNonce {
+  grantId   String   @db.VarChar(64)
+  nonce     String   @db.VarChar(64)
+  expiresAt DateTime @db.DateTime(3)
+  createdAt DateTime @default(now()) @db.DateTime(3)
+
+  @@id([grantId, nonce])
+  @@index([expiresAt])
+}
+
+// Billing V1 wallet top-up orders (S2-b). The persisted orderType keeps top-ups apart from legacy subscription orders.
+enum PaymentOrderType {
+  wallet_topup
+}
+
+enum PaymentOrderProvider {
+  wechat_pay
+  alipay
+}
+
+enum PaymentOrderState {
+  created
+  pending
+  paid_verified
+  closed_unpaid
+  unknown
+}
+
+enum VerifiedPaymentSource {
+  callback
+  query
+}
+
+model PaymentOrder {
+  id              String               @id @default(cuid())
+  payerAccountId  String               @db.VarChar(191)
+  payerBindingId  String               @db.VarChar(191) // binding the order was created under (history)
+  workspaceId     String               @db.VarChar(191)
+  orderType       PaymentOrderType
+  provider        PaymentOrderProvider
+  providerOrderNo String               @unique @db.VarChar(64)
+  amountFen       BigInt
+  currency        String               @default("CNY") @db.VarChar(3)
+  merchantRef     String               @db.VarChar(191) // opaque server config refs, never secrets
+  appRef          String               @db.VarChar(191)
+  state           PaymentOrderState    @default(created)
+  version         Int                  @default(1)
+  expiresAt       DateTime
+  createdBy       String               @db.VarChar(191)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@index([payerAccountId, createdAt])
+}
+
+model VerifiedPayment {
+  id                 String                @id @default(cuid())
+  provider           PaymentOrderProvider
+  providerTxnId      String                @db.VarChar(64)
+  paymentOrderId     String                @unique @db.VarChar(191)
+  amountFen          BigInt
+  currency           String                @default("CNY") @db.VarChar(3)
+  source             VerifiedPaymentSource
+  lateAfterClose     Boolean               @default(false)
+  fundsTransactionId String                @unique @db.VarChar(191)
+  verifiedAt         DateTime              @default(now())
+
+  @@unique([provider, providerTxnId])
+}
+
+// Billing V1 corporate bank receipts (S2-c). Maker/checker; approval posts a bank_topup in the same Core transaction.
+enum PlatformFinanceRole {
+  maker
+  checker
+}
+
+enum PlatformFinanceGrantState {
+  active
+  revoked
+}
+
+model PlatformFinanceGrant {
+  id              String                    @id @default(cuid())
+  userId          String                    @db.VarChar(191)
+  role            PlatformFinanceRole
+  state           PlatformFinanceGrantState @default(active)
+  // Equals userId while active, NULL once revoked: one active grant per (role, user).
+  activeUserId    String?                   @db.VarChar(191)
+  grantedByUserId String                    @db.VarChar(191)
+  evidenceRef     String                    @db.VarChar(191)
+  revokedByUserId String?                   @db.VarChar(191)
+  revokedAt       DateTime?
+  version         Int                       @default(1)
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  @@unique([role, activeUserId])
+  @@index([userId])
+}
+
+enum BankReceiptState {
+  drafted
+  reviewed
+  posted
+  rejected
+}
+
+model BankReceipt {
+  id                  String           @id @default(cuid())
+  payerAccountId      String           @db.VarChar(191)
+  receivingAccountRef String           @db.VarChar(191) // opaque reference to our receiving bank account
+  bankTxnRef          String           @db.VarChar(191)
+  // The dedupe key of bankTxnRef (upper-cased, separators - _ . : / removed; DB CHECK) unless rejected: one live receipt per bank
+  // transaction per registered receiving account, whatever case or separators the drafter typed.
+  activeBankTxnRef    String?          @db.VarChar(191)
+  payerNameDigest     String?          @db.VarChar(191) // keyed digest or opaque reference; never a plaintext name
+  amountFen           BigInt
+  currency            String           @default("CNY") @db.VarChar(3)
+  valueDate           DateTime         @db.Date
+  state               BankReceiptState @default(drafted)
+  draftedByUserId     String           @db.VarChar(191)
+  reviewedByUserId    String?          @db.VarChar(191) // DB CHECK: differs from draftedByUserId
+  reviewedAt          DateTime?
+  evidenceRef         String           @db.VarChar(191)
+  reviewEvidenceRef   String?          @db.VarChar(191)
+  fundsTransactionId  String?          @unique @db.VarChar(191)
+  version             Int              @default(1)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  @@unique([receivingAccountRef, activeBankTxnRef])
+  @@index([payerAccountId, state])
+  @@index([state, createdAt])
+}
+
+// Billing V1 credit facility (S3-e). No facility means 0 credit. One active/reduced facility per payer; see the migration triggers.
+enum CreditFacilityState {
+  draft
+  approved
+  active
+  reduced
+  expired
+  revoked
+}
+
+model CreditFacility {
+  id                   String              @id @default(cuid())
+  payerAccountId       String              @db.VarChar(191)
+  state                CreditFacilityState @default(draft)
+  limitFen             BigInt              @default(0)
+  approvedLimitFen     BigInt? // frozen at approval: the exposure cap, also for reservations held before a tightening
+  usedFen              BigInt              @default(0)
+  validUntil           DateTime?
+  // Equals payerAccountId while active or reduced, NULL otherwise: the unique key admits one drawable facility per payer.
+  activePayerAccountId String?             @unique @db.VarChar(191)
+  operationKey         String              @db.VarChar(191)
+  contentHash          String              @db.Char(64)
+  proposedByUserId     String              @db.VarChar(191)
+  evidenceRef          String              @db.VarChar(191)
+  approvedByUserId     String?             @db.VarChar(191) // DB CHECK: differs from proposedByUserId
+  approvalRef          String?             @db.VarChar(191)
+  approvedAt           DateTime?
+  activatedAt          DateTime?
+  lastReducedAt        DateTime?
+  closedAt             DateTime?
+  version              Int                 @default(1)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  @@unique([payerAccountId, operationKey])
+  @@index([payerAccountId, state])
 }
 
 model WorkerPublisherProfile {
@@ -7567,3 +8169,230 @@ model LLMTrustedUsageEvidence {
   @@unique([workspaceId, providerIdempotencyKey], map: "LLMTrustedUsageEvidence_attempt_key")
   @@unique([workspaceId, decisionId], map: "LLMTrustedUsageEvidence_decision_key")
 }
+
+// CAIO attention (operating attention items) — control plane. Standalone tables, no relation to the generic task
+// tables and no database foreign keys (relationMode = "prisma"). Append-only tables are kept immutable by grants
+// (SELECT/INSERT only), not triggers; closed sets are CHECK-constrained in the migration.
+// Single row, id fixed to 'global'; seeded PAUSED by the migration. Only the controlled operator identity writes it.
+model CaioAttentionControl {
+  id                      String    @id @default("global")
+  intakeState             String    @default("PAUSED") // OPEN | PAUSED | DEPLOYING
+  epoch                   Int       @default(0)
+  openEpoch               Int       @default(0)
+  leaseToken              String?
+  leaseNodeId             String?
+  leaseTargetDeploymentId String?
+  leaseAcquiredAt         DateTime?
+  leaseExpiresAt          DateTime?
+  requiredCloseCapability Int       @default(1)
+  minGuardVersion         Int       @default(1)
+  expectedNodesJson       String    @db.Text
+  rowVersion              Int       @default(0)
+  updatedByRef            String
+  updatedAt               DateTime  @default(now()) @updatedAt
+}
+
+model CaioAttentionRuntimeNode {
+  id                     String   @id @default(cuid())
+  nodeId                 String   @unique
+  role                   String
+  deploymentId           String
+  closeCapabilityVersion Int
+  remindersEnabled       Boolean  @default(false)
+  lastSeenAt             DateTime
+}
+
+// Append-only except the revocation columns (revokedAt, revokedByRef, revokedEpoch), which only the operator identity
+// may update. A proof is valid while unrevoked and its epoch exceeds the node's highest revokedEpoch.
+model CaioAttentionNodeReadiness {
+  id                     String    @id @default(cuid())
+  nodeId                 String
+  deploymentId           String
+  closeCapabilityVersion Int
+  guardVersion           Int
+  epoch                  Int
+  verifiedAt             DateTime
+  verifiedByRef          String
+  revokedAt              DateTime?
+  revokedByRef           String?
+  revokedEpoch           Int?
+
+  @@index([nodeId, revokedAt])
+}
+
+// Append-only. The web identity may only add rows, so it can close the current open epoch but never reopen intake.
+model CaioAttentionPauseRequest {
+  id             String   @id @default(cuid())
+  openEpoch      Int
+  reasonCode     String // node_heartbeat_stale | deployment_mismatch | watchdog | operator
+  requestedByRef String
+  createdAt      DateTime @default(now())
+
+  @@unique([openEpoch, requestedByRef])
+  @@index([openEpoch])
+}
+
+// Append-only audit of every operator / deploy-host operation on the control plane, written in the operation's own
+// transaction. op is the CLI op name; epoch / openEpoch are the Control values after the operation (NULL for the
+// workspace-scoped route-config ops). Operator identity SELECT/INSERT only.
+model CaioAttentionControlEvent {
+  id          String   @id @default(cuid())
+  op          String // pause | resume | expected-nodes | deploy-begin | attest-node | deploy-end | deploy-recover | guard-downgrade | routes-publish | routes-activate
+  actorRef    String
+  epoch       Int?
+  openEpoch   Int?
+  payloadJson String   @db.Text
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([op, createdAt])
+}
+
+// CAIO attention — cases. Same rules as the control plane above: no foreign keys, append-only history by grants.
+model CaioAttentionCase {
+  id                        String    @id @default(cuid())
+  workspaceId               String
+  shortNo                   Int
+  detectorId                String
+  mergeKey                  String
+  objectKey                 String
+  enterpriseSlug            String?
+  category                  String // business | technical | compliance
+  originCandidateId         String    @unique
+  activeKey                 String? // detectorId:mergeKey while non-terminal; NULL once terminal
+  previousCaseId            String?
+  routeConfigVersion        Int?
+  routingBlocked            Boolean   @default(false)
+  routingBlockedReasonsJson String?   @db.Text
+  status                    String    @default("SUGGESTED")
+  commandVersion            Int       @default(0)
+  ownerCommandJson          String?   @db.LongText
+  ownerCommandHash          String?
+  primaryUserId             String?
+  ccUserIdsJson             String    @db.Text
+  escalationUserId          String?
+  reviewerSuggestedUserId   String?
+  reviewerUserIdsJson       String    @db.Text
+  reviewerVersion           Int       @default(0)
+  confirmedByUserId         String?
+  committedDueAt            DateTime?
+  severityAtSuggest         String
+  effectiveSeverity         String
+  reminderPolicy            String
+  dispatchedAt              DateTime?
+  respondedAt               DateTime?
+  deferredUntil             DateTime?
+  r0aDueAt                  DateTime?
+  r0aSentAt                 DateTime?
+  r0bDueAt                  DateTime?
+  r0bSentAt                 DateTime?
+  noResponseDueAt           DateTime?
+  r1FiredAt                 DateTime?
+  unresolvedEscalateAt      DateTime?
+  r2FiredSeverity           String?
+  nextPeriodicAt            DateTime?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @default(now()) @updatedAt
+  closedAt                  DateTime?
+
+  @@unique([workspaceId, activeKey])
+  @@unique([workspaceId, shortNo])
+  @@index([workspaceId, status, createdAt])
+  // Reminder scanner: one range branch per rule (20261104160000_caio_attention_reminder_due_indexes).
+  @@index([status, r0aDueAt])
+  @@index([status, r0bDueAt])
+  @@index([status, noResponseDueAt])
+  @@index([status, unresolvedEscalateAt])
+  @@index([status, nextPeriodicAt])
+  // System step: resume deferred cases whose deferral ended (20261104180000_caio_attention_deferred_until_index).
+  @@index([status, deferredUntil])
+}
+
+model CaioAttentionCaseEvent {
+  id              String   @id @default(cuid())
+  caseId          String
+  kind            String
+  commandVersion  Int?
+  candidateId     String?
+  dedupeKey       String?
+  clientRequestId String?
+  actorUserId     String?
+  payloadJson     String   @db.LongText
+  createdAt       DateTime @default(now())
+
+  @@unique([caseId, kind, candidateId])
+  @@unique([caseId, kind, dedupeKey])
+  @@unique([caseId, clientRequestId])
+  @@index([kind, createdAt])
+}
+
+model CaioAttentionDisposition {
+  id                String   @id @default(cuid())
+  workspaceId       String
+  caseId            String
+  commandVersion    Int
+  sequence          Int
+  submittedByUserId String
+  disposedAt        DateTime
+  outcome           String
+  actionTaken       String   @db.Text
+  note              String?  @db.Text
+  evidenceRefsJson  String   @db.LongText
+  contentHash       String
+  createdAt         DateTime @default(now())
+
+  @@unique([caseId, sequence])
+  @@index([workspaceId, createdAt])
+}
+
+model CaioAttentionReview {
+  id                       String   @id @default(cuid())
+  caseId                   String
+  dispositionId            String   @unique
+  reviewerUserId           String
+  reviewerVersion          Int
+  decision                 String // ACCEPT | RETURN
+  attestedExternalRefsJson String   @db.LongText
+  note                     String   @db.Text
+  createdAt                DateTime @default(now())
+
+  @@index([caseId])
+}
+
+model CaioAttentionRouteConfig {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  version       Int
+  schemaVersion String
+  configJson    String   @db.LongText
+  contentHash   String
+  createdByRef  String
+  createdAt     DateTime @default(now())
+
+  @@unique([workspaceId, version])
+}
+
+model CaioAttentionRouteConfigHead {
+  id            String   @id @default(cuid())
+  workspaceId   String   @unique
+  activeVersion Int
+  rowVersion    Int      @default(0)
+  updatedByRef  String
+  updatedAt     DateTime @default(now()) @updatedAt
+}
+
+model CaioDetectorEvaluation {
+  id               String   @id @default(cuid())
+  workspaceId      String
+  tickId           String
+  bucketStart      DateTime
+  detectorId       String
+  ruleVersion      String
+  outcome          String // HIT | NO_HIT | SKIPPED | FAILED
+  hitMergeKeysJson String   @db.LongText
+  createdAt        DateTime @default(now())
+
+  @@unique([tickId, detectorId])
+  @@index([workspaceId, detectorId, bucketStart])
+}
+

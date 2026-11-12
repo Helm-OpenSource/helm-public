@@ -40,7 +40,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ mee
       force: payload.force,
     });
 
-    await recordUsageLedgerEntry({
+    if (!result.usageReceipt) await recordUsageLedgerEntry({
       workspaceId: workspace.id,
       userId: user.id,
       usageType: UsageType.BRIEFING_GENERATION,

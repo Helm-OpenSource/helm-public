@@ -1,0 +1,84 @@
+---
+status: active / formed-needs-next-layer
+owner: helm-core
+created: 2026-11-10
+review_after: 2026-12-10
+public_safety: Public source contract and synthetic test verification only. No real price, deployment approval, payment, credential or customer data.
+---
+
+# Billing budget buckets and reservations / 预算桶与预占
+
+S3-b1/S3-b2 (Core): migrations `20261110200000_billing_reservations`, `20261110210000_billing_charges`,
+`lib/billing/reservations/reservations.ts`; S3-w wires the S3-e credit line into reserve and settle (no migration). Functions follow protocol v3 `BillingCoreClient` (`quote`, `reserve`, `settle`,
+`release`, `markUnknown`, `resolveUnknown`) as `(client, actor, req)` returning `{ ok, ... }` or
+`{ ok: false, code }`; routes and `BillingServiceGrant` are S3-b3. 所有账户默认 `billingMode=off`。
+
+- **BudgetBucket**: grant x mode (shadow never consumes enforce limits) x Asia/Shanghai `day|month`, counting settled and reserved
+  (held + unknown) fen; never deleted; each move is a `version + 1` CAS with the limit or non-negative guard in its own WHERE.
+- **Payer binding (#528 review P1-1, migration `20261112100000_billing_reservation_payer_binding`)**: `reserve` takes a required
+  `subjectScope` (`{ kind: "workspace", workspaceId }`, the workspace the work is for; vault is `request_invalid` until S3-f) next to
+  `payerRef`. Under the PayerAccount lock it resolves that workspace's **current** active binding (S1-c resolver, binding row
+  `FOR SHARE`) and refuses unless it names `payerRef`: unbound, revoked, rebound to another payer, or a suspended payer is
+  `grant_not_active` (fail closed, nothing written). `payerRef` is therefore a cross-check of the `quote` result, not a choice: a
+  cached `payerRef`/`grantId` stops reserving once the binding is revoked, and naming another workspace's payer is refused. The row
+  freezes `subjectWorkspaceId`, `payerBindingId`, `payerBindingVersion` (trigger). `revokeBinding` takes no PayerAccount lock; it
+  serializes with reserve on the binding row: a revoke committed first is seen, a reserve that already holds the share lock commits
+  first and keeps its binding. Settle, release and markUnknown take no payer: they use the reservation's frozen payer and binding,
+  so a hold made before a revoke still settles (R05, S0 §5). A same-key replay returns the recorded hold even after a revoke (the
+  content hash covers the workspace). Residual: Core cannot verify which workspace a service caller really acts for; a caller that
+  knows a real workspace id and its bound payer still passes. This closes the revoked-binding and cross-payer paths and leaves the
+  declared workspace on the row.
+- **Reserve**: idempotent by `(payerRef, idempotencyKey)` (`^[A-Za-z0-9:_-]{8,128}$`; a rejected request never consumes it) + content
+  hash; one reservation per `(payerRef, operationRef)`. The S3-a gate prices from the bound price row at `UTC_TIMESTAMP(3)` with
+  `usedFen` from the locked buckets. Frozen (trigger): mode, grant/price version, price hash, `chargeFen`, `reservedAt`, period keys.
+  Replays return the current state. Enforce needs wallet + `availableCreditFen` (S3-e: remaining line of the active, in-term
+  facility, under the PayerAccount lock; 0 without one) minus open enforce holds; shadow skips money entirely. Zero fen is
+  `grant_charge_zero`. `off` is `billing_mode_off`; an unknown or suspended payer is `grant_not_active`. Refusals write nothing.
+- **States**: `held -> unknown` (`markUnknown`) keeps the hold; `held -> released` (`release`, `not_executed|failed|partial_unusable`)
+  returns it to the **frozen** periods even on a later day/month. Business `settle`/`release` accept only `held`; unknown leaves
+  only via `resolveUnknown` (trigger: only reason `unknown_released` from unknown). Same key + content replays (markUnknown reports the current state); other content or a
+  wrong `operationRef` is `idempotency_conflict`; an unknown `reservationId` is `reservation_state_conflict`. A key reused on another of the payer's reservations is `idempotency_conflict`.
+- **Settle** (`held -> settled`, once): `quantityUsed` <= reserved (`quantity_exceeds_reservation`; `"0"` is `request_invalid`, use
+  release) is repriced from the frozen price row (hash re-checked), `chargeFen <= capFen`. One transaction moves reserved to
+  settled in the **frozen** buckets (a later-day/month settle counts in the reserve-time periods), posts a `charge` transaction
+  (debit wallet, credit `charge_revenue`, `charge:<reservationId>`; audit + `funds.posted`), writes the immutable `BillingCharge`
+  and a `billing.charge.settled` outbox row. **Credit (S3-w, owner v3)**: before the charge, in the same transaction, enforce settle
+  calls `drawCreditShortfallInTransaction` with the settled `chargeFen`, the locked row's frozen `reservedAt`, `sourceRef`
+  `reservation:<id>` and the service actor: it borrows only `max(0, chargeFen - wallet)` (`credit-draw:reservation:<id>`), so the
+  wallet pays first and nets to 0, and the charge then debits the wallet in full. A same-key replay returns before it (never a
+  second draw). A shortfall the line cannot cover (`credit_insufficient`, `credit_not_active`) is `insufficient_funds`.
+  A 0-fen settle (smaller quantity) is `settled` with `chargeFen` 0 and no draw or funds entry.
+  Shadow writes the charge (`fundsTransactionId` null) and `billing.charge.shadow_settled`, never funds or credit. Settle of a held
+  reservation never checks payer status or mode (R05: delivered results are processed; only new reserves are blocked, for shadow
+  and enforce alike); the funds journal admits a `charge` or `credit_draw` posting for a suspended/off payer only when
+  `charge:<id>` / `credit-draw:reservation:<id>` names that payer's held or unknown enforce reservation (resolveUnknown posts
+  before the state moves), and the draw also requires that row's own `reservedAt`; free-standing draws need an active payer.
+  `insufficient_funds` (wallet corrected below the hold, no credit left) is refused: the business side keeps it retryable or
+  `review_needed` and must not release.
+- **resolveUnknown** (reconciliation/manual channel; routes S3-b3/S5): `unknown -> settled` (needs `quantityUsed`) or
+  `-> released` (`unknown_released`) on evidence; other states are `unknown_resolution_conflict`. **quote**
+  (`{ kind: "workspace", workspaceId }`; vault is `request_invalid` until S3-f): payer via the active binding and the single active
+  grant matching event and meter unit -> `payerRef`, `grantId`, `priceVersionId`, `mode` (`shadow|enforce`). Advisory, lock-free.
+  Unbound workspace or off payer is `billing_mode_off`; suspended payer, none or several grants are `grant_not_active`.
+- **Codes**: limits -> `limit_exceeded`; inactive/out-of-validity/ineffective price -> `grant_not_active`; `request_invalid` (v3.2).
+  Write conflicts, deadlocks (1213) and lock timeouts (1205) are `core_unavailable` (retry the same key).
+- **Isolation (S3-w)**: every reservations entry point (`run()`) runs `READ COMMITTED` (funds, credit, grant and payer entry points stay on the default isolation): no gap locks, so settles of different payers drawing credit no
+  longer deadlock on the funds `(payerAccountId, operationKey)` unique index (seen under REPEATABLE READ); correctness rests on the
+  PayerAccount mutex and the unique keys. **Enablement prerequisite (verify in production before enabling; not yet checked)**:
+  the production MySQL `binlog_format` must be `ROW` (READ COMMITTED with statement binlog refuses writes).
+- **Locks**: Membership -> PayerAccount `FOR UPDATE` (per-payer mutex) -> (reserve) PayerScopeBinding `FOR SHARE` -> SpendGrant ->
+  buckets day, month -> reservation. Hold sums,
+  wallet and bucket existence are plain reads (current under the mutex; locking reads gap-locked across payers and deadlocked);
+  `reserve` owns its transaction (no exported in-transaction variant) so PayerAccount is locked before the first read. `changeSpendGrantInTransaction` callers must not lock buckets first. A bucket CAS miss
+  throws `reservation_invariant_breach` (not a code): the S3-b3 route must alert on it; do not retry.
+- **Verify / rollback**: `reservations.test.ts`; `npm run test:billing:mysql` (over-limit and 16-payer concurrency, racing keys,
+  double settle, settle vs release, cross-period settle, triggers, guarded rollbacks; S3-w: credit-backed reserve, shortfall-only
+  draw, replay without a second draw, tightened line, 0-fen/shadow, suspended payer, concurrent draws). S3-w adds no migration;
+  undo it by reverting the code (the S3-e rollback still refuses while credit rows exist). P1-1: revert the code first (the old code
+  does not write the binding columns), then `prisma/rollback/20261112_rollback_billing_reservation_payer_binding.sql` (refuses while
+  any reservation row or later billing migration exists; restores the S3-b1 trigger), before the charges and reservations rollbacks;
+  the reservations rollback now refuses while this migration is applied.
+  Stop calling the service; roll back charges
+  first (refuses while charge rows exist; removes only `charge`/`charge_revenue` from the current ENUMs), then reservations. The charges
+  rollback re-checks that no `charge*` value is left; the S2-c and S2-a rollbacks refuse while any later billing migration is applied.
+- **Not here**: refunds, routes (S3-b3), expiry, increasing a hold, execution claims (S0 §5).

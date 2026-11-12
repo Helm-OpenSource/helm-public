@@ -304,14 +304,17 @@ describe("dingtalk public qr login flow", () => {
     expect(statusPayload.status).toBe("matched");
     expect(statusPayload.completeUrl).toBeTruthy();
 
-    const completeResponse = await qrCompleteRoute(
-      new Request(new URL(statusPayload.completeUrl!, "http://localhost:3000").toString()),
-    );
+    const callback = "/tenant-alpha/workspace?view=summary#selected=example";
+    const completeUrl = new URL(statusPayload.completeUrl!, "http://localhost:3000");
+    completeUrl.searchParams.set("callback", callback);
+    publicOauthMock.finalizePublicOauthLogin.mockResolvedValueOnce({ ok: true, redirectTo: callback });
+    const completeResponse = await qrCompleteRoute(new Request(completeUrl));
     expect(completeResponse.status).toBe(307);
-    expect(completeResponse.headers.get("location")).toBe("/dashboard");
+    expect(completeResponse.headers.get("location")).toBe(callback);
     expect(publicOauthMock.finalizePublicOauthLogin).toHaveBeenCalledTimes(2);
     expect(publicOauthMock.finalizePublicOauthLogin).toHaveBeenLastCalledWith(
       expect.objectContaining({
+        callback,
         preferredWorkspaceId: "workspace-1",
       }),
     );

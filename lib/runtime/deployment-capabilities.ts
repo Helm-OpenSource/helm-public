@@ -8,7 +8,10 @@ export type DeploymentCapability =
   | "customer_visible_send"
   | "automated_customer_call"
   | "sms_send"
-  | "financial_action";
+  | "financial_action"
+  | "billing_internal_route"
+  | "billing_topup_alipay"
+  | "billing_topup_wechatpay";
 
 type DeploymentEnvironment = Readonly<Record<string, string | undefined>>;
 
@@ -63,6 +66,19 @@ const CAPABILITY_CONTROLS: Record<
   },
   financial_action: {
     envKey: "HELM_FINANCIAL_ACTIONS_ENABLED",
+    defaultAllowed: true,
+  },
+  billing_internal_route: {
+    envKey: "HELM_BILLING_INTERNAL_ROUTES_ENABLED",
+    defaultAllowed: false,
+  },
+  billing_topup_alipay: {
+    envKey: "HELM_BILLING_TOPUP_ALIPAY_ENABLED",
+    defaultAllowed: false,
+  },
+  billing_topup_wechatpay: {
+    envKey: "HELM_BILLING_TOPUP_WECHATPAY_ENABLED",
+    // Owner 2026-11-12: on by default; the entry fails closed (503, alert, no credit) until every merchant key is configured.
     defaultAllowed: true,
   },
 };

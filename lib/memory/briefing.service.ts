@@ -6,6 +6,7 @@ import { prepareOrdinaryPaidOperationOrFallback } from "@/lib/llm/ordinary-paid-
 import { isLLMEnabledByEnv } from "@/lib/llm/config";
 import { generateBriefingWithLLM } from "@/lib/llm-workflows/generate-briefing.workflow";
 import { getBlockers } from "@/lib/memory/blocker.service";
+import { getAcceptedBriefing, persistAcceptedBriefingInTransaction, readBriefingUsageReceipt } from "@/lib/memory/briefing-usage.service";
 import { getCommitments } from "@/lib/memory/commitment.service";
 import { getRelevantMemoryFacts } from "@/lib/memory/memory-fact.service";
 import {
@@ -134,6 +135,7 @@ export async function generateObjectBriefingSnapshot(input: GenericBriefingInput
     return {
       snapshot: latestSnapshot,
       payload: parseBriefingPayload(latestSnapshot.content),
+      usageReceipt: await readBriefingUsageReceipt(db, latestSnapshot),
     };
   }
 
@@ -170,6 +172,10 @@ export async function generateObjectBriefingSnapshot(input: GenericBriefingInput
         actorUserId: input.actorUserId, kind: "briefing", sourceType: paidSourceType,
         sourceId: input.objectId, slot: input.snapshotType })
     : null;
+  if (ordinaryOperation) {
+    const accepted = await getAcceptedBriefing(db, input.workspaceId, ordinaryOperation.id);
+    if (accepted) return { ...accepted, payload: parseBriefingPayload(accepted.snapshot.content) };
+  }
   const llmBriefing = await generateBriefingWithLLM({
     workspaceId: input.workspaceId,
     userId: input.actorUserId,
@@ -179,28 +185,31 @@ export async function generateObjectBriefingSnapshot(input: GenericBriefingInput
     fallbackPayload,
     ordinaryOperationId: ordinaryOperation?.id,
   });
-  const payload = llmBriefing.output;
-
-  if (latestSnapshot?.expiresAt === null) {
-    await db.briefingSnapshot.update({
-      where: { id: latestSnapshot.id },
-      data: { expiresAt: new Date() },
-    });
+  let payload = llmBriefing.output;
+  const snapshotData = {
+    workspaceId: input.workspaceId, objectType: input.objectType, objectId: input.objectId,
+    snapshotType: input.snapshotType, content: jsonStringify(payload), sourceFactIds: serializeIds(facts),
+    sourceCommitmentIds: serializeIds(commitments), sourceBlockerIds: serializeIds(blockers),
+    version: (latestSnapshot?.version ?? 0) + 1,
+  };
+  let snapshot;
+  let usageReceipt: Awaited<ReturnType<typeof readBriefingUsageReceipt>> = null;
+  if (ordinaryOperation && llmBriefing.success && !llmBriefing.fallbackUsed) {
+    const accepted = await db.$transaction(tx => persistAcceptedBriefingInTransaction(tx, {
+      operationId: ordinaryOperation.id, actorUserId: input.actorUserId!, sourcePage: input.sourcePage, data: snapshotData,
+    }), { maxWait: 5000, timeout: 10000 });
+    snapshot = accepted.snapshot;
+    usageReceipt = accepted.usageReceipt;
+    payload = parseBriefingPayload(snapshot.content);
+  } else {
+    if (latestSnapshot?.expiresAt === null) {
+      await db.briefingSnapshot.update({
+        where: { id: latestSnapshot.id },
+        data: { expiresAt: new Date() },
+      });
+    }
+    snapshot = await db.briefingSnapshot.create({ data: snapshotData });
   }
-
-  const snapshot = await db.briefingSnapshot.create({
-    data: {
-      workspaceId: input.workspaceId,
-      objectType: input.objectType,
-      objectId: input.objectId,
-      snapshotType: input.snapshotType,
-      content: jsonStringify(payload),
-      sourceFactIds: serializeIds(facts),
-      sourceCommitmentIds: serializeIds(commitments),
-      sourceBlockerIds: serializeIds(blockers),
-      version: (latestSnapshot?.version ?? 0) + 1,
-    },
-  });
 
   if (input.objectType === ObjectType.MEETING) {
     await db.meeting.update({
@@ -246,6 +255,7 @@ export async function generateObjectBriefingSnapshot(input: GenericBriefingInput
   return {
     snapshot,
     payload,
+    usageReceipt,
   };
 }
 

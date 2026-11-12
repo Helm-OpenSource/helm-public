@@ -667,7 +667,7 @@ export async function generateMeetingBriefingAction(meetingId: string) {
     operation: "BRIEFING_GENERATION",
   });
 
-  await generateMeetingBriefingSnapshot({
+  const result = await generateMeetingBriefingSnapshot({
     workspaceId: workspace.id,
     actorName: user.name,
     actorUserId: user.id,
@@ -678,7 +678,7 @@ export async function generateMeetingBriefingAction(meetingId: string) {
 
   revalidatePath(`/meetings/${meetingId}`);
   revalidatePath("/memory");
-  await recordUsageLedgerEntry({
+  if (!result.usageReceipt) await recordUsageLedgerEntry({
     workspaceId: workspace.id,
     userId: user.id,
     usageType: UsageType.BRIEFING_GENERATION,
@@ -708,8 +708,9 @@ export async function generateObjectBriefingAction(objectType: ObjectType, objec
           ? `/opportunities?opportunityId=${objectId}`
           : `/memory`;
 
+  let usageReceipt;
   if (objectType === ObjectType.CONTACT) {
-    await generateContactBriefingSnapshot({
+    ({ usageReceipt } = await generateContactBriefingSnapshot({
       workspaceId: workspace.id,
       actorName: user.name,
       actorUserId: user.id,
@@ -717,10 +718,10 @@ export async function generateObjectBriefingAction(objectType: ObjectType, objec
       sourcePage,
       contactId: objectId,
       force: true,
-    });
+    }));
     revalidatePath(`/contacts/${objectId}`);
   } else if (objectType === ObjectType.COMPANY) {
-    await generateCompanyBriefingSnapshot({
+    ({ usageReceipt } = await generateCompanyBriefingSnapshot({
       workspaceId: workspace.id,
       actorName: user.name,
       actorUserId: user.id,
@@ -728,10 +729,10 @@ export async function generateObjectBriefingAction(objectType: ObjectType, objec
       sourcePage,
       companyId: objectId,
       force: true,
-    });
+    }));
     revalidatePath(`/companies/${objectId}`);
   } else if (objectType === ObjectType.OPPORTUNITY) {
-    await generateOpportunityBriefingSnapshot({
+    ({ usageReceipt } = await generateOpportunityBriefingSnapshot({
       workspaceId: workspace.id,
       actorName: user.name,
       actorUserId: user.id,
@@ -739,12 +740,12 @@ export async function generateObjectBriefingAction(objectType: ObjectType, objec
       sourcePage,
       opportunityId: objectId,
       force: true,
-    });
+    }));
     revalidatePath("/opportunities");
   }
 
   revalidatePath("/memory");
-  await recordUsageLedgerEntry({
+  if (!usageReceipt) await recordUsageLedgerEntry({
     workspaceId: workspace.id,
     userId: user.id,
     usageType: UsageType.BRIEFING_GENERATION,

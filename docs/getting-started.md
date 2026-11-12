@@ -167,8 +167,9 @@ DingTalk · WeCom · HubSpot · Salesforce · Stripe · 支付宝 · 微信支�
 |---|---|
 | `SIGNAL_COLLECTION_SCHEDULER_ENABLED` | 信号采集调度器；`true` 才启动 |
 | `LIGHT_CHAIN_FOLLOW_THROUGH_CRON_ENABLED` | 轻量任务链催办扫描（每日一次）：对逾期 / 停留的任务与承诺产出**内部提醒与审计**，不外发、不改任何任务状态。部署级开关，会扫描库内所有工作区；建议先在内部自用工作区验证节奏，参考[自身租户运营 runbook §5](./product/HELM_SELF_TENANT_OPERATING_RUNBOOK.md) |
+| `HELM_CAIO_ATTENTION_REMINDERS_ENABLED` | CAIO 运营关注事项的提醒、升级与评估看门狗（每 5 分钟）：只发站内定向通知，不外发、不改事项状态；`true` 或 `1` 才启动，且须由 overlay 注册租户提醒策略后才会实际扫描（本版本未接入进程启动，设置不生效；随下一次启动文件准入更新接线） |
 
-两个调度器都不影响首次启动，留空 / `false` 即可。
+三个调度器都不影响首次启动，留空 / `false` 即可。
 
 ### DEPLOYMENT_ENTRY（可选，部署入口）
 
@@ -177,7 +178,7 @@ DingTalk · WeCom · HubSpot · Salesforce · Stripe · 支付宝 · 微信支�
 | `HELM_DEPLOYMENT_ENTRY_PROFILE` | 入口类型：`public`、`cloud`、`tenant` 或 `first-party` |
 | `HELM_DEPLOYMENT_ENTRY_DISPLAY_NAME` | 产品或工作区入口名称 |
 | `HELM_DEPLOYMENT_ENTRY_COMPANY_NAME` | 可选的所属公司展示名称；Core 只读取通用配置，不内置任何公司 |
-| `HELM_DEPLOYMENT_ENTRY_HOME_PATH` | 登录成功后的同源站内路径 |
+| `HELM_DEPLOYMENT_ENTRY_HOME_PATH` | 登录成功后的默认同源站内路径 |
 | `HELM_DEPLOYMENT_ALLOWED_WORKSPACE_SLUGS` | `tenant` / `first-party` 必填的工作区白名单之一 |
 | `HELM_DEPLOYMENT_ALLOWED_WORKSPACE_SYSTEM_KEYS` | 可替代或补充 slug 的 system key 白名单 |
 | `HELM_DEPLOYMENT_SELF_SERVE_SIGNUP` | 仅 `public` / `cloud` 可开启；私有入口始终关闭 |
@@ -200,12 +201,19 @@ DingTalk · WeCom · HubSpot · Salesforce · Stripe · 支付宝 · 微信支�
 构建可提供公开 Logo `public/assets/logo.svg`；仅 `/assets/logo.svg` 精确路径免于
 登录及身份补全跳转，不开放整个 `/assets` 目录或该路径的子级。
 
+直接打开受保护的工作区链接时，登录页用 `callback` 保留原站内地址。完成登录及
+所需的工作区选择、身份补全后，系统返回原路径和查询参数。如果浏览器在登录跳转后仍保留锚点，回跳也会带上锚点。目标
+页面照常校验当前工作区和访问权限。外部成员使用其注册入口，缺失或无效的
+`callback` 使用默认入口。
+
 ### RUNTIME_ATTESTATION（可选，source-built 发布绑定）
 
 | 变量 | 用途 |
 |---|---|
 | `HELM_HEALTH_ATTESTATION_MODE` | 缺失、空值或 `reachability` 时保持既有公开可达性检查；只有精确为 `artifact-bound` 才启用源码发布绑定 |
 | `HELM_RUNTIME_DEPLOYMENT_ID` | 私有发布流程注入的 non-secret opaque ID；仅允许 1–128 个 ASCII 字符，并匹配 `[A-Za-z0-9][A-Za-z0-9._:-]*` |
+| `HELM_RUNTIME_NODE_ID` | CAIO 运营关注事项的本机节点标识（每台主机一个，non-secret，匹配 `[A-Za-z0-9][A-Za-z0-9._-]{0,95}`）；与 `artifact-bound` 部署标识同时存在时才写 RuntimeNode 心跳，本机能力探针才报告该节点，就绪证明才可能签发；缺失或非法时不心跳，入口保持暂停（本版本未接入进程启动，设置不生效；随下一次启动文件准入更新接线） |
+| `HELM_RUNTIME_NODE_ROLE` | 心跳上报的进程角色，匹配 `[a-z][a-z0-9_-]{0,31}`；缺失或空值为 `http`，非法值不心跳（本版本未接入进程启动，设置不生效；随下一次启动文件准入更新接线） |
 
 `artifact-bound` 是显式选择：ID 缺失、超长、含空白、控制字符或其他非法字符时，
 `GET /api/health` 固定返回 `503`，且不会回显非法原值。合法时，该端点在
@@ -386,3 +394,22 @@ npm run quality:regression
 - 微信 `ffjw0821` — 联系我们 / 商业合作 / 社群沟通（人工受控入口）
 - 微信公众号 `Helm开源经营系统`（微信号 `HelmCoreCN`）— 信息发布入口，非默认支持工单入口
 - 安全漏洞——**不要**走公开议题，见 [../SECURITY.md](../SECURITY.md)
+
+
+## 登录会话元数据边界
+
+登录创建和会话刷新均将 `User-Agent` 去除首尾空白并限制为 191 字符，以匹配
+MySQL baseline 的 `AuthSession.userAgent VARCHAR(191)`；缺失或空白值保持为空。
+刷新复用旧会话标识时也应用相同边界。该字段只记录浏览器元数据，不参与身份认证或授权。
+修复不需要数据库迁移，不重置密码，不调整成员角色、租户或案件权限。
+
+可运行 `npx vitest run lib/auth/session.test.ts --config vitest.public.config.ts`
+复核 191 字符边界、超长标识、空值及刷新回退路径。测试替换数据库边界，不需真实数据库。
+
+## 工作区切换
+
+同一账号加入多个组织后，点击顶部头像／姓名区域，在下拉列表中选择目标组织，无需退出登录。列表显示组织名称、当前角色和当前组织标识；只有一个可进入的组织时，保留静态账号信息。
+
+列表和登录后的组织选择页共用成员资格及部署白名单过滤。切换仍调用现有认证动作，服务端重新校验目标成员资格、更新活动会话并记录切换审计。成功后整页进入服务端返回的目标首页，清除原工作区的页面临时状态和路由缓存。切换前应保存未提交的编辑。失败会显示错误，可在当前组织重试。
+
+这项改动不新增成员、角色或权限，不需要数据库迁移。回滚前端代码即可移除入口。多标签页共享既有登录会话的活动工作区语义，本次没有增加每个标签页独立的工作区会话。

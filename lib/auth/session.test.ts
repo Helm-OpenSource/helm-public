@@ -19,6 +19,7 @@ const {
   syncWorkspaceAccessStateMock: vi.fn(),
   dbMock: {
     $executeRaw: vi.fn(),
+    $transaction: vi.fn(),
     authSession: {
       findUnique: vi.fn(),
       findMany: vi.fn(),
@@ -216,6 +217,8 @@ describe("getCurrentWorkspaceSessionOrNull", () => {
     // that had stopped returning sessions at all.
     seatOn(MembershipStatus.ACTIVE);
     dbMock.$executeRaw.mockResolvedValue(0);
+    dbMock.$transaction.mockImplementation(async (callback: (client: typeof dbMock) => unknown) => callback(dbMock));
+    dbMock.workspace.findUnique.mockResolvedValue({ featureFlagsJson: JSON.stringify({ membershipAutoActivation: true }) });
     dbMock.membership.findUnique.mockResolvedValue(membershipRow(MembershipStatus.ACTIVE));
 
     const session = await getCurrentWorkspaceSessionOrNull();
@@ -248,6 +251,17 @@ describe("getCurrentWorkspaceSessionOrNull", () => {
     dbMock.membership.findUnique.mockResolvedValue(null);
 
     await expect(getCurrentWorkspaceSessionOrNull()).resolves.toBeNull();
+  });
+
+  it("refuses an opted-out invited workspace without realigning the auth session", async () => {
+    seatOn(MembershipStatus.INVITED);
+    dbMock.workspace.findUnique.mockResolvedValue({ featureFlagsJson: JSON.stringify({ membershipAutoActivation: false }) });
+    dbMock.membership.findUnique.mockResolvedValue(membershipRow(MembershipStatus.INVITED));
+
+    await expect(getCurrentWorkspaceSessionOrNull()).resolves.toBeNull();
+
+    expect(dbMock.authSession.update).not.toHaveBeenCalled();
+    expect(ensureWorkspaceCommercialFoundationMock).not.toHaveBeenCalled();
   });
 
   it("still seats the session when activation genuinely succeeds", async () => {
@@ -363,11 +377,13 @@ describe("auth session substrate", () => {
     ensureWorkspaceCommercialFoundationMock.mockResolvedValue(undefined);
     syncWorkspaceAccessStateMock.mockResolvedValue(null);
     dbMock.$executeRaw.mockResolvedValue(0);
+    dbMock.$transaction.mockImplementation(async (callback: (client: typeof dbMock) => unknown) => callback(dbMock));
+    dbMock.workspace.findUnique.mockResolvedValue({ featureFlagsJson: JSON.stringify({ membershipAutoActivation: true }) });
     dbMock.membership.updateMany.mockResolvedValue({ count: 0 });
     dbMock.authSession.updateMany.mockResolvedValue({ count: 0 });
   });
 
-  it("activates an invited membership with one atomic conditional UPDATE", async () => {
+  it("activates only an opted-in member and writes transition audit in the CAS transaction", async () => {
     dbMock.$executeRaw.mockResolvedValue(1);
     dbMock.membership.findUnique.mockResolvedValue({
       workspaceId: "workspace-1",
@@ -381,6 +397,7 @@ describe("auth session substrate", () => {
     });
 
     expect(dbMock.membership.updateMany).not.toHaveBeenCalled();
+    expect(dbMock.$transaction).toHaveBeenCalledTimes(1);
     expect(dbMock.$executeRaw).toHaveBeenCalledTimes(1);
     const [query, ...values] = dbMock.$executeRaw.mock.calls[0] ?? [];
     expect(Array.from(query as TemplateStringsArray).join("?")).toContain(
@@ -398,11 +415,40 @@ describe("auth session substrate", () => {
     expect(writeAuditLogMock).toHaveBeenCalledWith(
       expect.objectContaining({
         actionType: MEMBERSHIP_AUTO_ACTIVATED_AUDIT_ACTION,
+        actor: "user-1",
+        actorType: "USER",
       }),
+      { client: dbMock },
     );
     expect(membership).toEqual(
       expect.objectContaining({ status: MembershipStatus.ACTIVE }),
     );
+  });
+
+  it("keeps legacy workspaces with a missing key on the enabled activation behavior", async () => {
+    dbMock.workspace.findUnique.mockResolvedValue({ featureFlagsJson: null });
+    dbMock.$executeRaw.mockResolvedValue(1);
+    dbMock.membership.findUnique.mockResolvedValue({ status: MembershipStatus.ACTIVE });
+
+    const membership = await activateMembershipIfInvited({ workspaceId: "workspace-1", userId: "user-1" });
+
+    expect(membership?.status).toBe(MembershipStatus.ACTIVE);
+    expect(dbMock.$transaction).toHaveBeenCalledTimes(1);
+    expect(writeAuditLogMock).toHaveBeenCalledWith(expect.objectContaining({
+      actionType: MEMBERSHIP_AUTO_ACTIVATED_AUDIT_ACTION,
+      actorType: "USER",
+    }), { client: dbMock });
+  });
+
+  it("keeps invited memberships inactive when the workspace explicitly opts out", async () => {
+    dbMock.workspace.findUnique.mockResolvedValue({ featureFlagsJson: JSON.stringify({ membershipAutoActivation: false }) });
+    dbMock.membership.findUnique.mockResolvedValue({ status: MembershipStatus.INVITED });
+
+    const membership = await activateMembershipIfInvited({ workspaceId: "workspace-1", userId: "user-1" });
+
+    expect(membership?.status).toBe(MembershipStatus.INVITED);
+    expect(dbMock.$transaction).not.toHaveBeenCalled();
+    expect(writeAuditLogMock).not.toHaveBeenCalled();
   });
 
   it("uses the DB-backed auth session as the current user truth and ignores the legacy email cookie", async () => {
@@ -479,6 +525,64 @@ describe("auth session substrate", () => {
 
     await expect(getCurrentUser()).resolves.toBeNull();
     expect(dbMock.authSession.updateMany).toHaveBeenCalled();
+  });
+
+  // The storage double enforces the MySQL baseline's VARCHAR(191), rather
+  // than accepting the oversized metadata that used to abort valid logins.
+  it.each([190, 191, 192, 512, 1024])(
+    "creates a usable session with a %i-character user agent",
+    async (length) => {
+      const cookieStore = createCookieStore();
+      cookiesMock.mockResolvedValue(cookieStore);
+      headersMock.mockResolvedValue(createHeaderStore({ "user-agent": `  ${"a".repeat(length)}  ` }));
+      dbMock.authSession.create.mockImplementationOnce(async ({ data }) => {
+        if (data.userAgent.length > 191) throw new Error("P2000: AuthSession.userAgent");
+        return { id: "bounded-session" };
+      });
+
+      await expect(createSession({ userId: "user-1", email: "owner@example.com" }))
+        .resolves.toEqual({ id: "bounded-session" });
+
+      expect(dbMock.authSession.create.mock.calls[0][0].data.userAgent)
+        .toBe("a".repeat(Math.min(length, 191)));
+      expect(cookieStore.values.get(SESSION_ID_COOKIE)).toEqual(expect.any(String));
+    },
+  );
+
+  it.each([
+    ["a".repeat(191), "previous", "a".repeat(191)],
+    ["a".repeat(192), "previous", "a".repeat(191)],
+    ["a".repeat(1024), "previous", "a".repeat(191)],
+    [undefined, "b".repeat(512), "b".repeat(191)],
+    ["  ", "b".repeat(512), "b".repeat(191)],
+    [undefined, null, undefined],
+  ])("rotates a session with bounded current or fallback user-agent metadata (%#)", async (current, previous, expected) => {
+    const cookieStore = createCookieStore({ [SESSION_ID_COOKIE]: "current-session" });
+    cookiesMock.mockResolvedValue(cookieStore);
+    headersMock.mockResolvedValue(createHeaderStore(current ? { "user-agent": current } : {}));
+    dbMock.authSession.findUnique.mockResolvedValueOnce(buildAuthSessionRecord({ userAgent: previous }));
+    dbMock.authSession.create.mockImplementationOnce(async ({ data }) => {
+      if (data.userAgent && data.userAgent.length > 191) throw new Error("P2000: AuthSession.userAgent");
+      return buildAuthSessionRecord({ ...data, id: "bounded-rotation" });
+    });
+    dbMock.authSession.update.mockResolvedValue({});
+
+    await expect(rotateCurrentAuthSession()).resolves.toEqual({ ok: true, sessionId: "bounded-rotation" });
+
+    expect(dbMock.authSession.create.mock.calls[0][0].data.userAgent).toBe(expected);
+    expect(cookieStore.values.get(SESSION_ID_COOKIE)).not.toBe("current-session");
+    expect(dbMock.authSession.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ revokedAt: expect.any(Date) }),
+    }));
+  });
+
+  it.each([undefined, "  "])("creates a session without user-agent metadata (%#)", async (current) => {
+    cookiesMock.mockResolvedValue(createCookieStore());
+    headersMock.mockResolvedValue(createHeaderStore(current ? { "user-agent": current } : {}));
+    dbMock.authSession.create.mockResolvedValueOnce({ id: "no-agent-session" });
+    await expect(createSession({ userId: "user-1", email: "owner@example.com" }))
+      .resolves.toEqual({ id: "no-agent-session" });
+    expect(dbMock.authSession.create.mock.calls[0][0].data.userAgent).toBeUndefined();
   });
 
   it("creates a session record, revokes the previous session, and stores only opaque cookies", async () => {
@@ -845,6 +949,25 @@ describe("auth session substrate", () => {
         targetId: "auth-session-1",
       }),
     );
+  });
+
+  it("cannot authorize through a stale workspace cookie after its auth session is cleared", async () => {
+    const cookieStore = createCookieStore({
+      [SESSION_ID_COOKIE]: "current-session",
+      [ACTIVE_WORKSPACE_COOKIE]: "workspace-1",
+    });
+    cookiesMock.mockResolvedValue(cookieStore);
+    dbMock.authSession.findUnique.mockResolvedValue(buildAuthSessionRecord());
+    dbMock.authSession.update.mockResolvedValue({});
+
+    await clearSession();
+
+    await expect(getCurrentWorkspaceSessionOrNull()).resolves.toBeNull();
+    expect(cookieStore.get(SESSION_ID_COOKIE)).toBeUndefined();
+    expect(dbMock.authSession.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "auth-session-1" },
+      data: expect.objectContaining({ revokedAt: expect.any(Date) }),
+    }));
   });
 
   it("still clears auth cookies when sqlite revocation write hits readonly mode", async () => {

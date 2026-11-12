@@ -1,3 +1,4 @@
+import { withLoginCallback } from "@/lib/auth/login-callback";
 import { isEmailEntryEnabled } from "@/lib/auth/email-entry-policy";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -51,6 +52,7 @@ function buildPublicAuthStartPath(
     organizationName?: string;
     workspaceId?: string;
     title?: string;
+    callback?: string;
   },
 ) {
   const searchParams = new URLSearchParams();
@@ -68,7 +70,7 @@ function buildPublicAuthStartPath(
   }
 
   const query = searchParams.toString();
-  return `/api/public-auth/${provider}/start${query ? `?${query}` : ""}`;
+  return withLoginCallback(`/api/public-auth/${provider}/start${query ? `?${query}` : ""}`, params.callback);
 }
 
 function getLoginPageCopy(
@@ -203,6 +205,7 @@ export default async function LoginPage({
   const locale = resolveUiLocale(cookieStore.get("helm-ui-locale")?.value);
   const english = locale === "en-US";
   const params = (await searchParams) ?? {};
+  const callback = readSearchParam(params, "callback");
   const requestedTab = readSearchParam(params, "tab");
   const provider = readSearchParam(params, "provider");
   const prefillMarker = readSearchParam(params, "prefill") === "1";
@@ -224,6 +227,7 @@ export default async function LoginPage({
         organizationName: publicOauthOrganizationName,
         workspaceId: publicOauthWorkspaceId,
         title: publicOauthTitle,
+        callback,
       }),
     },
     {
@@ -233,6 +237,7 @@ export default async function LoginPage({
         organizationName: publicOauthOrganizationName,
         workspaceId: publicOauthWorkspaceId,
         title: publicOauthTitle,
+        callback,
       }),
     },
   ];
