@@ -41,6 +41,7 @@ export async function POST(request: Request) {
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
     if (Object.hasOwn(STATUS, code)) return json({ error: code }, STATUS[code]);
+    console.error("[billing-topup-orders]", JSON.stringify({ event: "create_failed", reason: "unexpected_error" })); // fixed code only
     return json({ error: "TOPUP_ORDER_CREATE_FAILED" }, 500);
   }
 }

@@ -10,7 +10,7 @@ import { readTopupOrderForSession, TopupRefusal, verifyTopupByQuery } from "./to
  * workspace and the caller must be its OWNER/BILLING_ADMIN; anything else reads as an unknown order. Fixed codes only.
  */
 const STATUS: Record<string, number> = { topup_forbidden: 403, topup_input_invalid: 404, topup_order_unknown: 404,
-  topup_order_not_closable: 409, topup_rate_limited: 429 };
+  topup_order_not_closable: 409, topup_provider_mismatch: 409, topup_rate_limited: 429 };
 export const topupJson = (body: object, status = 200) =>
   NextResponse.json(body, { status, headers: { "Cache-Control": "no-store" } });
 

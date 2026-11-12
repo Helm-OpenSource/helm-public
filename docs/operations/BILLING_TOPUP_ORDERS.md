@@ -104,7 +104,9 @@ Route `POST /api/billing/v1/topup-orders` (`app/api/billing/v1/topup-orders/rout
   2026-11-12 11:24 「100 的整倍数，上不封顶」): whole multiples of 100 yuan (400 `topup_amount_not_multiple`), at least 100 yuan and no
   business cap — only Alipay's documented 100 000 000 yuan maximum as a technical bound (400 `topup_amount_out_of_range`); the same key with the same request replays the order (200,
   `replayed: true`), with a different request 409 `topup_idempotency_conflict`; per creator and workspace at most 5 open unpaid orders and
-  5 creations a minute (429 `topup_rate_limited`). The reads after the lock are locking reads, so concurrent requests serialize.
+  5 creations a minute (429 `topup_rate_limited`). The transaction runs at READ COMMITTED (no gap locks, so different creators'
+  first orders do not deadlock; needs ROW binlog like reservations); the creator's membership row lock serializes one creator and the
+  reads after it see the latest commit. An unexpected failure answers 500 and logs one fixed-code `create_failed` event.
 - **Cashier URL** (`buildAlipayTopupPayUrl`, built, never sent by the server): signed `alipay.trade.page.pay` GET URL with
   `notify_url = APP_URL + /api/billing/v1/topup-notify/alipay`, `return_url = APP_URL + /billing/topup?order=<order id>`,
   `product_code=FAST_INSTANT_TRADE_PAY`, `total_amount` formatted exactly from fen, fixed `subject`, `time_expire` = order expiry
@@ -128,8 +130,48 @@ Only an order of the session's workspace, for its OWNER/BILLING_ADMIN (403); any
   verified), then runs the same query: the order becomes `closed_unpaid` only when Alipay reports `TRADE_CLOSED`. `close` is
   `closed`, `not_created` (`ACQ.TRADE_NOT_EXIST`: the cashier was never submitted; the order stays open until it expires) or
   `close_failed`. A success arriving after close still credits once (`lateAfterClose`).
-- Config: same `resolveAlipayTopup("query")` decision; incomplete → `503 topup_unavailable`. Alipay is called only on these explicit
+- Provider dispatch: an order is only ever sent to its own provider; another provider's order answers 409
+  `topup_provider_mismatch` before any throttle write or provider call (WeChat Pay orders wait for the WeChat slice).
+- Config: same `resolveAlipayTopup("query")` decision, checked after the session (unsigned requests log nothing); incomplete →
+  `503 topup_unavailable`. Alipay is called only on these explicit
   user actions, never by a timer.
+
+## WeChat Pay adapter and notify entry / 微信支付适配器与充值通知入口（S2-w1）
+
+`lib/billing/topup/wechatpay-topup.ts`, route `POST /api/billing/v1/topup-notify/wechatpay`. Separate from the legacy subscription
+notify route (`/api/billing/wechat-pay/notify`, unchanged). The answer policy (which refusals are acknowledged, which are retried) is
+shared with Alipay in `notify-entry.ts`; only the wire format differs. 与旧订阅通知入口分开；订阅单号（`helm_wx_`）在开事务前即被拒。
+
+- **Gate**: `HELM_BILLING_TOPUP_WECHATPAY_ENABLED` (capability `billing_topup_wechatpay`, **default enabled**, owner 2026-11-12) and
+  `financial_action`; `false` (or an invalid value) answers a plain 404 before reading the body or the database. Enabled but any merchant
+  key missing or malformed (a private key in the public key slot included): fail closed, `503`, nothing read or credited; the
+  `config_unavailable` alert is logged at most once a minute per process with a `suppressed` count. Deployments that do not collect WeChat Pay set `false`.
+- **Config** (environment only): existing `WECHAT_PAY_APP_ID`, `WECHAT_PAY_MERCHANT_ID`, `WECHAT_PAY_MERCHANT_SERIAL_NO`,
+  `WECHAT_PAY_PRIVATE_KEY` (confidential), `WECHAT_PAY_PLATFORM_PUBLIC_KEY` (the WeChat Pay public key), `WECHAT_PAY_API_V3_KEY` (confidential, 32 bytes)
+  and the new public `HELM_BILLING_TOPUP_WECHATPAY_PUBLIC_KEY_ID` (`PUB_KEY_ID_<digits>`). Missing or malformed: `503`. Only the
+  configured mchid + appid pair maps to `merchantRef=wechatpay-mch:<id>` / `appRef=wechatpay-app:<id>`; anything else is `topup_merchant_mismatch`.
+- **Notify**: `application/json`, at most 16 KiB, strict UTF-8. `Wechatpay-Timestamp` within 300 s either way (checked first),
+  `Wechatpay-Serial` equal to the configured public key id (platform-certificate mode is not supported and fails), SHA256-RSA over
+  `timestamp\nnonce\nbody\n`; signature probes are not special-cased. Then `resource_type=encrypt-resource`, `original_type=transaction`,
+  `AEAD_AES_256_GCM` decryption with the APIv3 key (16-byte tag appended; `associated_data` absent, `""` or `null` is empty AAD). The decrypted transaction maps with `observeWeChatPayTransaction`
+  (`amount.total` is fen); an `event_type` other than `TRANSACTION.SUCCESS` maps to `unknown`, as do `REFUND` and unlisted states.
+- **Answer**: 200 with no body when acknowledged (same cases as Alipay `success`); otherwise 4XX/5XX with `{"code":"FAIL","message":"失败"}`
+  so WeChat Pay retries. Logs carry a fixed reason code only.
+- **Query** (`createWeChatPayTopupAdapter(config).queryOrder`, for `verifyTopupByQuery`): `GET /v3/pay/transactions/out-trade-no/{no}?mchid=`
+  signed with the merchant key (`WECHATPAY2-SHA256-RSA2048`), asking for public-key signed answers; 10 s timeout, redirects refused. The
+  answer is verified like a notify before it is parsed; `404 ORDER_NOT_EXIST` is `not_paid`; other answers throw (order unchanged).
+  Order creation (Native), the session-triggered query route, close order and the legacy-route guard are S2-w2.
+- **Before collecting real payments / 真实收款前提**（the notify entry being on does not mean collection is ready）:
+  1. The merchant id has **finished the platform-certificate to WeChat Pay public key switch** and signs with the public key only. During
+     the switch WeChat Pay mixes both signatures; this entry accepts only the configured public key id, so certificate-signed notifies are
+     refused (400) and only an active query can recover them. 商户号须已走完平台证书到微信支付公钥的切换。
+  2. The merchant platform has **no coupons or discounts** configured (owner 2026-11-12: no discounts; credit is the order amount). This
+     slice compares `amount.total` only. 商户平台不得配置代金券或立减。
+  3. **Required before S2-w2 merges** (the slice that can create `tpw_` orders): a paid observation whose `amount.payer_total` differs from
+     the order amount is recorded as a reconciliation exception and not credited, with tests. d2 合入前必做：入账前比对 `payer_total`。
+- **Verify / rollback**: `wechatpay-topup.test.ts` (per-run RSA keys and APIv3 key, in-process API double) and `wechatpay-topup.mysql.test.ts`
+  in `npm run test:billing:mysql` (forged/stale/undecryptable notify, merchant or app mismatch, subscription order number, amount and currency
+  mismatch, duplicate notify, concurrent notify and query, refund state before credit, billing off, gate off). Roll back: unset the gate; no migration.
 
 ## Verification and rollback / 验证与回滚
 
