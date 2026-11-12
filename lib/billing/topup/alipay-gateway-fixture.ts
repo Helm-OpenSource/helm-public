@@ -21,6 +21,7 @@ export function alipayDouble() {
   };
   const trades = new Map<string, Record<string, unknown>>();
   const requests: Array<Record<string, string>> = [];
+  const closeOverrides = new Map<string, Record<string, unknown>>(); // signed close answers to return instead
   let tamper = false, mode: "ok" | "no_sign" | "empty_sign" | "http_500" = "ok";
   const fetch = (async (url: string | URL | Request, init?: RequestInit) => {
     if (String(url) !== env.ALIPAY_GATEWAY_URL) throw new Error("unexpected_gateway");
@@ -31,13 +32,24 @@ export function alipayDouble() {
       return new Response("{}", { status: 200 });
     }
     const outTradeNo = (JSON.parse(form.biz_content) as { out_trade_no: string }).out_trade_no;
-    const node = JSON.stringify(trades.get(outTradeNo) ?? { code: "40004", msg: "Business Failed", sub_code: "ACQ.TRADE_NOT_EXIST" });
+    const known = trades.get(outTradeNo);
+    const missing = { code: "40004", msg: "Business Failed", sub_code: "ACQ.TRADE_NOT_EXIST" };
+    let result: Record<string, unknown> = known ?? missing;
+    if (form.method === "alipay.trade.close") { // a waiting trade closes (and then queries as TRADE_CLOSED); others refuse
+      result = !known ? missing : known.trade_status !== "WAIT_BUYER_PAY"
+        ? { code: "40004", msg: "Business Failed", sub_code: "ACQ.TRADE_STATUS_ERROR" }
+        : { code: "10000", msg: "Success", out_trade_no: outTradeNo, trade_no: known.trade_no };
+      if (result.code === "10000") trades.set(outTradeNo, { ...known, trade_status: "TRADE_CLOSED" });
+      result = closeOverrides.get(outTradeNo) ?? result;
+    }
+    const node = JSON.stringify(result);
+    const responseKey = `${form.method.replaceAll(".", "_")}_response`;
     const signature = sign(node);
     const body = tamper ? node.replace(/"total_amount":"[^"]*"/, "\"total_amount\":\"0.01\"") : node;
-    const text = mode === "no_sign" ? `{"alipay_trade_query_response":${body}}`
-      : `{"alipay_trade_query_response":${body},"sign":"${mode === "empty_sign" ? "" : signature}"}`;
+    const text = mode === "no_sign" ? `{"${responseKey}":${body}}`
+      : `{"${responseKey}":${body},"sign":"${mode === "empty_sign" ? "" : signature}"}`;
     return new Response(text, { status: mode === "http_500" ? 500 : 200, headers: { "Content-Type": "application/json;charset=utf-8" } });
   }) as typeof globalThis.fetch;
-  return { env, notify, fetch, trades, requests, strangerPrivateKey: stranger.privateKey, appPublicKey: app.publicKey, setTamper(value: boolean) { tamper = value; },
+  return { env, notify, fetch, trades, requests, strangerPrivateKey: stranger.privateKey, appPublicKey: app.publicKey, closeOverrides, setTamper(value: boolean) { tamper = value; },
     setMode(value: typeof mode) { mode = value; } };
 }

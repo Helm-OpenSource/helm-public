@@ -68,7 +68,7 @@ notify route (`/api/billing/alipay/notify`, unchanged): top-up orders are create
 - **Query** (`createAlipayTopupAdapter(config).queryOrder`, for `verifyTopupByQuery`): `alipay.trade.query` signed by the configured app,
   10 s timeout, redirects refused; the raw `alipay_trade_query_response` text is RSA2-verified before it is parsed and keeps `total_amount`. Identity is the
   querying app (its seller unless the response names another). `ACQ.TRADE_NOT_EXIST` is `not_paid`; other errors throw (order unchanged).
-  The session-triggered query route and order creation are S2-d2.
+  The session-triggered query route and order creation: see S2-d2a/d2b below.
 - **Verify / rollback**: `alipay-topup.test.ts` (per-run RSA keys, in-process gateway double) and `alipay-topup.mysql.test.ts` in
   `npm run test:billing:mysql` (forged signature, app/seller mismatch, subscription order number, amount mismatch, duplicate notify,
   concurrent notify and query, late success after close, refund news, billing off, gate off). Roll back: set the gate to `false`; no migration.
@@ -98,6 +98,27 @@ Route `POST /api/billing/v1/topup-orders` (`app/api/billing/v1/topup-orders/rout
 - **Legacy guard**: the subscription notify route `/api/billing/alipay/notify` answers `400 fail` for any verified `tpa_`/`tpw_`
   `out_trade_no` before recording a callback event or resolving a workspace (no write). 旧订阅入口拒绝充值单号。The WeChat Pay
   subscription route gets the same guard in the WeChat d2 slice.
+
+## Order status, refresh and close / 订单状态、主动查单与关单（S2-d2b）
+
+Routes under `app/api/billing/v1/topup-orders/[id]/` (shared session handling `lib/billing/topup/topup-order-http.ts`), migration
+`20261112130000_billing_topup_order_query_throttle` (rollback `prisma/rollback/20261112_rollback_billing_topup_order_query_throttle.sql`).
+Only an order of the session's workspace, for its OWNER/BILLING_ADMIN (403); any other id is `404 topup_order_unknown`.
+
+- `GET /{id}`: the order (id, provider, state, amount in fen, expiry, creation). Read-only; needs the gates only (404 when off).
+- `POST /{id}/verify` (「刷新状态」): `alipay.trade.query` for the order's original number through `verifyTopupByQuery` (credits once if
+  paid). `claimTopupOrderQuery` throttles per order: 10 s apart, 30 per hour window (429 `topup_rate_limited`), and only for
+  `created|pending|unknown|closed_unpaid` orders up to 72 h old; a credited, older or non-queryable order is returned as is
+  (`queried: false`). A provider or verification failure leaves the order unchanged and is reported as `queryError` (fixed code).
+- `POST /{id}/close`: for `created|pending` only (409 `topup_order_not_closable`). Calls `alipay.trade.close` (signed, response node
+  verified), then runs the same query: the order becomes `closed_unpaid` only when Alipay reports `TRADE_CLOSED`. `close` is
+  `closed`, `not_created` (`ACQ.TRADE_NOT_EXIST`: the cashier was never submitted; the order stays open until it expires) or
+  `close_failed`. A success arriving after close still credits once (`lateAfterClose`).
+- Provider dispatch: an order is only ever sent to its own provider; another provider's order answers 409
+  `topup_provider_mismatch` before any throttle write or provider call (WeChat Pay orders wait for the WeChat slice).
+- Config: same `resolveAlipayTopup("query")` decision, checked after the session (unsigned requests log nothing); incomplete →
+  `503 topup_unavailable`. Alipay is called only on these explicit
+  user actions, never by a timer.
 
 ## WeChat Pay adapter and notify entry / 微信支付适配器与充值通知入口（S2-w1）
 
