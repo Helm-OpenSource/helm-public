@@ -20,11 +20,20 @@ const nextConfig: NextConfig = {
   // Next dev logs Server Function arguments by default; keep credentials and payloads out of stdout.
   logging: { serverFunctions: false },
   async headers() {
-    return ["/activate-member", "/settings/member-activation"].map(source => ({ source, headers: [
+    const privatePage = [
       { key: "Cache-Control", value: "no-store, private" },
       { key: "Referrer-Policy", value: "no-referrer" },
       { key: "X-Robots-Tag", value: "noindex, nofollow" },
-    ] }));
+    ];
+    // Seat device pairing pages refuse to be framed (design D1 §4.3, clickjacking).
+    const noFraming = [
+      { key: "X-Frame-Options", value: "DENY" },
+      { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+    ];
+    return [
+      ...["/activate-member", "/settings/member-activation"].map(source => ({ source, headers: privatePage })),
+      { source: "/device", headers: [...privatePage, ...noFraming] },
+    ];
   },
   generateBuildId: releaseBuildId ? async () => releaseBuildId : undefined,
 };

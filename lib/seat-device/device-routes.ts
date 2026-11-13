@@ -46,7 +46,7 @@ const NO_STORE = { "Cache-Control": "no-store" } as const;
 
 export type SeatDeviceOperation = "authorize" | "cancel" | "claim" | "refresh" | "revoke";
 
-class InvalidBody extends Error {}
+export class InvalidBody extends Error {}
 
 // The answer of a switched-off deployment and of any method other than POST:
 // as if the route did not exist.
@@ -73,7 +73,7 @@ export function seatDeviceErrorResponse(code: SeatDeviceErrorCode, retryAfterSec
 // never application/json (and OPTIONS answers 404). Bounded like
 // lib/billing/internal/internal-routes.ts: the declared length first, then
 // the bytes as they stream (chunked too); reading stops past the limit.
-async function readJson(request: Request): Promise<unknown> {
+export async function readJson(request: Request): Promise<unknown> {
   const type = request.headers.get("content-type")?.split(";")[0].trim().toLowerCase();
   if (type !== "application/json") throw new InvalidBody();
   if (!(Number(request.headers.get("content-length") ?? "0") <= MAX_BODY_BYTES)) throw new InvalidBody();

@@ -14,6 +14,7 @@
 import { MembershipStatus, WorkspaceRole, WorkspaceStatus } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { hashPassword } from "@/lib/auth/formal-auth";
 import { db } from "@/lib/db";
 import { hashSeatDeviceToken, mintSeatDeviceToken, normalizeSeatDevicePairingCode } from "@/lib/seat-device/contract";
 import {
@@ -22,6 +23,7 @@ import {
   claimSeatDeviceAuthorization,
   decideSeatDeviceAuthorization,
   requestSeatDeviceAuthorization,
+  verifySeatDeviceApprovalPassword,
 } from "@/lib/seat-device/store-authorize";
 import {
   classifySeatDeviceAccessToken,
@@ -38,6 +40,8 @@ if (process.env.SEAT_DEVICE_MYSQL_REQUIRED === "1" && !integrationDatabaseUrl) {
 }
 const describeMysql = integrationDatabaseUrl ? describe.sequential : describe.skip;
 const suffix = `${process.pid.toString(36)}-${Date.now().toString(36)}`;
+const PASSWORD = "correct horse battery";
+const PASSWORD_HASH = hashPassword(PASSWORD);
 
 let clock = Date.parse("2041-01-01T00:00:00.000Z");
 function nextClock() {
@@ -73,7 +77,7 @@ describeMysql("seat device credentials (classify, pin, revoke) on MySQL", () => 
   async function member(options: { role?: WorkspaceRole; workspace?: string } = {}): Promise<Member> {
     memberCount += 1;
     const user = await db.user.create({
-      data: { email: `seat-tokens-${memberCount}-${suffix}@example.com`, name: `坐席 ${memberCount}`, passwordSetAt: new Date("2040-06-01T00:00:00.000Z") },
+      data: { email: `seat-tokens-${memberCount}-${suffix}@example.com`, name: `坐席 ${memberCount}`, passwordHash: PASSWORD_HASH, passwordSetAt: new Date("2040-06-01T00:00:00.000Z") },
     });
     const membership = await db.membership.create({
       data: { workspaceId: options.workspace ?? workspaceId, userId: user.id, role: options.role ?? WorkspaceRole.OPERATOR, status: MembershipStatus.ACTIVE },
@@ -106,7 +110,7 @@ describeMysql("seat device credentials (classify, pin, revoke) on MySQL", () => 
       requestId: grant.requestId,
       pairingCode: normalizeSeatDevicePairingCode(grant.pairingCode)!,
       decision: "approve",
-      passwordVerifiedAt: at(now, -30),
+      passwordProof: await verifySeatDeviceApprovalPassword({ userId: owner.userId, password: PASSWORD, now: at(now, -30) }),
       source: null,
       now,
     });
@@ -310,7 +314,7 @@ describeMysql("seat device credentials (classify, pin, revoke) on MySQL", () => 
       requestId: grant.requestId,
       pairingCode: normalizeSeatDevicePairingCode(grant.pairingCode)!,
       decision: "approve",
-      passwordVerifiedAt: at(now, -30),
+      passwordProof: await verifySeatDeviceApprovalPassword({ userId: who.userId, password: PASSWORD, now: at(now, -30) }),
       source: null,
       now,
     });
