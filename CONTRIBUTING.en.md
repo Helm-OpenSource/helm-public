@@ -129,6 +129,9 @@ npm run quality:regression
 
 What each command means: see [AGENTS.md §10](AGENTS.md) *(Chinese)*.
 
+A PR that adds `prisma/migrations/<migration directory>/` must also add `prisma/upgrade-notes/<migration directory>.json`;
+see [public upgrade notes](prisma/upgrade-notes/README.en.md). `npm run check:boundaries` fails when it is missing.
+
 If a command can't run in your environment, the PR description **must** state:
 
 - Which commands didn't run
