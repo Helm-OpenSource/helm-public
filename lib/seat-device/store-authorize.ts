@@ -646,7 +646,7 @@ export type SeatDeviceLookup = {
   requestedAt: string;
   source: string | null;
   expiresInSeconds: number;
-  workspace: { name: string };
+  workspace: { id: string; name: string };
 };
 
 // `pairingCode` is the normalized code (SEAT_DEVICE_LOOKUP_REQUEST_SCHEMA).
@@ -680,7 +680,7 @@ export async function lookupSeatDeviceAuthorization(input: {
     requestedAt: row.requestedAt.toISOString(),
     source: row.sourceIp,
     expiresInSeconds: Math.max(0, Math.floor((row.requestExpiresAt.getTime() - now.getTime()) / 1000)),
-    workspace: { name: member.workspace.name },
+    workspace: { id: member.workspace.id, name: member.workspace.name },
   };
 }
 
@@ -698,8 +698,11 @@ const issuedPasswordProofs = new WeakMap<object, PasswordProofFacts>();
 // A wrong password counts as a failed password login of the account: the
 // login counter keyed by the account email, with the login limit (8 in 15
 // minutes, locked 15 minutes). While that counter is locked a right password
-// is refused too. The lock check and the count run in one Serializable
-// transaction, like code entry; scrypt runs before it.
+// is refused too, and no scrypt is spent on it: the lock is read first. The
+// authoritative lock check and the count run in one Serializable transaction,
+// like code entry. Callers check the session first
+// (assertSeatDeviceApprovalPreconditions), so a request that cannot approve
+// anyway never becomes a password oracle or spends login attempts.
 export async function verifySeatDeviceApprovalPassword(input: {
   userId: string;
   password: string;
@@ -709,8 +712,11 @@ export async function verifySeatDeviceApprovalPassword(input: {
   const now = input.now ?? new Date();
   const user = await db.user.findUnique({ where: { id: input.userId }, select: { email: true, passwordHash: true, passwordSetAt: true } });
   if (!user) throw new SeatDeviceAuthError("reauthentication_required");
-  const matched = verifyPassword(input.password, user.passwordHash);
   const keys = [{ identifierHash: hashLoginIdentifier(user.email), limit: LOGIN_RATE_LIMIT }];
+  const counter = await db.failedLoginAttempt.findUnique({ where: { identifierHash: keys[0].identifierHash }, select: { lockedUntil: true } });
+  const lock = evaluateLock(counter, now);
+  if (lock.locked) throw new SeatDeviceAuthError("rate_limited", Math.ceil(lock.retryAfterMs / 1000));
+  const matched = verifyPassword(input.password, user.passwordHash);
   const accepted = await retried(() => db.$transaction(async (tx) => {
     const counters = await openCodeEntryInTx(tx, keys, now);
     if (matched) return true;
@@ -724,6 +730,27 @@ export async function verifySeatDeviceApprovalPassword(input: {
 }
 
 type Decision = "approve" | "reject";
+
+// Approval needs both switches, a PASSWORD session and the session still on
+// the workspace the page showed (lookup answers its id, approve sends it
+// back): a workspace switch in between must not bind the device elsewhere.
+function approvalRefusal(member: MemberContext, expectedWorkspaceId: string | null): SeatDeviceErrorCode | null {
+  if (!member.workspace.enabled) return "workspace_not_enabled";
+  if (member.providerType !== AUTH_SESSION_PROVIDER_TYPES.PASSWORD) return "reauthentication_required";
+  return member.workspace.id === expectedWorkspaceId ? null : "workspace_mismatch";
+}
+
+export async function assertSeatDeviceApprovalPreconditions(input: {
+  authSessionId: string;
+  userId: string;
+  expectedWorkspaceId: string;
+  now?: Date;
+}): Promise<void> {
+  assertDeploymentEnabled();
+  const member = await loadMemberContext(input.authSessionId, input.userId, input.now ?? new Date());
+  const refusal = approvalRefusal(member, input.expectedWorkspaceId);
+  if (refusal) throw new SeatDeviceAuthError(refusal);
+}
 
 // Approve binds the request to the member, the session's workspace and the
 // password snapshot; it needs both switches, a PASSWORD session, a password
@@ -740,6 +767,8 @@ export async function decideSeatDeviceAuthorization(input: {
   pairingCode: string;
   decision: Decision;
   passwordProof: SeatDevicePasswordProof | null;
+  // Approve only: the workspace id the page showed (lookup answer).
+  expectedWorkspaceId: string | null;
   source: string | null;
   now?: Date;
 }): Promise<{ requestId: string; status: "approved" | "rejected" }> {
@@ -747,11 +776,11 @@ export async function decideSeatDeviceAuthorization(input: {
   const now = input.now ?? new Date();
   const member = await loadMemberContext(input.authSessionId, input.userId, now);
   if (input.decision === "approve") {
-    if (!member.workspace.enabled) throw new SeatDeviceAuthError("workspace_not_enabled");
+    const refusal = approvalRefusal(member, input.expectedWorkspaceId);
+    if (refusal) throw new SeatDeviceAuthError(refusal);
     const proof = input.passwordProof ? issuedPasswordProofs.get(input.passwordProof) : undefined;
     const proofAgeMs = proof ? now.getTime() - proof.verifiedAt : Number.NaN;
     if (
-      member.providerType !== AUTH_SESSION_PROVIDER_TYPES.PASSWORD ||
       proof?.userId !== member.userId ||
       proof.passwordSetAt !== (member.passwordSetAt?.getTime() ?? null) ||
       !(proofAgeMs >= 0 && proofAgeMs <= SEAT_DEVICE_STEP_UP_MAX_SESSION_AGE_SECONDS * 1000)

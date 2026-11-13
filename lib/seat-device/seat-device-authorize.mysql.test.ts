@@ -139,6 +139,7 @@ describeMysql("seat device authorization (request, decide, cancel) on MySQL", ()
       pairingCode: normalizeSeatDevicePairingCode(grant.pairingCode) ?? grant.pairingCode,
       decision,
       passwordProof: passwordProof === undefined ? await proofAt(who, at(now, -30)) : passwordProof,
+      expectedWorkspaceId: workspaceId,
       source: null,
       now,
     });
@@ -306,7 +307,7 @@ describeMysql("seat device authorization (request, decide, cancel) on MySQL", ()
       clientReported: ["deviceName", "clientVersion"],
       source,
       expiresInSeconds: 595,
-      workspace: { name: `坐席设备 ${suffix}` },
+      workspace: { id: workspaceId, name: `坐席设备 ${suffix}` },
     });
     for (let index = 0; index < SEAT_DEVICE_CODE_ENTRY_MAX_FAILURES; index += 1) {
       await expectCode(lookup("ZZZZZZZZ"), "pairing_code_invalid");
@@ -439,6 +440,11 @@ describeMysql("seat device authorization (request, decide, cancel) on MySQL", ()
     // A look-alike object is no proof, nor is another member's.
     await expectCode(decide(who, grant, now, "approve", rotated, Object.freeze({}) as SeatDevicePasswordProof), "reauthentication_required");
     await expectCode(decide(who, grant, now, "approve", rotated, await proofAt(await member(), at(now, -30))), "reauthentication_required");
+    // The page showed another workspace than the session now sits on.
+    await expectCode(
+      decideSeatDeviceAuthorization({ authSessionId: rotated, userId: who.userId, requestId: grant.requestId, pairingCode: normalizeSeatDevicePairingCode(grant.pairingCode)!, decision: "approve", passwordProof: await proofAt(who, at(now, -30)), expectedWorkspaceId: otherWorkspaceId, source: null, now }),
+      "workspace_mismatch",
+    );
     // A proof of the password before it was changed is no proof either.
     const beforeChange = await proofAt(who, at(now, -30));
     await db.user.update({ where: { id: who.userId }, data: { passwordSetAt: at(now, -10) } });
@@ -468,7 +474,7 @@ describeMysql("seat device authorization (request, decide, cancel) on MySQL", ()
     const grant = await request(now, freshSource());
     const who = await member();
     const sessionId = await session(who, at(now, -30));
-    await expectCode(decideSeatDeviceAuthorization({ authSessionId: sessionId, userId: who.userId, requestId: grant.requestId, pairingCode: "ZZZZZZZZ", decision: "approve", passwordProof: await proofAt(who, at(now, -30)), source: null, now }), "pairing_code_invalid");
+    await expectCode(decideSeatDeviceAuthorization({ authSessionId: sessionId, userId: who.userId, requestId: grant.requestId, pairingCode: "ZZZZZZZZ", decision: "approve", passwordProof: await proofAt(who, at(now, -30)), expectedWorkspaceId: workspaceId, source: null, now }), "pairing_code_invalid");
     const failures = await db.failedLoginAttempt.findUniqueOrThrow({ where: { identifierHash: hashLoginIdentifier(`seat-device-code:user:${who.userId}`) } });
     expect(failures.attemptCount).toBe(1);
     await expect(decide(who, grant, now, "approve", sessionId)).resolves.toEqual({ requestId: grant.requestId, status: "approved" });

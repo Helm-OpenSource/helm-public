@@ -111,6 +111,7 @@ describeMysql("seat device credentials (classify, pin, revoke) on MySQL", () => 
       pairingCode: normalizeSeatDevicePairingCode(grant.pairingCode)!,
       decision: "approve",
       passwordProof: await verifySeatDeviceApprovalPassword({ userId: owner.userId, password: PASSWORD, now: at(now, -30) }),
+      expectedWorkspaceId: owner.workspaceId,
       source: null,
       now,
     });
@@ -315,6 +316,7 @@ describeMysql("seat device credentials (classify, pin, revoke) on MySQL", () => 
       pairingCode: normalizeSeatDevicePairingCode(grant.pairingCode)!,
       decision: "approve",
       passwordProof: await verifySeatDeviceApprovalPassword({ userId: who.userId, password: PASSWORD, now: at(now, -30) }),
+      expectedWorkspaceId: who.workspaceId,
       source: null,
       now,
     });

@@ -10,7 +10,7 @@ export type SeatDeviceLookupView = {
   requestedAt: string;
   source: string | null;
   expiresInSeconds: number;
-  workspace: { name: string };
+  workspace: { id: string; name: string };
 };
 
 // Design v0.3 §4.3: required wording, shown before and with every decision.
@@ -24,7 +24,10 @@ const ERROR_LABELS: Record<string, string> = {
   reauthentication_required: "请用密码登录后再授权：退出登录，再用密码登录并回到本页。",
   too_many_devices: "你已授权 3 台设备，请先在设备列表中撤销不用的设备。",
   workspace_not_enabled: "你所在的机构尚未开通坐席客户端。",
-  forbidden: "你没有这项操作的权限。",
+  // Also the answer when the browser did not mark the request as same-site
+  // (an outdated browser, or the page opened from another address).
+  forbidden: "无法完成：请确认你是本机构的在职成员，并用最新版浏览器直接打开本站的授权页再试。",
+  workspace_mismatch: "你当前所在的机构已切换，与页面上显示的不一致。请重新输入配对码查找。",
   invalid_input: "输入不符合要求。",
 };
 
@@ -93,7 +96,12 @@ export function DeviceConfirmClient() {
 
   function decide(action: "approve" | "reject", password?: string) {
     if (!lookup) return;
-    const body = { action, requestId: lookup.requestId, pairingCode: code, ...(password ? { password } : {}) };
+    const body = {
+      action,
+      requestId: lookup.requestId,
+      pairingCode: code,
+      ...(action === "approve" ? { workspaceId: lookup.workspace.id, password } : {}),
+    };
     run(async () => {
       await post(body);
       setLookup(null);

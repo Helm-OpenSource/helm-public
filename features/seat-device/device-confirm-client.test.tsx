@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // features/seat-device/device-confirm-client.test.tsx
 // The D1 verification page (design v0.3 §4.3): the required anti-phishing
 // wording, the bound workspace and what the device can do, client-reported
@@ -5,6 +6,8 @@
 // one, "拒绝" as the default button, the page refusing to be framed, its
 // deployment switch, and a signed-out visitor coming back to it after login.
 
+import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -14,6 +17,7 @@ vi.mock("next/navigation", () => navigation);
 vi.mock("@/lib/auth/session", () => session);
 
 import SeatDeviceVerificationPage from "@/app/(workspace)/device/page";
+import SeatDevicesPage from "@/app/(workspace)/settings/seat-devices/page";
 import { withLoginCallback } from "@/lib/auth/login-callback";
 import { shouldRedirectMissingWorkspaceSession } from "@/lib/auth/workspace-route-guard";
 import nextConfig from "@/next.config";
@@ -23,6 +27,7 @@ import {
   SeatDeviceDecisionPanel,
   type SeatDeviceLookupView,
 } from "@/features/seat-device/device-confirm-client";
+import { SeatDeviceTable, type SeatDeviceListItem } from "@/features/seat-device/seat-devices-client";
 
 const LOOKUP: SeatDeviceLookupView = {
   requestId: "req1",
@@ -31,13 +36,14 @@ const LOOKUP: SeatDeviceLookupView = {
   requestedAt: "2031-01-01T00:00:00.000Z",
   source: "198.51.100.7",
   expiresInSeconds: 540,
-  workspace: { name: "示例机构" },
+  workspace: { id: "ws1", name: "示例机构" },
 };
 
 const panel = (lookup: SeatDeviceLookupView) =>
   renderToStaticMarkup(<SeatDeviceDecisionPanel lookup={lookup} pending={false} onReject={() => {}} onApprove={() => {}} />);
 
 afterEach(() => {
+  cleanup();
   vi.unstubAllEnvs();
   vi.clearAllMocks();
 });
@@ -49,6 +55,15 @@ describe("seat device verification page", () => {
     expect(session.getCurrentWorkspaceSession).not.toHaveBeenCalled();
     vi.stubEnv("HELM_SEAT_DEVICE_AUTH_ENABLED", "true");
     expect(renderToStaticMarkup(await SeatDeviceVerificationPage())).toContain(SEAT_DEVICE_PHISHING_WARNING);
+    expect(session.getCurrentWorkspaceSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the device list page absent while the deployment switch is off", async () => {
+    vi.stubEnv("HELM_SEAT_DEVICE_AUTH_ENABLED", "false");
+    await expect(SeatDevicesPage()).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(session.getCurrentWorkspaceSession).not.toHaveBeenCalled();
+    vi.stubEnv("HELM_SEAT_DEVICE_AUTH_ENABLED", "true");
+    expect(renderToStaticMarkup(await SeatDevicesPage())).toContain("坐席客户端设备");
     expect(session.getCurrentWorkspaceSession).toHaveBeenCalledTimes(1);
   });
 
@@ -87,15 +102,43 @@ describe("seat device verification page", () => {
     expect(html).toMatch(/<input[^>]*type="password"/);
   });
 
-  it("refuses framing of /device", async () => {
+  it("rejects on Enter from the default focus, and Enter in the password field neither approves nor rejects", async () => {
+    const onReject = vi.fn();
+    const onApprove = vi.fn();
+    render(<SeatDeviceDecisionPanel lookup={LOOKUP} pending={false} onReject={onReject} onApprove={onApprove} />);
+    const user = userEvent.setup();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "拒绝" }));
+    await user.keyboard("{Enter}");
+    expect(onReject).toHaveBeenCalledTimes(1);
+    await user.type(screen.getByLabelText("授权前请再次输入登录密码"), "typed password{Enter}");
+    expect(onReject).toHaveBeenCalledTimes(1);
+    expect(onApprove).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "授权这台设备" }));
+    expect(onApprove).toHaveBeenCalledWith("typed password");
+  });
+
+  it.each(["/device", "/settings/seat-devices"])("refuses framing of %s", async (source) => {
     const rules = (await nextConfig.headers?.()) ?? [];
-    const device = rules.find((rule) => rule.source === "/device");
-    expect(device?.headers).toEqual(
+    const page = rules.find((rule) => rule.source === source);
+    expect(page?.headers).toEqual(
       expect.arrayContaining([
         { key: "X-Frame-Options", value: "DENY" },
         { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
         { key: "Cache-Control", value: "no-store, private" },
       ]),
     );
+  });
+
+  it("offers revoke only on a live device in the device list", () => {
+    const base: SeatDeviceListItem = {
+      deviceId: "d1", deviceName: "前台电脑", clientVersion: "1.0.0", status: "active", memberName: "坐席", own: true,
+      approvedAt: null, approvalSource: null, lastUsedAt: null, expiresAt: null, revokedAt: null, revokeReason: null,
+    };
+    const table = (devices: SeatDeviceListItem[]) =>
+      renderToStaticMarkup(<SeatDeviceTable devices={devices} showMember={false} pending={false} onRevoke={() => {}} />);
+    expect(table([base, { ...base, deviceId: "d2", status: "approved" }]).match(/>撤销</g)).toHaveLength(2);
+    const revoked = table([{ ...base, status: "revoked", revokeReason: "admin" }, { ...base, deviceId: "d3", status: "expired" }]);
+    expect(revoked).not.toContain(">撤销<");
+    expect(revoked).toContain("已撤销：管理员撤销");
   });
 });
