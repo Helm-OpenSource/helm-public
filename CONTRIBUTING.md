@@ -126,6 +126,9 @@ npm run quality:regression
 
 具体含义见 [AGENTS.md §10](AGENTS.md)。
 
+新增 `prisma/migrations/<迁移目录>/` 时，同一个 PR 必须带 `prisma/upgrade-notes/<迁移目录>.json`，格式见
+[公开升级说明](prisma/upgrade-notes/README.md)；`npm run check:boundaries` 会拦截缺失。
+
 如果某一条命令在你的环境无法运行，PR 描述里必须明确：
 
 - 哪些命令没跑
