@@ -113,6 +113,8 @@ export const SEAT_DEVICE_ERROR_STATUS = {
   rate_limited: 429,
   // Website (member session) side.
   pairing_code_invalid: 400,
+  // The password typed to approve a device was wrong (counted as a failed login).
+  password_invalid: 400,
   forbidden: 403,
   reauthentication_required: 403,
   temporarily_unavailable: 503,
@@ -332,6 +334,16 @@ export const SEAT_DEVICE_LOOKUP_REQUEST_SCHEMA = z.object({ pairingCode: pairing
 export const SEAT_DEVICE_DECISION_REQUEST_SCHEMA = z
   .object({ requestId: requestIdSchema, pairingCode: pairingCodeSchema })
   .strict();
+
+// Website (member session) actions on /api/settings/seat-devices (design
+// §4.3). Approve carries the password: it is verified and the device approved
+// in the same request, so no proof of it is ever stored or sent back.
+export const SEAT_DEVICE_WEBSITE_ACTION_SCHEMA = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("lookup"), pairingCode: pairingCodeSchema }).strict(),
+  z.object({ action: z.literal("approve"), requestId: requestIdSchema, pairingCode: pairingCodeSchema, password: z.string().min(1).max(256) }).strict(),
+  z.object({ action: z.literal("reject"), requestId: requestIdSchema, pairingCode: pairingCodeSchema }).strict(),
+]);
+export type SeatDeviceWebsiteAction = z.infer<typeof SEAT_DEVICE_WEBSITE_ACTION_SCHEMA>;
 
 export type SeatDeviceParseResult<T> = { ok: true; value: T } | { ok: false; code: SeatDeviceErrorCode };
 

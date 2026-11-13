@@ -25,7 +25,8 @@ import "server-only";
 import { ActorType, MembershipStatus, Prisma, WorkspaceStatus, type WorkspaceRole } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { externalScopeOf } from "@/lib/auth/external-member-scope";
-import { evaluateLock, hashLoginIdentifier, nextStateOnFailure, type FailureLimit } from "@/lib/auth/login-rate-limit";
+import { verifyPassword } from "@/lib/auth/formal-auth";
+import { LOGIN_RATE_LIMIT, evaluateLock, hashLoginIdentifier, nextStateOnFailure, type FailureLimit } from "@/lib/auth/login-rate-limit";
 import { AUTH_SESSION_PROVIDER_TYPES } from "@/lib/auth/provider-seam";
 import { db } from "@/lib/db";
 import { isWriteConflictError } from "@/lib/db/conflict-aware-write";
@@ -683,29 +684,62 @@ export async function lookupSeatDeviceAuthorization(input: {
   };
 }
 
+// Step-up (design §4.3, server design §2C.3): rotating a session creates a
+// fresh AuthSession row without asking for the password, so neither a session
+// nor its age proves the member just typed it. Approval needs this proof
+// instead. Only verifySeatDeviceApprovalPassword issues one, after the
+// password matched; its facts live in a module-private WeakMap, so an object
+// cast to the type, or a bare time, is no proof.
+declare const passwordProofBrand: unique symbol;
+export type SeatDevicePasswordProof = { readonly [passwordProofBrand]: true };
+type PasswordProofFacts = { userId: string; passwordSetAt: number | null; verifiedAt: number };
+const issuedPasswordProofs = new WeakMap<object, PasswordProofFacts>();
+
+// A wrong password counts as a failed password login of the account: the
+// login counter keyed by the account email, with the login limit (8 in 15
+// minutes, locked 15 minutes). While that counter is locked a right password
+// is refused too. The lock check and the count run in one Serializable
+// transaction, like code entry; scrypt runs before it.
+export async function verifySeatDeviceApprovalPassword(input: {
+  userId: string;
+  password: string;
+  now?: Date;
+}): Promise<SeatDevicePasswordProof> {
+  assertDeploymentEnabled();
+  const now = input.now ?? new Date();
+  const user = await db.user.findUnique({ where: { id: input.userId }, select: { email: true, passwordHash: true, passwordSetAt: true } });
+  if (!user) throw new SeatDeviceAuthError("reauthentication_required");
+  const matched = verifyPassword(input.password, user.passwordHash);
+  const keys = [{ identifierHash: hashLoginIdentifier(user.email), limit: LOGIN_RATE_LIMIT }];
+  const accepted = await retried(() => db.$transaction(async (tx) => {
+    const counters = await openCodeEntryInTx(tx, keys, now);
+    if (matched) return true;
+    await countCodeEntryFailureInTx(tx, keys, counters, now);
+    return false;
+  }, TX), "rate_limited", isCodeEntryConflict);
+  if (!accepted) throw new SeatDeviceAuthError("password_invalid");
+  const proof = Object.freeze({}) as SeatDevicePasswordProof;
+  issuedPasswordProofs.set(proof, { userId: input.userId, passwordSetAt: user.passwordSetAt?.getTime() ?? null, verifiedAt: now.getTime() });
+  return proof;
+}
+
 type Decision = "approve" | "reject";
 
 // Approve binds the request to the member, the session's workspace and the
 // password snapshot; it needs both switches, a PASSWORD session, a password
-// verified for this approval in the last 10 minutes and room under the device
-// cap. Reject needs a usable member session only (no step-up), so a phishing
+// proof of this member (same password) at most 10 minutes old and room under
+// the device cap. Reject needs a usable member session only (no step-up), so a phishing
 // request can be turned down from any session. Both go through the code-entry
 // lock: while the account or its address bucket is locked, reject waits out
 // the lock like approve (the request lapses in 10 minutes regardless).
-//
-// Step-up (design §4.3): rotating a session creates a fresh AuthSession row
-// without asking for the password, so the session's age proves nothing. The
-// caller re-verifies the member's password for this approval, under the login
-// failure limit, and passes `passwordVerifiedAt`, the moment that check
-// succeeded. The store never sees the password; it refuses a missing proof,
-// one older than 10 minutes and one later than `now`.
+// The session's age plays no part: only the password proof does.
 export async function decideSeatDeviceAuthorization(input: {
   authSessionId: string;
   userId: string;
   requestId: string;
   pairingCode: string;
   decision: Decision;
-  passwordVerifiedAt: Date | null;
+  passwordProof: SeatDevicePasswordProof | null;
   source: string | null;
   now?: Date;
 }): Promise<{ requestId: string; status: "approved" | "rejected" }> {
@@ -714,9 +748,12 @@ export async function decideSeatDeviceAuthorization(input: {
   const member = await loadMemberContext(input.authSessionId, input.userId, now);
   if (input.decision === "approve") {
     if (!member.workspace.enabled) throw new SeatDeviceAuthError("workspace_not_enabled");
-    const proofAgeMs = input.passwordVerifiedAt ? now.getTime() - input.passwordVerifiedAt.getTime() : Number.NaN;
+    const proof = input.passwordProof ? issuedPasswordProofs.get(input.passwordProof) : undefined;
+    const proofAgeMs = proof ? now.getTime() - proof.verifiedAt : Number.NaN;
     if (
       member.providerType !== AUTH_SESSION_PROVIDER_TYPES.PASSWORD ||
+      proof?.userId !== member.userId ||
+      proof.passwordSetAt !== (member.passwordSetAt?.getTime() ?? null) ||
       !(proofAgeMs >= 0 && proofAgeMs <= SEAT_DEVICE_STEP_UP_MAX_SESSION_AGE_SECONDS * 1000)
     ) {
       throw new SeatDeviceAuthError("reauthentication_required");

@@ -20,9 +20,10 @@ import * as cancelRoute from "@/app/api/public-auth/seat-device/device-authoriza
 import * as claimRoute from "@/app/api/public-auth/seat-device/device-authorizations/claim/route";
 import * as refreshRoute from "@/app/api/public-auth/seat-device/device-tokens/refresh/route";
 import * as revokeRoute from "@/app/api/public-auth/seat-device/device-tokens/revoke/route";
+import { hashPassword } from "@/lib/auth/formal-auth";
 import { db } from "@/lib/db";
 import { hashSeatDeviceToken, mintSeatDeviceToken, normalizeSeatDevicePairingCode } from "@/lib/seat-device/contract";
-import { decideSeatDeviceAuthorization } from "@/lib/seat-device/store-authorize";
+import { decideSeatDeviceAuthorization, verifySeatDeviceApprovalPassword } from "@/lib/seat-device/store-authorize";
 
 const integrationDatabaseUrl = process.env.SEAT_DEVICE_DATABASE_URL;
 if (process.env.SEAT_DEVICE_MYSQL_REQUIRED === "1" && !integrationDatabaseUrl) {
@@ -31,6 +32,8 @@ if (process.env.SEAT_DEVICE_MYSQL_REQUIRED === "1" && !integrationDatabaseUrl) {
 const describeMysql = integrationDatabaseUrl ? describe.sequential : describe.skip;
 const suffix = `${process.pid.toString(36)}-${Date.now().toString(36)}`;
 const APP_ORIGIN = "https://seat.example.test";
+const PASSWORD = "correct horse battery";
+const PASSWORD_HASH = hashPassword(PASSWORD);
 
 let clock = Date.parse("2051-01-01T00:00:00.000Z");
 // A new day per test; `tick` moves within it.
@@ -121,7 +124,7 @@ describeMysql("seat device endpoints on MySQL", () => {
   async function member(): Promise<Member> {
     memberCount += 1;
     const user = await db.user.create({
-      data: { email: `seat-routes-${memberCount}-${suffix}@example.com`, name: `坐席 ${memberCount}`, passwordSetAt: new Date("2050-06-01T00:00:00.000Z") },
+      data: { email: `seat-routes-${memberCount}-${suffix}@example.com`, name: `坐席 ${memberCount}`, passwordHash: PASSWORD_HASH, passwordSetAt: new Date("2050-06-01T00:00:00.000Z") },
     });
     const membership = await db.membership.create({
       data: { workspaceId, userId: user.id, role: WorkspaceRole.OPERATOR, status: MembershipStatus.ACTIVE },
@@ -147,7 +150,7 @@ describeMysql("seat device endpoints on MySQL", () => {
       requestId: grant.requestId,
       pairingCode: normalizeSeatDevicePairingCode(grant.pairingCode)!,
       decision: "approve",
-      passwordVerifiedAt: new Date(now.getTime() - 30_000),
+      passwordProof: await verifySeatDeviceApprovalPassword({ userId: who.userId, password: PASSWORD }),
       source: null,
     });
   }

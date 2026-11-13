@@ -13,6 +13,8 @@ export const WORKSPACE_PAGE_PREFIXES = [
   "/delivery-conversations",
   "/delivery-reviews",
   "/delivery-walkthroughs",
+  // Seat device verification page (D1): signed-out visitors log in and return here.
+  "/device",
   "/diagnostics",
   "/expansion-reviews",
   "/external-narrative-fallbacks",
