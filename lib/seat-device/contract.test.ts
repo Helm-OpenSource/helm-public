@@ -28,6 +28,7 @@ import {
   readSeatDeviceTrustedProxyHops,
   resolveSeatDeviceTrustedSource,
   seatDeviceCredentialExpiresAt,
+  seatDeviceEntryLinks,
   seatDeviceHashesEqual,
   seatDeviceIdentity,
   seatDevicePreviousAccessExpiresAt,
@@ -247,6 +248,26 @@ describe("seat device request validation", () => {
     expect(SEAT_DEVICE_ERROR_STATUS).not.toHaveProperty("request_invalid");
     expect(parseSeatDeviceRevokeRequest({ refreshToken: "hsdr_short" })).toEqual({ ok: false, code: "invalid_input" });
     expect(parseSeatDeviceRevokeRequest({ refreshToken, reason: "device_logout", extra: 1 })).toEqual({ ok: false, code: "invalid_input" });
+  });
+
+  it("builds entry links from the given origin only; activation follows its own switch; no sign-up link", () => {
+    const origin = "https://seat.example.test";
+    expect(seatDeviceEntryLinks(origin, {})).toEqual({ signIn: `${origin}/login`, activateMember: null, signUp: null });
+    expect(seatDeviceEntryLinks(origin, { HELM_AUTH_MEMBER_ACTIVATION_ENABLED: "true" })).toEqual({
+      signIn: `${origin}/login`,
+      activateMember: `${origin}/activate-member`,
+      signUp: null,
+    });
+    // Only the exact "true" opens the activation page (it answers 404 otherwise).
+    for (const value of ["false", "TRUE", "1", "", undefined]) {
+      expect(seatDeviceEntryLinks(origin, { HELM_AUTH_MEMBER_ACTIVATION_ENABLED: value }).activateMember).toBeNull();
+    }
+    // The origin passed in is the only source: APP_URL itself is not re-read here.
+    expect(seatDeviceEntryLinks(origin, { ...on, APP_URL: "https://other.example.test" })).toEqual({
+      signIn: `${origin}/login`,
+      activateMember: null,
+      signUp: null,
+    });
   });
 
   it("normalizes pairing codes in lookup and decision bodies", () => {
