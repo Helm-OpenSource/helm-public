@@ -2,11 +2,20 @@
 // The D1 verification page (design v0.3 §4.3): the required anti-phishing
 // wording, the bound workspace and what the device can do, client-reported
 // fields marked as such, the source shown only when the server has a trusted
-// one, "拒绝" as the default button, and the page refusing to be framed.
+// one, "拒绝" as the default button, the page refusing to be framed, its
+// deployment switch, and a signed-out visitor coming back to it after login.
 
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+const navigation = vi.hoisted(() => ({ notFound: vi.fn(() => { throw new Error("NEXT_NOT_FOUND"); }) }));
+const session = vi.hoisted(() => ({ getCurrentWorkspaceSession: vi.fn(async () => ({})) }));
+vi.mock("next/navigation", () => navigation);
+vi.mock("@/lib/auth/session", () => session);
+
+import SeatDeviceVerificationPage from "@/app/(workspace)/device/page";
+import { withLoginCallback } from "@/lib/auth/login-callback";
+import { shouldRedirectMissingWorkspaceSession } from "@/lib/auth/workspace-route-guard";
 import nextConfig from "@/next.config";
 import {
   DeviceConfirmClient,
@@ -28,7 +37,26 @@ const LOOKUP: SeatDeviceLookupView = {
 const panel = (lookup: SeatDeviceLookupView) =>
   renderToStaticMarkup(<SeatDeviceDecisionPanel lookup={lookup} pending={false} onReject={() => {}} onApprove={() => {}} />);
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.clearAllMocks();
+});
+
 describe("seat device verification page", () => {
+  it("is absent while the deployment switch is off, and needs a workspace session when on", async () => {
+    vi.stubEnv("HELM_SEAT_DEVICE_AUTH_ENABLED", "false");
+    await expect(SeatDeviceVerificationPage()).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(session.getCurrentWorkspaceSession).not.toHaveBeenCalled();
+    vi.stubEnv("HELM_SEAT_DEVICE_AUTH_ENABLED", "true");
+    expect(renderToStaticMarkup(await SeatDeviceVerificationPage())).toContain(SEAT_DEVICE_PHISHING_WARNING);
+    expect(session.getCurrentWorkspaceSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends a signed-out visitor to login and back to /device", () => {
+    expect(shouldRedirectMissingWorkspaceSession({ pathname: "/device", hasAuthSessionCookie: false })).toBe(true);
+    expect(withLoginCallback("/login", "/device")).toBe("/login?callback=%2Fdevice");
+  });
+
   it("shows the anti-phishing warning before any code is entered, and never takes the code from the URL", () => {
     expect(SEAT_DEVICE_PHISHING_WARNING).toContain("如果有人通过电话、短信或聊天让你输入这个码，那是诈骗，请点拒绝。");
     const html = renderToStaticMarkup(<DeviceConfirmClient />);
