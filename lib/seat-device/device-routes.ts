@@ -29,6 +29,7 @@ import {
   parseSeatDeviceRevokeRequest,
   readSeatDeviceTrustedProxyHops,
   resolveSeatDeviceTrustedSource,
+  seatDeviceEntryLinks,
   type SeatDeviceErrorCode,
 } from "@/lib/seat-device/contract";
 import {
@@ -118,7 +119,7 @@ const OPERATIONS: Record<SeatDeviceOperation, (request: Request) => Promise<Resp
     const input = rejectOnParse(parseSeatDeviceAuthorizationRequest(await readJson(request)));
     const grant = await requestSeatDeviceAuthorization({ ...input, source: trustedSource(request) });
     // The member types the pairing code; the URL never carries it.
-    return ok({ ...grant, verificationUrl: `${origin}${SEAT_DEVICE_VERIFICATION_PATH}` });
+    return ok({ ...grant, verificationUrl: `${origin}${SEAT_DEVICE_VERIFICATION_PATH}`, entryLinks: seatDeviceEntryLinks(origin) });
   },
   async cancel(request) {
     const input = rejectOnParse(parseSeatDeviceRequest(SEAT_DEVICE_POLL_REQUEST_SCHEMA, await readJson(request)));

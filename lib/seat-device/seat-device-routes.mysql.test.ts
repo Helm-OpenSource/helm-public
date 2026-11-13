@@ -2,7 +2,7 @@
 // The five D1 device endpoints (design v0.3 §4.2, §15) through their real
 // route handlers and the real store on an isolated MySQL database: answer
 // shapes, the code map with its HTTP statuses, no-store on every answer,
-// Retry-After on every 429 and 503, the verification URL (APP_URL only, no
+// Retry-After on every 429 and 503, the verification URL and entry links (APP_URL only, no
 // code), and a log probe that no token or pairing code reaches a log line.
 //
 //   SEAT_DEVICE_DATABASE_URL=<disposable db> DATABASE_URL=<same>
@@ -160,7 +160,7 @@ describeMysql("seat device endpoints on MySQL", () => {
   async function authorize(source = freshSource()) {
     const answer = await post("authorize", DEVICE, source);
     expect(answer.status).toBe(200);
-    return { grant: answer.body as Grant & { verificationUrl: string }, source };
+    return { grant: answer.body as Grant & { verificationUrl: string; entryLinks: unknown }, source };
   }
 
   // A claimed device of a fresh member, from a trusted source.
@@ -185,6 +185,8 @@ describeMysql("seat device endpoints on MySQL", () => {
     vi.stubEnv("HELM_SEAT_DEVICE_AUTH_ENABLED", "true");
     vi.stubEnv("HELM_SEAT_DEVICE_TRUSTED_PROXY_HOPS", "1");
     vi.stubEnv("APP_URL", APP_ORIGIN);
+    // The activation page (and so its entry link) is off unless a test opens it.
+    vi.stubEnv("HELM_AUTH_MEMBER_ACTIVATION_ENABLED", undefined);
     for (const method of CONSOLE_METHODS) {
       const original = console[method].bind(console);
       vi.spyOn(console, method).mockImplementation((...args: unknown[]) => {
@@ -209,9 +211,11 @@ describeMysql("seat device endpoints on MySQL", () => {
   it("authorizes with a URL built from APP_URL only, never carrying the code, and keeps the trusted source", async () => {
     nextDay();
     const { grant, source } = await authorize();
-    expect(Object.keys(grant).sort()).toEqual(["expiresInSeconds", "intervalSeconds", "pairingCode", "pollToken", "requestId", "verificationUrl"]);
+    expect(Object.keys(grant).sort()).toEqual(["entryLinks", "expiresInSeconds", "intervalSeconds", "pairingCode", "pollToken", "requestId", "verificationUrl"]);
     expect(grant).toMatchObject({ expiresInSeconds: 600, intervalSeconds: 5 });
     expect(grant.verificationUrl).toBe(`${APP_ORIGIN}/device`);
+    // post() sends a hostile Host, x-forwarded-host and an http forwarded proto.
+    expect(grant.entryLinks).toEqual({ signIn: `${APP_ORIGIN}/login`, activateMember: null, signUp: null });
     const url = new URL(grant.verificationUrl);
     expect(url.search + url.hash).toBe("");
     expect(grant.verificationUrl).not.toContain(grant.pairingCode.replace("-", ""));
@@ -222,13 +226,29 @@ describeMysql("seat device endpoints on MySQL", () => {
     expect(row.pollTokenHash).toBe(hashSeatDeviceToken(grant.pollToken));
   });
 
+  it("offers the activation link only while the activation page is on, and takes no address from the client", async () => {
+    nextDay();
+    vi.stubEnv("HELM_AUTH_MEMBER_ACTIVATION_ENABLED", "true");
+    try {
+      const { grant } = await authorize();
+      expect(grant.entryLinks).toEqual({ signIn: `${APP_ORIGIN}/login`, activateMember: `${APP_ORIGIN}/activate-member`, signUp: null });
+    } finally {
+      vi.stubEnv("HELM_AUTH_MEMBER_ACTIVATION_ENABLED", undefined);
+    }
+    // A client cannot steer the links: any address field is an unknown field.
+    for (const extra of [{ entryLinks: { signUp: "https://phish.example" } }, { signUpUrl: "https://phish.example" }, { verificationUrl: "https://phish.example/device" }]) {
+      expect(only(await post("authorize", { ...DEVICE, ...extra }, freshSource()))).toEqual({ status: 400, body: errorOf("invalid_input") });
+    }
+  });
+
   it("resolves the public origin before storing anything", async () => {
     nextDay();
     const before = await db.seatDeviceAuthorization.count();
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("APP_URL", "http://plain-http.example.test");
     try {
-      expect(await post("authorize", DEVICE, freshSource())).toMatchObject({ status: 503, body: errorOf("temporarily_unavailable") });
+      // Fail closed: no link of any kind leaves with a non-https origin.
+      expect(only(await post("authorize", DEVICE, freshSource()))).toEqual({ status: 503, body: errorOf("temporarily_unavailable") });
     } finally {
       vi.stubEnv("NODE_ENV", "test");
       vi.stubEnv("APP_URL", APP_ORIGIN);

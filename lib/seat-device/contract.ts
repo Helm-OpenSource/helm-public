@@ -23,6 +23,9 @@ export type SeatDeviceClientType = (typeof SEAT_DEVICE_CLIENT_TYPES)[number];
 export const SEAT_DEVICE_PUBLIC_AUTH_BASE_PATH = "/api/public-auth/seat-device";
 // The verification URL never carries the pairing code: the member types it.
 export const SEAT_DEVICE_VERIFICATION_PATH = "/device";
+// Existing Core pages the client may point a member to (server design §8).
+export const SEAT_DEVICE_SIGN_IN_PATH = "/login";
+export const SEAT_DEVICE_ACTIVATE_MEMBER_PATH = "/activate-member";
 
 export const SEAT_DEVICE_REQUEST_TTL_SECONDS = 600;
 export const SEAT_DEVICE_POLL_INTERVAL_SECONDS = 5;
@@ -240,6 +243,28 @@ export function isSeatDeviceWorkspaceEnabled(
   } catch {
     return false;
   }
+}
+
+export type SeatDeviceEntryLinks = {
+  signIn: string;
+  activateMember: string | null;
+  signUp: string | null;
+};
+
+// Entry links in the authorization answer (server design §8.3), for the
+// client's guidance text. `origin` is the already resolved APP_URL origin
+// (https outside local development), never anything from the request.
+// activateMember is null while its page answers 404. signUp stays null:
+// Core has no sign-up page and no sign-up address is configured.
+export function seatDeviceEntryLinks(
+  origin: string,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): SeatDeviceEntryLinks {
+  return {
+    signIn: `${origin}${SEAT_DEVICE_SIGN_IN_PATH}`,
+    activateMember: env.HELM_AUTH_MEMBER_ACTIVATION_ENABLED === "true" ? `${origin}${SEAT_DEVICE_ACTIVATE_MEMBER_PATH}` : null,
+    signUp: null,
+  };
 }
 
 // Number of proxies in front of the app that append to x-forwarded-for. Any
