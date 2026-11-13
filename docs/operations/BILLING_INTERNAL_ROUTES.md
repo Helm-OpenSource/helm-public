@@ -79,6 +79,18 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
   One lock-free statement per batch: a consistent read that never waits on, or delays, a reserve or settle. Writes only the
   auth nonce. The wallet read (`/api/billing/v1/wallet`) carries the same `balanceFen`, `headroomFen` and `arrears` next to
   `availableFen` (unchanged: wallet projection only).
+- **Member balance view** (B-1, library only, no route; `lib/billing/balance/member-balance.ts`
+  `readMemberBalanceSummaryInTransaction(tx, { workspaceId, userId })`): the balance a workspace member may see, for a caller
+  that already authenticated that member (the Overlay seat device channel). Role rule: any ACTIVE, unscoped member of an
+  ACTIVE workspace reads it, anyone else is `balance_forbidden`. Answer `{ canTopUp, topUpUrl, payer }`: `payer` is null for
+  an unbound workspace, otherwise `{ billingMode, payerStatus, balanceFen, arrears, arrearsReason, asOf }` from the same
+  summary as `balance-status` (bigint fen; no headroom, ledger, transaction, reservation or payer ids). `canTopUp` is the
+  top-up page's rule: OWNER or BILLING_ADMIN, payer in shadow or enforce, `alipayTopupGateOpen` and a usable `APP_URL`;
+  only then `topUpUrl` = `APP_URL` + `/billing/topup` (no prefill). Two plain statements, lock-free under READ COMMITTED or
+  REPEATABLE READ; under SERIALIZABLE InnoDB would take shared locks a settle waits on, so callers must not use it there.
+  Verified by `member-balance.mysql.test.ts` in `npm run test:billing:mysql` (roles, scoped/inactive/foreign/suspended
+  readers, unbound and off payers, gate and `APP_URL` closures, no wait on a locked projection row). Reverting it removes
+  only this function (no migration, no data).
 - **Scope list, single source**: `BILLING_SERVICE_SCOPES` is both what a grant may declare (verifier and issuance CLI) and what
   routes accept; there is no separate declarable list.
 - **reserve** `expectedMode` (v3.4, optional `shadow|enforce`): a payer in the other mode is `mode_mismatch` before any bucket
