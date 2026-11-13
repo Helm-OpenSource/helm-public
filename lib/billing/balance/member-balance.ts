@@ -13,8 +13,8 @@ import { readPayerBalanceSummaries, type ArrearsReason, type PayerBalanceSummary
  *
  * Role rule (written here, as payer-accounts.ts asks of every caller): any ACTIVE, unscoped member of an ACTIVE workspace reads
  * the summary (owner 2026-11-12: the seat client shows the real balance after sign-in); anyone else is `balance_forbidden`.
- * `canTopUp` is the top-up page's own rule (topup-orders.ts, app/(workspace)/billing/topup): OWNER or BILLING_ADMIN, a payer in
- * shadow or enforce, the top-up gate open and APP_URL usable; only then is `topUpUrl` (APP_URL + /billing/topup, no prefill)
+ * `canTopUp` is the top-up page's own rule (topup-orders.ts, app/(workspace)/billing/topup): OWNER or BILLING_ADMIN, an active payer
+ * (order creation refuses a suspended or closed one) in shadow or enforce, the top-up gate open and APP_URL usable; only then is `topUpUrl` (APP_URL + /billing/topup, no prefill)
  * given. The gate check is the read-only one (alipayTopupGateOpen), as the page uses: incomplete merchant settings make the page
  * say so rather than hide it.
  *
@@ -42,7 +42,7 @@ export async function readMemberBalanceSummaryInTransaction(tx: Prisma.Transacti
   const payer = summary ? { billingMode: summary.billingMode, payerStatus: summary.payerStatus, balanceFen: summary.balanceFen,
     arrears: summary.arrears, arrearsReason: summary.arrearsReason, asOf: summary.asOf } : null;
   const origin = topupAppOrigin(env);
-  const canTopUp = payer !== null && payer.billingMode !== "off" &&
+  const canTopUp = payer !== null && payer.billingMode !== "off" && payer.payerStatus === "active" &&
     canManageWorkspaceBilling(member.role as Parameters<typeof canManageWorkspaceBilling>[0]) && alipayTopupGateOpen(env) && origin !== null;
   return { canTopUp, topUpUrl: canTopUp ? buildTopUpUrl(origin) : null, payer };
 }

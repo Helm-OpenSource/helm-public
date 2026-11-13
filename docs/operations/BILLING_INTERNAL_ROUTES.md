@@ -85,12 +85,13 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
   ACTIVE workspace reads it, anyone else is `balance_forbidden`. Answer `{ canTopUp, topUpUrl, payer }`: `payer` is null for
   an unbound workspace, otherwise `{ billingMode, payerStatus, balanceFen, arrears, arrearsReason, asOf }` from the same
   summary as `balance-status` (bigint fen; no headroom, ledger, transaction, reservation or payer ids). `canTopUp` is the
-  top-up page's rule: OWNER or BILLING_ADMIN, payer in shadow or enforce, `alipayTopupGateOpen` and a usable `APP_URL`;
+  top-up page's rule: OWNER or BILLING_ADMIN, an active payer in shadow or enforce, `alipayTopupGateOpen` and a usable `APP_URL`;
   only then `topUpUrl` = `APP_URL` + `/billing/topup` (no prefill). Two plain statements, lock-free under READ COMMITTED or
   REPEATABLE READ; under SERIALIZABLE InnoDB would take shared locks a settle waits on, so callers must not use it there.
   Verified by `member-balance.mysql.test.ts` in `npm run test:billing:mysql` (roles, scoped/inactive/foreign/suspended
   readers, unbound and off payers, gate and `APP_URL` closures, no wait on a locked projection row). Reverting it removes
-  only this function (no migration, no data).
+  only this function (no migration, no data). Credit fields (remaining credit, limit) are not in this view yet: the seat client does not read
+  them and the points display that needs them is a later slice; they would come from the same C-BAL summary row.
 - **Scope list, single source**: `BILLING_SERVICE_SCOPES` is both what a grant may declare (verifier and issuance CLI) and what
   routes accept; there is no separate declarable list.
 - **reserve** `expectedMode` (v3.4, optional `shadow|enforce`): a payer in the other mode is `mode_mismatch` before any bucket

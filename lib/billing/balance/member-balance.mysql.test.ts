@@ -93,6 +93,15 @@ describe.skipIf(!url)("member balance view (B-1) against MySQL", () => {
     expect(await view(off.ws, owner)).toMatchObject({ canTopUp: false, topUpUrl: null, payer: { billingMode: "off", balanceFen: BigInt(10_000) } });
   });
 
+  it("never offers top-up for a suspended or closed payer, but still shows its numbers and arrears", async () => {
+    for (const status of ["suspended", "closed"] as const) {
+      const p = await bound("enforce", 10_000);
+      await a.$executeRaw`UPDATE PayerAccount SET status = ${status} WHERE id = ${p.payerAccountId}`;
+      expect(await view(p.ws, owner)).toMatchObject({ canTopUp: false, topUpUrl: null,
+        payer: { payerStatus: status, balanceFen: BigInt(10_000), arrears: true, arrearsReason: "payer_inactive" } });
+    }
+  });
+
   it("answers no payer for an unbound workspace and never offers top-up there", async () => {
     expect(await view(await workspace(), owner)).toEqual({ canTopUp: false, topUpUrl: null, payer: null });
   });
@@ -111,9 +120,12 @@ describe.skipIf(!url)("member balance view (B-1) against MySQL", () => {
     const other = await bound("enforce", 10_000);
     await a.$executeRaw`DELETE FROM Membership WHERE workspaceId = ${other.ws} AND userId = ${seat}`;
     await expect(view(other.ws, seat)).rejects.toThrow("balance_forbidden");
+    // Byte-exact identity while the workspace is still ACTIVE: another case of the same id is not this workspace (or member).
+    await expect(view(p.ws.toUpperCase(), owner)).rejects.toThrow("balance_forbidden");
+    await expect(view(p.ws, owner.toUpperCase())).rejects.toThrow("balance_forbidden");
+    expect((await view(p.ws, owner)).payer).toMatchObject({ balanceFen: BigInt(10_000) });
     await a.$executeRaw`UPDATE Workspace SET status = 'SUSPENDED' WHERE id = ${p.ws}`;
     await expect(view(p.ws, owner)).rejects.toThrow("balance_forbidden");
-    await expect(view(p.ws.toUpperCase(), owner)).rejects.toThrow("balance_forbidden");
     for (const bad of ["", " ", "x".repeat(200)]) await expect(view(bad, owner)).rejects.toThrow("balance_forbidden");
   });
 
