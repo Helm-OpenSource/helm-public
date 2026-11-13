@@ -109,7 +109,7 @@ export function SeatDevicesClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "revoke", deviceId: device.deviceId }),
       });
-      setMessage(response.ok ? "已撤销。" : "撤销失败：你没有这项操作的权限，或稍后重试。");
+      setMessage(response.ok ? "已撤销。" : "撤销失败：你没有这项操作的权限，或浏览器版本过旧（请用最新版浏览器直接打开本站），或稍后重试。");
       await load();
     });
   }

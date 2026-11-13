@@ -17,7 +17,7 @@ import "server-only";
 // and a fixed log line for anything outside the closed set, never the
 // password, the pairing code or the body.
 
-import { WorkspaceRole } from "@prisma/client";
+import { Prisma, WorkspaceRole } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { resolveTrustedPublicOrigin } from "@/lib/auth/trusted-public-origin";
 import { db } from "@/lib/db";
@@ -32,6 +32,7 @@ import {
 import { InvalidBody, readJson, seatDeviceErrorResponse, seatDeviceNotFound } from "@/lib/seat-device/device-routes";
 import {
   SeatDeviceAuthError,
+  assertSeatDeviceApprovalPreconditions,
   decideSeatDeviceAuthorization,
   loadMemberContext,
   lookupSeatDeviceAuthorization,
@@ -74,36 +75,56 @@ async function answer(request: Request, resolveSession: () => Promise<SeatDevice
   if (body.action === "lookup") {
     return NextResponse.json(await lookupSeatDeviceAuthorization({ ...member, pairingCode: body.pairingCode }), { headers: NO_STORE });
   }
-  const passwordProof =
-    body.action === "approve" ? await verifySeatDeviceApprovalPassword({ userId: session.userId, password: body.password }) : null;
+  let passwordProof = null;
+  if (body.action === "approve") {
+    // Session type, switches and workspace first: only then is the password
+    // judged (and a wrong one counted).
+    await assertSeatDeviceApprovalPreconditions({ ...member, expectedWorkspaceId: body.workspaceId });
+    passwordProof = await verifySeatDeviceApprovalPassword({ userId: session.userId, password: body.password });
+  }
   const decided = await decideSeatDeviceAuthorization({
     ...member,
     requestId: body.requestId,
     pairingCode: body.pairingCode,
     decision: body.action,
     passwordProof,
+    expectedWorkspaceId: body.action === "approve" ? body.workspaceId : null,
   });
   return NextResponse.json(decided, { headers: NO_STORE });
 }
 
 // Bound devices only (approved, active, revoked): a pending, rejected or
-// cancelled request has no member. Newest decision first, at most 200.
+// cancelled request has no member. Live devices (an unclaimed approval or an
+// unexpired active device) are read in full: the device cap keeps them to 3
+// per member, so ended rows can never push one off the page. Ended devices
+// (revoked or expired) are history: the newest 50 of the member's own and,
+// for OWNER/ADMIN, the newest 100 of the workspace.
+const OWN_HISTORY_LIMIT = 50;
+const WORKSPACE_HISTORY_LIMIT = 100;
+const LIST_SELECT = {
+  id: true, userId: true, deviceLabel: true, clientVersion: true, status: true, requestExpiresAt: true, expiresAt: true,
+  decidedAt: true, approvalSource: true, lastUsedAt: true, revokedAt: true, revokeReason: true,
+} as const;
+
 async function listDevices(session: NonNullable<SeatDeviceWebsiteSession>) {
   const now = new Date();
   const member = await loadMemberContext(session.authSessionId, session.userId, now);
   const manager = member.role === WorkspaceRole.OWNER || member.role === WorkspaceRole.ADMIN;
-  const rows = await db.seatDeviceAuthorization.findMany({
-    where: { workspaceId: member.workspace.id, userId: manager ? { not: null } : member.userId, status: { in: ["approved", "active", "revoked"] } },
-    orderBy: { decidedAt: "desc" },
-    take: 200,
-    select: {
-      id: true, userId: true, deviceLabel: true, clientVersion: true, status: true, requestExpiresAt: true, expiresAt: true,
-      decidedAt: true, approvalSource: true, lastUsedAt: true, revokedAt: true, revokeReason: true,
-    },
-  });
+  const live: Prisma.SeatDeviceAuthorizationWhereInput = {
+    OR: [{ status: "approved", requestExpiresAt: { gt: now } }, { status: "active", expiresAt: { gt: now } }],
+  };
+  const bound = (userId: string | { not: null }) => ({ workspaceId: member.workspace.id, userId, status: { in: ["approved", "active", "revoked"] } });
+  const history = (userId: string | { not: null }, take: number) =>
+    db.seatDeviceAuthorization.findMany({ where: { ...bound(userId), NOT: live }, orderBy: { decidedAt: "desc" }, take, select: LIST_SELECT });
+  const [liveRows, ownHistory, workspaceHistory] = await Promise.all([
+    db.seatDeviceAuthorization.findMany({ where: { ...bound(manager ? { not: null } : member.userId), ...live }, orderBy: { decidedAt: "desc" }, select: LIST_SELECT }),
+    history(member.userId, OWN_HISTORY_LIMIT),
+    manager ? history({ not: null }, WORKSPACE_HISTORY_LIMIT) : Promise.resolve([]),
+  ]);
+  const rows = [...liveRows, ...ownHistory, ...workspaceHistory];
   const users = await db.user.findMany({ where: { id: { in: [...new Set(rows.map((row) => row.userId ?? ""))] } }, select: { id: true, name: true } });
   const names = new Map(users.map((user) => [user.id, user.name]));
-  const devices = rows.map((row) => ({
+  const view = (row: (typeof rows)[number]) => ({
     deviceId: row.id,
     deviceName: row.deviceLabel,
     clientVersion: row.clientVersion,
@@ -116,8 +137,12 @@ async function listDevices(session: NonNullable<SeatDeviceWebsiteSession>) {
     expiresAt: row.expiresAt?.toISOString() ?? null,
     revokedAt: row.revokedAt?.toISOString() ?? null,
     revokeReason: row.revokeReason,
-  }));
-  return { mine: devices.filter((device) => device.own), workspace: manager ? devices : null };
+  });
+  const liveViews = liveRows.map(view);
+  return {
+    mine: [...liveViews.filter((device) => device.own), ...ownHistory.map(view)],
+    workspace: manager ? [...liveViews, ...workspaceHistory.map(view)] : null,
+  };
 }
 
 export async function handleSeatDeviceWebsiteList(resolveSession: () => Promise<SeatDeviceWebsiteSession>): Promise<Response> {

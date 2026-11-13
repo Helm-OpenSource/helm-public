@@ -151,6 +151,7 @@ describeMysql("seat device endpoints on MySQL", () => {
       pairingCode: normalizeSeatDevicePairingCode(grant.pairingCode)!,
       decision: "approve",
       passwordProof: await verifySeatDeviceApprovalPassword({ userId: who.userId, password: PASSWORD }),
+      expectedWorkspaceId: workspaceId,
       source: null,
     });
   }

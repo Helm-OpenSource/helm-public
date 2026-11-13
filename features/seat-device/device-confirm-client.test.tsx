@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // features/seat-device/device-confirm-client.test.tsx
 // The D1 verification page (design v0.3 §4.3): the required anti-phishing
 // wording, the bound workspace and what the device can do, client-reported
@@ -5,6 +6,8 @@
 // one, "拒绝" as the default button, the page refusing to be framed, its
 // deployment switch, and a signed-out visitor coming back to it after login.
 
+import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -33,13 +36,14 @@ const LOOKUP: SeatDeviceLookupView = {
   requestedAt: "2031-01-01T00:00:00.000Z",
   source: "198.51.100.7",
   expiresInSeconds: 540,
-  workspace: { name: "示例机构" },
+  workspace: { id: "ws1", name: "示例机构" },
 };
 
 const panel = (lookup: SeatDeviceLookupView) =>
   renderToStaticMarkup(<SeatDeviceDecisionPanel lookup={lookup} pending={false} onReject={() => {}} onApprove={() => {}} />);
 
 afterEach(() => {
+  cleanup();
   vi.unstubAllEnvs();
   vi.clearAllMocks();
 });
@@ -96,6 +100,21 @@ describe("seat device verification page", () => {
     // Disabled until a password is typed.
     expect(buttons[1]).toMatch(/disabled/);
     expect(html).toMatch(/<input[^>]*type="password"/);
+  });
+
+  it("rejects on Enter from the default focus, and Enter in the password field neither approves nor rejects", async () => {
+    const onReject = vi.fn();
+    const onApprove = vi.fn();
+    render(<SeatDeviceDecisionPanel lookup={LOOKUP} pending={false} onReject={onReject} onApprove={onApprove} />);
+    const user = userEvent.setup();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "拒绝" }));
+    await user.keyboard("{Enter}");
+    expect(onReject).toHaveBeenCalledTimes(1);
+    await user.type(screen.getByLabelText("授权前请再次输入登录密码"), "typed password{Enter}");
+    expect(onReject).toHaveBeenCalledTimes(1);
+    expect(onApprove).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "授权这台设备" }));
+    expect(onApprove).toHaveBeenCalledWith("typed password");
   });
 
   it.each(["/device", "/settings/seat-devices"])("refuses framing of %s", async (source) => {
