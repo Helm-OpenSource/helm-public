@@ -5,7 +5,8 @@
 // login of the account, and a locked login refuses a right one), a rotated
 // session approves nothing on its own, reject needs no password, the
 // cross-site guard runs before the session is read, no-store everywhere, and
-// a log probe that no password or pairing code reaches a log line.
+// a log probe that no password or pairing code reaches a log line. Then the
+// device list (own devices; OWNER/ADMIN the workspace's) and website revoke.
 //
 //   SEAT_DEVICE_DATABASE_URL=<disposable db> DATABASE_URL=<same>
 //   npm run test:seat-device:mysql   (sets SEAT_DEVICE_MYSQL_REQUIRED=1: a missing URL fails instead of skipping)
@@ -22,7 +23,7 @@ import { getLoginLockStatus } from "@/lib/auth/login-rate-limit.service";
 import { db } from "@/lib/db";
 import { hashSeatDeviceToken } from "@/lib/seat-device/contract";
 import { requestSeatDeviceAuthorization } from "@/lib/seat-device/store-authorize";
-import { handleSeatDeviceWebsiteRequest, type SeatDeviceWebsiteSession } from "@/lib/seat-device/website-routes";
+import { handleSeatDeviceWebsiteList, handleSeatDeviceWebsiteRequest, type SeatDeviceWebsiteSession } from "@/lib/seat-device/website-routes";
 
 const integrationDatabaseUrl = process.env.SEAT_DEVICE_DATABASE_URL;
 if (process.env.SEAT_DEVICE_MYSQL_REQUIRED === "1" && !integrationDatabaseUrl) {
@@ -63,13 +64,13 @@ describeMysql("seat device website pairing on MySQL", () => {
   let sessionReads = 0;
 
   type Member = { userId: string; email: string; session: SeatDeviceWebsiteSession };
-  async function member(providerType = "PASSWORD"): Promise<Member> {
+  async function member(providerType = "PASSWORD", role: WorkspaceRole = WorkspaceRole.OPERATOR): Promise<Member> {
     memberCount += 1;
     const email = `seat-website-${memberCount}-${suffix}@example.com`;
     const user = await db.user.create({
       data: { email, name: `坐席 ${memberCount}`, passwordHash: PASSWORD_HASH, passwordSetAt: new Date("2070-06-01T00:00:00.000Z") },
     });
-    await db.membership.create({ data: { workspaceId, userId: user.id, role: WorkspaceRole.OPERATOR, status: MembershipStatus.ACTIVE } });
+    await db.membership.create({ data: { workspaceId, userId: user.id, role, status: MembershipStatus.ACTIVE } });
     // Brand new, as a rotation leaves it: its age proves nothing.
     const authSession = await db.authSession.create({
       data: {
@@ -233,6 +234,59 @@ describeMysql("seat device website pairing on MySQL", () => {
     expect(await post(who, decision("approve", grant, { password: WRONG }), { "content-type": "text/plain" })).toEqual({ status: 400, body: errorOf("invalid_input") });
     expect(await loginFailures(who.email)).toBe(0);
     expect(await row(grant.requestId)).toMatchObject({ status: "pending", version: 0 });
+  });
+
+  async function approvedDevice(who: Member) {
+    const grant = await pending();
+    expect((await post(who, decision("approve", grant, { password: PASSWORD }))).status).toBe(200);
+    return grant.requestId;
+  }
+
+  async function list(who: Member | null) {
+    const answer = await handleSeatDeviceWebsiteList(async () => who?.session ?? null);
+    expect(answer.headers.get("cache-control")).toBe("no-store");
+    return { status: answer.status, body: await answer.json() };
+  }
+
+  it("lists a member's own bound devices; OWNER and ADMIN also see the workspace's", async () => {
+    nextDay();
+    const seat = await member();
+    const colleague = await member();
+    const admin = await member("PASSWORD", WorkspaceRole.ADMIN);
+    const own = await approvedDevice(seat);
+    const theirs = await approvedDevice(colleague);
+    const rejected = await pending();
+    await post(seat, decision("reject", rejected));
+    const mine = await list(seat);
+    expect(mine.status).toBe(200);
+    expect(mine.body.workspace).toBeNull();
+    expect(mine.body.mine).toEqual([
+      expect.objectContaining({ deviceId: own, deviceName: "前台电脑", clientVersion: "1.0.0", status: "approved", own: true, memberName: expect.any(String), revokedAt: null }),
+    ]);
+    const managed = await list(admin);
+    expect(managed.body.mine).toEqual([]);
+    const ids = managed.body.workspace.map((device: { deviceId: string }) => device.deviceId);
+    expect(ids).toEqual(expect.arrayContaining([own, theirs]));
+    expect(ids).not.toContain(rejected.requestId);
+    expect(await list(null)).toEqual({ status: 403, body: errorOf("reauthentication_required") });
+  });
+
+  it("revokes one's own device; another member's only as OWNER or ADMIN", async () => {
+    nextDay();
+    const seat = await member();
+    const colleague = await member();
+    const admin = await member("PASSWORD", WorkspaceRole.ADMIN);
+    const own = await approvedDevice(seat);
+    const theirs = await approvedDevice(colleague);
+    expect(await post(seat, { action: "revoke", deviceId: theirs })).toEqual({ status: 403, body: errorOf("forbidden") });
+    expect(await row(theirs)).toMatchObject({ status: "approved" });
+    expect(await post(seat, { action: "revoke", deviceId: own }, { origin: "https://phish.example" })).toEqual({ status: 403, body: errorOf("forbidden") });
+    expect(await post(seat, { action: "revoke", deviceId: own })).toEqual({ status: 200, body: { revoked: true } });
+    expect(await row(own)).toMatchObject({ status: "revoked", revokeReason: "self", revokedByUserId: seat.userId });
+    expect(await post(admin, { action: "revoke", deviceId: theirs })).toEqual({ status: 200, body: { revoked: true } });
+    expect(await row(theirs)).toMatchObject({ status: "revoked", revokeReason: "admin", revokedByUserId: admin.userId });
+    expect(await post(admin, { action: "revoke", deviceId: theirs })).toEqual({ status: 200, body: { revoked: false } });
+    expect((await list(seat)).body.mine).toEqual([expect.objectContaining({ deviceId: own, status: "revoked", revokeReason: "self" })]);
   });
 
   it("answers 404 with no body while the deployment switch is off, for every method", async () => {

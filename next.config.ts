@@ -32,7 +32,7 @@ const nextConfig: NextConfig = {
     ];
     return [
       ...["/activate-member", "/settings/member-activation"].map(source => ({ source, headers: privatePage })),
-      { source: "/device", headers: [...privatePage, ...noFraming] },
+      ...["/device", "/settings/seat-devices"].map(source => ({ source, headers: [...privatePage, ...noFraming] })),
     ];
   },
   generateBuildId: releaseBuildId ? async () => releaseBuildId : undefined,

@@ -14,6 +14,7 @@ import {
   SeatDeviceDecisionPanel,
   type SeatDeviceLookupView,
 } from "@/features/seat-device/device-confirm-client";
+import { SeatDeviceTable, type SeatDeviceListItem } from "@/features/seat-device/seat-devices-client";
 
 const LOOKUP: SeatDeviceLookupView = {
   requestId: "req1",
@@ -59,15 +60,28 @@ describe("seat device verification page", () => {
     expect(html).toMatch(/<input[^>]*type="password"/);
   });
 
-  it("refuses framing of /device", async () => {
+  it.each(["/device", "/settings/seat-devices"])("refuses framing of %s", async (source) => {
     const rules = (await nextConfig.headers?.()) ?? [];
-    const device = rules.find((rule) => rule.source === "/device");
-    expect(device?.headers).toEqual(
+    const page = rules.find((rule) => rule.source === source);
+    expect(page?.headers).toEqual(
       expect.arrayContaining([
         { key: "X-Frame-Options", value: "DENY" },
         { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
         { key: "Cache-Control", value: "no-store, private" },
       ]),
     );
+  });
+
+  it("offers revoke only on a live device in the device list", () => {
+    const base: SeatDeviceListItem = {
+      deviceId: "d1", deviceName: "前台电脑", clientVersion: "1.0.0", status: "active", memberName: "坐席", own: true,
+      approvedAt: null, approvalSource: null, lastUsedAt: null, expiresAt: null, revokedAt: null, revokeReason: null,
+    };
+    const table = (devices: SeatDeviceListItem[]) =>
+      renderToStaticMarkup(<SeatDeviceTable devices={devices} showMember={false} pending={false} onRevoke={() => {}} />);
+    expect(table([base, { ...base, deviceId: "d2", status: "approved" }]).match(/>撤销</g)).toHaveLength(2);
+    const revoked = table([{ ...base, status: "revoked", revokeReason: "admin" }, { ...base, deviceId: "d3", status: "expired" }]);
+    expect(revoked).not.toContain(">撤销<");
+    expect(revoked).toContain("已撤销：管理员撤销");
   });
 });

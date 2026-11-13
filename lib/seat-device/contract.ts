@@ -336,12 +336,13 @@ export const SEAT_DEVICE_DECISION_REQUEST_SCHEMA = z
   .strict();
 
 // Website (member session) actions on /api/settings/seat-devices (design
-// §4.3). Approve carries the password: it is verified and the device approved
+// §4.3); the device list is its GET. Approve carries the password: it is verified and the device approved
 // in the same request, so no proof of it is ever stored or sent back.
 export const SEAT_DEVICE_WEBSITE_ACTION_SCHEMA = z.discriminatedUnion("action", [
   z.object({ action: z.literal("lookup"), pairingCode: pairingCodeSchema }).strict(),
   z.object({ action: z.literal("approve"), requestId: requestIdSchema, pairingCode: pairingCodeSchema, password: z.string().min(1).max(256) }).strict(),
   z.object({ action: z.literal("reject"), requestId: requestIdSchema, pairingCode: pairingCodeSchema }).strict(),
+  z.object({ action: z.literal("revoke"), deviceId: requestIdSchema }).strict(),
 ]);
 export type SeatDeviceWebsiteAction = z.infer<typeof SEAT_DEVICE_WEBSITE_ACTION_SCHEMA>;
 
