@@ -12,8 +12,8 @@
  * This is a whole-tree invariant, not a PR diff: it holds on pull requests and on
  * pushes to main alike. The baseline (`scripts/upgrade-notes-baseline.json`)
  * lists the migrations that existed when the guard landed; it may only shrink
- * (a backfilled note removes its entry). Adding a new migration to the baseline
- * instead of writing a note is not caught here and must be refused in review.
+ * (a backfilled note removes its entry); entry count and a name cutoff are capped.
+ * A new name slipped in before the cutoff is not caught here and must be refused in review.
  *
  * Notes are public: they carry generic MySQL facts only. Deployment facts,
  * production measurements and approvals belong in each deployment's private
@@ -29,6 +29,9 @@ export const MIGRATIONS_DIR = "prisma/migrations";
 export const NOTES_DIR = "prisma/upgrade-notes";
 export const BASELINE_PATH = "scripts/upgrade-notes-baseline.json";
 const GUIDE_PATH = "prisma/upgrade-notes/README.md";
+// The baseline was frozen at the main head where this guard landed: it may shrink, never grow or reach past it.
+export const BASELINE_MAX_ENTRIES = 104;
+export const BASELINE_CUTOFF = "20261112130000_billing_topup_order_query_throttle";
 
 const nonEmpty = z.string().trim().min(1);
 const bilingual = z.strictObject({ zh: nonEmpty, en: nonEmpty });
@@ -136,6 +139,11 @@ function readBaseline(repoRoot: string): {
   if (sortedUnique.length !== list.length || sortedUnique.some((name, i) => name !== list[i])) {
     return invalid("migrations must be sorted and unique");
   }
+  if (list.length > BASELINE_MAX_ENTRIES) {
+    return invalid(`at most ${BASELINE_MAX_ENTRIES} entries; the baseline only shrinks`);
+  }
+  const late = list.find((name) => name > BASELINE_CUTOFF);
+  if (late) return invalid(`${late} sorts after the frozen cutoff ${BASELINE_CUTOFF}; write a note instead`);
   return { migrations: new Set(list), violations: [] };
 }
 

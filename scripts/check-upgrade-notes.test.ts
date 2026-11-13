@@ -4,7 +4,14 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { analyzeUpgradeNotes, BASELINE_PATH, MIGRATIONS_DIR, NOTES_DIR } from "./check-upgrade-notes";
+import {
+  analyzeUpgradeNotes,
+  BASELINE_CUTOFF,
+  BASELINE_MAX_ENTRIES,
+  BASELINE_PATH,
+  MIGRATIONS_DIR,
+  NOTES_DIR,
+} from "./check-upgrade-notes";
 
 const roots: string[] = [];
 
@@ -12,7 +19,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-const OLD = "20990101000000_example_old_change";
+const OLD = "20200101000000_example_old_change";
 const NEW = "20990102000000_example_new_change";
 
 function write(root: string, relativePath: string, content: string): void {
@@ -115,6 +122,11 @@ describe("check-upgrade-notes", () => {
     ["a rollback path outside prisma/rollback", validNote({ rollback: { kind: "sql", path: "scripts/rollback.sql" } })],
     ["a rollback path that climbs directories", validNote({ rollback: { kind: "sql", path: "prisma/rollback/../x.sql" } })],
     ["a lower-case env key", validNote({ env: [{ key: "lower_key", codeDefault: "", enablePrerequisites: [] }] })],
+    ["an unknown key inside a bilingual text", validNote({ summary: { zh: "摘要", en: "Summary", fr: "Résumé" } })],
+    ["an unknown key in a sql rollback", validNote({ rollback: { kind: "sql", path: "prisma/rollback/20990102_rollback_example_new_change.sql", note: "x" } })],
+    ["an unknown key in a forward-only rollback", validNote({ rollback: { kind: "forward-only", reason: { zh: "只新增数据。", en: "Data only." }, path: "x" } })],
+    ["an unknown key in an env entry", validNote({ env: [{ key: "HELM_EXAMPLE", codeDefault: "false", enablePrerequisites: [], productionValue: "true" }] })],
+    ["an illegal table name", validNote({ ddl: [{ table: "bad-name;", existingTable: true, algorithm: "INPLACE", lock: "NONE", rebuild: false }] })],
     ["a missing env list", (() => { const note = validNote(); delete note.env; return note; })()],
   ])("rejects %s as invalid-format", (_label, note) => {
     const root = fixture();
@@ -150,6 +162,7 @@ describe("check-upgrade-notes", () => {
   it.each([
     ["CREATE on an existing table", { table: "T", existingTable: true, algorithm: "CREATE", lock: "NONE", rebuild: false }],
     ["COPY without rebuild", { table: "T", existingTable: true, algorithm: "COPY", lock: "SHARED", rebuild: false }],
+    ["INSTANT with a rebuild", { table: "T", existingTable: true, algorithm: "INSTANT", lock: "NONE", rebuild: true }],
     ["INSTANT with a lock", { table: "T", existingTable: true, algorithm: "INSTANT", lock: "SHARED", rebuild: false }],
   ])("rejects %s as inconsistent-ddl", (_label, entry) => {
     const root = fixture();
@@ -173,7 +186,7 @@ describe("check-upgrade-notes", () => {
 
   it("rejects a baseline entry without a migration directory", () => {
     const root = fixture({
-      baseline: { schema: "helm.upgrade-note-baseline/v1", note: "fixture", migrations: ["20980101000000_gone", OLD] },
+      baseline: { schema: "helm.upgrade-note-baseline/v1", note: "fixture", migrations: ["20190101000000_gone", OLD] },
     });
     writeNote(root, validNote());
     expect(rules(root)).toEqual(["upgrade-notes:baseline-stale"]);
@@ -190,6 +203,15 @@ describe("check-upgrade-notes", () => {
     ["unsorted", { schema: "helm.upgrade-note-baseline/v1", note: "fixture", migrations: [NEW, OLD] }],
     ["duplicated", { schema: "helm.upgrade-note-baseline/v1", note: "fixture", migrations: [OLD, OLD] }],
     ["an unknown key", { schema: "helm.upgrade-note-baseline/v1", note: "fixture", migrations: [OLD], extra: 1 }],
+    ["a past-cutoff", { schema: "helm.upgrade-note-baseline/v1", note: "fixture", migrations: [OLD, `${BASELINE_CUTOFF}_later`] }],
+    [
+      "an oversized",
+      {
+        schema: "helm.upgrade-note-baseline/v1",
+        note: "fixture",
+        migrations: Array.from({ length: BASELINE_MAX_ENTRIES + 1 }, (_, i) => `2019${String(i).padStart(10, "0")}_x`),
+      },
+    ],
   ])("rejects a %s baseline and then treats every migration as unbaselined", (_label, baseline) => {
     const root = fixture({ baseline });
     writeNote(root, validNote());

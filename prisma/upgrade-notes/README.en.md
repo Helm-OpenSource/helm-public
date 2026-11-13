@@ -90,5 +90,7 @@ above; review still checks each note.
 
 `scripts/upgrade-notes-baseline.json` lists the migrations that existed on main when this check landed; they do not
 need a note yet. The baseline **only shrinks**: when backfilling a note for an existing migration, delete its entry
-in the same PR. Never add a new migration to the baseline to bypass the check; the check cannot catch that edit and
-review must refuse it.
+in the same PR. Never add a new migration to the baseline to bypass the check; two hard limits back this up: at most 104
+entries (the count when the guard landed), and no entry may sort after the cutoff
+`20261112130000_billing_topup_order_query_throttle`. Slipping a new name in before the cutoff still has to be refused
+in review.
