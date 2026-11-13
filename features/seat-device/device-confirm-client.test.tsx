@@ -14,6 +14,7 @@ vi.mock("next/navigation", () => navigation);
 vi.mock("@/lib/auth/session", () => session);
 
 import SeatDeviceVerificationPage from "@/app/(workspace)/device/page";
+import SeatDevicesPage from "@/app/(workspace)/settings/seat-devices/page";
 import { withLoginCallback } from "@/lib/auth/login-callback";
 import { shouldRedirectMissingWorkspaceSession } from "@/lib/auth/workspace-route-guard";
 import nextConfig from "@/next.config";
@@ -50,6 +51,15 @@ describe("seat device verification page", () => {
     expect(session.getCurrentWorkspaceSession).not.toHaveBeenCalled();
     vi.stubEnv("HELM_SEAT_DEVICE_AUTH_ENABLED", "true");
     expect(renderToStaticMarkup(await SeatDeviceVerificationPage())).toContain(SEAT_DEVICE_PHISHING_WARNING);
+    expect(session.getCurrentWorkspaceSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the device list page absent while the deployment switch is off", async () => {
+    vi.stubEnv("HELM_SEAT_DEVICE_AUTH_ENABLED", "false");
+    await expect(SeatDevicesPage()).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(session.getCurrentWorkspaceSession).not.toHaveBeenCalled();
+    vi.stubEnv("HELM_SEAT_DEVICE_AUTH_ENABLED", "true");
+    expect(renderToStaticMarkup(await SeatDevicesPage())).toContain("坐席客户端设备");
     expect(session.getCurrentWorkspaceSession).toHaveBeenCalledTimes(1);
   });
 
