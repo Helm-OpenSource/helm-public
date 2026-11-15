@@ -2,7 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { availableCreditFen, CreditFacilityRefusal, drawCreditShortfallInTransaction } from "../credit/credit-facilities";
-import { chargeOperationKey, claimOverdraftChannel, FundsRefusal, postFundsTransactionInTransaction,
+import { FundsRefusal, postSettleChargeFundsInTransaction,
   settleDrawSourceRef } from "../funds/funds-journal";
 import { MAX_FEN } from "../funds/money";
 import { resolvePayerForWorkspaceInTransaction } from "../payer/payer-accounts";
@@ -59,8 +59,6 @@ export async function asBillingResult<T extends object>(work: Promise<T>): Promi
 }
 
 const ZERO = BigInt(0);
-// C-OD: this module holds the only overdraft posting channel (funds-journal.ts); claimed once, at load.
-const drawOverdraftShortfall = claimOverdraftChannel();
 const RELEASE_REASONS = ["not_executed", "failed", "partial_unusable"] as const;
 export type ReleaseReasonCode = (typeof RELEASE_REASONS)[number];
 /** The authenticated service identity (BillingServiceGrant in S3-b3); never a user. */
@@ -109,8 +107,8 @@ export type ReserveRequest = { idempotencyKey: string; operationRef: string;
   expectedMode?: Mode;
   /**
    * C-OD (v3.10 clause 1): `post_delivery` reserves work already delivered, so the funds check is skipped (mode, binding, grant,
-   * limits and price still apply) and only such a reservation's settle overdraws its tail (never refused by the soft limit). The route admits it only for a service
-   * grant holding the `reserve-post-delivery` scope. Part of the content hash when present.
+   * limits and price still apply) and only such a reservation's settle overdraws its tail (never refused by the soft limit). The
+   * internal route does not accept this field in this slice (strict shape: request_invalid). Part of the content hash when present.
    */
   admission?: "post_delivery" };
 
@@ -216,7 +214,7 @@ async function reserveInTransaction(tx: Prisma.TransactionClient, actor: Service
     return { day: used(buckets[0]), month: used(buckets[1]) };
   });
   const { grant, chargeFen, billingMode } = admitted;
-  if (billingMode === "enforce" && !postDelivery) { // post_delivery: already delivered, settle overdraws within the limit
+  if (billingMode === "enforce" && !postDelivery) { // post_delivery: already delivered; settle records any tail as overdraft
     // Non-locking reads: every hold and wallet writer holds this PayerAccount lock, so each read (READ COMMITTED) is
     // current; FOR SHARE range locks here deadlocked first reserves across payers. Callers must not read before calling.
     const [{ held }] = await tx.$queryRaw<Array<{ held: bigint }>>`SELECT CAST(COALESCE(SUM(chargeFen), 0) AS SIGNED) AS held
@@ -386,14 +384,10 @@ async function settleFrom(tx: Prisma.TransactionClient, actor: ServiceActor, req
     const postDelivery = reservation.admission === "post_delivery";
     await drawCreditShortfallInTransaction(tx, { payerAccountId: reservation.payerAccountId, chargeFen,
       sourceRef: settleDrawSourceRef(reservation.id), actor, reservedAt: reservation.reservedAt, upToAvailable: postDelivery });
-    if (postDelivery) await drawOverdraftShortfall(tx, { payerAccountId: reservation.payerAccountId,
-      reservationId: reservation.id, chargeFen, actor });
   }
-  const funds = !posting ? null : await postFundsTransactionInTransaction(tx, {
-    payerAccountId: reservation.payerAccountId, kind: "charge", operationKey: chargeOperationKey(reservation.id), actor,
-    evidenceRef: req.evidenceRef, entries: [{ account: "customer_wallet_available", direction: "debit", amountFen: chargeFen },
-      { account: "charge_revenue", direction: "credit", amountFen: chargeFen }] });
-  if (funds?.replayed) invariantBreach(); // a charge posting exists for an unsettled reservation
+  // One funds call posts the post_delivery overdraft (if any) and the charge together; it refuses a recorded one (replays above).
+  const funds = !posting ? null : await postSettleChargeFundsInTransaction(tx, { payerAccountId: reservation.payerAccountId,
+    reservationId: reservation.id, chargeFen, actor, evidenceRef: req.evidenceRef });
   const charge = await tx.billingCharge.create({ data: { reservationId: reservation.id, payerAccountId: reservation.payerAccountId,
     grantId: reservation.grantId, operationRef: reservation.operationRef, idempotencyKey: req.idempotencyKey,
     billingMode: reservation.billingMode, fundsTransactionId: funds?.transaction.id ?? null, priceVersionId: reservation.priceVersionId, priceContentHash: reservation.priceContentHash,

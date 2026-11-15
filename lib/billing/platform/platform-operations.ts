@@ -15,8 +15,8 @@ import { changeSpendGrantInTransaction, createSpendGrantInTransaction, normalize
  * Lock order: finance grant + reserved Membership (share) -> PayerAccount FOR UPDATE -> PlatformBillingOperation FOR UPDATE ->
  * PayerScopeBinding (share). Switching to `enforce` is not enablement: real charging has separate prerequisites (docs).
  * E1b adds `price_publish` (append a price version; never 0) and `spend_grant` (create -> set_limits -> activate on approval).
- * C-OD adds `overdraft_limit`: a CAS on the payer's overdraft soft limit (fen; 0, the default, gives no overdraft headroom). It
- * never refuses a settle: it only sizes headroom and the overLimit flag. Lowering it below what is already overdrawn is allowed.
+ * C-OD adds `overdraft_limit`: a CAS on the payer's overdraft soft limit (fen; 0, the default = not configured, no overdraft room).
+ * It never refuses a settle: it only sizes the separate overdraft room and the overLimit flag. Lowering it below the overdraft is allowed.
  */
 export type PlatformBillingMode = "off" | "shadow" | "enforce";
 export type PlatformOperationRequest =

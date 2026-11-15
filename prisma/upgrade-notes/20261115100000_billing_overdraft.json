@@ -76,8 +76,8 @@
       "en": "Check that every PayerAccount.overdraftLimitFen is 0 (not configured, no overdraft room), FundsTransaction.kind ends with overdraft_draw, and existing reservations are standard."
     },
     {
-      "zh": "上表的算法与锁为 MySQL 8.0 的预期行为，未实测。生产启用前置：binlog_format=ROW，具备建触发器权限（或 log_bin_trust_function_creators=1）。",
-      "en": "The algorithms and locks above are expected MySQL 8.0 behaviour, not measured. Production prerequisites: binlog_format=ROW and trigger privileges (or log_bin_trust_function_creators=1)."
+      "zh": "上表的算法与锁为 MySQL 8.0 的预期行为，未实测。生产启用前置：binlog_format=ROW；必须具备建触发器权限；binlog 开启且无 SUPER 时还须另设 log_bin_trust_function_creators=1（不能替代该权限）。",
+      "en": "The algorithms and locks above are expected MySQL 8.0 behaviour, not measured. Production prerequisites: binlog_format=ROW and the TRIGGER privilege; with binary logging on and no SUPER, also log_bin_trust_function_creators=1 (it never replaces the privilege)."
     }
   ]
 }

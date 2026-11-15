@@ -15,9 +15,8 @@ import type { BillingRejectCode, ServiceActor } from "../reservations/reservatio
  * - overdraftRoom (C-OD) = max(0, overdraftLimitFen - overdraftUsed): what post-delivery work may still overdraw. Never negative,
  *   so an overdraft over its soft limit never eats wallet or credit; reported separately, never part of headroom;
  * - overLimit (C-OD, Q9): overdraftUsed > overdraftLimitFen (with no limit configured, any overdraft at all);
- * - arrears: stop new billable work. Two causes, reported as arrearsReason: "funds" when headroom <= 0 (Q8: effective
- *   headroom + overdraftRoom at or below zero; owner ruling: overdraw up to the limit, then stop) or overLimit (Q9: stop at
- *   once), "payer_inactive" when an enforce payer is suspended or closed (coordinator 11-12): Core
+ * - arrears: stop new billable work. Two causes, reported as arrearsReason: "funds" when headroom + overdraftRoom <= 0 (Q8;
+ *   owner ruling: overdraw up to the limit, then stop) or overLimit (Q9: stop at once), "payer_inactive" when an enforce payer is suspended or closed (coordinator 11-12): Core
  *   refuses its new reserves, so work would run unbilled. payer_inactive wins when both hold; null when not in arrears.
  * creditUsed is the credit_receivable projection, so a revoked or expired facility's outstanding draws still count.
  * overdraftUsed is the overdraft_receivable projection (C-OD post-delivery settle tails).
