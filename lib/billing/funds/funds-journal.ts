@@ -250,12 +250,13 @@ export async function settlingReservationInTransaction(tx: Prisma.TransactionCli
   return row ? { reservedAt: row.reservedAt, chargeFen: BigInt(row.chargeFen) } : null;
 }
 
-/** Σ chargeFen of the payer's enforce held/unknown reservations: the `held` of reserve admission (and of balance-status). A plain
- * read, current only under READ COMMITTED (or before any earlier consistent read) while the PayerAccount lock is held, which
- * every hold writer takes first. */
-export async function heldEnforceFenInTransaction(tx: Prisma.TransactionClient, payerAccountId: string) {
+/** Σ chargeFen of the payer's enforce held/unknown reservations: the `held` of reserve admission (and of balance-status), read
+ * while the PayerAccount lock is held (every hold writer takes it first). Plain, it is current only under READ COMMITTED (or before
+ * any earlier consistent read); `forShare` makes it a locking read, which reads the latest committed rows in any isolation level. */
+export async function heldEnforceFenInTransaction(tx: Prisma.TransactionClient, payerAccountId: string, forShare = false) {
   const [{ held }] = await tx.$queryRaw<Array<{ held: bigint }>>`SELECT CAST(COALESCE(SUM(chargeFen), 0) AS SIGNED) AS held
-    FROM BillingReservation WHERE payerAccountId = ${payerAccountId} AND billingMode = 'enforce' AND state IN ('held', 'unknown')`;
+    FROM BillingReservation WHERE payerAccountId = ${payerAccountId} AND billingMode = 'enforce' AND state IN ('held', 'unknown')
+    ${forShare ? Prisma.sql`FOR SHARE` : Prisma.empty}`;
   return BigInt(held);
 }
 
@@ -270,9 +271,9 @@ export function isRetryableFundsConflict(error: unknown) {
 
 /** Runs a money transaction with a bounded retry on those conflicts; when attempts run out it refuses `funds_write_conflict`. */
 export async function runFundsTransactionWithRetry<T>(client: PrismaClient, run: (tx: Prisma.TransactionClient) => Promise<T>,
-  attempts = 3): Promise<T> {
+  attempts = 3, isolationLevel?: Prisma.TransactionIsolationLevel): Promise<T> {
   for (let attempt = 1; ; attempt += 1) {
-    try { return await client.$transaction(run, { maxWait: 5000, timeout: 10000 }); } catch (error) {
+    try { return await client.$transaction(run, { maxWait: 5000, timeout: 10000, isolationLevel }); } catch (error) {
       if (!isRetryableFundsConflict(error)) throw error;
       if (attempt >= attempts) refuse("funds_write_conflict");
       await new Promise(resolve => setTimeout(resolve, 5 * attempt + Math.floor(Math.random() * 10)));

@@ -1,15 +1,18 @@
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readPayerBalanceSummaries } from "../balance/balance-status";
-import { grantPlatformFinanceRole } from "../bank-receipts/bank-receipts";
+import { draftBankReceipt, grantPlatformFinanceRole, reviewBankReceipt } from "../bank-receipts/bank-receipts";
 import { heldEnforceFenInTransaction, postFundsTransactionInTransaction, recomputeFundsProjection,
   reverseFundsTransactionInTransaction } from "../funds/funds-journal";
 import { changeSpendGrant, createSpendGrant, publishPriceVersion } from "../grants/price-grants";
 import { bindScope, createPayerAccount } from "../payer/payer-accounts";
-import { reserve as reserveSpend, settle as settleSpend } from "../reservations/reservations";
+import { releaseInTransaction, reserve as reserveSpend, settle as settleSpend } from "../reservations/reservations";
+import { settleTopupNotify } from "../topup/notify-entry";
+import type { WeChatPayTransaction } from "../topup/provider-observation";
+import { createTopupOrder, defineTopupProviderAdapter, verifyTopupCallback } from "../topup/topup-orders";
 import { changeCreditFacility, drawCreditShortfallInTransaction, proposeCreditFacility } from "./credit-facilities";
 import { repayArrearsFromInflowInTransaction } from "./inflow-repay";
 
@@ -120,7 +123,7 @@ describe.skipIf(!url)("inflow repayment against MySQL (C-REPAY)", () => {
       billingEventRef: "service-billing-event-v1:synthetic", meterUnit: "document", quantity: String(documents),
       ...(admission === "post_delivery" ? { admission } : {}) });
     if (!held.ok) throw new Error(held.code);
-    return { settle: (client: PrismaClient = a) => settleSpend(client, service, { idempotencyKey: `idem:set:${key}`,
+    return { reservationId: held.reservationId, key, settle: (client: PrismaClient = a) => settleSpend(client, service, { idempotencyKey: `idem:set:${key}`,
       reservationId: held.reservationId, operationRef: `ref:${key}`, quantityUsed: String(documents), evidenceRef: "acceptance:usable" }) };
   }
   /** Real post_delivery reserve + settle: what wallet and credit cannot cover is recorded as overdraft (C-OD). */
@@ -137,7 +140,7 @@ describe.skipIf(!url)("inflow repayment against MySQL (C-REPAY)", () => {
   };
   const inflow = (payerAccountId: string, amount: number, kind: "topup" | "bank_topup" = "topup", client: PrismaClient = a) =>
     client.$transaction(tx => inflowTx(tx, payerAccountId, amount, kind), { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
-  /** Pre-C-REPAY inflow (no repayment): how a wallet > 0 with debts can exist today. */
+  /** Pre-C-REPAY inflow (no repayment): how a spendable wallet beside debts can exist today. */
   const legacyTopup = (payerAccountId: string, amount: number) => a.$transaction(tx => postFundsTransactionInTransaction(tx, { payerAccountId,
     kind: "topup", operationKey: `topup:legacy:${(seq += 1)}`, actor: VERIFIER, evidenceRef: "inflow:legacy",
     entries: [{ account: "topup_clearing", direction: "debit", amountFen: fen(amount) }, { account: "customer_wallet_available", direction: "credit", amountFen: fen(amount) }] }));
@@ -147,7 +150,7 @@ describe.skipIf(!url)("inflow repayment against MySQL (C-REPAY)", () => {
     return { wallet: of("customer_wallet_available"), credit: of("credit_receivable"), overdraft: of("overdraft_receivable") };
   };
   const used = async (facilityId: string) => (await a.creditFacility.findUniqueOrThrow({ where: { id: facilityId } })).usedFen;
-  /** Reconciliation: the journal rebuilds every projection, credit_receivable = Σ usedFen (S5), and wallet > 0 implies no debt. */
+  /** Reconciliation: the journal rebuilds every projection, credit_receivable = Σ usedFen (S5), and wallet - held > 0 implies no debt. */
   async function books(payerAccountId: string) {
     const report = await a.$transaction(tx => recomputeFundsProjection(tx, payerAccountId));
     expect(report.consistent).toBe(true);
@@ -303,7 +306,8 @@ describe.skipIf(!url)("inflow repayment against MySQL (C-REPAY)", () => {
   });
 
   /** Holds the payer row on a third connection until `start`'s transactions are distinct waiters on that very row lock (bounded). */
-  async function contended<T>(payerAccountId: string, start: () => Array<Promise<T>>) {
+  async function contended<T>(payerAccountId: string, start: () => Array<Promise<T>>,
+    whileHeld?: (tx: Prisma.TransactionClient) => Promise<unknown>) {
     let pending: Array<Promise<T>> = [];
     await a.$transaction(async tx => {
       await tx.$queryRaw`SELECT id FROM PayerAccount WHERE id = ${payerAccountId} FOR UPDATE`;
@@ -316,6 +320,7 @@ describe.skipIf(!url)("inflow repayment against MySQL (C-REPAY)", () => {
         if (Date.now() > deadline) throw new Error("rendezvous_timeout");
         await sleep(20);
       }
+      await whileHeld?.(tx); // committed before the waiters get the lock
     }, { timeout: 15_000 });
     return Promise.all(pending);
   }
@@ -375,5 +380,150 @@ describe.skipIf(!url)("inflow repayment against MySQL (C-REPAY)", () => {
       "rollback refused: repayment rows exist; fix forward"]);
     expect(await fires(later.condition)).toBe(0);
     expect(await fires(rows.condition)).toBe(1); // the cases above recorded repayments
+  });
+
+  it("reads held current under the payer lock even in a REPEATABLE READ transaction with an older snapshot (part 2)", async () => {
+    // Over-repay counterexample (review r2 F): wallet 10000, closed facility owing 10000; a hold of 10000 commits after the inflow's
+    // snapshot. A stale held of 0 would repay 10000; the locking read sees the hold and repays only the spendable 1.
+    const p = await payer(), line = await facility(p.payerAccountId, 10_000);
+    await borrow(p.payerAccountId, 10_000); await close(line.id, "revoke"); await legacyTopup(p.payerAccountId, 10_000);
+    const paid = await a.$transaction(async tx => {
+      await tx.$queryRaw`SELECT COUNT(*) AS n FROM BillingReservation WHERE payerAccountId = ${p.payerAccountId}`; // snapshot now
+      await hold(p, 100); // another transaction holds 10000 and commits
+      return inflowTx(tx, p.payerAccountId, 1);
+    }, { timeout: 15_000 }); // the default isolation level, REPEATABLE READ
+    expect(paid.repayment).toMatchObject({ creditRepaid: [{ facilityId: line.id, amountFen: fen(1) }] });
+    expect(await books(p.payerAccountId)).toEqual({ wallet: fen(10_000), credit: fen(9_999), overdraft: fen(0) });
+  });
+
+  // Synthetic provider IO for the real top-up entry: an HMAC with a per-run key stands in for the provider signature. No network.
+  const syntheticKey = randomUUID(), sign = (body: string) => createHmac("sha256", syntheticKey).update(body).digest("hex");
+  const wechat = (body: WeChatPayTransaction) => defineTopupProviderAdapter("wechat_pay", {
+    refs: mch => (mch === "mch-syn" ? { merchantRef: "merchant:synthetic", appRef: "app:synthetic" } : null),
+    verifyCallback: async ({ headers, rawBody }) => {
+      if (headers["x-signature"] !== sign(rawBody)) throw new Error("synthetic_signature_invalid");
+      return JSON.parse(rawBody) as WeChatPayTransaction;
+    }, queryOrder: async () => body });
+  async function paidCallback(ids: Ids, yuan: number) {
+    const order = await createTopupOrder(a, { actorUserId: owner, workspaceId: ids.workspaceId, provider: "wechat_pay", amountFen: fen(yuan * 100),
+      merchantRef: "merchant:synthetic", appRef: "app:synthetic" });
+    const body: WeChatPayTransaction = { mchid: "mch-syn", appid: "app-syn", out_trade_no: order.providerOrderNo, trade_state: "SUCCESS",
+      transaction_id: `wx-${order.providerOrderNo.slice(4, 24)}`, amount: { total: yuan * 100, currency: "CNY" } };
+    const rawBody = JSON.stringify(body), request = { headers: { "x-signature": sign(rawBody) }, rawBody };
+    return { order, body, send: (client: PrismaClient = a) => verifyTopupCallback(client, wechat(body), request),
+      notify: (alerts: string[]) => settleTopupNotify(a, wechat(body), request, reason => alerts.push(reason)) };
+  }
+  const exceptionRows = (key: string) => a.billingOutbox.count({ where: { aggregateType: "PaymentException", eventType: "payment_exception", aggregateId: key } });
+
+  it("repays through the real top-up entry once; concurrent and repeated callbacks replay; a broken invariant is kept and retried", async () => {
+    const p = await payer(), line = await facility(p.payerAccountId, 30_000);
+    await borrow(p.payerAccountId, 25_000);
+    const first = await paidCallback(p, 100);
+    const pair = await Promise.all([first.send(a), first.send(b)]); // the same inflow twice at once: one credit, one replay
+    expect(pair.map(r => r.outcome).sort()).toEqual(["credited", "replayed"]);
+    expect((await first.send()).outcome).toBe("replayed");
+    const rows = await repayRows(p.payerAccountId);
+    expect(rows.map(row => [row.kind, row.operationKey, row.createdBy])).toEqual([["credit_repay",
+      `credit-repay:${pair.find(r => r.outcome === "credited")!.fundsTransactionId}:${line.id}`, "SYSTEM:billing-topup-verifier"]]);
+    expect(await books(p.payerAccountId)).toEqual({ wallet: fen(0), credit: fen(15_000), overdraft: fen(0) });
+    // S5 broken by a direct write: the credit is refused with a fixed code, a `repay_invariant_breach` exception is kept once per
+    // provider transaction, and the notify is not acknowledged (503) so the provider retries; after the repair a retry credits.
+    await a.$executeRaw`UPDATE CreditFacility SET usedFen = usedFen - 1 WHERE id = ${line.id}`;
+    const second = await paidCallback(p, 100), alerts: string[] = [];
+    expect(await second.notify(alerts)).toEqual({ acknowledged: false, status: 503 });
+    expect(await second.notify(alerts)).toEqual({ acknowledged: false, status: 503 });
+    expect(alerts).toEqual(["topup_repay_invariant_breach", "topup_repay_invariant_breach"]);
+    expect(await exceptionRows(`repay_invariant_breach:wechat_pay:${second.body.transaction_id}`)).toBe(1);
+    expect((await a.paymentOrder.findUniqueOrThrow({ where: { id: second.order.id } })).state).not.toBe("paid_verified");
+    await a.$executeRaw`UPDATE CreditFacility SET usedFen = usedFen + 1 WHERE id = ${line.id}`; // repair (draw shape)
+    expect(await second.notify(alerts)).toEqual({ acknowledged: true, status: 200 });
+    expect(await books(p.payerAccountId)).toEqual({ wallet: fen(0), credit: fen(5_000), overdraft: fen(0) });
+  });
+
+  it("uses the held value committed while the real entry waited on the payer lock (under-repay counterexample)", async () => {
+    // Wallet 10000, a closed facility owing 20000, a hold of 10000. The hold is released while the callback, past its pre-lock reads,
+    // waits on the payer lock: the repayment must see held 0 and repay 20000 (a stale held of 10000 would repay only 10000).
+    const p = await payer(), line = await facility(p.payerAccountId, 20_000);
+    await borrow(p.payerAccountId, 20_000); await close(line.id, "revoke"); await legacyTopup(p.payerAccountId, 10_000);
+    const funded = await hold(p, 100), topup = await paidCallback(p, 100);
+    const [result] = await contended(p.payerAccountId, () => [topup.send(b)], tx => releaseInTransaction(tx, service, {
+      idempotencyKey: `idem:rel:${funded.key}`, reservationId: funded.reservationId, operationRef: `ref:${funded.key}`, reasonCode: "failed",
+      evidenceRef: "claim:failed" }));
+    expect(result.outcome).toBe("credited");
+    expect((await repayRows(p.payerAccountId)).map(row => row.entries.find(e => e.account === "credit_receivable")!.amountFen)).toEqual([fen(20_000)]);
+    expect(await books(p.payerAccountId)).toEqual({ wallet: fen(0), credit: fen(0), overdraft: fen(0) });
+  });
+
+  it("repays through the real bank-receipt approval, and names the refusal when the invariant is broken", async () => {
+    const p = await payer(), line = await facility(p.payerAccountId, 1000);
+    await borrow(p.payerAccountId, 300);
+    const env = { HELM_BILLING_BANK_RECEIVING_ACCOUNTS: JSON.stringify(["recv:synthetic-1"]) };
+    const receipt = (amount: number) => draftBankReceipt(a, { actorUserId: maker, payerAccountId: p.payerAccountId, receivingAccountRef: "recv:synthetic-1",
+      bankTxnRef: `bank-${run}-${(seq += 1)}`, amountFen: fen(amount), valueDate: "2026-11-15", evidenceRef: "bank-statement:synthetic" }, env);
+    const approve = (receiptId: string) => reviewBankReceipt(a, { actorUserId: checker, receiptId, decision: "approve", expectedVersion: 1,
+      evidenceRef: "review:approve" });
+    await approve((await receipt(200)).id);
+    expect((await repayRows(p.payerAccountId)).map(row => [row.kind, row.createdBy])).toEqual([["credit_repay", `USER:${checker}`]]);
+    expect(await books(p.payerAccountId)).toEqual({ wallet: fen(0), credit: fen(100), overdraft: fen(0) });
+    await a.$executeRaw`UPDATE CreditFacility SET usedFen = usedFen - 1 WHERE id = ${line.id}`;
+    const refused = await receipt(500);
+    await expect(approve(refused.id)).rejects.toThrow("bank_receipt_repay_invariant_breach");
+    expect(await a.bankReceipt.findUniqueOrThrow({ where: { id: refused.id } })).toMatchObject({ state: "drafted", fundsTransactionId: null });
+  });
+
+  it("rolls the whole inflow back when the caller fails after its repayments, and a retry repays once", async () => {
+    const p = await payer();
+    await facility(p.payerAccountId, 300);
+    await borrow(p.payerAccountId, 300);
+    expect(await deliver(p, 2)).toMatchObject({ ok: true }); // credit exhausted: overdraft 200 beside credit 300
+    const before = { rows: await a.fundsTransaction.count({ where: { payerAccountId: p.payerAccountId } }), books: await balances(p.payerAccountId) };
+    await expect(a.$transaction(async tx => {
+      const { repayment } = await inflowTx(tx, p.payerAccountId, 400);
+      expect(repayment).toMatchObject({ overdraftRepaidFen: fen(200), creditRepaid: [{ amountFen: fen(200) }] }); // both written
+      throw new Error("caller_failed_after_repayment");
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted })).rejects.toThrow("caller_failed_after_repayment");
+    expect({ rows: await a.fundsTransaction.count({ where: { payerAccountId: p.payerAccountId } }), books: await balances(p.payerAccountId) }).toEqual(before);
+    expect((await inflow(p.payerAccountId, 400)).repayment).toMatchObject({ overdraftRepaidFen: fen(200), creditRepaid: [{ amountFen: fen(200) }] });
+    expect(await repayRows(p.payerAccountId)).toHaveLength(2);
+    expect(await books(p.payerAccountId)).toEqual({ wallet: fen(0), credit: fen(100), overdraft: fen(0) });
+  });
+
+  it("keeps keys apart for inflow ids 1 and 10, accepts a facility id with separators and orders equal activation times by id", async () => {
+    // Inflow ids are CUIDs in practice; raw rows with chosen ids pin the range query: `credit-repay:<x>1:` never covers `<x>10:`.
+    const p = await payer(), x = `in${run}`;
+    for (const suffix of ["1", "10"]) await a.$executeRaw`INSERT INTO FundsTransaction (id,payerAccountId,kind,operationKey,contentHash,currency,evidenceRef,createdBy)
+      VALUES (${x + suffix},${p.payerAccountId},'topup',${`topup:synthetic:${x}${suffix}`},${"0".repeat(64)},'CNY','inflow:raw','SYSTEM:test')`;
+    await a.$executeRaw`INSERT INTO FundsTransaction (id,payerAccountId,kind,operationKey,contentHash,currency,evidenceRef,createdBy)
+      VALUES (${`${x}r`},${p.payerAccountId},'credit_repay',${`credit-repay:${x}10:cf`},${"0".repeat(64)},'CNY','credit-facility:cf','SYSTEM:test')`;
+    const repayRaw = (inflowTransactionId: string) => a.$transaction(tx => repayArrearsFromInflowInTransaction(tx, { payerAccountId: p.payerAccountId,
+      inflowTransactionId, actor: VERIFIER }), { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+    await expect(repayRaw(`${x}1`)).resolves.toMatchObject({ creditRepaid: [] });
+    await expect(repayRaw(`${x}10`)).rejects.toThrow("funds_repay_invariant_breach");
+    // Two closed facilities with ids containing ':' activated at one pinned database time: repaid in id order.
+    const q = await payer(), pinned = new PrismaClient({ datasources: { db: { url: `${url}${url.includes("?") ? "&" : "?"}connection_limit=1` } } });
+    try {
+      await pinned.$executeRawUnsafe(`SET timestamp = ${Math.floor(Date.now() / 1000) - 3600}`);
+      const ids = [`cf:${run}:b`, `cf:${run}:a`];
+      for (const facilityId of ids) {
+        await a.$executeRaw`INSERT INTO CreditFacility (id,payerAccountId,limitFen,operationKey,contentHash,proposedByUserId,evidenceRef,updatedAt)
+          VALUES (${facilityId},${q.payerAccountId},100,${`credit:${facilityId}`},${"0".repeat(64)},${maker},'owner-ruling:synthetic',NOW(3))`;
+        await changeCreditFacility(pinned, { actorUserId: checker, facilityId, action: "approve", expectedVersion: 1, evidenceRef: "review:approve" });
+        await changeCreditFacility(pinned, { actorUserId: maker, facilityId, action: "activate", expectedVersion: 2, evidenceRef: "review:activate" });
+        await borrow(q.payerAccountId, 100);
+        await changeCreditFacility(pinned, { actorUserId: maker, facilityId, action: "revoke", expectedVersion: 3, evidenceRef: "review:revoke" });
+      }
+      const [b1, b2] = await a.creditFacility.findMany({ where: { id: { in: ids } } });
+      expect(b1.activatedAt).toEqual(b2.activatedAt);
+      const paid = await inflow(q.payerAccountId, 150);
+      expect(paid.repayment.creditRepaid.map(r => [r.facilityId, r.amountFen])).toEqual([[ids[1], fen(100)], [ids[0], fen(50)]]);
+      expect((await repayRows(q.payerAccountId)).map(row => row.operationKey)).toContain(`credit-repay:${paid.inflowId}:${ids[1]}`);
+      expect(await books(q.payerAccountId)).toEqual({ wallet: fen(0), credit: fen(50), overdraft: fen(0) });
+    } finally { await pinned.$disconnect(); }
+    // The reversal entry cannot occupy a reserved repayment prefix either.
+    const plain = await legacyTopup(q.payerAccountId, 10);
+    for (const operationKey of [`credit-repay:${plain.transaction.id}:x`, `overdraft-repay:${plain.transaction.id}`]) {
+      await expect(a.$transaction(tx => reverseFundsTransactionInTransaction(tx, { payerAccountId: q.payerAccountId,
+        originalTransactionId: plain.transaction.id, operationKey, actor: VERIFIER, evidenceRef: "review:reverse" }))).rejects.toThrow("funds_input_invalid");
+    }
   });
 });

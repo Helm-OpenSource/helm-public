@@ -80,6 +80,10 @@ Runbook / 运行手册:
   Approve: CAS `drafted -> reviewed`, `postFundsTransactionInTransaction` (`bank_topup`, operation key `bank-receipt:<id>`), then
   `reviewed -> posted` with the funds id; journal, projection, funds audit, outbox, receipt and review audit commit or roll back together.
   Reject never posts. The same checker repeating the same decision replays; otherwise a decided receipt refuses `bank_receipt_not_pending`.
+  C-REPAY (protocol v3.10 clause 5): right after the `bank_topup`, in the same READ COMMITTED transaction, the spendable wallet repays
+  overdraft, then credit (BILLING_CREDIT_FACILITIES.md **Repayment**; actor = the checker). A broken repayment invariant refuses
+  `bank_receipt_repay_invariant_breach`: nothing is posted and the receipt stays `drafted`. The checker reports it to platform finance,
+  who reconcile the payer (`credit_receivable` against Σ `usedFen`, `recomputeFundsProjection`) before the receipt is approved again.
 - Lock order: grant (share) -> reserved membership (share) -> `PayerAccount FOR UPDATE` -> `BankReceipt FOR UPDATE` -> funds rows.
 
 ## Wallet read / 钱包查询

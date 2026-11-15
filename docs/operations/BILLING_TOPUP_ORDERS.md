@@ -64,6 +64,15 @@ queries. No route, UI, real provider call or merchant credential (S2-d1 adds the
   answers (string, absent, or `"0.00"`): absent lets a query credit without the received-amount check (guarded only by an earlier
   `amount_mismatch` record), `"0.00"` would refuse every query credit.
 - Write conflicts (P2034, MySQL 1213, same-key insert) retry up to 3 times, then `funds_write_conflict`.
+- **Repayment (C-REPAY, protocol v3.10 clause 5)**: the verification transaction runs READ COMMITTED and, right after the `topup`,
+  repays overdraft, then credit, from the spendable wallet (BILLING_CREDIT_FACILITIES.md **Repayment**). If the repayment invariant
+  is broken (`credit_receivable` != Σ `usedFen`, or a repayment already recorded for the inflow) nothing is credited: the refusal is
+  `topup_repay_invariant_breach`, the notify alert logs that fixed code, and a `repay_invariant_breach:<provider>:<txn>` payment
+  exception is kept (once per provider transaction; `billing:topup-exceptions -- list`). The customer has paid but is not credited.
+  The notify is **not** acknowledged (503), so the provider keeps retrying (Alipay for about 25 hours); every retry refuses the same
+  way until fixed. Platform finance (the daily `list` owner above) treats it as urgent: reconcile the payer's credit facilities
+  against the journal (`recomputeFundsProjection`, Σ `usedFen`), have the responsible person approve the repair, then let a provider
+  retry or run `reverify --order-id` (credits and repays once), and `ack` the exception. Never refund it in the merchant console first.
 
 ## Alipay adapter and notify entry / 支付宝适配器与充值通知入口（S2-d1）
 

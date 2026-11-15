@@ -2,7 +2,8 @@ import "server-only";
 import { ActorType, Prisma, type BankReceipt, type PrismaClient } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { HELM_RESERVED_WORKSPACE_SYSTEM_KEY } from "@/lib/workspace-identity";
-import { postFundsTransactionInTransaction } from "../funds/funds-journal";
+import { repayArrearsFromInflowInTransaction } from "../credit/inflow-repay";
+import { FundsRefusal, postFundsTransactionInTransaction } from "../funds/funds-journal";
 import { assertPositiveFen } from "../funds/money";
 
 /**
@@ -20,7 +21,7 @@ export type BankReceiptReviewInput = { actorUserId: string; receiptId: string; d
 export type BankReceiptRefusalCode = "bank_receipt_input_invalid" | "bank_receipt_forbidden" | "bank_receipt_self_review_forbidden" |
   "bank_receipt_duplicate" | "bank_receipt_account_unregistered" | "bank_receipt_unavailable" | "bank_receipt_not_pending" | "bank_receipt_version_conflict" |
   "bank_receipt_posting_conflict" | "payer_account_unavailable" | "payer_billing_off" | "finance_grant_forbidden" |
-  "finance_grant_exists" | "finance_grant_unavailable";
+  "finance_grant_exists" | "finance_grant_unavailable" | "bank_receipt_repay_invariant_breach";
 
 export class BankReceiptRefusal extends Error {
   constructor(readonly code: BankReceiptRefusalCode) { super(code); this.name = "BankReceiptRefusal"; }
@@ -213,6 +214,12 @@ export async function reviewBankReceiptInTransaction(tx: Prisma.TransactionClien
       actor: { type: "USER", ref: input.actorUserId },
       entries: [{ account: "bank_clearing", direction: "debit", amountFen }, { account: "customer_wallet_available", direction: "credit", amountFen }] });
     if (posted.replayed) refuse("bank_receipt_posting_conflict"); // a drafted receipt must never find its posting already present
+    // C-REPAY (protocol v3.10 clause 5): the spendable wallet repays overdraft, then credit, in this transaction; a broken
+    // repayment invariant refuses the whole approval with its own code (nothing posted, the receipt stays drafted).
+    await repayArrearsFromInflowInTransaction(tx, { payerAccountId: receipt.payerAccountId, inflowTransactionId: posted.transaction.id,
+      actor: { type: "USER", ref: input.actorUserId } }).catch((error: unknown) => {
+      if (error instanceof FundsRefusal && error.code === "funds_repay_invariant_breach") refuse("bank_receipt_repay_invariant_breach");
+      throw error; });
     fundsTransactionId = posted.transaction.id;
     const marked = await tx.$executeRaw`UPDATE BankReceipt SET state = 'posted', fundsTransactionId = ${fundsTransactionId},
       version = version + 1, updatedAt = CURRENT_TIMESTAMP(3) WHERE id = ${receipt.id} AND state = 'reviewed'`;
@@ -228,5 +235,7 @@ export async function reviewBankReceiptInTransaction(tx: Prisma.TransactionClien
 }
 
 export function reviewBankReceipt(client: PrismaClient, input: BankReceiptReviewInput) {
-  return transaction(client, tx => reviewBankReceiptInTransaction(tx, input));
+  // READ COMMITTED as reservations: an approval's repayment locking reads then take no gap locks across payers. No retry here.
+  return client.$transaction(tx => reviewBankReceiptInTransaction(tx, input), { maxWait: 5000, timeout: 10000,
+    isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
 }

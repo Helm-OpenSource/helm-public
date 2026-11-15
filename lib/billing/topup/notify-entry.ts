@@ -36,7 +36,8 @@ export async function settleTopupNotify(client: PrismaClient, adapter: TopupProv
   } catch (error) {
     if (error instanceof TopupRefusal) {
       alert(error.code);
-      if (error.code === "payer_billing_off") return { acknowledged: false, status: 503 }; // a later retry credits once re-enabled
+      // A later retry credits once the payer is re-enabled, or once finance has repaired the repayment invariant (exception kept).
+      if (error.code === "payer_billing_off" || error.code === "topup_repay_invariant_breach") return { acknowledged: false, status: 503 };
       return error.exception ? { acknowledged: true, status: 200 } : { acknowledged: false, status: 400 };
     }
     const retryable = (error instanceof FundsRefusal && error.code === "funds_write_conflict") ||

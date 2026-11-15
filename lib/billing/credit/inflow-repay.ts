@@ -8,8 +8,10 @@ import { creditRepayKeyPrefix, creditRepayOperationKey, FundsRefusal, heldEnforc
  * transaction and under the same PayerAccount lock, the spendable wallet (wallet - held, at least 0; ruling M-1) repays the
  * overdraft first, then credit; the rest stays in the wallet. Held (what admitted enforce reservations count on) stays, so their
  * settles remain funded. After every inflow: wallet - held > 0 implies credit used = 0 and overdraft used = 0; a wallet > 0 beside
- * a debt can still exist (holds, pre-C-REPAY balances) until a later inflow. Callers run in READ COMMITTED (held is a plain read,
- * see heldEnforceFenInTransaction). Amounts are computed here from
+ * a debt can still exist (holds, pre-C-REPAY balances, a hold released later) until a later inflow. Held is a locking read, so it
+ * is current under the payer lock whatever the caller's isolation level: `@@transaction_isolation` does not show a Prisma
+ * transaction's own level (measured, C-REPAY part 2), so a level check would prove nothing. Callers still run in READ COMMITTED,
+ * where that locking read takes no gap locks (as reservations do). Amounts are computed here from
  * locked rows, never passed in; owing nothing writes nothing.
  * - `overdraft_repay` (key `overdraft-repay:<inflowId>`): debit the wallet, credit overdraft_receivable.
  * - `credit_repay`, one per facility repaid (key `credit-repay:<inflowId>:<facilityId>`, evidence `credit-facility:<id>` as for
@@ -22,7 +24,9 @@ import { creditRepayKeyPrefix, creditRepayOperationKey, FundsRefusal, heldEnforc
  */
 export type InflowRepayInput = { payerAccountId: string; inflowTransactionId: string; actor: FundsActor };
 export type InflowRepayment = { overdraftRepaidFen: bigint; overdraftTransactionId: string | null;
-  creditRepaid: Array<{ facilityId: string; amountFen: bigint; fundsTransactionId: string }>; walletLeftFen: bigint };
+  creditRepaid: Array<{ facilityId: string; amountFen: bigint; fundsTransactionId: string }>;
+  /** The actual wallet balance afterwards, holds included: positive does not mean nothing is owed or that it may be spent. */
+  walletLeftFen: bigint };
 
 const ZERO = BigInt(0);
 const REF = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,190}$/;
@@ -67,7 +71,7 @@ export async function repayArrearsFromInflowInTransaction(tx: Prisma.Transaction
   // S5: the credit receivable is exactly what the facilities record as used; otherwise the books are already wrong.
   if (facilities.reduce((sum, row) => sum + row.usedFen, ZERO) !== balance("credit_receivable")) breach();
 
-  const spendable = balance(WALLET) - await heldEnforceFenInTransaction(tx, payerAccountId);
+  const spendable = balance(WALLET) - await heldEnforceFenInTransaction(tx, payerAccountId, true);
   let wallet = spendable > ZERO ? spendable : ZERO; // what may still repay
   const overdraftRepaidFen = wallet < balance("overdraft_receivable") ? wallet : balance("overdraft_receivable");
   let overdraftTransactionId: string | null = null;

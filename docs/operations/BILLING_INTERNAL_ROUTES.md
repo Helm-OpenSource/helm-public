@@ -103,6 +103,8 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
   routes accept; there is no separate declarable list.
 - **reserve** `expectedMode` (v3.4, optional `shadow|enforce`): a payer in the other mode is `mode_mismatch` before any bucket
   or reservation row; a replay of the key is also checked against it (not part of the content hash).
+- **Inflow repayment** (C-REPAY, protocol v3.10 clause 5; no route): a `topup` or `bank_topup` repays, in its own transaction, the
+  overdraft first, then credit, from the spendable wallet (wallet - held); see BILLING_CREDIT_FACILITIES.md **Repayment**.
 - **reserve** `admission: "post_delivery"` (C-OD, protocol v3.10 clause 1): for work already delivered. Needs the grant scope
   `reserve-post-delivery` **in addition to** `reserve`; without it ANY `admission` value is 403 `service_unauthorized` first (no
   business write; the auth nonce is still recorded), and with it any value other than `post_delivery` is `request_invalid`. It
