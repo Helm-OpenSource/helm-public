@@ -73,7 +73,7 @@ describe.skipIf(!url)("BillingServiceGrant issuance CLI against MySQL", () => {
     pin = applied.pin;
     expect(await a.billingServiceGrant.findUnique({ where: { id: grantId } })).toMatchObject({ contentHash: dry.contentHash,
       scopesJson: '["balance-status","quote","reserve"]', revokedAt: null });
-    expect(await authenticate(pin)).toEqual({ grantId, actor: { type: "SYSTEM", ref: `billing-service:synthetic-e1c/${grantId}` } });
+    expect(await authenticate(pin)).toEqual({ grantId, scopes: ["balance-status", "quote", "reserve"], actor: { type: "SYSTEM", ref: `billing-service:synthetic-e1c/${grantId}` } });
   });
 
   it("a pin differing in one character, or a different signing key, is refused", async () => {

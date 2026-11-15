@@ -242,6 +242,39 @@ describe.skipIf(!url)("balance-status and the balance summary against MySQL", ()
     expect((await call({ workspaceIds: [fresh.ws] }, service)).body.results[0]).toMatchObject({ billingMode: "off", balanceFen: "0", headroomFen: "0", arrears: true, arrearsReason: "funds" });
   });
 
+  it("prices pending usage at the current grant's price into headroomAfterPendingFen, only when asked (C-OD)", async () => {
+    const service = await grant("pending", ["balance-status"]);
+    const funded = await payer("enforce", 1000), other = await payer("enforce", 0, 500), unbound = `bal-unbound-p-${run}`;
+    await hold(funded, "p1", 2); // 70 held: headroom 930
+    const pending = (workspaceId: string, quantity: string, extra: object = {}) =>
+      ({ workspaceId, billingEventRef: event, meterUnit: "minute", pendingQuantity: quantity, ...extra });
+    const plain = (await call({ workspaceIds: [funded.ws] }, service)).body.results[0];
+    expect(plain).not.toHaveProperty("headroomAfterPendingFen"); // the v3.10 shape is unchanged without pending
+    const answer = await call({ workspaceIds: [funded.ws, other.ws, unbound], pending: [pending(funded.ws, "30"),
+      pending(other.ws, "1", { meterUnit: "segment" })] }, service);
+    expect(answer.status).toBe(200);
+    expect(answer.body.results[0]).toMatchObject({ headroomFen: "930", headroomAfterPendingFen: "-120", arrears: false }); // 930 - 30 x 35
+    expect(answer.body.results[1]).toMatchObject({ headroomFen: "500", headroomAfterPendingFen: null }); // no grant for that unit
+    expect(answer.body.results[2]).toEqual({ workspaceId: unbound, ok: false, code: "billing_mode_off" });
+    expect((await call({ workspaceIds: [other.ws], pending: [] }, service)).body.results[0]).toMatchObject({ headroomAfterPendingFen: "500" });
+    // Two active grants for the same event and unit (another product): ambiguous, so not priced (the quote rule).
+    const second = (await publishPriceVersion(a, { actor: { type: "SYSTEM", ref: "synthetic-catalog" }, productCode: `synthetic.bal2${run}`,
+      version: 1, meterUnit: "minute", billingEventRef: event, acceptanceRef: "acceptance:synthetic", scopeKind: "workspace",
+      unitPriceFenNumerator: BigInt(1), unitPriceDenominator: BigInt(1), effectiveFrom: new Date("2026-11-01T00:00:00Z"),
+      effectiveUntil: null, approvalRef: "approval:synthetic" })).priceVersion.id;
+    const { grant: extra } = await createSpendGrant(a, { actorUserId: owner, payerAccountId: funded.payerRef, priceVersionId: second,
+      operationKey: "grant:bal2", evidenceRef: "consent:synthetic", validFrom: new Date("2026-11-01T00:00:00Z"),
+      validUntil: new Date("2027-02-01T00:00:00Z"), limits: { perChargeLimitFen: BigInt(1), dailyLimitFen: BigInt(1), monthlyLimitFen: BigInt(1) } });
+    await changeSpendGrant(a, { actorUserId: owner, grantId: extra.id, expectedVersion: 1, action: "activate", evidenceRef: "consent:on" });
+    expect((await call({ workspaceIds: [funded.ws], pending: [pending(funded.ws, "1")] }, service)).body.results[0])
+      .toMatchObject({ headroomAfterPendingFen: null });
+    const invalid = { status: 400, body: { ok: false, code: "request_invalid" } };
+    for (const bad of [[pending(unbound, "1")], [pending(funded.ws, "0")], [pending(funded.ws, "01")], [pending(funded.ws, "1", { extra: 1 })],
+      [pending(funded.ws, "1"), pending(funded.ws, "2")], [pending(funded.ws, "1", { meterUnit: "Minute" })]]) {
+      expect(await call({ workspaceIds: [funded.ws], pending: bad }, service)).toEqual(invalid);
+    }
+  });
+
   it("refuses malformed batches as request_invalid and accepts exactly 50", async () => {
     const service = await grant("shape", ["balance-status"]);
     const invalid = { status: 400, body: { ok: false, code: "request_invalid" } };

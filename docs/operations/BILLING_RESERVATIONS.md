@@ -30,7 +30,11 @@ S3-b1/S3-b2 (Core): migrations `20261110200000_billing_reservations`, `202611102
   declared workspace on the row.
 - **Reserve**: idempotent by `(payerRef, idempotencyKey)` (`^[A-Za-z0-9:_-]{8,128}$`; a rejected request never consumes it) + content
   hash; one reservation per `(payerRef, operationRef)`. The S3-a gate prices from the bound price row at `UTC_TIMESTAMP(3)` with
-  `usedFen` from the locked buckets. Frozen (trigger): mode, grant/price version, price hash, `chargeFen`, `reservedAt`, period keys.
+  `usedFen` from the locked buckets. Frozen (trigger): mode, grant/price version, price hash, `chargeFen`, `reservedAt`, period keys,
+  `admission`. **C-OD** `admission: "post_delivery"` (route scope `reserve-post-delivery`) skips only the enforce funds check:
+  delivered work is reserved and settled at once, its tail overdrawn within the payer's limit; with no limit the settle is
+  `insufficient_funds` and the hold stays. Its rollback `prisma/rollback/20261115_rollback_billing_reservation_admission.sql`
+  refuses while any post_delivery row exists.
   Replays return the current state. Enforce needs wallet + `availableCreditFen` (S3-e: remaining line of the active, in-term
   facility, under the PayerAccount lock; 0 without one) minus open enforce holds; shadow skips money entirely. Zero fen is
   `grant_charge_zero`. `off` is `billing_mode_off`; an unknown or suspended payer is `grant_not_active`. Refusals write nothing.

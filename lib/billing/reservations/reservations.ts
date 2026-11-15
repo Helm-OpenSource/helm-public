@@ -106,7 +106,13 @@ export type ReserveRequest = { idempotencyKey: string; operationRef: string;
   subjectScope: SubjectScope; payerRef: string; grantId: string;
   priceVersionId: string; billingEventRef: string; meterUnit: string; quantity: string;
   /** v3.4: the payer's actual mode must equal it, else `mode_mismatch` and nothing is held (not part of the content hash). */
-  expectedMode?: Mode };
+  expectedMode?: Mode;
+  /**
+   * C-OD (v3.10 clause 1): `post_delivery` reserves work already delivered, so the funds check is skipped (mode, binding, grant,
+   * limits and price still apply) and settle overdraws any tail within the payer's limit. The route admits it only for a service
+   * grant holding the `reserve-post-delivery` scope. Part of the content hash when present.
+   */
+  admission?: "post_delivery" };
 
 /** Pure validation; the content hash binds the key to everything the caller chose (never the server-derived time or price). */
 export function normalizeReserve(actor: ServiceActor, req: ReserveRequest) {
@@ -118,9 +124,14 @@ export function normalizeReserve(actor: ServiceActor, req: ReserveRequest) {
   if (typeof req.meterUnit !== "string" || !/^[a-z][a-z0-9_]{0,31}$/.test(req.meterUnit)) reject("request_invalid");
   const quantity = positiveQuantity(req.quantity);
   if (req.expectedMode !== undefined && req.expectedMode !== "shadow" && req.expectedMode !== "enforce") reject("request_invalid");
+  if (req.admission !== undefined && req.admission !== "post_delivery") reject("request_invalid");
+  const postDelivery = req.admission === "post_delivery";
+  // A standard reserve keeps its v2 hash; post_delivery adds the field, so the same key cannot switch admission on replay.
   const content = { v: 2, operationRef: req.operationRef, workspaceId, payerRef: req.payerRef, grantId: req.grantId,
-    priceVersionId: req.priceVersionId, billingEventRef: req.billingEventRef, meterUnit: req.meterUnit, quantity: req.quantity };
-  return { createdBy, workspaceId, quantity, contentHash: createHash("sha256").update(JSON.stringify(content)).digest("hex") };
+    priceVersionId: req.priceVersionId, billingEventRef: req.billingEventRef, meterUnit: req.meterUnit, quantity: req.quantity,
+    ...(postDelivery ? { admission: req.admission } : {}) };
+  return { createdBy, workspaceId, quantity, postDelivery,
+    contentHash: createHash("sha256").update(JSON.stringify(content)).digest("hex") };
 }
 
 /**
@@ -175,7 +186,7 @@ async function moveBucket(tx: Prisma.TransactionClient, grantId: string, billing
 /** Reserve: idempotent by (payer, key) + content hash, one per (payer, operationRef); any refusal rolls back, key unused. */
 // Not exported: its plain reads rely on PayerAccount being locked before the transaction's first read, which `reserve` guarantees.
 async function reserveInTransaction(tx: Prisma.TransactionClient, actor: ServiceActor, req: ReserveRequest) {
-  const { createdBy, workspaceId, quantity, contentHash } = normalizeReserve(actor, req);
+  const { createdBy, workspaceId, quantity, postDelivery, contentHash } = normalizeReserve(actor, req);
   const payerAccountId = req.payerRef;
   await lockPayerRow(tx, payerAccountId);
   // Every reservation writer holds this PayerAccount lock, so a plain read now sees any committed row; a stale caller snapshot
@@ -205,7 +216,7 @@ async function reserveInTransaction(tx: Prisma.TransactionClient, actor: Service
     return { day: used(buckets[0]), month: used(buckets[1]) };
   });
   const { grant, chargeFen, billingMode } = admitted;
-  if (billingMode === "enforce") {
+  if (billingMode === "enforce" && !postDelivery) { // post_delivery: already delivered, settle overdraws within the limit
     // Non-locking reads: every hold and wallet writer holds this PayerAccount lock, so each read (READ COMMITTED) is
     // current; FOR SHARE range locks here deadlocked first reserves across payers. Callers must not read before calling.
     const [{ held }] = await tx.$queryRaw<Array<{ held: bigint }>>`SELECT CAST(COALESCE(SUM(chargeFen), 0) AS SIGNED) AS held
@@ -224,7 +235,7 @@ async function reserveInTransaction(tx: Prisma.TransactionClient, actor: Service
     priceVersionId: admitted.priceVersionId, priceContentHash: admitted.priceContentHash, billingEventRef: req.billingEventRef,
     meterUnit: req.meterUnit, quantity, chargeFen, billingMode, reservedAt: admitted.at, dayKey: admitted.periodKeys.day,
     monthKey: admitted.periodKeys.month, createdBy, subjectWorkspaceId: workspaceId, payerBindingId: binding.bindingId,
-    payerBindingVersion: binding.bindingVersion } });
+    payerBindingVersion: binding.bindingVersion, admission: postDelivery ? "post_delivery" : "standard" } });
   return reserved(billingMode, row.id, row.state, chargeFen, row.priceContentHash, row.dayKey, row.monthKey);
 }
 function reserved(mode: Mode, reservationId: string, state: string, capFen: bigint, priceContentHash: string, day: string, month: string) {

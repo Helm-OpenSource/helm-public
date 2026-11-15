@@ -419,6 +419,24 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
     expect(await reservations(ids.payerRef)).toBe(0);
   });
 
+  it("admits a post_delivery reserve only for a grant that also holds reserve-post-delivery, writing nothing otherwise (C-OD)", async () => {
+    const plain = await grant("pd-plain", ["reserve", "settle"]), settler = await grant("pd-settler", ["reserve", "reserve-post-delivery", "settle"]);
+    const ids = await payer("enforce", 0); // no wallet, no credit
+    expect(await call("reserve", reserveBody(ids, "pd"), { grantId: plain })).toEqual(refused(422, "insufficient_funds"));
+    expect(await call("reserve", reserveBody(ids, "pd", 2, { admission: "post_delivery" }), { grantId: plain })).toEqual(refused(403, "service_unauthorized"));
+    expect(await call("reserve", reserveBody(ids, "pd", 2, { admission: "standard" }), { grantId: settler })).toEqual(refused(400, "request_invalid"));
+    expect(await reservations(ids.payerRef)).toBe(0);
+    const held = await call("reserve", reserveBody(ids, "pd", 2, { admission: "post_delivery" }), { grantId: settler });
+    expect(held).toMatchObject({ status: 200, body: { ok: true, mode: "enforce", state: "held", capFen: "200" } });
+    expect(await a.billingReservation.findUniqueOrThrow({ where: { id: held.body.reservationId } })).toMatchObject({ admission: "post_delivery" });
+    expect(await call("reserve", reserveBody(ids, "pd"), { grantId: settler })).toEqual(refused(409, "idempotency_conflict")); // admission is hashed
+    // No overdraft limit: the delivered work stays held (retryable), it is never released by Core.
+    expect(await call("settle", { idempotencyKey: `idem:pds:${run}`, reservationId: held.body.reservationId, operationRef: `op:pd:${run}`,
+      quantityUsed: "2", evidenceRef: "cdr:synthetic" }, { grantId: settler })).toEqual(refused(422, "insufficient_funds"));
+    await expect(a.$executeRaw`UPDATE BillingReservation SET admission = 'standard', version = version + 1 WHERE id = ${held.body.reservationId}`)
+      .rejects.toThrow(/billing_reservation_snapshot_immutable/);
+  });
+
   it("refuses an issuerRef with a trailing line terminator (ICU `$` matches before it) and orders the rollbacks", async () => {
     for (const [name, terminator] of [["nl", "\n"], ["cr", "\r"], ["crlf", "\r\n"], ["ls", "\u2028"], ["nel", "\u0085"]]) {
       await expect(grant(`term-${name}`, ["reserve"], { issuerRef: `issuer-t${terminator}` })).rejects.toThrow(/BillingServiceGrant_issuer/);

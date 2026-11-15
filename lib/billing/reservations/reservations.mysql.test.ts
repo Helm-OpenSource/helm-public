@@ -578,6 +578,26 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
     expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(0), overdraft_receivable: fen(200), charge_revenue: fen(200) });
     expect((await a.$transaction(tx => recomputeFundsProjection(tx, ids.payerAccountId))).consistent).toBe(true);
   });
+  it("admits post_delivery work without the funds check, keeps limits, and settles its tail into overdraft (C-OD part 2)", async () => {
+    const ids = await setup("enforce", 0);
+    const delivered = (key: string, quantity: number) => reserveSpend(a, service, { idempotencyKey: `idem:${key}`, operationRef: `ref:${key}`,
+      subjectScope: { kind: "workspace", workspaceId: ids.workspaceId }, payerRef: ids.payerAccountId, grantId: ids.grantId,
+      priceVersionId: priceId, billingEventRef: "service-billing-event-v1:synthetic", meterUnit: "document", quantity: String(quantity),
+      admission: "post_delivery" });
+    expect(await reserve(ids, "std", 1, 0, new Date())).toEqual(rejected("insufficient_funds")); // standard work still needs funds
+    expect(await delivered("big", 6)).toEqual(rejected("limit_exceeded")); // the 500 per-charge limit still applies
+    expect(await reserveSpend(a, service, { idempotencyKey: "idem:bad", operationRef: "ref:bad", subjectScope: { kind: "workspace",
+      workspaceId: ids.workspaceId }, payerRef: ids.payerAccountId, grantId: ids.grantId, priceVersionId: priceId,
+    billingEventRef: "service-billing-event-v1:synthetic", meterUnit: "document", quantity: "1", admission: "standard" as never })).toEqual(rejected("request_invalid"));
+    const call = await delivered("pd-call", 2);
+    if (!call.ok) throw new Error(call.code);
+    expect(await a.billingReservation.findUniqueOrThrow({ where: { id: call.reservationId } })).toMatchObject({ admission: "post_delivery", state: "held" });
+    expect(await delivered("pd-call", 2)).toEqual(call); // replay
+    await overdraftLimit(ids.workspaceId, 0, 500);
+    expect(await settle(call.reservationId, "set:pd", "2")).toMatchObject({ ok: true, chargeFen: "200" });
+    expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(0), overdraft_receivable: fen(200), charge_revenue: fen(200) });
+    expect((await readPayerBalanceSummaries(a, [ids.workspaceId])).get(ids.workspaceId)).toMatchObject({ balanceFen: fen(-200), arrears: true });
+  });
   // #528 review P1-1: the payer comes from the declared workspace's current binding, resolved under the PayerAccount lock.
   const reservation = (id: string) => a.billingReservation.findUniqueOrThrow({ where: { id } });
   it("reserves only for the payer the declared workspace is bound to now and freezes that binding", async () => {

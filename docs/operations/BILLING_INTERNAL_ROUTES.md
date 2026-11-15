@@ -84,6 +84,16 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
   routes accept; there is no separate declarable list.
 - **reserve** `expectedMode` (v3.4, optional `shadow|enforce`): a payer in the other mode is `mode_mismatch` before any bucket
   or reservation row; a replay of the key is also checked against it (not part of the content hash).
+- **reserve** `admission: "post_delivery"` (C-OD, protocol v3.10 clause 1; any other value is `request_invalid`): for work
+  already delivered. Needs the grant scope `reserve-post-delivery` **in addition to** `reserve` (otherwise 403
+  `service_unauthorized`, nothing written); it is a scope only, not a route. Core skips the funds check only; mode, binding,
+  grant, limits and price apply as before, and settle overdraws the tail within the payer's limit (BILLING_RESERVATIONS.md).
+  The admission is in the content hash and frozen on the row (migration `20261115110000_billing_reservation_admission`).
+- **balance-status** `pending` (C-OD, optional): `[{ workspaceId, billingEventRef, meterUnit, pendingQuantity }]`, at most 50,
+  each for a listed workspace, distinct per workspace, event and unit, positive integer quantity (else `request_invalid`). With
+  it every bound entry gains `headroomAfterPendingFen` = headroomFen minus the pending usage priced half-up per entry at the
+  payer's single active grant on an effective price for that event and unit (the quote rule, database time; one more
+  lock-free read). `null` when any entry of the workspace has no such grant or leaves the fen bound. `arrears` is unchanged.
 - **Verify / rollback**: `npm run test:billing:mysql` (`internal-routes.mysql.test.ts`: gate, signature/expiry/replay/scope/
   revocation/pin/validity/content hash/scope canonicality/public key, bounded and exact body bytes, shape and refusal
   mapping, expectedMode, issuer isolation and rotation, connection-error mapping, every operation, separate reconciliation

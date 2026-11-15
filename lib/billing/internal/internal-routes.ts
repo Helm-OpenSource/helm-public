@@ -7,7 +7,7 @@ import { isDeploymentCapabilityEnabled } from "@/lib/runtime/deployment-capabili
 import { type BillingRejectCode, markUnknown, quote, release, reserve, resolveUnknown, type ServiceActor, settle }
   from "../reservations/reservations";
 import { balanceStatus, BALANCE_STATUS_MAX_WORKSPACES } from "../balance/balance-status";
-import { authenticateBillingService, type BillingServiceScope, ServiceAuthRefused } from "./service-auth";
+import { authenticateBillingService, type BillingServiceScope, POST_DELIVERY_SCOPE, ServiceAuthRefused } from "./service-auth";
 
 /**
  * Billing V1 S3-b3 internal routes (S3 internal protocol; docs/operations/BILLING_INTERNAL_ROUTES.md). Order: deployment gate
@@ -31,14 +31,16 @@ const OPERATIONS = {
   quote: operation(z.object({ subjectScope, billingEventRef: text, meterUnit: text, quantity: text }).strict(), quote),
   reserve: operation(z.object({ idempotencyKey: text, operationRef: text, subjectScope, payerRef: text, grantId: text,
     priceVersionId: text, billingEventRef: text, meterUnit: text, quantity: text,
-    expectedMode: z.enum(["shadow", "enforce"]).optional() }).strict(), reserve),
+    expectedMode: z.enum(["shadow", "enforce"]).optional(), admission: z.literal("post_delivery").optional() }).strict(), reserve),
   settle: operation(z.object({ ...resolution, quantityUsed: text }).strict(), settle),
   release: operation(z.object({ ...resolution, reasonCode: z.enum(["not_executed", "failed", "partial_unusable"]) }).strict(), release),
   "mark-unknown": operation(z.object(resolution).strict(), markUnknown),
   "resolve-unknown": operation(z.object({ ...resolution, outcome: z.enum(["settled", "released"]), quantityUsed: text.optional() })
     .strict(), resolveUnknown),
-  "balance-status": operation(z.object({ workspaceIds: z.array(text).min(1).max(BALANCE_STATUS_MAX_WORKSPACES) }).strict(), balanceStatus),
-} satisfies Record<BillingServiceScope, unknown>;
+  "balance-status": operation(z.object({ workspaceIds: z.array(text).min(1).max(BALANCE_STATUS_MAX_WORKSPACES),
+    pending: z.array(z.object({ workspaceId: text, billingEventRef: text, meterUnit: text, pendingQuantity: text }).strict())
+      .max(BALANCE_STATUS_MAX_WORKSPACES).optional() }).strict(), balanceStatus),
+} satisfies Record<Exclude<BillingServiceScope, typeof POST_DELIVERY_SCOPE>, unknown>;
 export type BillingInternalOperation = keyof typeof OPERATIONS;
 
 /** v3.7 `internal_error`: route-only (the library never returns it); the caller stays pending, alerts, backs off, never releases. */
@@ -79,9 +81,9 @@ export async function handleBillingInternalRequest(operation: BillingInternalOpe
   if (!(declared <= MAX_BODY_BYTES)) return rejected("request_invalid", 413);
   const body = await readBoundedBody(request);
   if (!body) return rejected("request_invalid", 413);
-  let actor;
+  let actor, scopes: readonly string[];
   try {
-    ({ actor } = await authenticateBillingService(db, { method: request.method, path: new URL(request.url).pathname,
+    ({ actor, scopes } = await authenticateBillingService(db, { method: request.method, path: new URL(request.url).pathname,
       headers: request.headers, body }, operation));
   } catch (error) {
     if (!(error instanceof ServiceAuthRefused)) {
@@ -94,6 +96,11 @@ export async function handleBillingInternalRequest(operation: BillingInternalOpe
   let input: unknown;
   // Strict UTF-8 that keeps a BOM (JSON.parse then refuses it): what was signed is exactly what is parsed.
   try { input = JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(body)); } catch { return rejected("request_invalid"); }
+  // C-OD: skipping the funds check is a separate grant scope (only the post-delivery settler's identity holds it).
+  if (operation === "reserve" && (input as { admission?: unknown } | null)?.admission !== undefined && !scopes.includes(POST_DELIVERY_SCOPE)) {
+    alert("billing_internal_auth_refused", operation, "scope_denied");
+    return rejected("service_unauthorized", 403);
+  }
   const pending = OPERATIONS[operation](db, actor, input);
   if (!pending) return rejected("request_invalid");
   try {

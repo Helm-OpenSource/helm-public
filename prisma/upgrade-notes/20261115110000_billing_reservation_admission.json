@@ -1,0 +1,19 @@
+{
+  "schema": "helm.upgrade-note/v1",
+  "migration": "20261115110000_billing_reservation_admission",
+  "summary": {
+    "zh": "计费预占新增 admission 列（standard / post_delivery，已有行为 standard），并重建预占更新触发器使该列不可修改。",
+    "en": "Billing reservations gain an admission column (standard / post_delivery; existing rows are standard), and the reservation update trigger is recreated to freeze it."
+  },
+  "ddl": [
+    { "table": "BillingReservation", "existingTable": true, "algorithm": "INSTANT", "lock": "NONE", "rebuild": false },
+    { "table": "BillingReservation", "existingTable": true, "algorithm": "TRIGGER", "lock": "NONE", "rebuild": false }
+  ],
+  "rollback": { "kind": "sql", "path": "prisma/rollback/20261115_rollback_billing_reservation_admission.sql" },
+  "order": "migrate-before-code",
+  "env": [],
+  "verification": [
+    { "zh": "核对 BillingReservation.admission 存在且已有行均为 standard；更新触发器拒绝修改 admission。", "en": "Check that BillingReservation.admission exists with every existing row standard, and that the update trigger refuses changing it." },
+    { "zh": "迁移期间保持内部计费路由关闭：触发器删除与重建之间没有更新保护。", "en": "Keep the internal billing routes off while migrating: there is no update guard between dropping and recreating the trigger." }
+  ]
+}

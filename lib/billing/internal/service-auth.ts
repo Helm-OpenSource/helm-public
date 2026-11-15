@@ -12,8 +12,11 @@ import type { ServiceActor } from "../reservations/reservations";
  * timestamp, nonce and body hash; database time bounds the window and a committed nonce row refuses replays. Every refusal is
  * the same `service_unauthorized` outside; signatures and bodies are never logged.
  */
-export const BILLING_SERVICE_SCOPES = ["quote", "reserve", "settle", "release", "mark-unknown", "resolve-unknown", "balance-status"] as const;
+export const BILLING_SERVICE_SCOPES = ["quote", "reserve", "settle", "release", "mark-unknown", "resolve-unknown", "balance-status",
+  "reserve-post-delivery"] as const;
 export type BillingServiceScope = (typeof BILLING_SERVICE_SCOPES)[number];
+/** C-OD: not an operation of its own; a `reserve` with `admission: "post_delivery"` needs it in addition to `reserve`. */
+export const POST_DELIVERY_SCOPE = "reserve-post-delivery" satisfies BillingServiceScope;
 export const BILLING_SIGNATURE_WINDOW_MS = 300_000;
 /** Grant ids the request header accepts; a row with any other id can never authenticate. */
 export const BILLING_SERVICE_GRANT_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{2,63}$/;
@@ -66,7 +69,7 @@ export function signBillingInternalRequest(privateKey: KeyObject, parts: SignedR
  * replay is refused even when the operation later fails; a retry signs a fresh nonce and replays by idempotencyKey).
  */
 export async function authenticateBillingService(client: PrismaClient, request: { method: string; path: string;
-  headers: Headers; body: Uint8Array }, scope: BillingServiceScope, env: Readonly<Record<string, string | undefined>> = process.env) {
+  headers: Headers; body: Uint8Array }, scope: Exclude<BillingServiceScope, typeof POST_DELIVERY_SCOPE>, env: Readonly<Record<string, string | undefined>> = process.env) {
   const grantId = request.headers.get(HEADERS.grant) ?? "", timestamp = request.headers.get(HEADERS.timestamp) ?? "";
   const nonce = request.headers.get(HEADERS.nonce) ?? "", signature = request.headers.get(HEADERS.signature) ?? "";
   if (!BILLING_SERVICE_GRANT_ID_PATTERN.test(grantId) || !/^[1-9][0-9]{12}$/.test(timestamp) ||
@@ -99,7 +102,8 @@ export async function authenticateBillingService(client: PrismaClient, request: 
     throw error;
   }
   // v3.9: reservations belong to the issuer (stable across rotation, covered by contentHash and the pin), not the grant.
-  return { grantId, actor: { type: "SYSTEM", ref: `billing-service:${grant.issuerRef}/${grantId}` } satisfies ServiceActor };
+  return { grantId, scopes: billingServiceGrantScopes(grant.scopesJson),
+    actor: { type: "SYSTEM", ref: `billing-service:${grant.issuerRef}/${grantId}` } satisfies ServiceActor };
 }
 
 /** The pinned row's key must be an Ed25519 SPKI public key (never a private PEM) matching its stored fingerprint. */
