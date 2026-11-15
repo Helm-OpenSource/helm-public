@@ -36,8 +36,10 @@ CLI `npm run billing:platform-ops` (`lib/billing/platform/platform-batch.ts`); n
   tolerance; no default amount, the owner sets it per payer). It is the tail tolerance for work still running when the balance
   reached zero (owner 11-15: zero means stop), not spendable credit: it never refuses a settle and the reported overdraft room
   `max(0, limit - overdraftUsed)` is information only. Funds arrears is `headroomFen <= 0` **or** `overLimit` (overdraft above
-  the limit, or any overdraft at 0): e.g. limit 30, overdraft 50, then a top-up of 100 gives headroom 100, and the payer is
-  still in arrears because it is over the limit (until the overdraft is repaid). Approval is a CAS on the expected old limit (`overdraft_limit_conflict`,
+  the limit, or any overdraft at 0): e.g. limit 30, overdraft 50, wallet 0, no remaining credit and nothing held; a top-up of
+  100 then gives headroom (wallet + creditRemaining - held) 100, and the payer is still in arrears because it is over the
+  limit. In this slice a top-up does not repay overdraft (repaying overdraft first on arrival is the later C-REPAY slice), so
+  it stays in arrears until the overdraft is repaid. Approval is a CAS on the expected old limit (`overdraft_limit_conflict`,
   also at draft); audit `BILLING_PAYER_OVERDRAFT_LIMIT_CHANGED`. Lowering it below what is already overdrawn is allowed (the
   payer is then overLimit). Batch entries: `{ "kind": "overdraft_limit", "workspaceId", "fromLimitFen", "toLimitFen" }`; the dry
   run shows `currentOverdraftLimitFen`.
