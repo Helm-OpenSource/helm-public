@@ -305,24 +305,87 @@ describe.skipIf(!url)("inflow repayment against MySQL (C-REPAY)", () => {
     expect(await books(p.payerAccountId)).toEqual({ wallet: fen(0), credit: fen(100), overdraft: fen(0) });
   });
 
-  /** Holds the payer row on a third connection until `start`'s transactions are distinct waiters on that very row lock (bounded). */
+  // Lock barriers. Premise: nothing else uses this database while these cases run. `test:billing:mysql` (the only script given
+  // BILLING_MYSQL_DATABASE_URL, run by the one CI step that sets it) passes --fileParallelism=false, and cases in a file run one
+  // at a time. Running these files in parallel against one database voids it; the scoping below narrows what a stray
+  // transaction could be counted as, it does not make that safe.
+  type Settled<T> = { ok: true; value: T } | { ok: false; error: unknown };
+  /** Captures a rejection at once, so a task started under a gate never rejects unobserved. */
+  const settledOf = <T>(work: Promise<T>): Promise<Settled<T>> =>
+    work.then(value => ({ ok: true as const, value }), (error: unknown) => ({ ok: false as const, error }));
+  const unwrap = <T>(result: Settled<T>): T => { if (!result.ok) throw result.error; return result.value; };
+  /**
+   * Tasks started while a gate holds locks. `drain` runs once the gate has finished (committed or rolled back, so its locks are
+   * released) and before any assertion; it repeats until no task was added meanwhile and returns how many tasks ended.
+   */
+  function tracker() {
+    const tasks: Array<Promise<Settled<unknown>>> = [];
+    return { start<T>(work: Promise<T>) { const settled = settledOf(work); tasks.push(settled); return settled; },
+      drain: async () => {
+        for (let seen = -1; seen !== tasks.length;) { seen = tasks.length; await Promise.all(tasks.slice(0, seen)); }
+        return tasks.length;
+      } };
+  }
+  /** Bounded wait for a started task; the timer is always cleared. The task itself is left to its tracker. */
+  async function within<T>(work: Promise<Settled<T>>, ms: number) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return unwrap(await Promise.race([work, new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("cross_payer_wait")), ms);
+      })]));
+    } finally { clearTimeout(timer); }
+  }
+  /** The InnoDB transaction id of `gate`, read from its own lock on `table` (this connection's thread). */
+  async function blockerOf(gate: Prisma.TransactionClient, table: string) {
+    const [row] = await gate.$queryRaw<Array<{ trx: bigint | number | string }>>`SELECT ENGINE_TRANSACTION_ID AS trx
+      FROM performance_schema.data_locks WHERE THREAD_ID = PS_CURRENT_THREAD_ID() AND OBJECT_SCHEMA = DATABASE()
+        AND OBJECT_NAME = ${table} LIMIT 1`;
+    if (!row) throw new Error(`gate_holds_no_lock_on_${table}`);
+    return String(row.trx);
+  }
+  /** Scope of a barrier: waiters in this database, on `table`, blocked by the `blocker` transaction and, when `row` is given, on
+   * a record whose lock data names that id (quoted, as data_locks shows these synthetic ids; a gap wait names the next record
+   * instead, so it is scoped by table and blocker only). */
+  type Wait = { table: string; blocker: string; row?: string };
+  async function countWaiters({ table, blocker, row }: Wait) {
+    const [result] = await a.$queryRaw<Array<{ n: bigint }>>`SELECT COUNT(DISTINCT w.REQUESTING_ENGINE_TRANSACTION_ID) AS n
+      FROM performance_schema.data_lock_waits w
+        JOIN performance_schema.data_locks l ON l.ENGINE = w.ENGINE AND l.ENGINE_LOCK_ID = w.REQUESTING_ENGINE_LOCK_ID
+      WHERE l.OBJECT_SCHEMA = DATABASE() AND l.OBJECT_NAME = ${table} AND w.BLOCKING_ENGINE_TRANSACTION_ID = ${blocker}
+        ${row === undefined ? Prisma.empty : Prisma.sql`AND l.LOCK_DATA LIKE ${`%'${row}'%`}`}`;
+    return Number(result.n);
+  }
+  /** Waits (bounded) until `n` distinct transactions wait in that scope. */
+  async function waitersOn(scope: Wait, n = 1, ms = 10_000) {
+    for (const deadline = Date.now() + ms; ;) {
+      if (await countWaiters(scope) >= n) return;
+      if (Date.now() > deadline) throw new Error(`rendezvous_timeout_${scope.table}`);
+      await sleep(20);
+    }
+  }
+  /**
+   * Holds the payer row on a third connection until `start`'s transactions are distinct waiters on that very row lock behind it
+   * (bounded), runs `whileHeld`, then releases it. Every task `start` returned ends before this returns or throws (`start` must
+   * return its tasks, not throw). Priority, not time order, picks the error: the gate's error is thrown, with any task failures
+   * attached (AggregateError, same message); otherwise the first failed task's error in `start`'s order.
+   */
   async function contended<T>(payerAccountId: string, start: () => Array<Promise<T>>,
-    whileHeld?: (tx: Prisma.TransactionClient) => Promise<unknown>) {
-    let pending: Array<Promise<T>> = [];
-    await a.$transaction(async tx => {
+    whileHeld?: (tx: Prisma.TransactionClient) => Promise<unknown>, ms = 10_000) {
+    let started: Array<Promise<Settled<T>>> = [];
+    const gate = await settledOf(a.$transaction(async tx => {
       await tx.$queryRaw`SELECT id FROM PayerAccount WHERE id = ${payerAccountId} FOR UPDATE`;
-      pending = start();
-      for (const deadline = Date.now() + 10_000; ;) {
-        const [row] = await a.$queryRaw<Array<{ n: bigint }>>`SELECT COUNT(DISTINCT w.REQUESTING_ENGINE_TRANSACTION_ID) AS n
-          FROM performance_schema.data_lock_waits w JOIN performance_schema.data_locks l ON l.ENGINE_LOCK_ID = w.REQUESTING_ENGINE_LOCK_ID
-          WHERE l.OBJECT_NAME = 'PayerAccount' AND l.LOCK_DATA = QUOTE(${payerAccountId})`;
-        if (Number(row.n) >= pending.length) break;
-        if (Date.now() > deadline) throw new Error("rendezvous_timeout");
-        await sleep(20);
-      }
+      const blocker = await blockerOf(tx, "PayerAccount");
+      started = start().map(settledOf);
+      await waitersOn({ table: "PayerAccount", blocker, row: payerAccountId }, started.length, ms);
       await whileHeld?.(tx); // committed before the waiters get the lock
-    }, { timeout: 15_000 });
-    return Promise.all(pending);
+    }, { timeout: 15_000 }));
+    const results = await Promise.all(started); // the gate has committed or rolled back: its locks are released
+    if (!gate.ok) {
+      const failed = results.flatMap(result => (result.ok ? [] : [result.error]));
+      if (failed.length === 0) throw gate.error;
+      throw new AggregateError([gate.error, ...failed], gate.error instanceof Error ? gate.error.message : String(gate.error));
+    }
+    return results.map(unwrap);
   }
 
   it("serializes concurrent inflows and an inflow racing a settle on the payer lock", async () => {
@@ -492,20 +555,76 @@ describe.skipIf(!url)("inflow repayment against MySQL (C-REPAY)", () => {
     expect(await books(p.payerAccountId)).toEqual({ wallet: fen(0), credit: fen(100), overdraft: fen(0) });
   });
 
-  /** Waits (bounded) until `n` distinct transactions wait on a row lock of `table`; tests run one at a time, so they are ours. */
-  async function waitersOn(table: string, n = 1) {
-    for (const deadline = Date.now() + 10_000; ;) {
-      const [row] = await a.$queryRaw<Array<{ n: bigint }>>`SELECT COUNT(DISTINCT w.REQUESTING_ENGINE_TRANSACTION_ID) AS n
-        FROM performance_schema.data_lock_waits w JOIN performance_schema.data_locks l ON l.ENGINE_LOCK_ID = w.REQUESTING_ENGINE_LOCK_ID
-        WHERE l.OBJECT_NAME = ${table}`;
-      if (Number(row.n) >= n) return;
-      if (Date.now() > deadline) throw new Error(`no_waiter_on_${table}`);
-      await sleep(20);
-    }
-  }
-  const settledOf = <T>(work: Promise<T>) => work.then(value => ({ value, error: null }), (error: unknown) => ({ value: null, error }));
-  const within = <T>(work: Promise<T>, ms: number) =>
-    Promise.race([work, sleep(ms).then((): never => { throw new Error("cross_payer_wait"); })]);
+  it("scopes the lock barrier to this database, row and blocker; a failed gate keeps its error and waits for what it started", async () => {
+    const p = await payer(), q = await payer(), tasks = tracker();
+    try {
+      await a.$transaction(async gate => {
+        await gate.$queryRaw`SELECT id FROM PayerAccount WHERE id = ${p.payerAccountId} FOR UPDATE`;
+        const blocker = await blockerOf(gate, "PayerAccount");
+        tasks.start(b.$transaction(tx => tx.$queryRaw`SELECT id FROM PayerAccount WHERE id = ${p.payerAccountId} FOR UPDATE`));
+        await waitersOn({ table: "PayerAccount", blocker, row: p.payerAccountId });
+        // The same waiter is not counted for another row, another blocker or another table.
+        expect(await Promise.all([countWaiters({ table: "PayerAccount", blocker, row: q.payerAccountId }),
+          countWaiters({ table: "PayerAccount", blocker: "0", row: p.payerAccountId }),
+          countWaiters({ table: "CreditFacility", blocker })])).toEqual([0, 0, 0]);
+      });
+    } finally { await tasks.drain(); }
+    // Tasks that never queue on the lock: the rendezvous fails, its error wins over a task's, and both tasks have ended first.
+    const ended: string[] = [];
+    const failure = await contended(p.payerAccountId, () => [sleep(300).then(() => { ended.push("resolved"); return 1; }),
+      sleep(200).then((): number => { ended.push("rejected"); throw new Error("task_failed"); })], undefined, 100)
+      .then(() => null, (error: unknown) => error);
+    expect(ended.sort()).toEqual(["rejected", "resolved"]);
+    expect(failure).toBeInstanceOf(AggregateError); // the gate's error leads, the task's failure is kept with it
+    expect((failure as AggregateError).message).toBe("rendezvous_timeout_PayerAccount");
+    expect((failure as AggregateError).errors.map(String)).toEqual(["Error: rendezvous_timeout_PayerAccount", "Error: task_failed"]);
+    // A task registered inside a gate that then fails ends before the drain returns, and so does one it starts meanwhile.
+    const late = tracker(), seen: string[] = [];
+    let failedGate: Settled<never>;
+    try {
+      failedGate = await settledOf(a.$transaction(async gate => {
+        await gate.$queryRaw`SELECT id FROM PayerAccount WHERE id = ${q.payerAccountId} FOR UPDATE`;
+        late.start(b.$transaction(tx => tx.$queryRaw`SELECT id FROM PayerAccount WHERE id = ${q.payerAccountId} FOR UPDATE`)
+          .then(() => { seen.push("waiter"); late.start(sleep(100).then(() => seen.push("follow-up"))); }));
+        await waitersOn({ table: "PayerAccount", blocker: await blockerOf(gate, "PayerAccount"), row: q.payerAccountId });
+        throw new Error("gate_failed");
+      }));
+    } finally { expect(await late.drain()).toBe(2); }
+    expect(seen).toEqual(["waiter", "follow-up"]);
+    expect(!failedGate.ok && String(failedGate.error)).toContain("gate_failed");
+  });
+
+  it("re-runs the real entry after a retryable error injected once its repayment is written: one credit, one repayment", async () => {
+    // Error injection, not a real deadlock: a client extension makes the entry's first VerifiedPayment insert (after the top-up and
+    // its repayment are written) throw the P2034 write conflict Prisma reports; runFundsTransactionWithRetry must roll the whole
+    // attempt back and re-run it under the same provider transaction.
+    const p = await payer(), line = await facility(p.payerAccountId, 30_000);
+    await borrow(p.payerAccountId, 20_000);
+    const topup = await paidCallback(p, 100);
+    const injected: Array<{ repayIds: string[] }> = [];
+    const faulty = b.$extends({ query: { verifiedPayment: { async create({ args, query }) {
+      if (injected.length === 0) {
+        // The attempt's own repayment row, seen before it is rolled back (a dirty read, for this proof only).
+        const rows = await a.$transaction(tx => tx.fundsTransaction.findMany({ where: { payerAccountId: p.payerAccountId,
+          kind: "credit_repay" }, select: { id: true } }), { isolationLevel: Prisma.TransactionIsolationLevel.ReadUncommitted });
+        injected.push({ repayIds: rows.map(row => row.id) });
+        throw new Prisma.PrismaClientKnownRequestError("injected write conflict (test)", { code: "P2034",
+          clientVersion: Prisma.prismaVersion.client });
+      }
+      return query(args);
+    } } } }) as unknown as PrismaClient;
+    const result = await topup.send(faulty);
+    expect(injected).toHaveLength(1);
+    expect(injected[0].repayIds).toHaveLength(1);
+    // The first attempt's repayment row is gone (rolled back, not committed and replayed): the surviving one is new.
+    expect(await a.fundsTransaction.findUnique({ where: { id: injected[0].repayIds[0] } })).toBeNull();
+    expect(result).toMatchObject({ outcome: "credited" });
+    expect(await a.fundsTransaction.count({ where: { payerAccountId: p.payerAccountId,
+      operationKey: `topup:wechat_pay:${topup.body.transaction_id}` } })).toBe(1);
+    expect((await repayRows(p.payerAccountId)).map(row => [row.kind, row.operationKey])).toEqual([["credit_repay",
+      `credit-repay:${result.fundsTransactionId}:${line.id}`]]);
+    expect(await books(p.payerAccountId)).toEqual({ wallet: fen(0), credit: fen(10_000), overdraft: fen(0) });
+  });
 
   it("rolls everything back when the second repayment fails after the first is written (direct fault injection)", async () => {
     // Overdraft 200 beside credit 300 and an unrepaid inflow of 400: its repayment writes overdraft_repay 200, then credit_repay 200.
@@ -519,22 +638,25 @@ describe.skipIf(!url)("inflow repayment against MySQL (C-REPAY)", () => {
     // A REPEATABLE READ locking read of the absent credit_repay key gap-locks it, so only that insert waits (the overdraft key sorts
     // into another gap). A short lock wait timeout on a dedicated connection then fails the second repayment's write.
     const victim = new PrismaClient({ datasources: { db: { url: `${url}${url.includes("?") ? "&" : "?"}connection_limit=1` } } });
+    const tasks = tracker();
     try {
       await victim.$executeRawUnsafe("SET SESSION innodb_lock_wait_timeout = 2");
       const outcome = await a.$transaction(async gate => {
         await gate.$queryRaw`SELECT id FROM FundsTransaction WHERE payerAccountId = ${p.payerAccountId}
           AND operationKey = ${`credit-repay:${inflowId}:${line.id}`} FOR UPDATE`;
-        const repaid = settledOf(victim.$transaction(tx => repayArrearsFromInflowInTransaction(tx, { payerAccountId: p.payerAccountId,
+        const blocker = await blockerOf(gate, "FundsTransaction");
+        const repaid = tasks.start(victim.$transaction(tx => repayArrearsFromInflowInTransaction(tx, { payerAccountId: p.payerAccountId,
           inflowTransactionId: inflowId, actor: VERIFIER }), { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, timeout: 15_000 }));
-        await waitersOn("FundsTransaction");
+        await waitersOn({ table: "FundsTransaction", blocker }); // a gap wait: scoped by table and this gate
         // The first repayment is already written by the waiting transaction (a dirty read, for this proof only).
         const firstWritten = await a.$transaction(tx => tx.fundsTransaction.count({ where: { payerAccountId: p.payerAccountId,
           operationKey: `overdraft-repay:${inflowId}` } }), { isolationLevel: Prisma.TransactionIsolationLevel.ReadUncommitted });
         return { firstWritten, repaid: await repaid };
       }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, timeout: 20_000 });
       expect(outcome.firstWritten).toBe(1);
-      expect(String(outcome.repaid.error)).toMatch(/Lock wait timeout/i);
-    } finally { await victim.$disconnect(); }
+      expect(outcome.repaid.ok).toBe(false);
+      expect(String(!outcome.repaid.ok && outcome.repaid.error)).toMatch(/Lock wait timeout/i);
+    } finally { await tasks.drain(); await victim.$disconnect(); }
     expect(await snapshot()).toEqual(before); // no repayment row, projections and usedFen unchanged
     expect(await repayRows(p.payerAccountId)).toHaveLength(0);
     expect((await a.$transaction(tx => recomputeFundsProjection(tx, p.payerAccountId))).consistent).toBe(true);
@@ -545,25 +667,32 @@ describe.skipIf(!url)("inflow repayment against MySQL (C-REPAY)", () => {
     await borrow(p.payerAccountId, 20_000);
     const topup = await paidCallback(p, 100);
     const weight = id(`wt${(seq += 1)}`);
-    let entry: Promise<{ value: Awaited<ReturnType<typeof topup.send>> | null; error: unknown }> | undefined;
-    await expect(a.$transaction(async gate => {
-      // Heavier than the entry (InnoDB rolls back the lighter transaction of a deadlock), so the entry is the victim.
-      await gate.$executeRaw`INSERT INTO Workspace (id, name, slug, updatedAt) WITH RECURSIVE n (i) AS (SELECT 1 UNION ALL
-        SELECT i + 1 FROM n WHERE i < 200) SELECT CONCAT(${weight}, '-', i), 'Synthetic weight', CONCAT(${weight}, '-', i), NOW(3) FROM n`;
-      await gate.$queryRaw`SELECT id FROM CreditFacility WHERE id = ${line.id} FOR UPDATE`;
-      entry = settledOf(topup.send(b));
-      await waitersOn("CreditFacility"); // the entry holds the payer lock, has posted the top-up and waits in its repayment
-      // Closing the cycle; this must be granted, i.e. the entry was rolled back. Then this gate rolls back too.
-      await gate.$queryRaw`SELECT id FROM PayerAccount WHERE id = ${p.payerAccountId} FOR UPDATE`;
-      throw new Error("gate_released");
-    }, { timeout: 20_000 })).rejects.toThrow("gate_released");
-    const { value, error } = await entry!;
-    expect(error).toBeNull();
+    const tasks = tracker();
+    let entry: Promise<Settled<Awaited<ReturnType<typeof topup.send>>>> | undefined;
+    let gated: Settled<never>, drained: number;
+    try {
+      gated = await settledOf(a.$transaction(async gate => {
+        // Heavier than the entry (InnoDB rolls back the lighter transaction of a deadlock), so the entry is the victim.
+        await gate.$executeRaw`INSERT INTO Workspace (id, name, slug, updatedAt) WITH RECURSIVE n (i) AS (SELECT 1 UNION ALL
+          SELECT i + 1 FROM n WHERE i < 200) SELECT CONCAT(${weight}, '-', i), 'Synthetic weight', CONCAT(${weight}, '-', i), NOW(3) FROM n`;
+        await gate.$queryRaw`SELECT id FROM CreditFacility WHERE id = ${line.id} FOR UPDATE`;
+        const blocker = await blockerOf(gate, "CreditFacility");
+        entry = tasks.start(topup.send(b));
+        // The entry holds the payer lock, has posted the top-up and waits on this facility row in its repayment.
+        await waitersOn({ table: "CreditFacility", blocker, row: line.id });
+        // Closing the cycle; this must be granted, i.e. the entry was rolled back. Then this gate rolls back too.
+        await gate.$queryRaw`SELECT id FROM PayerAccount WHERE id = ${p.payerAccountId} FOR UPDATE`;
+        throw new Error("gate_released");
+      }, { timeout: 20_000 }));
+    } finally { drained = await tasks.drain(); } // the gate has finished, whatever failed in it; no assertion before this
+    expect(drained).toBe(1); // the entry, registered inside the gate, has ended
+    expect(!gated.ok && String(gated.error)).toContain("gate_released");
+    const value = unwrap(await entry!);
     expect(value).toMatchObject({ outcome: "credited" });
     expect(await a.fundsTransaction.count({ where: { payerAccountId: p.payerAccountId,
       operationKey: `topup:wechat_pay:${topup.body.transaction_id}` } })).toBe(1);
     expect((await repayRows(p.payerAccountId)).map(row => [row.kind, row.operationKey])).toEqual([["credit_repay",
-      `credit-repay:${value!.fundsTransactionId}:${line.id}`]]);
+      `credit-repay:${value.fundsTransactionId}:${line.id}`]]);
     expect(await books(p.payerAccountId)).toEqual({ wallet: fen(0), credit: fen(10_000), overdraft: fen(0) });
   });
 
@@ -572,18 +701,22 @@ describe.skipIf(!url)("inflow repayment against MySQL (C-REPAY)", () => {
     await facility(p.payerAccountId, 1000);
     await borrow(p.payerAccountId, 300);
     const delivered = await hold(q, 2, "post_delivery");
-    // q's reservation locked as its settle locks it: p's inflow sums p's holds and repays without waiting on that row.
-    await a.$transaction(async tx => {
-      await tx.$queryRaw`SELECT id FROM BillingReservation WHERE id = ${delivered.reservationId} FOR UPDATE`;
-      const paid = await within(inflow(p.payerAccountId, 150, "topup", b), 5_000);
-      expect(paid.repayment.creditRepaid.map(r => r.amountFen)).toEqual([fen(150)]);
-    }, { timeout: 15_000 });
-    // p's inflow and repayment left open (uncommitted): q settles, overdraws and repays from its own inflow meanwhile.
-    await a.$transaction(async tx => {
-      expect((await inflowTx(tx, p.payerAccountId, 50)).repayment.creditRepaid.map(r => r.amountFen)).toEqual([fen(50)]);
-      expect(await within(delivered.settle(b), 5_000)).toMatchObject({ ok: true, chargeFen: "200" });
-      expect((await within(inflow(q.payerAccountId, 120, "topup", b), 5_000)).repayment).toMatchObject({ overdraftRepaidFen: fen(120) });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, timeout: 15_000 });
+    const tasks = tracker();
+    try {
+      // q's reservation locked as its settle locks it: p's inflow sums p's holds and repays without waiting on that row.
+      await a.$transaction(async tx => {
+        await tx.$queryRaw`SELECT id FROM BillingReservation WHERE id = ${delivered.reservationId} FOR UPDATE`;
+        const paid = await within(tasks.start(inflow(p.payerAccountId, 150, "topup", b)), 5_000);
+        expect(paid.repayment.creditRepaid.map(r => r.amountFen)).toEqual([fen(150)]);
+      }, { timeout: 15_000 });
+      // p's inflow and repayment left open (uncommitted): q settles, overdraws and repays from its own inflow meanwhile.
+      await a.$transaction(async tx => {
+        expect((await inflowTx(tx, p.payerAccountId, 50)).repayment.creditRepaid.map(r => r.amountFen)).toEqual([fen(50)]);
+        expect(await within(tasks.start(delivered.settle(b)), 5_000)).toMatchObject({ ok: true, chargeFen: "200" });
+        expect((await within(tasks.start(inflow(q.payerAccountId, 120, "topup", b)), 5_000)).repayment)
+          .toMatchObject({ overdraftRepaidFen: fen(120) });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, timeout: 15_000 });
+    } finally { await tasks.drain(); } // after a failure too, nothing started here outlives the case
     expect(await books(p.payerAccountId)).toEqual({ wallet: fen(0), credit: fen(100), overdraft: fen(0) });
     expect(await books(q.payerAccountId)).toEqual({ wallet: fen(0), credit: fen(0), overdraft: fen(80) });
   });

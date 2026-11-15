@@ -55,7 +55,8 @@ Billing V1 S3-e (Core): migrations `20261110215000_billing_credit_facilities` an
   the other controlled business columns unchanged; it does not pair the facility with the journal. Refusals: `funds_input_invalid`
   (not this payer's unreversed inflow), `funds_repay_invariant_breach` (repayment already recorded for the inflow, `credit_receivable`
   != Σ `usedFen`, or a facility row moved): the inflow rolls back with it (fail-closed; codes per entry in TOPUP_ORDERS / BANK_RECEIPTS).
-  Alerts: every refused top-up notify raises one alert with the fixed code `topup_repay_invariant_breach`; the payment exception is
+  Alerts: every top-up notify refused because the repayment invariant fails raises one alert with the fixed code
+  `topup_repay_invariant_breach`; the payment exception is
   recorded once per provider transaction, but alerts are not deduplicated, so provider retries repeat them. Whether the alert sink
   aggregates or rate-limits them is to be checked before launch. Limits: a hold released
   later leaves its money beside the debt until the next inflow;
