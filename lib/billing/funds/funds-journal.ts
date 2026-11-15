@@ -14,7 +14,8 @@ export const FUNDS_ACCOUNTS = ["bank_clearing", "charge_revenue", "correction_su
   "customer_wallet_available", "overdraft_receivable", "topup_clearing"] as const;
 export type FundsAccountName = (typeof FUNDS_ACCOUNTS)[number];
 export type FundsDirection = "debit" | "credit";
-export type FundsKind = "topup" | "correction" | "bank_topup" | "charge" | "credit_draw" | "overdraft_draw";
+export type FundsKind = "topup" | "correction" | "bank_topup" | "charge" | "credit_draw" | "overdraft_draw" | "overdraft_repay" |
+  "credit_repay";
 export type FundsEntryInput = { account: FundsAccountName; direction: FundsDirection; amountFen: bigint };
 /** Server-derived actor; `ref` is a user id for USER or a service name for SYSTEM. */
 export type FundsActor = { type: "USER" | "SYSTEM"; ref: string };
@@ -24,7 +25,8 @@ export type ReverseFundsInput = { payerAccountId: string; originalTransactionId:
   actor: FundsActor; evidenceRef: string };
 export type FundsRefusalCode = "funds_input_invalid" | "funds_unbalanced" | "funds_accounts_not_allowed" |
   "payer_account_unavailable" | "payer_billing_off" | "funds_operation_conflict" | "funds_insufficient" |
-  "funds_projection_conflict" | "funds_write_conflict" | "funds_reversal_invalid" | "funds_already_reversed";
+  "funds_projection_conflict" | "funds_write_conflict" | "funds_reversal_invalid" | "funds_already_reversed" |
+  "funds_repay_invariant_breach";
 
 export class FundsRefusal extends Error {
   constructor(readonly code: FundsRefusalCode) { super(code); this.name = "FundsRefusal"; }
@@ -48,8 +50,11 @@ function signedDelta(account: FundsAccountName, direction: FundsDirection, amoun
 type Normalized = { payerAccountId: string; kind: FundsKind; operationKey: string; reversalOfId: string | null;
   evidenceRef: string; createdBy: string; actor: FundsActor; entries: FundsEntryInput[]; contentHash: string };
 
-/** Module-private posting channels: `credit_draw` only from the credit module, `overdraft_draw` only from settle (C-OD). */
-type PrivateKind = "credit_draw" | "overdraft_draw";
+/** Module-private posting channels: `credit_draw` only from the credit module, `overdraft_draw` only from settle (C-OD),
+ * `overdraft_repay` / `credit_repay` only from the inflow repayment (C-REPAY, credit/inflow-repay.ts). */
+type PrivateKind = "credit_draw" | "overdraft_draw" | RepayKind;
+export type RepayKind = "overdraft_repay" | "credit_repay";
+const PRIVATE_KINDS: readonly FundsKind[] = ["credit_draw", "overdraft_draw", "overdraft_repay", "credit_repay"];
 /** Pure validation. Lines are sorted by account so the content hash and line numbers ignore caller ordering. */
 export function normalizeFundsPosting(input: PostFundsInput, reversalOfId: string | null = null,
   privateKind: PrivateKind | null = null): Normalized {
@@ -57,15 +62,19 @@ export function normalizeFundsPosting(input: PostFundsInput, reversalOfId: strin
   reference(input.payerAccountId); reference(input.operationKey); reference(input.evidenceRef);
   if (!input.actor || (input.actor.type !== "USER" && input.actor.type !== "SYSTEM")) refuse("funds_input_invalid");
   reference(input.actor.ref);
-  if (!["topup", "correction", "bank_topup", "charge", "credit_draw", "overdraft_draw"].includes(input.kind)) refuse("funds_input_invalid");
+  if (!["topup", "correction", "bank_topup", "charge", "credit_draw", "overdraft_draw", "overdraft_repay", "credit_repay"]
+    .includes(input.kind)) refuse("funds_input_invalid");
   // S3-e: a credit draw must move the facility's usedFen in the same transaction, so only the credit module may post one.
   // C-OD: an overdraft draw is only the settle shortfall left after wallet and credit, so only settle may post one.
-  if ((input.kind === "credit_draw" || input.kind === "overdraft_draw" ? input.kind : null) !== privateKind) {
-    refuse("funds_accounts_not_allowed");
-  }
+  // C-REPAY: a repayment is computed under the payer lock from the inflow it follows, so only the inflow repayment may post one.
+  if ((PRIVATE_KINDS.includes(input.kind) ? input.kind : null) !== privateKind) refuse("funds_accounts_not_allowed");
   if (reversalOfId !== null && input.kind !== "correction") refuse("funds_input_invalid");
   // `charge:` keys are reserved for settle postings (one per reservation, protocol v3.5).
   if ((input.kind === "charge") !== input.operationKey.startsWith(CHARGE_PREFIX)) refuse("funds_input_invalid");
+  // C-REPAY: `overdraft-repay:` / `credit-repay:` keys are reserved the same way, so no other posting can occupy a repayment key.
+  for (const [kind, prefix] of Object.entries(REPAY_PREFIX)) {
+    if ((input.kind === kind) !== input.operationKey.startsWith(prefix)) refuse("funds_input_invalid");
+  }
   const count = Array.isArray(input.entries) ? input.entries.length : 0;
   if (count < 2 || count > FUNDS_ACCOUNTS.length) refuse("funds_input_invalid");
   const entries = input.entries.map(entry => {
@@ -96,6 +105,11 @@ export function normalizeFundsPosting(input: PostFundsInput, reversalOfId: strin
     // C-OD: an overdraft draw is exactly: debit overdraft receivable (the customer owes it), credit the customer wallet.
     if (input.kind === "overdraft_draw" && (entries.length !== 2 || line("overdraft_receivable")?.direction !== "debit" ||
         line(WALLET)?.direction !== "credit")) refuse("funds_accounts_not_allowed");
+    // C-REPAY: repayments are exactly: debit the customer wallet, credit the receivable being repaid.
+    if (input.kind === "overdraft_repay" && (entries.length !== 2 || line(WALLET)?.direction !== "debit" ||
+        line("overdraft_receivable")?.direction !== "credit")) refuse("funds_accounts_not_allowed");
+    if (input.kind === "credit_repay" && (entries.length !== 2 || line(WALLET)?.direction !== "debit" ||
+        line("credit_receivable")?.direction !== "credit")) refuse("funds_accounts_not_allowed");
     // A free correction moves value only between the wallet and correction suspense; reversals mirror the original.
     if (input.kind === "correction" && (entries.length !== 2 || !line("correction_suspense") || !line(WALLET))) {
       refuse("funds_accounts_not_allowed");
@@ -207,6 +221,13 @@ async function postLocked(tx: Prisma.TransactionClient, payer: PayerRow, posting
 // `overdraft-draw:reservation:<reservationId>` for what remains after wallet and credit.
 const CHARGE_PREFIX = "charge:", DRAW_PREFIX = "credit-draw:", SETTLE_SOURCE_PREFIX = "reservation:";
 const OVERDRAFT_PREFIX = "overdraft-draw:reservation:";
+// C-REPAY keys, bound to the inflow funds transaction they follow: `overdraft-repay:<inflowId>` and, one per facility repaid,
+// `credit-repay:<inflowId>:<facilityId>`.
+const REPAY_PREFIX: Record<RepayKind, string> = { overdraft_repay: "overdraft-repay:", credit_repay: "credit-repay:" };
+export const overdraftRepayOperationKey = (inflowTransactionId: string) => `${REPAY_PREFIX.overdraft_repay}${inflowTransactionId}`;
+export const creditRepayKeyPrefix = (inflowTransactionId: string) => `${REPAY_PREFIX.credit_repay}${inflowTransactionId}:`;
+export const creditRepayOperationKey = (inflowTransactionId: string, facilityId: string) =>
+  `${creditRepayKeyPrefix(inflowTransactionId)}${facilityId}`;
 export const chargeOperationKey = (reservationId: string) => `${CHARGE_PREFIX}${reservationId}`;
 export const settleDrawSourceRef = (reservationId: string) => `${SETTLE_SOURCE_PREFIX}${reservationId}`;
 export const isSettleDrawSourceRef = (sourceRef: string) => sourceRef.startsWith(SETTLE_SOURCE_PREFIX);
@@ -304,14 +325,22 @@ export async function postSettleChargeFundsInTransaction(tx: Prisma.TransactionC
   return charge;
 }
 
+/** C-REPAY only: posts an `overdraft_repay` or `credit_repay`; repayArrearsFromInflowInTransaction computes the amount under the
+ * payer lock and, for `credit_repay`, lowers the facility's usedFen in the same transaction. */
+export async function postRepayFundsInTransaction(tx: Prisma.TransactionClient, input: PostFundsInput & { kind: RepayKind }) {
+  const posting = normalizeFundsPosting(input, null, input.kind);
+  return postLocked(tx, await lockPayer(tx, posting.payerAccountId), posting);
+}
+
 /** Appends a mirror transaction (each line's direction swapped) referencing the original; nothing is edited or deleted. */
 export async function reverseFundsTransactionInTransaction(tx: Prisma.TransactionClient, input: ReverseFundsInput) {
   reference(input.payerAccountId); reference(input.originalTransactionId);
   const payer = await lockPayer(tx, input.payerAccountId);
   const original = await readTransaction(tx, Prisma.sql`id = ${input.originalTransactionId}`);
   if (!original || original.id !== input.originalTransactionId || original.payerAccountId !== input.payerAccountId ||
-      original.reversalOfId !== null || original.kind === "charge" || original.kind === "credit_draw" ||
-      original.kind === "overdraft_draw") refuse("funds_reversal_invalid");
+      original.reversalOfId !== null || original.kind === "charge" || PRIVATE_KINDS.includes(original.kind)) {
+    refuse("funds_reversal_invalid"); // C-REPAY: a reversed repayment would raise the receivable without its facility's usedFen
+  }
   const mirrored = (await readEntries(tx, original.id)).map(entry => ({ account: entry.account,
     direction: entry.direction === "debit" ? "credit" as const : "debit" as const, amountFen: entry.amountFen }));
   const posting = normalizeFundsPosting({ payerAccountId: input.payerAccountId, kind: "correction",

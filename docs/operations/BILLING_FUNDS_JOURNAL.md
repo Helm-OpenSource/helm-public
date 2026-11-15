@@ -44,6 +44,14 @@ route or UI. 本片只提供 Core 本库资金分录原语，不接支付、不�
 - Projection: version CAS plus the non-negative guard in the UPDATE's own WHERE (`funds_insufficient`, `funds_projection_conflict`); the
   CHECK is the final guard. Refusals throw `FundsRefusal` so the whole caller transaction rolls back; no automatic retry.
 - It does **not** authorize people: S2-b (verified payment) / S2-c (maker/checker receipt) prove authority and pass a server-derived `actor`.
+- **Repayments (C-REPAY part 1, migration `20261115120000_billing_inflow_repay`)**: kinds `overdraft_repay` (debit wallet / credit
+  `overdraft_receivable`) and `credit_repay` (debit wallet / credit `credit_receivable`), keys `overdraft-repay:<inflowId>` and
+  `credit-repay:<inflowId>:<facilityId>` reserved for them (no other kind, a correction included, may use those prefixes). Only the
+  private `postRepayFundsInTransaction` posts them, called by `lib/billing/credit/inflow-repay.ts` (see BILLING_CREDIT_FACILITIES.md);
+  the public entry refuses `funds_accounts_not_allowed`. Neither is ever reversed (`funds_reversal_invalid`): a reversed repayment would
+  raise a receivable without its facility. Reversing an inflow already spent on repayment is refused by the wallet guard
+  (`funds_insufficient`); undoing an inflow together with its repayment is C-ADJ. Triggers keep the `credit_receivable` projection
+  non-negative (`funds_credit_projection_invalid`), as C-OD does for the overdraft projection. 入账抵扣只在入账后由私有通道过账，不可冲正。
 
 ## Verification and rollback / 验证与回滚
 
