@@ -50,7 +50,8 @@ S3-b1/S3-b2 (Core): migrations `20261110200000_billing_reservations`, `202611102
   calls `drawCreditShortfallInTransaction` with the settled `chargeFen`, the locked row's frozen `reservedAt`, `sourceRef`
   `reservation:<id>` and the service actor: it borrows only `max(0, chargeFen - wallet)` (`credit-draw:reservation:<id>`), so the
   wallet pays first and nets to 0, and the charge then debits the wallet in full. A same-key replay returns before it (never a
-  second draw). **Overdraft (C-OD, migration `20261115100000_billing_overdraft`)**: settle passes `upToAvailable`, so credit lends
+  second draw). **Overdraft (C-OD, migration `20261115100000_billing_overdraft`)**: for a `post_delivery` reservation only
+  (C-OD part 2; any other reservation keeps the rule above), settle passes `upToAvailable`, so credit lends
   what it can (possibly 0) and `drawOverdraftShortfallInTransaction` posts what the wallet still lacks as one `overdraft_draw`
   (debit `overdraft_receivable`, credit wallet, `overdraft-draw:reservation:<id>`), only while outstanding overdraft stays within
   the payer's `overdraftLimitFen` (0 unless a platform `overdraft_limit` operation was approved; no default allowance). Order:

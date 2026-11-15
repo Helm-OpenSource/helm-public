@@ -1,7 +1,7 @@
 import "server-only";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { fenToDecimalString, MAX_FEN } from "../funds/money";
-import { chargeFenForQuantity } from "../grants/price-grants";
+import { chargeFenForQuantity, SpendGrantRefusal } from "../grants/price-grants";
 import type { BillingRejectCode, ServiceActor } from "../reservations/reservations";
 
 /**
@@ -113,8 +113,9 @@ async function pendingFenByWorkspace(client: PrismaClient | Prisma.TransactionCl
       price.meterUnit === item.meterUnit);
     const sum = totals.has(item.workspaceId) ? totals.get(item.workspaceId)! : ZERO;
     let fen: bigint | null = null;
-    try { if (sum !== null && matches.length === 1) fen = sum + chargeFenForQuantity(matches[0], BigInt(item.pendingQuantity)); } catch {
-      fen = null; // beyond the fen bound: not priceable, never a wrapped number
+    try { if (sum !== null && matches.length === 1) fen = sum + chargeFenForQuantity(matches[0], BigInt(item.pendingQuantity)); } catch (error) {
+      // Beyond the fen bound: not priceable, never a wrapped number. Anything else is a real fault and propagates.
+      if (!(error instanceof SpendGrantRefusal) || error.code !== "price_amount_out_of_range") throw error;
     }
     totals.set(item.workspaceId, fen);
   }

@@ -499,6 +499,13 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
       .rejects.toThrow("platform_operation_forbidden"); // the maker can never approve it
     return reviewPlatformOperation(a, { actorUserId: checker, evidenceRef, request, decision: "approve", reviewEvidenceRef: "review:limit" });
   }
+  /** A post_delivery reservation (C-OD part 2): delivered work, reserved without the funds check; only it may overdraw. */
+  const deliver = (ids: Pick<Ids, "payerAccountId" | "grantId" | "workspaceId">, key: string, quantity: number) => reserveSpend(a, service, {
+    idempotencyKey: `idem:${key}`, operationRef: `ref:${key}`, subjectScope: { kind: "workspace", workspaceId: ids.workspaceId },
+    payerRef: ids.payerAccountId, grantId: ids.grantId, priceVersionId: priceId, billingEventRef: "service-billing-event-v1:synthetic",
+    meterUnit: "document", quantity: String(quantity), admission: "post_delivery" });
+  const delivered = async (ids: Pick<Ids, "payerAccountId" | "grantId" | "workspaceId">, key: string, quantity: number) => {
+    const result = await deliver(ids, key, quantity); if (!result.ok) throw new Error(result.code); return result; };
   /** Holds the payer row on a third connection until every settle in `start` waits on it, so they really contend (bounded). */
   async function contended<T>(payerAccountId: string, start: () => Array<Promise<T>>) {
     let pending: Array<Promise<T>> = [];
@@ -518,7 +525,7 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
   it("overdraws only the settle tail after wallet and credit, within the limit finance approved; never admits on it", async () => {
     const ids = await setup("enforce", 100);
     await credit(ids.payerAccountId, 100);
-    const call = await held(ids, "op:1", 2); // 100 wallet + 100 credit covers the 200 hold
+    const call = await delivered(ids, "op:od1", 2); // delivered work: 100 wallet + 100 credit for a 200 charge
     await correct(ids.payerAccountId, 50, "corr:half"); // the wallet drops after admission: 150 left for a 200 charge
     expect(await settle(call.reservationId, "set:1", "2")).toEqual(rejected("insufficient_funds")); // no limit: no overdraft
     expect(await a.billingReservation.findUniqueOrThrow({ where: { id: call.reservationId } })).toMatchObject({ state: "held" });
@@ -560,7 +567,7 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
   });
   it("lets only the in-limit share of two contending settle tails overdraw, and settles one reservation once", async () => {
     const ids = await setup("enforce", 200);
-    const one = await held(ids, "op:1", 1), two = await held(ids, "op:2", 1);
+    const one = await delivered(ids, "op:od1", 1), two = await delivered(ids, "op:od2", 1);
     await correct(ids.payerAccountId, 200, "corr:all"); // both 100 tails now need overdraft; the limit covers one
     await overdraftLimit(ids.workspaceId, 0, 100);
     const pair = await contended(ids.payerAccountId, () => [settle(one.reservationId, "set:1", "1", "e", 0), settle(two.reservationId, "set:2", "1", "e", 1)]);
@@ -580,23 +587,31 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
   });
   it("admits post_delivery work without the funds check, keeps limits, and settles its tail into overdraft (C-OD part 2)", async () => {
     const ids = await setup("enforce", 0);
-    const delivered = (key: string, quantity: number) => reserveSpend(a, service, { idempotencyKey: `idem:${key}`, operationRef: `ref:${key}`,
-      subjectScope: { kind: "workspace", workspaceId: ids.workspaceId }, payerRef: ids.payerAccountId, grantId: ids.grantId,
-      priceVersionId: priceId, billingEventRef: "service-billing-event-v1:synthetic", meterUnit: "document", quantity: String(quantity),
-      admission: "post_delivery" });
     expect(await reserve(ids, "std", 1, 0, new Date())).toEqual(rejected("insufficient_funds")); // standard work still needs funds
-    expect(await delivered("big", 6)).toEqual(rejected("limit_exceeded")); // the 500 per-charge limit still applies
+    expect(await deliver(ids, "pd-big", 6)).toEqual(rejected("limit_exceeded")); // the 500 per-charge limit still applies
     expect(await reserveSpend(a, service, { idempotencyKey: "idem:bad", operationRef: "ref:bad", subjectScope: { kind: "workspace",
       workspaceId: ids.workspaceId }, payerRef: ids.payerAccountId, grantId: ids.grantId, priceVersionId: priceId,
     billingEventRef: "service-billing-event-v1:synthetic", meterUnit: "document", quantity: "1", admission: "standard" as never })).toEqual(rejected("request_invalid"));
-    const call = await delivered("pd-call", 2);
-    if (!call.ok) throw new Error(call.code);
+    const call = await delivered(ids, "pd-call", 2);
     expect(await a.billingReservation.findUniqueOrThrow({ where: { id: call.reservationId } })).toMatchObject({ admission: "post_delivery", state: "held" });
-    expect(await delivered("pd-call", 2)).toEqual(call); // replay
+    expect(await deliver(ids, "pd-call", 2)).toEqual(call); // replay
     await overdraftLimit(ids.workspaceId, 0, 500);
     expect(await settle(call.reservationId, "set:pd", "2")).toMatchObject({ ok: true, chargeFen: "200" });
     expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(0), overdraft_receivable: fen(200), charge_revenue: fen(200) });
     expect((await readPayerBalanceSummaries(a, [ids.workspaceId])).get(ids.workspaceId)).toMatchObject({ balanceFen: fen(-200), arrears: true });
+    // R05: delivered work of a payer suspended and switched off after admission still settles into overdraft.
+    const late = await delivered(ids, "pd-late", 1);
+    await a.$executeRaw`UPDATE PayerAccount SET billingMode = 'off', status = 'suspended' WHERE id = ${ids.payerAccountId}`;
+    expect(await settle(late.reservationId, "set:pd-late", "1")).toMatchObject({ ok: true, chargeFen: "100" });
+    expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(0), overdraft_receivable: fen(300) });
+    // A standard reservation's tail never overdraws, even with a limit configured (v3.10 clause 3: original rule).
+    const std = await setup("enforce", 100);
+    const plain = await held(std, "op:std-tail", 1);
+    await correct(std.payerAccountId, 100, "corr:std-tail");
+    await overdraftLimit(std.workspaceId, 0, 500);
+    expect(await settle(plain.reservationId, "set:std-tail", "1")).toEqual(rejected("insufficient_funds"));
+    expect([await overdrafts(std.payerAccountId), (await a.billingReservation.findUniqueOrThrow({ where: { id: plain.reservationId } })).state])
+      .toEqual([0, "held"]);
   });
   // #528 review P1-1: the payer comes from the declared workspace's current binding, resolved under the PayerAccount lock.
   const reservation = (id: string) => a.billingReservation.findUniqueOrThrow({ where: { id } });

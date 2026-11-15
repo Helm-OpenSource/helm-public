@@ -89,6 +89,8 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
   `service_unauthorized`, nothing written); it is a scope only, not a route. Core skips the funds check only; mode, binding,
   grant, limits and price apply as before, and settle overdraws the tail within the payer's limit (BILLING_RESERVATIONS.md).
   The admission is in the content hash and frozen on the row (migration `20261115110000_billing_reservation_admission`).
+  Reverting this code after a grant with `reserve-post-delivery` was issued makes that scope unknown, so the grant is refused on
+  every route (as for `balance-status` below): rotate to a grant without it (v3.9) before reverting.
 - **balance-status** `pending` (C-OD, optional): `[{ workspaceId, billingEventRef, meterUnit, pendingQuantity }]`, at most 50,
   each for a listed workspace, distinct per workspace, event and unit, positive integer quantity (else `request_invalid`). With
   it every bound entry gains `headroomAfterPendingFen` = headroomFen minus the pending usage priced half-up per entry at the

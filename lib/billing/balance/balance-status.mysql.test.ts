@@ -257,6 +257,8 @@ describe.skipIf(!url)("balance-status and the balance summary against MySQL", ()
     expect(answer.body.results[1]).toMatchObject({ headroomFen: "500", headroomAfterPendingFen: null }); // no grant for that unit
     expect(answer.body.results[2]).toEqual({ workspaceId: unbound, ok: false, code: "billing_mode_off" });
     expect((await call({ workspaceIds: [other.ws], pending: [] }, service)).body.results[0]).toMatchObject({ headroomAfterPendingFen: "500" });
+    expect((await call({ workspaceIds: [funded.ws], pending: [pending(funded.ws, "9007199254740991")] }, service)).body.results[0])
+      .toMatchObject({ headroomAfterPendingFen: null }); // beyond the fen bound: not priced, never wrapped
     // Two active grants for the same event and unit (another product): ambiguous, so not priced (the quote rule).
     const second = (await publishPriceVersion(a, { actor: { type: "SYSTEM", ref: "synthetic-catalog" }, productCode: `synthetic.bal2${run}`,
       version: 1, meterUnit: "minute", billingEventRef: event, acceptanceRef: "acceptance:synthetic", scopeKind: "workspace",

@@ -109,7 +109,7 @@ export type ReserveRequest = { idempotencyKey: string; operationRef: string;
   expectedMode?: Mode;
   /**
    * C-OD (v3.10 clause 1): `post_delivery` reserves work already delivered, so the funds check is skipped (mode, binding, grant,
-   * limits and price still apply) and settle overdraws any tail within the payer's limit. The route admits it only for a service
+   * limits and price still apply) and only such a reservation's settle overdraws its tail within the payer's limit. The route admits it only for a service
    * grant holding the `reserve-post-delivery` scope. Part of the content hash when present.
    */
   admission?: "post_delivery" };
@@ -246,7 +246,7 @@ function reserved(mode: Mode, reservationId: string, state: string, capFen: bigi
 type LockedReservation = { id: string; payerAccountId: string; operationRef: string; grantId: string; billingMode: Mode; priceVersionId: string;
   priceContentHash: string; quantity: bigint; chargeFen: bigint; reservedAt: Date; state: string; version: number; unknownKey: string | null;
   unknownEvidenceRef: string | null; resolutionKey: string | null; releaseReason: string | null; resolutionEvidenceRef: string | null;
-  createdBy: string };
+  createdBy: string; admission: "standard" | "post_delivery" };
 /**
  * v3.8/v3.9 owner of a reservation: a billing service actor (`SYSTEM:billing-service:<issuerRef>/<grantId>`) is owned by its
  * issuer, so a rotated grant of the same issuer keeps working; any other actor owns exactly its own ref.
@@ -271,7 +271,7 @@ async function lockReservationForResolution(tx: Prisma.TransactionClient, reserv
     head.billingMode);
   const [row] = await tx.$queryRaw<LockedReservation[]>`SELECT id, payerAccountId, operationRef, grantId, billingMode, priceVersionId,
     priceContentHash, quantity, chargeFen, reservedAt, state, version, unknownKey, unknownEvidenceRef, resolutionKey, releaseReason,
-    resolutionEvidenceRef, createdBy FROM BillingReservation WHERE id = ${reservationId} FOR UPDATE`;
+    resolutionEvidenceRef, createdBy, admission FROM BillingReservation WHERE id = ${reservationId} FOR UPDATE`;
   if (!row || row.id !== reservationId || row.grantId !== head.grantId || row.billingMode !== head.billingMode ||
       (owner !== null && ownerOf(row.createdBy) !== owner)) reject("reservation_state_conflict");
   if (row.operationRef !== operationRef) reject("idempotency_conflict");
@@ -377,15 +377,17 @@ async function settleFrom(tx: Prisma.TransactionClient, actor: ServiceActor, req
   }
   // Shadow records the would-be charge only, and a 0-fen settle (smaller quantity, v3.5) has nothing to post: no draw, no funds.
   const posting = reservation.billingMode === "enforce" && chargeFen > ZERO;
-  // Owner v3: the wallet pays first, then credit lends what it can of the shortfall, then (C-OD, design §1.3) the rest is
-  // overdrawn within the payer's limit; the wallet is then charged in full and never goes negative. Admission is unchanged:
-  // reserve still requires wallet + credit to cover the hold, so overdraft only absorbs a tail found at settle. Bound to this
-  // locked reservation and its frozen reservedAt; a replay returned above and never draws again.
+  // Owner v3: the wallet pays first and the shortfall is borrowed from credit, then the wallet is charged in full and never goes
+  // negative. C-OD (design §1.3, v3.10 clause 3): only a post_delivery reservation (delivered work, reserved without the funds
+  // check) takes what credit can lend and overdraws the rest within the payer's limit; any other reservation keeps the S3-w
+  // rule (the whole shortfall from credit, else insufficient_funds). Bound to this locked reservation and its frozen
+  // reservedAt; a replay returned above and never draws again.
   if (posting) {
+    const postDelivery = reservation.admission === "post_delivery";
     await drawCreditShortfallInTransaction(tx, { payerAccountId: reservation.payerAccountId, chargeFen,
-      sourceRef: settleDrawSourceRef(reservation.id), actor, reservedAt: reservation.reservedAt, upToAvailable: true });
-    await drawOverdraftShortfallInTransaction(tx, { payerAccountId: reservation.payerAccountId, reservationId: reservation.id,
-      chargeFen, actor });
+      sourceRef: settleDrawSourceRef(reservation.id), actor, reservedAt: reservation.reservedAt, upToAvailable: postDelivery });
+    if (postDelivery) await drawOverdraftShortfallInTransaction(tx, { payerAccountId: reservation.payerAccountId,
+      reservationId: reservation.id, chargeFen, actor });
   }
   const funds = !posting ? null : await postFundsTransactionInTransaction(tx, {
     payerAccountId: reservation.payerAccountId, kind: "charge", operationKey: chargeOperationKey(reservation.id), actor,
