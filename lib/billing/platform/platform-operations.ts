@@ -16,7 +16,7 @@ import { changeSpendGrantInTransaction, createSpendGrantInTransaction, normalize
  * PayerScopeBinding (share). Switching to `enforce` is not enablement: real charging has separate prerequisites (docs).
  * E1b adds `price_publish` (append a price version; never 0) and `spend_grant` (create -> set_limits -> activate on approval).
  * C-OD adds `overdraft_limit`: a CAS on the payer's overdraft soft limit (fen; 0, the default = not configured, no overdraft room).
- * It never refuses a settle: it only sizes the separate overdraft room and the overLimit flag. Lowering it below the overdraft is allowed.
+ * A tail tolerance, not credit: it never refuses a settle and only sizes the information-only overdraft room and overLimit.
  */
 export type PlatformBillingMode = "off" | "shadow" | "enforce";
 export type PlatformOperationRequest =

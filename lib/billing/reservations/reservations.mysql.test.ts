@@ -539,7 +539,7 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
       expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(0), credit_receivable: fen(100),
         overdraft_receivable: fen(50), charge_revenue: fen(200) }); // wallet 50 -> credit 100 -> overdraft 50
       expect(await summaryOf(ids.workspaceId)).toMatchObject({ balanceFen: fen(-150), overdraftUsedFen: fen(50), overLimit,
-        headroomFen: fen(0), overdraftRoomFen: fen(room), arrears: overLimit || room <= 0 }); // headroom keeps its reserve meaning
+        headroomFen: fen(0), overdraftRoomFen: fen(room), arrears: true }); // zero means stop: overdraft room (even 9950) admits nothing
       // Overdraft room serves post-delivery work only: standard admission is still wallet + credit - held.
       if (limit === 10000) expect(await reserve(ids, "op:std-after", 1, 0, new Date())).toEqual(rejected("insufficient_funds"));
       expect(await settle(call.reservationId, `set:od-${limit}`, "2")).toEqual(first); // a replay never overdraws again

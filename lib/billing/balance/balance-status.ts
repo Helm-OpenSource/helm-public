@@ -12,11 +12,11 @@ import type { BillingRejectCode, ServiceActor } from "../reservations/reservatio
  * - headroom = wallet + creditRemaining - held, the reserve admission formula (reservations.ts reserveInTransaction with
  *   credit-facilities.ts availableCreditFen): creditRemaining is max(0, limit - used) of the drawable, in-term facility and 0
  *   for a payer that is not active; held is enforce held/unknown reservations;
- * - overdraftRoom (C-OD) = max(0, overdraftLimitFen - overdraftUsed): what post-delivery work may still overdraw. Never negative,
- *   so an overdraft over its soft limit never eats wallet or credit; reported separately, never part of headroom;
+ * - overdraftRoom (C-OD) = max(0, overdraftLimitFen - overdraftUsed): how much of the per-payer tail tolerance is left. Information
+ *   only: it admits nothing and is part of no stop/go decision (owner 11-15 "zero means stop");
  * - overLimit (C-OD, Q9): overdraftUsed > overdraftLimitFen (with no limit configured, any overdraft at all);
- * - arrears: stop new billable work. Two causes, reported as arrearsReason: "funds" when headroom + overdraftRoom <= 0 (Q8;
- *   owner ruling: overdraw up to the limit, then stop) or overLimit (Q9: stop at once), "payer_inactive" when an enforce payer is suspended or closed (coordinator 11-12): Core
+ * - arrears: stop new billable work. Two causes, reported as arrearsReason: "funds" when headroom <= 0 (Q8: effective
+ *   headroom at or below zero; owner 11-15: zero means stop) or overLimit (Q9: stop at once), "payer_inactive" when an enforce payer is suspended or closed (coordinator 11-12): Core
  *   refuses its new reserves, so work would run unbilled. payer_inactive wins when both hold; null when not in arrears.
  * creditUsed is the credit_receivable projection, so a revoked or expired facility's outstanding draws still count.
  * overdraftUsed is the overdraft_receivable projection (C-OD post-delivery settle tails).
@@ -64,7 +64,7 @@ export async function readPayerBalanceSummaries(client: PrismaClient | Prisma.Tr
     const overdraftRoomFen = overLimit ? ZERO : overdraftLimitFen - overdraftUsedFen;
     const headroomFen = walletFen + creditRemainingFen - heldFen;
     const arrearsReason: ArrearsReason | null = row.billingMode === "enforce" && row.payerStatus !== "active" ? "payer_inactive"
-      : headroomFen + overdraftRoomFen <= ZERO || overLimit ? "funds" : null;
+      : headroomFen <= ZERO || overLimit ? "funds" : null;
     summaries.set(row.workspaceId, { billingMode: row.billingMode, payerStatus: row.payerStatus, walletFen, creditUsedFen,
       overdraftUsedFen, overdraftLimitFen, overdraftRoomFen, overLimit, creditRemainingFen, heldFen, balanceFen: walletFen - creditUsedFen - overdraftUsedFen, headroomFen,
       arrears: arrearsReason !== null, arrearsReason, asOf: row.asOf });
