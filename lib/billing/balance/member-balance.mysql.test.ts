@@ -123,6 +123,11 @@ describe.skipIf(!url)("member balance view (B-1) against MySQL", () => {
     // Byte-exact identity while the workspace is still ACTIVE: another case of the same id is not this workspace (or member).
     await expect(view(p.ws.toUpperCase(), owner)).rejects.toThrow("balance_forbidden");
     await expect(view(p.ws, owner.toUpperCase())).rejects.toThrow("balance_forbidden");
+    // A real id with a trailing space is not that id (MySQL PAD SPACE collations would compare them equal), and a well-formed id of a
+    // workspace that does not exist answers the same refusal as any other non-member.
+    await expect(view(`${p.ws} `, owner)).rejects.toThrow("balance_forbidden");
+    await expect(view(p.ws, `${owner} `)).rejects.toThrow("balance_forbidden");
+    await expect(view(`mb-ws-${run}-missing`, owner)).rejects.toThrow("balance_forbidden");
     expect((await view(p.ws, owner)).payer).toMatchObject({ balanceFen: BigInt(10_000) });
     await a.$executeRaw`UPDATE Workspace SET status = 'SUSPENDED' WHERE id = ${p.ws}`;
     await expect(view(p.ws, owner)).rejects.toThrow("balance_forbidden");
