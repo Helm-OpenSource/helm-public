@@ -2007,6 +2007,8 @@ enum FundsTransactionKind {
   charge // S3-b2 (the DB ENUM also holds S3-e's credit_draw from the agreed-union MODIFY; S3-e adds it here)
   credit_draw // S3-e
   overdraft_draw // C-OD
+  overdraft_repay // C-REPAY
+  credit_repay // C-REPAY
 }
 
 enum FundsAccount {

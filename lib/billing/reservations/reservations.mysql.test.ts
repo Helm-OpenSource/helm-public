@@ -748,6 +748,6 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
     expect(await guard("20261110_rollback_billing_funds_journal.sql")).toBe(1);
     const [kind] = await a.$queryRaw<Array<{ type: string }>>`SELECT COLUMN_TYPE AS type FROM information_schema.COLUMNS
       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'FundsTransaction' AND COLUMN_NAME = 'kind'`;
-    expect(kind.type).toBe("enum('topup','correction','bank_topup','charge','credit_draw','overdraft_draw')");
+    expect(kind.type).toBe("enum('topup','correction','bank_topup','charge','credit_draw','overdraft_draw','overdraft_repay','credit_repay')");
   });
 });

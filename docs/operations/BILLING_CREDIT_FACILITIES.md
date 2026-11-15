@@ -10,8 +10,8 @@ public_safety: Public source contract and synthetic test verification only. No r
 
 Billing V1 S3-e (Core): migrations `20261110215000_billing_credit_facilities` and `20261110220000_billing_credit_funds_enums`
 (full funds ENUM union, protocol v3.6), `lib/billing/credit/credit-facilities.ts`; operator CLI and batch issuance
-`lib/billing/credit/credit-operator.ts` (see **Operator CLI**). No route, UI or repayment.
-没有授信记录即授信为 0；批量发放用下文运维命令，还款、应收与对账在 S5。
+`lib/billing/credit/credit-operator.ts` (see **Operator CLI**). No route or UI. Repayment from inflows: **Repayment** below.
+没有授信记录即授信为 0；批量发放用下文运维命令；入账抵扣见下文 Repayment，常规应收对账在后续片。
 
 - **State**: `draft -> approved -> active -> reduced* -> expired | revoked`; revoke also cancels a draft or approved line. One
   `active`/`reduced` facility per payer (UNIQUE `activePayerAccountId`). Approval freezes `approvedLimitFen`; `limitFen` and `usedFen`
@@ -42,10 +42,26 @@ Billing V1 S3-e (Core): migrations `20261110215000_billing_credit_facilities` an
   applies the same binding, as for `charge`); any other sourceRef needs an active payer. A `reservedAt` later than database time
   refuses `credit_input_invalid`. Lock order: PayerAccount -> BillingReservation (share) -> FundsTransaction (share) ->
   CreditFacility -> wallet projection -> journal posting. Only this module posts `credit_draw`; it is never reversed as a correction. S5 reconciliation must check the invariant `credit_receivable` projection = Σ `usedFen`.
+- **Repayment (C-REPAY part 1, protocol v3.10 clause 5)**: `repayArrearsFromInflowInTransaction(tx, { payerAccountId,
+  inflowTransactionId, actor })` (`inflow-repay.ts`) runs right after a `topup` / `bank_topup` in the same READ COMMITTED transaction.
+  Under the payer lock it repays from the **spendable** wallet, wallet - held (enforce held/unknown, the reserve admission `held`), at
+  least 0: the overdraft first, then credit, one `credit_repay` per facility (`usedFen -= x`, `version` unchanged); the rest stays.
+  So wallet - held > 0 implies no debt; a positive wallet beside a debt can remain (holds, pre-C-REPAY balances) until a later inflow.
+  Admitted holds keep their funding and still settle. Order (one `ORDER BY`, `REPAY_ORDER`): closed facilities first, then the drawable
+  one, each by `activatedAt`, then `id` (coordinator default, pending owner confirmation: repaying a closed facility first lowers
+  headroom when the wallet cannot repay everything). The trigger's repayment shape admits `usedFen` falling to `>= 0` with version and
+  the other controlled business columns unchanged; it does not pair the facility with the journal. Refusals: `funds_input_invalid`
+  (not this payer's unreversed inflow), `funds_repay_invariant_breach` (repayment already recorded for the inflow, `credit_receivable`
+  != Σ `usedFen`, or a facility row moved): the inflow rolls back with it (fail-closed); part 2 wires the inflow entry points. Limit:
+  a direct database writer can lower `usedFen` alone (no journal line); S5 is checked only at the next repayment until routine
+  reconciliation lands, so direct writes stay restricted. Lock order: PayerAccount -> FundsTransaction (share) -> CreditFacility ->
+  projections -> journal postings. Release order: part 2 deployed and verified before any top-up channel or bank route opens.
 - **Verify / rollback**: unit `credit-facilities.test.ts`; `npm run test:billing:mysql`. Rollback: stop calling the service;
   `prisma/rollback/20261110_rollback_billing_credit_facilities.sql` refuses while any facility or credit journal row exists, removes
   both migrations and shrinks the ENUMs to the union minus `credit_draw` / `credit_receivable`. Order: S3-e first, then S3-b2 charges,
-  then reservations / S2-c.
+  then reservations / S2-c. C-REPAY: `prisma/rollback/20261115_rollback_billing_inflow_repay.sql` refuses once any repayment row
+  exists (fix forward) and must run before the C-OD rollback; run it whole with a stop-on-error client (`mysql --batch`, never
+  `--force`). A code-only rollback keeping the schema is safe, but new inflows then stop repaying.
 
 ## Operator CLI / 运维命令
 

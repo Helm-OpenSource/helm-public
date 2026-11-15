@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { normalizeFundsPosting, type FundsEntryInput, type PostFundsInput } from "./funds-journal";
+import { creditRepayOperationKey, normalizeFundsPosting, overdraftRepayOperationKey, type FundsEntryInput,
+  type PostFundsInput } from "./funds-journal";
 
 const fen = (value: number) => BigInt(value);
 const topup = (entries: FundsEntryInput[], extra: Partial<PostFundsInput> = {}): PostFundsInput => ({
@@ -71,5 +72,31 @@ describe("funds posting normalization", () => {
     expect(() => normalizeFundsPosting(topup([bankDebit(9), walletCredit(9)]))).toThrow("funds_accounts_not_allowed");
     expect(() => normalizeFundsPosting(topup([{ ...bankDebit(9), direction: "credit" }, { ...walletCredit(9), direction: "debit" }],
       { kind: "correction" }))).toThrow("funds_accounts_not_allowed");
+  });
+  it("posts repayments only through the private channel, with reserved keys and fixed shapes (C-REPAY)", () => {
+    const walletDebit = (amount: number): FundsEntryInput => ({ account: "customer_wallet_available", direction: "debit", amountFen: fen(amount) });
+    const owed = (account: "overdraft_receivable" | "credit_receivable", amount: number): FundsEntryInput => ({ account, direction: "credit",
+      amountFen: fen(amount) });
+    const overdraft = topup([walletDebit(5), owed("overdraft_receivable", 5)], { kind: "overdraft_repay", operationKey: overdraftRepayOperationKey("in-1") });
+    const credit = topup([walletDebit(5), owed("credit_receivable", 5)], { kind: "credit_repay", operationKey: creditRepayOperationKey("in-1", "cf-1") });
+    expect(creditRepayOperationKey("in-1", "cf-1")).toBe("credit-repay:in-1:cf-1");
+    expect(normalizeFundsPosting(overdraft, null, "overdraft_repay").entries.map(e => e.account)).toEqual(["customer_wallet_available", "overdraft_receivable"]);
+    expect(normalizeFundsPosting(credit, null, "credit_repay").entries.map(e => e.account)).toEqual(["credit_receivable", "customer_wallet_available"]);
+    for (const [posting, channel] of [[overdraft, null], [credit, null], [overdraft, "credit_repay"], [credit, "credit_draw"]] as const) {
+      expect(() => normalizeFundsPosting(posting, null, channel)).toThrow("funds_accounts_not_allowed"); // public or another channel
+    }
+    // Shapes: wallet debit against the receivable being repaid; never the other receivable, never reversed directions.
+    expect(() => normalizeFundsPosting({ ...overdraft, entries: [walletDebit(5), owed("credit_receivable", 5)] }, null, "overdraft_repay"))
+      .toThrow("funds_accounts_not_allowed");
+    expect(() => normalizeFundsPosting({ ...credit, entries: [{ ...walletDebit(5), direction: "credit" }, { ...owed("credit_receivable", 5),
+      direction: "debit" }] }, null, "credit_repay")).toThrow("funds_accounts_not_allowed");
+    // Reserved prefixes both ways: a repayment needs its key; no other kind (a correction included) may occupy one.
+    expect(() => normalizeFundsPosting({ ...credit, operationKey: "fee:x" }, null, "credit_repay")).toThrow("funds_input_invalid");
+    expect(() => normalizeFundsPosting({ ...overdraft, operationKey: "credit-repay:in-1:cf-1" }, null, "overdraft_repay")).toThrow("funds_input_invalid");
+    const squat = topup([walletDebit(5), { account: "correction_suspense", direction: "credit", amountFen: fen(5) }], { kind: "correction" });
+    for (const operationKey of [overdraftRepayOperationKey("in-1"), creditRepayOperationKey("in-1", "cf-1")]) {
+      expect(() => normalizeFundsPosting({ ...squat, operationKey })).toThrow("funds_input_invalid");
+    }
+    expect(normalizeFundsPosting({ ...squat, operationKey: "fee:in-1" }).kind).toBe("correction");
   });
 });

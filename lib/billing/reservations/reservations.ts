@@ -2,7 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { availableCreditFen, CreditFacilityRefusal, drawCreditShortfallInTransaction } from "../credit/credit-facilities";
-import { FundsRefusal, postSettleChargeFundsInTransaction,
+import { FundsRefusal, heldEnforceFenInTransaction, postSettleChargeFundsInTransaction,
   settleDrawSourceRef } from "../funds/funds-journal";
 import { MAX_FEN } from "../funds/money";
 import { resolvePayerForWorkspaceInTransaction } from "../payer/payer-accounts";
@@ -217,12 +217,11 @@ async function reserveInTransaction(tx: Prisma.TransactionClient, actor: Service
   if (billingMode === "enforce" && !postDelivery) { // post_delivery: already delivered; settle records any tail as overdraft
     // Non-locking reads: every hold and wallet writer holds this PayerAccount lock, so each read (READ COMMITTED) is
     // current; FOR SHARE range locks here deadlocked first reserves across payers. Callers must not read before calling.
-    const [{ held }] = await tx.$queryRaw<Array<{ held: bigint }>>`SELECT CAST(COALESCE(SUM(chargeFen), 0) AS SIGNED) AS held
-      FROM BillingReservation WHERE payerAccountId = ${payerAccountId} AND billingMode = 'enforce' AND state IN ('held', 'unknown')`;
+    const held = await heldEnforceFenInTransaction(tx, payerAccountId);
     const [wallet] = await tx.$queryRaw<Array<{ balanceFen: bigint }>>`SELECT balanceFen FROM FundsAccountProjection
       WHERE payerAccountId = ${payerAccountId} AND account = 'customer_wallet_available'`;
     const credit = await availableCreditFen(tx, payerAccountId); // owner v3: wallet + remaining credit (S3-e) must cover the holds
-    if (BigInt(wallet?.balanceFen ?? ZERO) + credit - BigInt(held) < chargeFen) reject("insufficient_funds");
+    if (BigInt(wallet?.balanceFen ?? ZERO) + credit - held < chargeFen) reject("insufficient_funds");
   }
   for (const bucket of buckets) {
     await moveBucket(tx, grant.id, billingMode, bucket, { reservedDelta: chargeFen, settledDelta: ZERO,

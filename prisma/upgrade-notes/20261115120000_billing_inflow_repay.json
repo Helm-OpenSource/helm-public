@@ -1,0 +1,59 @@
+{
+  "schema": "helm.upgrade-note/v1",
+  "migration": "20261115120000_billing_inflow_repay",
+  "summary": {
+    "zh": "计费入账抵扣（第 1 片）：资金交易类型追加 overdraft_repay 与 credit_repay；资金投影新增触发器保证授信应收投影非负；授信更新触发器重建，新增「还款形状」（版本不变、已用额度下降且 ≥ 0、其他列不变，已到期或已撤销的授信也可还）。不改已有数据，不动资金；本片代码不接入任何入账点。",
+    "en": "Billing inflow repayment (part 1): appends overdraft_repay and credit_repay to the funds transaction kinds, adds projection triggers keeping the credit receivable projection non-negative, and recreates the credit facility update trigger with a repayment shape (version unchanged, usedFen falls and stays >= 0, other columns unchanged, expired and revoked facilities included). No existing data changes and no money moves; this part wires no inflow entry point."
+  },
+  "ddl": [
+    {
+      "table": "FundsTransaction",
+      "existingTable": true,
+      "algorithm": "INSTANT",
+      "lock": "NONE",
+      "rebuild": false
+    },
+    {
+      "table": "FundsAccountProjection",
+      "existingTable": true,
+      "algorithm": "TRIGGER",
+      "lock": "NONE",
+      "rebuild": false
+    },
+    {
+      "table": "CreditFacility",
+      "existingTable": true,
+      "algorithm": "TRIGGER",
+      "lock": "NONE",
+      "rebuild": false
+    }
+  ],
+  "rollback": {
+    "kind": "sql",
+    "path": "prisma/rollback/20261115_rollback_billing_inflow_repay.sql"
+  },
+  "order": "migrate-before-code",
+  "env": [],
+  "verification": [
+    {
+      "zh": "顺序：停相关写入方（内部计费路由关闭、结算器与授信、对公到账财务命令停止、充值通知保持关闭）→ 等在途事务排空 → 迁移 → 核对 CreditFacility_guard_update 已重建且含还款形状 → 部署代码 → 恢复入口。删除与重建触发器之间该表没有更新守卫，所以必须停写。本片只代表账本能力就绪：第 2 片两处入账接线及其验证完成并部署之后，才能做支付宝切换、开放对公收款路由。",
+      "en": "Order: stop the writers (internal billing routes off, settler, credit and bank-receipt finance commands stopped, top-up notifications kept off), drain open transactions, migrate, check that CreditFacility_guard_update was recreated with the repayment shape, deploy the code, reopen the entries. Between dropping and recreating the trigger the table has no update guard, hence the stopped writers. This part only makes the ledger ready: switch the Alipay channel or open the bank receipt route only after part 2 (both inflow entry points wired, verified and deployed)."
+    },
+    {
+      "zh": "迁移不幂等，中途失败不能原样重跑：保持停写，按迁移文件手工补完剩余语句（若触发器已删先重建），再用 prisma migrate resolve --applied 标记。",
+      "en": "Not idempotent: after a partial failure keep writers stopped, finish the remaining statements by hand (recreate the trigger first if it was dropped), then mark it with prisma migrate resolve --applied."
+    },
+    {
+      "zh": "核对 FundsTransaction.kind 以 overdraft_repay、credit_repay 结尾；FundsAccountProjection 有 credit_insert、credit_update 两个新触发器；没有任何 credit_receivable 投影为负。",
+      "en": "Check that FundsTransaction.kind ends with overdraft_repay, credit_repay; FundsAccountProjection has the two new credit_insert / credit_update triggers; no credit_receivable projection is negative."
+    },
+    {
+      "zh": "回滚：本片迁移在位时，20261115100000_billing_overdraft 不能单独回滚（其守卫拒绝更晚的 billing 迁移），须先回滚本片；一旦有还款行，本片回滚脚本拒绝执行，只能前滚修复。脚本必须用遇错即停的方式整份执行（mysql --batch <库名> < 脚本，非零退出即拒绝），禁止 --force 等继续执行模式。只回滚代码、保留库结构是安全的，但之后新入账不再抵扣。",
+      "en": "Rollback: while this migration is applied, 20261115100000_billing_overdraft cannot be rolled back alone (its guard refuses a later billing migration), so roll this one back first; once any repayment row exists this rollback refuses and only a fix-forward remains. Run the script whole with a stop-on-error client (mysql --batch <database> < file; non-zero exit = refused), never in a continue-on-error mode such as --force. A code-only rollback keeping this schema is safe, but new inflows then stop repaying."
+    },
+    {
+      "zh": "上表的算法与锁为 MySQL 8.0 / 8.4 的预期行为，未实测。生产启用前置：binlog_format=ROW；必须具备建触发器权限；binlog 开启且无 SUPER 时还须另设 log_bin_trust_function_creators=1（不能替代该权限）。",
+      "en": "The algorithms and locks above are expected MySQL 8.0 / 8.4 behaviour, not measured. Production prerequisites: binlog_format=ROW and the TRIGGER privilege; with binary logging on and no SUPER, also log_bin_trust_function_creators=1 (it never replaces the privilege)."
+    }
+  ]
+}
