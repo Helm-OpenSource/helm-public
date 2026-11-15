@@ -574,6 +574,7 @@ jobs:
               printf "GRANT SELECT, INSERT, UPDATE ON \`%s\`.\`%s\` TO 'c4_runtime'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}" "${table}"
             done
             printf "GRANT SELECT ON performance_schema.data_lock_waits TO '%s'@'%%';\n" "${HELM_CI_MYSQL_USER}"
+            printf "GRANT SELECT ON performance_schema.data_locks TO '%s'@'%%';\n" "${HELM_CI_MYSQL_USER}" # C-REPAY: which row a wait is on
             printf "GRANT INSERT ON \`%s\`.AuditLog TO 'c4_runtime'@'%%';\n" "${HELM_CI_MYSQL_DATABASE}"
             # The application operation writer has no authority over the C4
             # spend ledger or route claim. Existing identity fields are immutable
