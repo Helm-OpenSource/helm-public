@@ -46,8 +46,11 @@ export async function repayArrearsFromInflowInTransaction(tx: Prisma.Transaction
   // Callers repay only a fresh inflow (a provider or checker replay returns before posting), so a recorded repayment is a breach;
   // recomputing would give other amounts, so content-hash replay cannot apply here.
   const overdraftKey = overdraftRepayOperationKey(inflowTransactionId), creditPrefix = creditRepayKeyPrefix(inflowTransactionId);
+  // A range on the binary-collated key (the prefix ends with ':', so every key under it sorts below the same text ending ';') uses
+  // the (payerAccountId, operationKey) index instead of scanning all of this payer's transactions.
+  const creditPrefixEnd = `${creditPrefix.slice(0, -1)};`;
   const [prior] = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM FundsTransaction WHERE payerAccountId = ${payerAccountId}
-    AND (operationKey = ${overdraftKey} OR LEFT(operationKey, ${creditPrefix.length}) = ${creditPrefix}) LIMIT 1 FOR SHARE`;
+    AND (operationKey = ${overdraftKey} OR (operationKey >= ${creditPrefix} AND operationKey < ${creditPrefixEnd})) LIMIT 1 FOR SHARE`;
   if (prior) breach();
 
   const facilities = (await tx.$queryRaw<Array<{ id: string; usedFen: bigint }>>`SELECT id, usedFen FROM CreditFacility

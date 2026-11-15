@@ -282,6 +282,14 @@ describe.skipIf(!url)("inflow repayment against MySQL (C-REPAY)", () => {
     }
     await expect(a.$executeRaw`UPDATE CreditFacility SET usedFen = -1 WHERE id = ${line.id}`).rejects.toThrow(/credit_facility_guard|check constraint/i);
     expect(await used(line.id)).toBe(fen(100));
+    // On a closed facility only the trigger guards closedAt (the table CHECK holds for any non-NULL value).
+    const closed = await payer();
+    const old = await facility(closed.payerAccountId, 100);
+    await borrow(closed.payerAccountId, 100);
+    await close(old.id, "revoke");
+    await expect(a.$executeRaw`UPDATE CreditFacility SET usedFen = 90, closedAt = closedAt + INTERVAL 1 SECOND WHERE id = ${old.id}`)
+      .rejects.toThrow(/credit_facility_guard/);
+    expect(await used(old.id)).toBe(fen(100));
     await expect(a.$executeRaw`UPDATE FundsAccountProjection SET balanceFen = -1 WHERE payerAccountId = ${p.payerAccountId}
       AND account = 'credit_receivable'`).rejects.toThrow(/funds_credit_projection_invalid/);
     const fresh = await payer();
