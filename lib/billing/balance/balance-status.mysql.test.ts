@@ -279,6 +279,24 @@ describe.skipIf(!url)("balance-status and the balance summary against MySQL", ()
     // Each line fits the fen bound, their sum does not: both new fields are null (arrears is false here).
     expect((await results([shared.ws, second], [pending(shared.ws, "130000000000000"), pending(second, "130000000000000")])).map(r =>
       [r.headroomAfterPendingFen, r.arrearsAfterPending, r.arrears])).toEqual([[null, null, false], [null, null, false]]);
+    // The running total is bounded itself: two lines of the max quantity at 1 fen against the max headroom total 2 x MAX, which
+    // is out of range although headroom - total (-MAX) is not. Both new fields are null, not -MAX / true.
+    const unitPrice = (await publishPriceVersion(a, { actor: { type: "SYSTEM", ref: "synthetic-catalog" }, productCode: `synthetic.bal1${run}`,
+      version: 1, meterUnit: "unit", billingEventRef: event, acceptanceRef: "acceptance:synthetic", scopeKind: "workspace",
+      unitPriceFenNumerator: BigInt(1), unitPriceDenominator: BigInt(1), effectiveFrom: new Date("2026-11-01T00:00:00Z"),
+      effectiveUntil: null, approvalRef: "approval:synthetic" })).priceVersion.id;
+    const rich = await payer("enforce", 9007199254740991), rich2 = `bal-ws3-${run}`;
+    const { grant: unitGrant } = await createSpendGrant(a, { actorUserId: owner, payerAccountId: rich.payerRef, priceVersionId: unitPrice,
+      operationKey: "grant:bal1", evidenceRef: "consent:synthetic", validFrom: new Date("2026-11-01T00:00:00Z"),
+      validUntil: new Date("2027-02-01T00:00:00Z"), limits: { perChargeLimitFen: BigInt(1), dailyLimitFen: BigInt(1), monthlyLimitFen: BigInt(1) } });
+    await changeSpendGrant(a, { actorUserId: owner, grantId: unitGrant.id, expectedVersion: 1, action: "activate", evidenceRef: "consent:on" });
+    await a.$executeRaw`INSERT INTO Workspace (id,name,slug,updatedAt) VALUES (${rich2},'Synthetic balance',${rich2},NOW(3))`;
+    await a.$executeRaw`INSERT INTO Membership (id,workspaceId,userId,role,status,updatedAt) VALUES (${`m-${rich2}`},${rich2},${owner},'OWNER','ACTIVE',NOW(3))`;
+    await bindScope(a, { actorUserId: owner, payerAccountId: rich.payerRef, scopeKind: "workspace", scopeRef: rich2, evidenceRef: "consent:bind",
+      expectedPayerVersion: (await a.payerAccount.findUniqueOrThrow({ where: { id: rich.payerRef } })).version });
+    const max = "9007199254740991";
+    expect((await results([rich.ws, rich2], [pending(rich.ws, max, { meterUnit: "unit" }), pending(rich2, max, { meterUnit: "unit" })])).map(r =>
+      [r.headroomFen, r.headroomAfterPendingFen, r.arrearsAfterPending])).toEqual([[max, null, null], [max, null, null]]);
     // A fractional price is bounded by ceil(quantity x price + settles/2): n half-up settles exceed the exact amount by <= n/2 fen.
     const thirds = (await publishPriceVersion(a, { actor: { type: "SYSTEM", ref: "synthetic-catalog" }, productCode: `synthetic.bal3${run}`,
       version: 1, meterUnit: "segment", billingEventRef: event, acceptanceRef: "acceptance:synthetic", scopeKind: "workspace",

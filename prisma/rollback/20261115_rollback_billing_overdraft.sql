@@ -2,7 +2,8 @@
 -- online, reject any drafted `overdraft_limit` operation (the old code cannot review it); then stop the writers and drain open
 -- transactions; run this script; then roll the code back (the previous code neither reads the limit, posts overdraft nor writes
 -- `admission`). Applied or rejected operations stay as immutable history and are harmless once every limit is 0. Refuses while any `overdraft_draw` / `overdraft_receivable` row or non-zero limit exists, or a
--- later billing migration is applied; stop writers first. Shrinks the funds ENUMs to the union minus this slice's two values
+-- `_prisma_migrations` holds any later billing migration record (finished_at / rolled_back_at are not checked, so a failed or
+-- rolled-back later record also blocks: check and resolve it first; a conservative refusal); stop writers first. Shrinks the funds ENUMs to the union minus this slice's two values
 -- (protocol v3.6), drops the column (ALGORITHM=COPY for the CHECK), then the triggers, and lets `prisma migrate deploy` re-apply.
 DROP PROCEDURE IF EXISTS `rollback_billing_overdraft`;
 DELIMITER $$
