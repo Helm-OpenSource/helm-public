@@ -272,8 +272,10 @@ export function isRetryableFundsConflict(error: unknown) {
 /** Runs a money transaction with a bounded retry on those conflicts; when attempts run out it refuses `funds_write_conflict`. */
 export async function runFundsTransactionWithRetry<T>(client: PrismaClient, run: (tx: Prisma.TransactionClient) => Promise<T>,
   attempts = 3, isolationLevel?: Prisma.TransactionIsolationLevel): Promise<T> {
+  // The level is set only when a caller names one; otherwise the options are exactly the pre-C-REPAY ones.
+  const options = { maxWait: 5000, timeout: 10000, ...(isolationLevel ? { isolationLevel } : {}) };
   for (let attempt = 1; ; attempt += 1) {
-    try { return await client.$transaction(run, { maxWait: 5000, timeout: 10000, isolationLevel }); } catch (error) {
+    try { return await client.$transaction(run, options); } catch (error) {
       if (!isRetryableFundsConflict(error)) throw error;
       if (attempt >= attempts) refuse("funds_write_conflict");
       await new Promise(resolve => setTimeout(resolve, 5 * attempt + Math.floor(Math.random() * 10)));

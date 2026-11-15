@@ -390,8 +390,11 @@ describe.skipIf(!url)("inflow repayment against MySQL (C-REPAY)", () => {
     const paid = await a.$transaction(async tx => {
       await tx.$queryRaw`SELECT COUNT(*) AS n FROM BillingReservation WHERE payerAccountId = ${p.payerAccountId}`; // snapshot now
       await hold(p, 100); // another transaction holds 10000 and commits
-      return inflowTx(tx, p.payerAccountId, 1);
-    }, { timeout: 15_000 }); // the default isolation level, REPEATABLE READ
+      const staleHeld = await heldEnforceFenInTransaction(tx, p.payerAccountId); // a plain read still sees the old snapshot
+      const result = await inflowTx(tx, p.payerAccountId, 1);
+      return { ...result, staleHeld, staleHeldAfter: await heldEnforceFenInTransaction(tx, p.payerAccountId) };
+    }, { timeout: 15_000, isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
+    expect([paid.staleHeld, paid.staleHeldAfter]).toEqual([fen(0), fen(0)]); // the snapshot predates the hold throughout
     expect(paid.repayment).toMatchObject({ creditRepaid: [{ facilityId: line.id, amountFen: fen(1) }] });
     expect(await books(p.payerAccountId)).toEqual({ wallet: fen(10_000), credit: fen(9_999), overdraft: fen(0) });
   });
@@ -419,7 +422,8 @@ describe.skipIf(!url)("inflow repayment against MySQL (C-REPAY)", () => {
     const p = await payer(), line = await facility(p.payerAccountId, 30_000);
     await borrow(p.payerAccountId, 25_000);
     const first = await paidCallback(p, 100);
-    const pair = await Promise.all([first.send(a), first.send(b)]); // the same inflow twice at once: one credit, one replay
+    // The same inflow twice at once, both seen waiting on the payer lock together: one credit, one replay.
+    const pair = await contended(p.payerAccountId, () => [first.send(a), first.send(b)]);
     expect(pair.map(r => r.outcome).sort()).toEqual(["credited", "replayed"]);
     expect((await first.send()).outcome).toBe("replayed");
     const rows = await repayRows(p.payerAccountId);
@@ -486,6 +490,102 @@ describe.skipIf(!url)("inflow repayment against MySQL (C-REPAY)", () => {
     expect((await inflow(p.payerAccountId, 400)).repayment).toMatchObject({ overdraftRepaidFen: fen(200), creditRepaid: [{ amountFen: fen(200) }] });
     expect(await repayRows(p.payerAccountId)).toHaveLength(2);
     expect(await books(p.payerAccountId)).toEqual({ wallet: fen(0), credit: fen(100), overdraft: fen(0) });
+  });
+
+  /** Waits (bounded) until `n` distinct transactions wait on a row lock of `table`; tests run one at a time, so they are ours. */
+  async function waitersOn(table: string, n = 1) {
+    for (const deadline = Date.now() + 10_000; ;) {
+      const [row] = await a.$queryRaw<Array<{ n: bigint }>>`SELECT COUNT(DISTINCT w.REQUESTING_ENGINE_TRANSACTION_ID) AS n
+        FROM performance_schema.data_lock_waits w JOIN performance_schema.data_locks l ON l.ENGINE_LOCK_ID = w.REQUESTING_ENGINE_LOCK_ID
+        WHERE l.OBJECT_NAME = ${table}`;
+      if (Number(row.n) >= n) return;
+      if (Date.now() > deadline) throw new Error(`no_waiter_on_${table}`);
+      await sleep(20);
+    }
+  }
+  const settledOf = <T>(work: Promise<T>) => work.then(value => ({ value, error: null }), (error: unknown) => ({ value: null, error }));
+  const within = <T>(work: Promise<T>, ms: number) =>
+    Promise.race([work, sleep(ms).then((): never => { throw new Error("cross_payer_wait"); })]);
+
+  it("rolls everything back when the second repayment fails after the first is written (direct fault injection)", async () => {
+    // Overdraft 200 beside credit 300 and an unrepaid inflow of 400: its repayment writes overdraft_repay 200, then credit_repay 200.
+    const p = await payer(), line = await facility(p.payerAccountId, 300);
+    await borrow(p.payerAccountId, 300);
+    expect(await deliver(p, 2)).toMatchObject({ ok: true });
+    const inflowId = (await legacyTopup(p.payerAccountId, 400)).transaction.id;
+    const snapshot = async () => ({ rows: await a.fundsTransaction.count({ where: { payerAccountId: p.payerAccountId } }),
+      books: await balances(p.payerAccountId), used: await used(line.id) });
+    const before = await snapshot();
+    // A REPEATABLE READ locking read of the absent credit_repay key gap-locks it, so only that insert waits (the overdraft key sorts
+    // into another gap). A short lock wait timeout on a dedicated connection then fails the second repayment's write.
+    const victim = new PrismaClient({ datasources: { db: { url: `${url}${url.includes("?") ? "&" : "?"}connection_limit=1` } } });
+    try {
+      await victim.$executeRawUnsafe("SET SESSION innodb_lock_wait_timeout = 2");
+      const outcome = await a.$transaction(async gate => {
+        await gate.$queryRaw`SELECT id FROM FundsTransaction WHERE payerAccountId = ${p.payerAccountId}
+          AND operationKey = ${`credit-repay:${inflowId}:${line.id}`} FOR UPDATE`;
+        const repaid = settledOf(victim.$transaction(tx => repayArrearsFromInflowInTransaction(tx, { payerAccountId: p.payerAccountId,
+          inflowTransactionId: inflowId, actor: VERIFIER }), { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, timeout: 15_000 }));
+        await waitersOn("FundsTransaction");
+        // The first repayment is already written by the waiting transaction (a dirty read, for this proof only).
+        const firstWritten = await a.$transaction(tx => tx.fundsTransaction.count({ where: { payerAccountId: p.payerAccountId,
+          operationKey: `overdraft-repay:${inflowId}` } }), { isolationLevel: Prisma.TransactionIsolationLevel.ReadUncommitted });
+        return { firstWritten, repaid: await repaid };
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, timeout: 20_000 });
+      expect(outcome.firstWritten).toBe(1);
+      expect(String(outcome.repaid.error)).toMatch(/Lock wait timeout/i);
+    } finally { await victim.$disconnect(); }
+    expect(await snapshot()).toEqual(before); // no repayment row, projections and usedFen unchanged
+    expect(await repayRows(p.payerAccountId)).toHaveLength(0);
+    expect((await a.$transaction(tx => recomputeFundsProjection(tx, p.payerAccountId))).consistent).toBe(true);
+  });
+
+  it("re-runs a deadlocked top-up in the real entry under the same provider transaction: one credit, one repayment", async () => {
+    const p = await payer(), line = await facility(p.payerAccountId, 30_000);
+    await borrow(p.payerAccountId, 20_000);
+    const topup = await paidCallback(p, 100);
+    const weight = id(`wt${(seq += 1)}`);
+    let entry: Promise<{ value: Awaited<ReturnType<typeof topup.send>> | null; error: unknown }> | undefined;
+    await expect(a.$transaction(async gate => {
+      // Heavier than the entry (InnoDB rolls back the lighter transaction of a deadlock), so the entry is the victim.
+      await gate.$executeRaw`INSERT INTO Workspace (id, name, slug, updatedAt) WITH RECURSIVE n (i) AS (SELECT 1 UNION ALL
+        SELECT i + 1 FROM n WHERE i < 200) SELECT CONCAT(${weight}, '-', i), 'Synthetic weight', CONCAT(${weight}, '-', i), NOW(3) FROM n`;
+      await gate.$queryRaw`SELECT id FROM CreditFacility WHERE id = ${line.id} FOR UPDATE`;
+      entry = settledOf(topup.send(b));
+      await waitersOn("CreditFacility"); // the entry holds the payer lock, has posted the top-up and waits in its repayment
+      // Closing the cycle; this must be granted, i.e. the entry was rolled back. Then this gate rolls back too.
+      await gate.$queryRaw`SELECT id FROM PayerAccount WHERE id = ${p.payerAccountId} FOR UPDATE`;
+      throw new Error("gate_released");
+    }, { timeout: 20_000 })).rejects.toThrow("gate_released");
+    const { value, error } = await entry!;
+    expect(error).toBeNull();
+    expect(value).toMatchObject({ outcome: "credited" });
+    expect(await a.fundsTransaction.count({ where: { payerAccountId: p.payerAccountId,
+      operationKey: `topup:wechat_pay:${topup.body.transaction_id}` } })).toBe(1);
+    expect((await repayRows(p.payerAccountId)).map(row => [row.kind, row.operationKey])).toEqual([["credit_repay",
+      `credit-repay:${value!.fundsTransactionId}:${line.id}`]]);
+    expect(await books(p.payerAccountId)).toEqual({ wallet: fen(0), credit: fen(10_000), overdraft: fen(0) });
+  });
+
+  it("does not wait on another payer's reservation or open inflow (READ COMMITTED, as the entries run)", async () => {
+    const p = await payer(), q = await payer();
+    await facility(p.payerAccountId, 1000);
+    await borrow(p.payerAccountId, 300);
+    const delivered = await hold(q, 2, "post_delivery");
+    // q's reservation locked as its settle locks it: p's inflow sums p's holds and repays without waiting on that row.
+    await a.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM BillingReservation WHERE id = ${delivered.reservationId} FOR UPDATE`;
+      const paid = await within(inflow(p.payerAccountId, 150, "topup", b), 5_000);
+      expect(paid.repayment.creditRepaid.map(r => r.amountFen)).toEqual([fen(150)]);
+    }, { timeout: 15_000 });
+    // p's inflow and repayment left open (uncommitted): q settles, overdraws and repays from its own inflow meanwhile.
+    await a.$transaction(async tx => {
+      expect((await inflowTx(tx, p.payerAccountId, 50)).repayment.creditRepaid.map(r => r.amountFen)).toEqual([fen(50)]);
+      expect(await within(delivered.settle(b), 5_000)).toMatchObject({ ok: true, chargeFen: "200" });
+      expect((await within(inflow(q.payerAccountId, 120, "topup", b), 5_000)).repayment).toMatchObject({ overdraftRepaidFen: fen(120) });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, timeout: 15_000 });
+    expect(await books(p.payerAccountId)).toEqual({ wallet: fen(0), credit: fen(100), overdraft: fen(0) });
+    expect(await books(q.payerAccountId)).toEqual({ wallet: fen(0), credit: fen(0), overdraft: fen(80) });
   });
 
   it("keeps keys apart for inflow ids 1 and 10, accepts a facility id with separators and orders equal activation times by id", async () => {
