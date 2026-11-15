@@ -2,21 +2,78 @@
   "schema": "helm.upgrade-note/v1",
   "migration": "20261115100000_billing_overdraft",
   "summary": {
-    "zh": "计费透支：资金枚举追加 overdraft_draw 与 overdraft_receivable，付款主体新增每户透支上限列（默认 0，即不允许透支），资金投影新增两个触发器约束透支投影非负且不超过上限。不改已有数据，不动资金。",
-    "en": "Billing overdraft: appends overdraft_draw and overdraft_receivable to the funds enums, adds a per-payer overdraft limit column (default 0, no overdraft) and two projection triggers that keep the overdraft projection non-negative and within the limit. No existing data changes and no money moves."
+    "zh": "计费透支：资金枚举追加 overdraft_draw 与 overdraft_receivable；付款主体新增每户透支软上限列（默认 0）；资金投影新增触发器保证透支投影非负；预占新增 admission 列（standard / post_delivery）并重建更新触发器使其不可修改。不改已有数据，不动资金。",
+    "en": "Billing overdraft: appends overdraft_draw and overdraft_receivable to the funds enums, adds a per-payer overdraft soft-limit column (default 0), projection triggers keeping the overdraft projection non-negative, and a reservation admission column (standard / post_delivery) frozen by the recreated update trigger. No existing data changes and no money moves."
   },
   "ddl": [
-    { "table": "FundsTransaction", "existingTable": true, "algorithm": "INSTANT", "lock": "NONE", "rebuild": false },
-    { "table": "FundsJournalEntry", "existingTable": true, "algorithm": "INSTANT", "lock": "NONE", "rebuild": false },
-    { "table": "FundsAccountProjection", "existingTable": true, "algorithm": "INSTANT", "lock": "NONE", "rebuild": false },
-    { "table": "PayerAccount", "existingTable": true, "algorithm": "COPY", "lock": "SHARED", "rebuild": true },
-    { "table": "FundsAccountProjection", "existingTable": true, "algorithm": "TRIGGER", "lock": "NONE", "rebuild": false }
+    {
+      "table": "FundsTransaction",
+      "existingTable": true,
+      "algorithm": "INSTANT",
+      "lock": "NONE",
+      "rebuild": false
+    },
+    {
+      "table": "FundsJournalEntry",
+      "existingTable": true,
+      "algorithm": "INSTANT",
+      "lock": "NONE",
+      "rebuild": false
+    },
+    {
+      "table": "FundsAccountProjection",
+      "existingTable": true,
+      "algorithm": "INSTANT",
+      "lock": "NONE",
+      "rebuild": false
+    },
+    {
+      "table": "PayerAccount",
+      "existingTable": true,
+      "algorithm": "COPY",
+      "lock": "SHARED",
+      "rebuild": true
+    },
+    {
+      "table": "FundsAccountProjection",
+      "existingTable": true,
+      "algorithm": "TRIGGER",
+      "lock": "NONE",
+      "rebuild": false
+    },
+    {
+      "table": "BillingReservation",
+      "existingTable": true,
+      "algorithm": "INSTANT",
+      "lock": "NONE",
+      "rebuild": false
+    },
+    {
+      "table": "BillingReservation",
+      "existingTable": true,
+      "algorithm": "TRIGGER",
+      "lock": "NONE",
+      "rebuild": false
+    }
   ],
-  "rollback": { "kind": "sql", "path": "prisma/rollback/20261115_rollback_billing_overdraft.sql" },
+  "rollback": {
+    "kind": "sql",
+    "path": "prisma/rollback/20261115_rollback_billing_overdraft.sql"
+  },
   "order": "migrate-before-code",
   "env": [],
   "verification": [
-    { "zh": "核对 PayerAccount 存在 overdraftLimitFen 且所有行为 0；FundsAccountProjection 有两个 overdraft 触发器。", "en": "Check that PayerAccount has overdraftLimitFen with every row at 0, and FundsAccountProjection has the two overdraft triggers." },
-    { "zh": "核对 FundsTransaction.kind 的枚举以 overdraft_draw 结尾。", "en": "Check that the FundsTransaction.kind enum ends with overdraft_draw." }
+    {
+      "zh": "核对 PayerAccount 存在 overdraftLimitFen 且所有行为 0；FundsAccountProjection 有两个 overdraft 触发器；BillingReservation.admission 已有行均为 standard。",
+      "en": "Check that PayerAccount has overdraftLimitFen with every row at 0, FundsAccountProjection has the two overdraft triggers, and every existing BillingReservation.admission is standard."
+    },
+    {
+      "zh": "核对 FundsTransaction.kind 的枚举以 overdraft_draw 结尾。",
+      "en": "Check that the FundsTransaction.kind enum ends with overdraft_draw."
+    },
+    {
+      "zh": "迁移期间保持内部计费路由关闭：预占更新触发器删除与重建之间没有更新保护。",
+      "en": "Keep the internal billing routes off while migrating: there is no reservation update guard between dropping and recreating the trigger."
+    }
   ]
 }

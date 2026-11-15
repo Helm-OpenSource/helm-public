@@ -2164,6 +2164,12 @@ enum BudgetPeriodKind {
   month
 }
 
+// C-OD part 2: post_delivery = reserved after the work was delivered (no funds check; settle may overdraw the tail).
+enum BillingReservationAdmission {
+  standard
+  post_delivery
+}
+
 enum BillingReservationState {
   held
   unknown
@@ -2217,6 +2223,7 @@ model BillingReservation {
   subjectWorkspaceId    String                  @db.VarChar(191) // the workspace the caller declared (reserve subjectScope)
   payerBindingId        String                  @db.VarChar(191) // its active PayerScopeBinding at reserve time; names payerAccountId
   payerBindingVersion   Int
+  admission             BillingReservationAdmission @default(standard)
   unknownKey            String?                 @db.VarChar(191)
   unknownEvidenceRef    String?                 @db.VarChar(191)
   unknownAt             DateTime?

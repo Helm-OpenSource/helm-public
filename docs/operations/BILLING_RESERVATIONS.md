@@ -46,15 +46,14 @@ S3-b1/S3-b2 (Core): migrations `20261110200000_billing_reservations`, `202611102
   calls `drawCreditShortfallInTransaction` with the settled `chargeFen`, the locked row's frozen `reservedAt`, `sourceRef`
   `reservation:<id>` and the service actor: it borrows only `max(0, chargeFen - wallet)` (`credit-draw:reservation:<id>`), so the
   wallet pays first and nets to 0, and the charge then debits the wallet in full. A same-key replay returns before it (never a
-  second draw). **Overdraft (C-OD, migration `20261115100000_billing_overdraft`)**: settle passes `upToAvailable`, so credit lends
-  what it can (possibly 0) and `drawOverdraftShortfallInTransaction` posts what the wallet still lacks as one `overdraft_draw`
-  (debit `overdraft_receivable`, credit wallet, `overdraft-draw:reservation:<id>`), only while outstanding overdraft stays within
-  the payer's `overdraftLimitFen` (0 unless a platform `overdraft_limit` operation was approved; no default allowance). Order:
-  wallet -> credit -> overdraft -> full wallet charge, so the wallet never goes negative. Beyond the limit
-  (`funds_overdraft_limit_exceeded`) the whole settle rolls back and is `insufficient_funds`: the reservation stays held. Reserve
-  admission is unchanged (wallet + remaining credit - held), so overdraft only absorbs a tail found at settle and the unused
-  limit never admits new work. Only settle posts `overdraft_draw`; it is never reversed. Projection triggers keep the overdraft
-  projection >= 0 and refuse any increase above the payer's limit.
+  second draw). **Overdraft (C-OD, migration `20261115100000_billing_overdraft`)**: for a `post_delivery` reservation only
+  (any other keeps the rule above), settle passes `upToAvailable`, so credit lends what it can (possibly 0), and
+  `drawOverdraftShortfallInTransaction` posts all that the wallet still lacks as one `overdraft_draw` (debit
+  `overdraft_receivable`, credit wallet, `overdraft-draw:reservation:<id>`). Order: wallet -> credit -> overdraft -> full wallet
+  charge, so the wallet never goes negative. The payer's `overdraftLimitFen` is a **soft** limit (design Q9, §2.5): delivered
+  usage is always recorded, never refused; beyond the limit the balance summary reports `overLimit` (and arrears). Standard
+  reserve admission is unchanged (wallet + remaining credit - held). Only settle posts `overdraft_draw`; it is never reversed;
+  projection triggers keep the overdraft projection >= 0.
   A 0-fen settle (smaller quantity) is `settled` with `chargeFen` 0 and no draw or funds entry.
   Shadow writes the charge (`fundsTransactionId` null) and `billing.charge.shadow_settled`, never funds or credit. Settle of a held
   reservation never checks payer status or mode (R05: delivered results are processed; only new reserves are blocked, for shadow
@@ -81,9 +80,9 @@ S3-b1/S3-b2 (Core): migrations `20261110200000_billing_reservations`, `202611102
   throws `reservation_invariant_breach` (not a code): the S3-b3 route must alert on it; do not retry.
 - **Verify / rollback**: `reservations.test.ts`; `npm run test:billing:mysql` (over-limit and 16-payer concurrency, racing keys,
   double settle, settle vs release, cross-period settle, triggers, guarded rollbacks; S3-w: credit-backed reserve, shortfall-only
-  draw, replay without a second draw, tightened line, 0-fen/shadow, suspended payer, concurrent draws; C-OD: no overdraft without a
-  limit, wallet -> credit -> overdraft order, replay without a second overdraft, two contending tails under one limit, private
-  posting channel, no reversal, projection trigger). C-OD rollback: revert the code, then
+  draw, replay without a second draw, tightened line, 0-fen/shadow, suspended payer, concurrent draws; C-OD: no
+  limit refusal at limits 0/30/50/10000, wallet -> credit -> overdraft order, replay without a second overdraft, overLimit and
+  headroom, two contending tails both recorded, standard tails never overdraw, private posting channel, no reversal, triggers). C-OD rollback: revert the code, then
   `prisma/rollback/20261115_rollback_billing_overdraft.sql` (refuses while any overdraft row or non-zero limit exists, or a later
   billing migration is applied). S3-w adds no migration;
   undo it by reverting the code (the S3-e rollback still refuses while credit rows exist). P1-1: revert the code first (the old code
