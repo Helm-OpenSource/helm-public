@@ -17,6 +17,7 @@ export type PlatformBatchArgs = { command: "draft" | "review"; listFile: string;
 
 const FIELDS: Record<string, string[]> = { payer_onboard: ["contractSubjectRef", "kind", "workspaceId"],
   billing_mode: ["fromMode", "kind", "toMode", "workspaceId"],
+  overdraft_limit: ["fromLimitFen", "kind", "toLimitFen", "workspaceId"],
   price_publish: ["acceptanceRef", "approvalRef", "billingEventRef", "effectiveFrom", "effectiveUntil", "kind", "meterUnit", "priceLabel",
     "productCode", "unitPriceDenominator", "unitPriceFenNumerator", "version"],
   spend_grant: ["dailyLimitFen", "kind", "monthlyLimitFen", "perChargeLimitFen", "priceVersion", "productCode", "validFrom", "validUntil",
@@ -94,10 +95,11 @@ export async function runPlatformBatch(client: PrismaClient, args: PlatformBatch
     const operation = await client.platformBillingOperation.findUnique({ where: { operationKey }, select: { state: true } });
     const binding = request.kind === "price_publish" ? null : await client.payerScopeBinding.findFirst({
       where: { scopeKind: "workspace", activeScopeRef: request.workspaceId }, select: { id: true, payerAccountId: true } });
-    const payer = binding && await client.payerAccount.findUnique({ where: { id: binding.payerAccountId }, select: { billingMode: true } });
+    const payer = binding && await client.payerAccount.findUnique({ where: { id: binding.payerAccountId }, select: { billingMode: true, overdraftLimitFen: true } });
     plan.push({ index, ...request, ...subject(request), ...(request.kind === "spend_grant" ? await limitUnits(client, request) : {}),
       operationKey, operationState: operation?.state ?? null, payerAccountId: binding?.payerAccountId ?? null, bindingId: binding?.id ?? null,
-      currentMode: payer?.billingMode ?? null });
+      currentMode: payer?.billingMode ?? null,
+      ...(request.kind === "overdraft_limit" ? { currentOverdraftLimitFen: payer?.overdraftLimitFen.toString() ?? null } : {}) });
   }
   const planSha = createHash("sha256").update(JSON.stringify(plan)).digest("hex");
   if (!args.apply) return { ok: true, applied: false, ...base, planSha, plan };

@@ -1,0 +1,83 @@
+{
+  "schema": "helm.upgrade-note/v1",
+  "migration": "20261115100000_billing_overdraft",
+  "summary": {
+    "zh": "计费透支：资金枚举追加 overdraft_draw 与 overdraft_receivable；付款主体新增每户透支软上限列（默认 0）；资金投影新增触发器保证透支投影非负；预占新增 admission 列（standard / post_delivery）并重建更新触发器使其不可修改。不改已有数据，不动资金。",
+    "en": "Billing overdraft: appends overdraft_draw and overdraft_receivable to the funds enums, adds a per-payer overdraft soft-limit column (default 0), projection triggers keeping the overdraft projection non-negative, and a reservation admission column (standard / post_delivery) frozen by the recreated update trigger. No existing data changes and no money moves."
+  },
+  "ddl": [
+    {
+      "table": "FundsTransaction",
+      "existingTable": true,
+      "algorithm": "INSTANT",
+      "lock": "NONE",
+      "rebuild": false
+    },
+    {
+      "table": "FundsJournalEntry",
+      "existingTable": true,
+      "algorithm": "INSTANT",
+      "lock": "NONE",
+      "rebuild": false
+    },
+    {
+      "table": "FundsAccountProjection",
+      "existingTable": true,
+      "algorithm": "INSTANT",
+      "lock": "NONE",
+      "rebuild": false
+    },
+    {
+      "table": "PayerAccount",
+      "existingTable": true,
+      "algorithm": "COPY",
+      "lock": "SHARED",
+      "rebuild": true
+    },
+    {
+      "table": "FundsAccountProjection",
+      "existingTable": true,
+      "algorithm": "TRIGGER",
+      "lock": "NONE",
+      "rebuild": false
+    },
+    {
+      "table": "BillingReservation",
+      "existingTable": true,
+      "algorithm": "INSTANT",
+      "lock": "NONE",
+      "rebuild": false
+    },
+    {
+      "table": "BillingReservation",
+      "existingTable": true,
+      "algorithm": "TRIGGER",
+      "lock": "NONE",
+      "rebuild": false
+    }
+  ],
+  "rollback": {
+    "kind": "sql",
+    "path": "prisma/rollback/20261115_rollback_billing_overdraft.sql"
+  },
+  "order": "migrate-before-code",
+  "env": [],
+  "verification": [
+    {
+      "zh": "顺序：停相关写入方（内部计费路由关闭、结算器与财务命令停止）→ 等在途事务排空 → 迁移 → 核对预占更新触发器已重建且包含 admission → 部署代码 → 恢复入口。",
+      "en": "Order: stop the writers (internal billing routes off, settler and finance commands stopped), drain open transactions, migrate, check that the reservation update trigger was recreated with admission, deploy the code, reopen the entries."
+    },
+    {
+      "zh": "迁移不幂等，中途失败不能原样重跑：保持停写，按迁移文件手工补完剩余语句（若触发器已删先重建），再用 prisma migrate resolve --applied 标记。",
+      "en": "Not idempotent: after a partial failure keep writers stopped, finish the remaining statements by hand (recreate the trigger first if it was dropped), then mark it with prisma migrate resolve --applied."
+    },
+    {
+      "zh": "核对 PayerAccount.overdraftLimitFen 全为 0（0 = 未配置、无透支空间）；FundsTransaction.kind 以 overdraft_draw 结尾；已有预占 admission 均为 standard。",
+      "en": "Check that every PayerAccount.overdraftLimitFen is 0 (not configured, no overdraft room), FundsTransaction.kind ends with overdraft_draw, and existing reservations are standard."
+    },
+    {
+      "zh": "上表的算法与锁为 MySQL 8.0 的预期行为，未实测。生产启用前置：binlog_format=ROW；必须具备建触发器权限；binlog 开启且无 SUPER 时还须另设 log_bin_trust_function_creators=1（不能替代该权限）。",
+      "en": "The algorithms and locks above are expected MySQL 8.0 behaviour, not measured. Production prerequisites: binlog_format=ROW and the TRIGGER privilege; with binary logging on and no SUPER, also log_bin_trust_function_creators=1 (it never replaces the privilege)."
+    }
+  ]
+}

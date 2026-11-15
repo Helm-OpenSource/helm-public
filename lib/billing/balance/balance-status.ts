@@ -12,23 +12,27 @@ import type { BillingRejectCode, ServiceActor } from "../reservations/reservatio
  * - headroom = wallet + creditRemaining - held, the reserve admission formula (reservations.ts reserveInTransaction with
  *   credit-facilities.ts availableCreditFen): creditRemaining is max(0, limit - used) of the drawable, in-term facility and 0
  *   for a payer that is not active; held is enforce held/unknown reservations;
+ * - overdraftRoom (C-OD) = max(0, overdraftLimitFen - overdraftUsed): how much of the per-payer tail tolerance is left. Information
+ *   only: it admits nothing and is part of no stop/go decision (owner 11-15 "zero means stop");
+ * - overLimit (C-OD, Q9): overdraftUsed > overdraftLimitFen (with no limit configured, any overdraft at all);
  * - arrears: stop new billable work. Two causes, reported as arrearsReason: "funds" when headroom <= 0 (Q8: effective
- *   headroom at or below zero), "payer_inactive" when an enforce payer is suspended or closed (coordinator 11-12): Core
+ *   headroom at or below zero; owner 11-15: zero means stop) or overLimit (Q9: stop at once), "payer_inactive" when an enforce payer is suspended or closed (coordinator 11-12): Core
  *   refuses its new reserves, so work would run unbilled. payer_inactive wins when both hold; null when not in arrears.
  * creditUsed is the credit_receivable projection, so a revoked or expired facility's outstanding draws still count.
- * overdraftUsed is always 0 until the overdraft slice (C-OD) adds its account; the field is reserved in the response now.
+ * overdraftUsed is the overdraft_receivable projection (C-OD post-delivery settle tails).
  */
 export const BALANCE_STATUS_MAX_WORKSPACES = 50;
 export type PayerStatus = "active" | "suspended" | "closed"; // PayerAccount.status ENUM
 export type ArrearsReason = "funds" | "payer_inactive";
 export type PayerBalanceSummary = { billingMode: "off" | "shadow" | "enforce"; payerStatus: PayerStatus; walletFen: bigint; creditUsedFen: bigint;
-  overdraftUsedFen: bigint; creditRemainingFen: bigint; heldFen: bigint; balanceFen: bigint; headroomFen: bigint; arrears: boolean;
+  overdraftUsedFen: bigint; overdraftLimitFen: bigint; overdraftRoomFen: bigint; overLimit: boolean; creditRemainingFen: bigint; heldFen: bigint; balanceFen: bigint;
+  headroomFen: bigint; arrears: boolean;
   arrearsReason: ArrearsReason | null; asOf: Date };
 
 const ZERO = BigInt(0);
 const REF = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,190}$/;
 type Row = { workspaceId: string; billingMode: PayerBalanceSummary["billingMode"]; payerStatus: PayerStatus; walletFen: bigint | null;
-  creditUsedFen: bigint | null; creditRemainingFen: bigint | null; heldFen: bigint; asOf: Date };
+  creditUsedFen: bigint | null; overdraftUsedFen: bigint | null; overdraftLimitFen: bigint; creditRemainingFen: bigint | null; heldFen: bigint; asOf: Date };
 
 /**
  * Summaries keyed by workspace id for the workspaces with exactly one active binding (others are absent: not billed). The
@@ -37,9 +41,10 @@ type Row = { workspaceId: string; billingMode: PayerBalanceSummary["billingMode"
  */
 export async function readPayerBalanceSummaries(client: PrismaClient | Prisma.TransactionClient, workspaceIds: readonly string[]) {
   if (workspaceIds.length === 0) return new Map<string, PayerBalanceSummary>();
-  const rows = await client.$queryRaw<Row[]>`SELECT b.scopeRef AS workspaceId, p.billingMode, p.status AS payerStatus,
+  const rows = await client.$queryRaw<Row[]>`SELECT b.scopeRef AS workspaceId, p.billingMode, p.status AS payerStatus, p.overdraftLimitFen,
       (SELECT w.balanceFen FROM FundsAccountProjection w WHERE w.payerAccountId = p.id AND w.account = 'customer_wallet_available') AS walletFen,
       (SELECT r.balanceFen FROM FundsAccountProjection r WHERE r.payerAccountId = p.id AND r.account = 'credit_receivable') AS creditUsedFen,
+      (SELECT o.balanceFen FROM FundsAccountProjection o WHERE o.payerAccountId = p.id AND o.account = 'overdraft_receivable') AS overdraftUsedFen,
       (SELECT IF(p.status = 'active' AND (f.validUntil IS NULL OR f.validUntil > UTC_TIMESTAMP(3)), GREATEST(f.limitFen - f.usedFen, 0), 0)
         FROM CreditFacility f WHERE f.activePayerAccountId = p.id ORDER BY f.activatedAt DESC LIMIT 1) AS creditRemainingFen,
       (SELECT CAST(COALESCE(SUM(h.chargeFen), 0) AS SIGNED) FROM BillingReservation h
@@ -52,13 +57,16 @@ export async function readPayerBalanceSummaries(client: PrismaClient | Prisma.Tr
     // Mirrors resolvePayerForWorkspaceInTransaction's byte-exact check; unreachable today (activeScopeRef is utf8mb4_bin and
     // REF admits no trailing space), kept so the two resolvers cannot drift apart.
     if (!workspaceIds.includes(row.workspaceId)) continue;
-    const walletFen = BigInt(row.walletFen ?? ZERO), creditUsedFen = BigInt(row.creditUsedFen ?? ZERO), overdraftUsedFen = ZERO;
+    const walletFen = BigInt(row.walletFen ?? ZERO), creditUsedFen = BigInt(row.creditUsedFen ?? ZERO);
+    const overdraftUsedFen = BigInt(row.overdraftUsedFen ?? ZERO);
     const creditRemainingFen = BigInt(row.creditRemainingFen ?? ZERO), heldFen = BigInt(row.heldFen);
+    const overdraftLimitFen = BigInt(row.overdraftLimitFen), overLimit = overdraftUsedFen > overdraftLimitFen;
+    const overdraftRoomFen = overLimit ? ZERO : overdraftLimitFen - overdraftUsedFen;
     const headroomFen = walletFen + creditRemainingFen - heldFen;
     const arrearsReason: ArrearsReason | null = row.billingMode === "enforce" && row.payerStatus !== "active" ? "payer_inactive"
-      : headroomFen <= ZERO ? "funds" : null;
+      : headroomFen <= ZERO || overLimit ? "funds" : null;
     summaries.set(row.workspaceId, { billingMode: row.billingMode, payerStatus: row.payerStatus, walletFen, creditUsedFen,
-      overdraftUsedFen, creditRemainingFen, heldFen, balanceFen: walletFen - creditUsedFen - overdraftUsedFen, headroomFen,
+      overdraftUsedFen, overdraftLimitFen, overdraftRoomFen, overLimit, creditRemainingFen, heldFen, balanceFen: walletFen - creditUsedFen - overdraftUsedFen, headroomFen,
       arrears: arrearsReason !== null, arrearsReason, asOf: row.asOf });
   }
   return summaries;

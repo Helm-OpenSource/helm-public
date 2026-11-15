@@ -1964,6 +1964,9 @@ model PayerAccount {
   currency             String              @default("CNY") @db.VarChar(3)
   billingMode          PayerBillingMode    @default(off)
   status               PayerAccountStatus  @default(active)
+  // C-OD overdraft soft limit (fen). 0 = not configured: no overdraft room; post-delivery tails are still recorded and at once
+  // overLimit. Written only by an approved platform `overdraft_limit` operation; never refuses a settle.
+  overdraftLimitFen    BigInt              @default(0)
   version              Int                 @default(1)
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
@@ -2003,6 +2006,7 @@ enum FundsTransactionKind {
   bank_topup // S2-c
   charge // S3-b2 (the DB ENUM also holds S3-e's credit_draw from the agreed-union MODIFY; S3-e adds it here)
   credit_draw // S3-e
+  overdraft_draw // C-OD
 }
 
 enum FundsAccount {
@@ -2012,6 +2016,7 @@ enum FundsAccount {
   bank_clearing // S2-c
   charge_revenue // S3-b2 (DB ENUM also holds S3-e's credit_receivable; S3-e adds it here)
   credit_receivable // S3-e
+  overdraft_receivable // C-OD
 }
 
 enum FundsEntryDirection {
@@ -2160,6 +2165,12 @@ enum BudgetPeriodKind {
   month
 }
 
+// C-OD part 2: post_delivery = reserved after the work was delivered (no funds check; settle may overdraw the tail).
+enum BillingReservationAdmission {
+  standard
+  post_delivery
+}
+
 enum BillingReservationState {
   held
   unknown
@@ -2213,6 +2224,7 @@ model BillingReservation {
   subjectWorkspaceId    String                  @db.VarChar(191) // the workspace the caller declared (reserve subjectScope)
   payerBindingId        String                  @db.VarChar(191) // its active PayerScopeBinding at reserve time; names payerAccountId
   payerBindingVersion   Int
+  admission             BillingReservationAdmission @default(standard)
   unknownKey            String?                 @db.VarChar(191)
   unknownEvidenceRef    String?                 @db.VarChar(191)
   unknownAt             DateTime?

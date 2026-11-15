@@ -2,7 +2,8 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { availableCreditFen, CreditFacilityRefusal, drawCreditShortfallInTransaction } from "../credit/credit-facilities";
-import { chargeOperationKey, FundsRefusal, postFundsTransactionInTransaction, settleDrawSourceRef } from "../funds/funds-journal";
+import { FundsRefusal, postSettleChargeFundsInTransaction,
+  settleDrawSourceRef } from "../funds/funds-journal";
 import { MAX_FEN } from "../funds/money";
 import { resolvePayerForWorkspaceInTransaction } from "../payer/payer-accounts";
 import { type BillingPeriodKeys, chargeFenForQuantity, lockSpendGrantForUseInTransaction, SpendGrantRefusal,
@@ -103,7 +104,13 @@ export type ReserveRequest = { idempotencyKey: string; operationRef: string;
   subjectScope: SubjectScope; payerRef: string; grantId: string;
   priceVersionId: string; billingEventRef: string; meterUnit: string; quantity: string;
   /** v3.4: the payer's actual mode must equal it, else `mode_mismatch` and nothing is held (not part of the content hash). */
-  expectedMode?: Mode };
+  expectedMode?: Mode;
+  /**
+   * C-OD (v3.10 clause 1): `post_delivery` reserves work already delivered, so the funds check is skipped (mode, binding, grant,
+   * limits and price still apply) and only such a reservation's settle overdraws its tail (never refused by the soft limit). The
+   * internal route does not accept this field in this slice (strict shape: request_invalid). Part of the content hash when present.
+   */
+  admission?: "post_delivery" };
 
 /** Pure validation; the content hash binds the key to everything the caller chose (never the server-derived time or price). */
 export function normalizeReserve(actor: ServiceActor, req: ReserveRequest) {
@@ -115,9 +122,14 @@ export function normalizeReserve(actor: ServiceActor, req: ReserveRequest) {
   if (typeof req.meterUnit !== "string" || !/^[a-z][a-z0-9_]{0,31}$/.test(req.meterUnit)) reject("request_invalid");
   const quantity = positiveQuantity(req.quantity);
   if (req.expectedMode !== undefined && req.expectedMode !== "shadow" && req.expectedMode !== "enforce") reject("request_invalid");
+  if (req.admission !== undefined && req.admission !== "post_delivery") reject("request_invalid");
+  const postDelivery = req.admission === "post_delivery";
+  // A standard reserve keeps its v2 hash; post_delivery adds the field, so the same key cannot switch admission on replay.
   const content = { v: 2, operationRef: req.operationRef, workspaceId, payerRef: req.payerRef, grantId: req.grantId,
-    priceVersionId: req.priceVersionId, billingEventRef: req.billingEventRef, meterUnit: req.meterUnit, quantity: req.quantity };
-  return { createdBy, workspaceId, quantity, contentHash: createHash("sha256").update(JSON.stringify(content)).digest("hex") };
+    priceVersionId: req.priceVersionId, billingEventRef: req.billingEventRef, meterUnit: req.meterUnit, quantity: req.quantity,
+    ...(postDelivery ? { admission: req.admission } : {}) };
+  return { createdBy, workspaceId, quantity, postDelivery,
+    contentHash: createHash("sha256").update(JSON.stringify(content)).digest("hex") };
 }
 
 /**
@@ -172,7 +184,7 @@ async function moveBucket(tx: Prisma.TransactionClient, grantId: string, billing
 /** Reserve: idempotent by (payer, key) + content hash, one per (payer, operationRef); any refusal rolls back, key unused. */
 // Not exported: its plain reads rely on PayerAccount being locked before the transaction's first read, which `reserve` guarantees.
 async function reserveInTransaction(tx: Prisma.TransactionClient, actor: ServiceActor, req: ReserveRequest) {
-  const { createdBy, workspaceId, quantity, contentHash } = normalizeReserve(actor, req);
+  const { createdBy, workspaceId, quantity, postDelivery, contentHash } = normalizeReserve(actor, req);
   const payerAccountId = req.payerRef;
   await lockPayerRow(tx, payerAccountId);
   // Every reservation writer holds this PayerAccount lock, so a plain read now sees any committed row; a stale caller snapshot
@@ -202,7 +214,7 @@ async function reserveInTransaction(tx: Prisma.TransactionClient, actor: Service
     return { day: used(buckets[0]), month: used(buckets[1]) };
   });
   const { grant, chargeFen, billingMode } = admitted;
-  if (billingMode === "enforce") {
+  if (billingMode === "enforce" && !postDelivery) { // post_delivery: already delivered; settle records any tail as overdraft
     // Non-locking reads: every hold and wallet writer holds this PayerAccount lock, so each read (READ COMMITTED) is
     // current; FOR SHARE range locks here deadlocked first reserves across payers. Callers must not read before calling.
     const [{ held }] = await tx.$queryRaw<Array<{ held: bigint }>>`SELECT CAST(COALESCE(SUM(chargeFen), 0) AS SIGNED) AS held
@@ -221,7 +233,7 @@ async function reserveInTransaction(tx: Prisma.TransactionClient, actor: Service
     priceVersionId: admitted.priceVersionId, priceContentHash: admitted.priceContentHash, billingEventRef: req.billingEventRef,
     meterUnit: req.meterUnit, quantity, chargeFen, billingMode, reservedAt: admitted.at, dayKey: admitted.periodKeys.day,
     monthKey: admitted.periodKeys.month, createdBy, subjectWorkspaceId: workspaceId, payerBindingId: binding.bindingId,
-    payerBindingVersion: binding.bindingVersion } });
+    payerBindingVersion: binding.bindingVersion, admission: postDelivery ? "post_delivery" : "standard" } });
   return reserved(billingMode, row.id, row.state, chargeFen, row.priceContentHash, row.dayKey, row.monthKey);
 }
 function reserved(mode: Mode, reservationId: string, state: string, capFen: bigint, priceContentHash: string, day: string, month: string) {
@@ -232,7 +244,7 @@ function reserved(mode: Mode, reservationId: string, state: string, capFen: bigi
 type LockedReservation = { id: string; payerAccountId: string; operationRef: string; grantId: string; billingMode: Mode; priceVersionId: string;
   priceContentHash: string; quantity: bigint; chargeFen: bigint; reservedAt: Date; state: string; version: number; unknownKey: string | null;
   unknownEvidenceRef: string | null; resolutionKey: string | null; releaseReason: string | null; resolutionEvidenceRef: string | null;
-  createdBy: string };
+  createdBy: string; admission: "standard" | "post_delivery" };
 /**
  * v3.8/v3.9 owner of a reservation: a billing service actor (`SYSTEM:billing-service:<issuerRef>/<grantId>`) is owned by its
  * issuer, so a rotated grant of the same issuer keeps working; any other actor owns exactly its own ref.
@@ -257,7 +269,7 @@ async function lockReservationForResolution(tx: Prisma.TransactionClient, reserv
     head.billingMode);
   const [row] = await tx.$queryRaw<LockedReservation[]>`SELECT id, payerAccountId, operationRef, grantId, billingMode, priceVersionId,
     priceContentHash, quantity, chargeFen, reservedAt, state, version, unknownKey, unknownEvidenceRef, resolutionKey, releaseReason,
-    resolutionEvidenceRef, createdBy FROM BillingReservation WHERE id = ${reservationId} FOR UPDATE`;
+    resolutionEvidenceRef, createdBy, admission FROM BillingReservation WHERE id = ${reservationId} FOR UPDATE`;
   if (!row || row.id !== reservationId || row.grantId !== head.grantId || row.billingMode !== head.billingMode ||
       (owner !== null && ownerOf(row.createdBy) !== owner)) reject("reservation_state_conflict");
   if (row.operationRef !== operationRef) reject("idempotency_conflict");
@@ -329,8 +341,9 @@ export type SettleRequest = { idempotencyKey: string; reservationId: string; ope
  * held|unknown -> settled, exactly once. The charge is repriced from the frozen price row for `quantityUsed` (<= the reserved
  * quantity, so <= capFen), moves from reserved to settled in the reservation's frozen-period buckets (not settle time), posts a
  * balanced `charge` funds transaction (wallet debit, charge revenue credit; its audit and funds outbox) and a charge outbox row,
- * all in this transaction. An enforce wallet shortfall is first borrowed from credit (S3-w). A refusal (e.g. wallet corrected
- * below the hold and no credit left) leaves the reservation held.
+ * all in this transaction. An enforce wallet shortfall is first borrowed from credit (S3-w); for a post_delivery reservation (C-OD)
+ * credit lends what it can and the rest is overdrawn in full, whatever the payer's soft limit. A refusal (e.g. a standard
+ * reservation's wallet corrected below the hold and no credit left) leaves the reservation held.
  */
 export async function settleInTransaction(tx: Prisma.TransactionClient, actor: ServiceActor, req: SettleRequest) {
   return settleFrom(tx, actor, req, false);
@@ -362,15 +375,19 @@ async function settleFrom(tx: Prisma.TransactionClient, actor: ServiceActor, req
   }
   // Shadow records the would-be charge only, and a 0-fen settle (smaller quantity, v3.5) has nothing to post: no draw, no funds.
   const posting = reservation.billingMode === "enforce" && chargeFen > ZERO;
-  // Owner v3: the wallet pays first and only the shortfall is borrowed (none when the wallet covers it), then the wallet is
-  // charged in full. Bound to this locked reservation and its frozen reservedAt; a replay returned above and never draws again.
-  if (posting) await drawCreditShortfallInTransaction(tx, { payerAccountId: reservation.payerAccountId, chargeFen,
-    sourceRef: settleDrawSourceRef(reservation.id), actor, reservedAt: reservation.reservedAt });
-  const funds = !posting ? null : await postFundsTransactionInTransaction(tx, {
-    payerAccountId: reservation.payerAccountId, kind: "charge", operationKey: chargeOperationKey(reservation.id), actor,
-    evidenceRef: req.evidenceRef, entries: [{ account: "customer_wallet_available", direction: "debit", amountFen: chargeFen },
-      { account: "charge_revenue", direction: "credit", amountFen: chargeFen }] });
-  if (funds?.replayed) invariantBreach(); // a charge posting exists for an unsettled reservation
+  // Owner v3: the wallet pays first and the shortfall is borrowed from credit, then the wallet is charged in full and never goes
+  // negative. C-OD (design §1.3, §2.5, v3.10 clauses 3-4): only a post_delivery reservation (delivered work, reserved without the
+  // funds check) takes what credit can lend and overdraws all the rest; the soft limit never refuses it. Any other keeps the S3-w
+  // rule (the whole shortfall from credit, else insufficient_funds). Bound to this locked reservation and its frozen
+  // reservedAt; a replay returned above and never draws again.
+  if (posting) {
+    const postDelivery = reservation.admission === "post_delivery";
+    await drawCreditShortfallInTransaction(tx, { payerAccountId: reservation.payerAccountId, chargeFen,
+      sourceRef: settleDrawSourceRef(reservation.id), actor, reservedAt: reservation.reservedAt, upToAvailable: postDelivery });
+  }
+  // One funds call posts the post_delivery overdraft (if any) and the charge together; it refuses a recorded one (replays above).
+  const funds = !posting ? null : await postSettleChargeFundsInTransaction(tx, { payerAccountId: reservation.payerAccountId,
+    reservationId: reservation.id, chargeFen, actor, evidenceRef: req.evidenceRef });
   const charge = await tx.billingCharge.create({ data: { reservationId: reservation.id, payerAccountId: reservation.payerAccountId,
     grantId: reservation.grantId, operationRef: reservation.operationRef, idempotencyKey: req.idempotencyKey,
     billingMode: reservation.billingMode, fundsTransactionId: funds?.transaction.id ?? null, priceVersionId: reservation.priceVersionId, priceContentHash: reservation.priceContentHash,

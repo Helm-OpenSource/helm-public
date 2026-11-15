@@ -26,10 +26,21 @@ describe("credit facility proposal normalization", () => {
     expect(() => normalizeCreditFacilityProposal(proposal({ actorUserId: "" }))).toThrow("credit_forbidden");
   });
   it("accepts a credit draw only as debit credit_receivable / credit wallet, through the credit module", () => {
-    expect(normalizeFundsPosting(draw(), null, true).entries.map(e => [e.account, e.direction])).toEqual([
+    expect(normalizeFundsPosting(draw(), null, "credit_draw").entries.map(e => [e.account, e.direction])).toEqual([
       ["credit_receivable", "debit"], ["customer_wallet_available", "credit"]]);
     expect(() => normalizeFundsPosting(draw())).toThrow("funds_accounts_not_allowed"); // public posting path
-    expect(() => normalizeFundsPosting({ ...draw(), kind: "topup" }, null, true)).toThrow("funds_accounts_not_allowed");
+    expect(() => normalizeFundsPosting({ ...draw(), kind: "topup" }, null, "credit_draw")).toThrow("funds_accounts_not_allowed");
     expect(() => normalizeFundsPosting({ ...draw(), kind: "correction" })).toThrow("funds_accounts_not_allowed");
+  });
+  it("accepts an overdraft draw (C-OD) only as debit overdraft_receivable / credit wallet, through the settle channel", () => {
+    const overdraft = (account: "overdraft_receivable" | "credit_receivable" = "overdraft_receivable"): PostFundsInput => ({ ...draw(),
+      kind: "overdraft_draw", operationKey: "overdraft-draw:reservation:r-1", entries: [{ account, direction: "debit", amountFen: BigInt(50) },
+        { account: "customer_wallet_available", direction: "credit", amountFen: BigInt(50) }] });
+    expect(normalizeFundsPosting(overdraft(), null, "overdraft_draw").entries.map(e => [e.account, e.direction])).toEqual([
+      ["customer_wallet_available", "credit"], ["overdraft_receivable", "debit"]]);
+    expect(() => normalizeFundsPosting(overdraft())).toThrow("funds_accounts_not_allowed");
+    expect(() => normalizeFundsPosting(overdraft(), null, "credit_draw")).toThrow("funds_accounts_not_allowed");
+    expect(() => normalizeFundsPosting(draw(), null, "overdraft_draw")).toThrow("funds_accounts_not_allowed");
+    expect(() => normalizeFundsPosting(overdraft("credit_receivable"), null, "overdraft_draw")).toThrow("funds_accounts_not_allowed");
   });
 });

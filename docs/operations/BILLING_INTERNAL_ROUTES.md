@@ -71,10 +71,15 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
   closed facility's draws still count); `headroomFen = wallet + creditRemaining - held` is the reserve admission formula
   (remaining credit of the drawable, in-term facility, 0 for a payer that is not active; held = enforce `held`/`unknown`
   reservations). `headroomFen` includes remaining credit: a stop/go input only, clients must never display it as a balance.
-  `overdraftUsedFen` is always `"0"` until the overdraft slice adds its account. `payerStatus` is the PayerAccount status
+  `overdraftUsedFen` is the `overdraft_receivable` projection (C-OD post-delivery settle tails). C-OD keeps `headroomFen` as
+  above and reports the overdraft separately: overdraft room = `max(0, overdraftLimit - overdraftUsed)` (never negative; limit 0
+  = not configured, no tolerance) and `overLimit` = used above the limit. The per-payer limit is only a tolerance for the tails of
+  work already running when the balance reached zero (owner 11-15: zero means stop), not spendable credit: overdraft room is
+  information only and admits nothing. Arrears for `funds` is `headroomFen <= 0` or `overLimit`. Switching a payer to enforce
+  still needs headroom > 0. `payerStatus` is the PayerAccount status
   (`active|suspended|closed`); numbers are returned in every mode and status, `off` included.
   **`arrears`** is the one boolean callers gate on (only for `billingMode: "enforce"`), with two causes in `arrearsReason`:
-  `funds` when `headroomFen <= 0` (Q8), `payer_inactive` when an enforce payer is suspended or closed (coordinator 11-12: Core
+  `funds` when `headroomFen <= 0` (Q8) or the overdraft is over its limit (C-OD), `payer_inactive` when an enforce payer is suspended or closed (coordinator 11-12: Core
   refuses its new reserves, so work would run unbilled); `payer_inactive` wins when both hold, `null` when not in arrears.
   One lock-free statement per batch: a consistent read that never waits on, or delays, a reserve or settle. Writes only the
   auth nonce. The wallet read (`/api/billing/v1/wallet`) carries the same `balanceFen`, `headroomFen` and `arrears` next to

@@ -11,10 +11,10 @@ import { assertPositiveFen } from "./money";
  * then FundsTransaction, then projection rows in ascending account order.
  */
 export const FUNDS_ACCOUNTS = ["bank_clearing", "charge_revenue", "correction_suspense", "credit_receivable",
-  "customer_wallet_available", "topup_clearing"] as const;
+  "customer_wallet_available", "overdraft_receivable", "topup_clearing"] as const;
 export type FundsAccountName = (typeof FUNDS_ACCOUNTS)[number];
 export type FundsDirection = "debit" | "credit";
-export type FundsKind = "topup" | "correction" | "bank_topup" | "charge" | "credit_draw";
+export type FundsKind = "topup" | "correction" | "bank_topup" | "charge" | "credit_draw" | "overdraft_draw";
 export type FundsEntryInput = { account: FundsAccountName; direction: FundsDirection; amountFen: bigint };
 /** Server-derived actor; `ref` is a user id for USER or a service name for SYSTEM. */
 export type FundsActor = { type: "USER" | "SYSTEM"; ref: string };
@@ -48,15 +48,21 @@ function signedDelta(account: FundsAccountName, direction: FundsDirection, amoun
 type Normalized = { payerAccountId: string; kind: FundsKind; operationKey: string; reversalOfId: string | null;
   evidenceRef: string; createdBy: string; actor: FundsActor; entries: FundsEntryInput[]; contentHash: string };
 
+/** Module-private posting channels: `credit_draw` only from the credit module, `overdraft_draw` only from settle (C-OD). */
+type PrivateKind = "credit_draw" | "overdraft_draw";
 /** Pure validation. Lines are sorted by account so the content hash and line numbers ignore caller ordering. */
-export function normalizeFundsPosting(input: PostFundsInput, reversalOfId: string | null = null, creditDraw = false): Normalized {
+export function normalizeFundsPosting(input: PostFundsInput, reversalOfId: string | null = null,
+  privateKind: PrivateKind | null = null): Normalized {
   if (!input || typeof input !== "object") refuse("funds_input_invalid");
   reference(input.payerAccountId); reference(input.operationKey); reference(input.evidenceRef);
   if (!input.actor || (input.actor.type !== "USER" && input.actor.type !== "SYSTEM")) refuse("funds_input_invalid");
   reference(input.actor.ref);
-  if (!["topup", "correction", "bank_topup", "charge", "credit_draw"].includes(input.kind)) refuse("funds_input_invalid");
+  if (!["topup", "correction", "bank_topup", "charge", "credit_draw", "overdraft_draw"].includes(input.kind)) refuse("funds_input_invalid");
   // S3-e: a credit draw must move the facility's usedFen in the same transaction, so only the credit module may post one.
-  if ((input.kind === "credit_draw") !== creditDraw) refuse("funds_accounts_not_allowed");
+  // C-OD: an overdraft draw is only the settle shortfall left after wallet and credit, so only settle may post one.
+  if ((input.kind === "credit_draw" || input.kind === "overdraft_draw" ? input.kind : null) !== privateKind) {
+    refuse("funds_accounts_not_allowed");
+  }
   if (reversalOfId !== null && input.kind !== "correction") refuse("funds_input_invalid");
   // `charge:` keys are reserved for settle postings (one per reservation, protocol v3.5).
   if ((input.kind === "charge") !== input.operationKey.startsWith(CHARGE_PREFIX)) refuse("funds_input_invalid");
@@ -86,6 +92,9 @@ export function normalizeFundsPosting(input: PostFundsInput, reversalOfId: strin
         line("charge_revenue")?.direction !== "credit")) refuse("funds_accounts_not_allowed");
     // S3-e: a credit draw is exactly: debit credit receivable (the customer owes it), credit the customer wallet.
     if (input.kind === "credit_draw" && (entries.length !== 2 || line("credit_receivable")?.direction !== "debit" ||
+        line(WALLET)?.direction !== "credit")) refuse("funds_accounts_not_allowed");
+    // C-OD: an overdraft draw is exactly: debit overdraft receivable (the customer owes it), credit the customer wallet.
+    if (input.kind === "overdraft_draw" && (entries.length !== 2 || line("overdraft_receivable")?.direction !== "debit" ||
         line(WALLET)?.direction !== "credit")) refuse("funds_accounts_not_allowed");
     // A free correction moves value only between the wallet and correction suspense; reversals mirror the original.
     if (input.kind === "correction" && (entries.length !== 2 || !line("correction_suspense") || !line(WALLET))) {
@@ -193,16 +202,20 @@ async function postLocked(tx: Prisma.TransactionClient, payer: PayerRow, posting
   return { transaction, entries, replayed: false };
 }
 
-// Settle-bound operation keys, shared by funds, credit and reservations: `charge:<reservationId>` and
-// `credit-draw:<sourceRef>` with sourceRef `reservation:<reservationId>` for the settle shortfall draw.
+// Settle-bound operation keys, shared by funds, credit and reservations: `charge:<reservationId>`,
+// `credit-draw:<sourceRef>` with sourceRef `reservation:<reservationId>` for the settle shortfall draw, and (C-OD)
+// `overdraft-draw:reservation:<reservationId>` for what remains after wallet and credit.
 const CHARGE_PREFIX = "charge:", DRAW_PREFIX = "credit-draw:", SETTLE_SOURCE_PREFIX = "reservation:";
+const OVERDRAFT_PREFIX = "overdraft-draw:reservation:";
 export const chargeOperationKey = (reservationId: string) => `${CHARGE_PREFIX}${reservationId}`;
 export const settleDrawSourceRef = (reservationId: string) => `${SETTLE_SOURCE_PREFIX}${reservationId}`;
 export const isSettleDrawSourceRef = (sourceRef: string) => sourceRef.startsWith(SETTLE_SOURCE_PREFIX);
 export const creditDrawOperationKey = (sourceRef: string) => `${DRAW_PREFIX}${sourceRef}`;
-const SETTLING_PREFIX: Partial<Record<FundsKind, string>> = { charge: CHARGE_PREFIX, credit_draw: creditDrawOperationKey(SETTLE_SOURCE_PREFIX) };
+const SETTLING_PREFIX: Partial<Record<FundsKind, string>> = { charge: CHARGE_PREFIX, credit_draw: creditDrawOperationKey(SETTLE_SOURCE_PREFIX),
+  overdraft_draw: OVERDRAFT_PREFIX };
 /**
- * The suspended/off-payer exemption is bound to one reservation: `charge:<id>` or `credit-draw:reservation:<id>` must name this
+ * The suspended/off-payer exemption is bound to one reservation: `charge:<id>`, `credit-draw:reservation:<id>` or
+ * `overdraft-draw:reservation:<id>` must name this
  * payer's held or unknown enforce reservation (locked by settle; resolveUnknown posts while the row is still unknown and moves it
  * to settled afterwards). Returns that row's frozen `reservedAt` and cap `chargeFen`, or null for any other posting.
  */
@@ -244,8 +257,51 @@ export async function postFundsTransactionInTransaction(tx: Prisma.TransactionCl
 
 /** S3-e only: posts a `credit_draw`; `drawCreditShortfallInTransaction` moves the facility's usedFen in the same transaction. */
 export async function postCreditDrawFundsInTransaction(tx: Prisma.TransactionClient, input: PostFundsInput) {
-  const posting = normalizeFundsPosting(input, null, true);
+  const posting = normalizeFundsPosting(input, null, "credit_draw");
   return postLocked(tx, await lockPayer(tx, posting.payerAccountId), posting);
+}
+
+export type SettleChargeFundsInput = { payerAccountId: string; reservationId: string; chargeFen: bigint; actor: FundsActor;
+  evidenceRef: string };
+/**
+ * The funds leg of a settle (S3-b2 charge; C-OD overdraft), under the PayerAccount lock. The reservation is re-read in-lock: this
+ * payer's held/unknown enforce reservation with 0 < chargeFen <= its cap. For a `post_delivery` reservation, what the locked
+ * wallet still lacks for `chargeFen` (computed here, never passed in) is first posted as one `overdraft_draw` (debit
+ * overdraft_receivable, credit the wallet; key bound to the reservation; the soft limit is never compared, design Q9); then the
+ * `charge` (debit the wallet, credit charge_revenue, `charge:<reservationId>`) is posted in the same call. So an overdraft only
+ * ever exists together with the same reservation's charge, in one transaction; there is no other entry point for
+ * `overdraft_draw`. Any other reservation never overdraws: a wallet short of `chargeFen` refuses `funds_insufficient` as before.
+ * Trust boundary (as for postCreditDrawFundsInTransaction): in-process callers are trusted to call this only from settle, which
+ * borrows credit first and writes the BillingCharge row, state change and buckets in the same transaction. A recorded overdraft
+ * or charge under these keys means the reservation was already settled: an invariant breach (settle replays before this).
+ */
+export async function postSettleChargeFundsInTransaction(tx: Prisma.TransactionClient, input: SettleChargeFundsInput) {
+  reference(input.reservationId); reference(input.evidenceRef);
+  const payer = await lockPayer(tx, input.payerAccountId);
+  const [open] = await tx.$queryRaw<Array<{ chargeFen: bigint; admission: string }>>`SELECT chargeFen, admission FROM BillingReservation
+    WHERE id = ${input.reservationId} AND payerAccountId = ${input.payerAccountId} AND billingMode = 'enforce'
+      AND state IN ('held', 'unknown') FOR SHARE`;
+  if (!open || typeof input.chargeFen !== "bigint" || input.chargeFen <= ZERO || input.chargeFen > BigInt(open.chargeFen)) {
+    refuse("funds_input_invalid");
+  }
+  if (open.admission === "post_delivery") {
+    const [wallet] = await tx.$queryRaw<Array<{ balanceFen: bigint }>>`SELECT balanceFen FROM FundsAccountProjection
+      WHERE payerAccountId = ${input.payerAccountId} AND account = 'customer_wallet_available' FOR UPDATE`;
+    const shortfall = input.chargeFen - BigInt(wallet?.balanceFen ?? ZERO);
+    if (shortfall > ZERO) {
+      const overdraft = await postLocked(tx, payer, normalizeFundsPosting({ payerAccountId: input.payerAccountId, kind: "overdraft_draw",
+        operationKey: `${OVERDRAFT_PREFIX}${input.reservationId}`, actor: input.actor, evidenceRef: `reservation:${input.reservationId}`,
+        entries: [{ account: "overdraft_receivable", direction: "debit", amountFen: shortfall },
+          { account: WALLET, direction: "credit", amountFen: shortfall }] }, null, "overdraft_draw"));
+      if (overdraft.replayed) throw new Error("funds_settle_invariant_breach");
+    }
+  }
+  const charge = await postLocked(tx, payer, normalizeFundsPosting({ payerAccountId: input.payerAccountId, kind: "charge",
+    operationKey: chargeOperationKey(input.reservationId), actor: input.actor, evidenceRef: input.evidenceRef,
+    entries: [{ account: WALLET, direction: "debit", amountFen: input.chargeFen },
+      { account: "charge_revenue", direction: "credit", amountFen: input.chargeFen }] }));
+  if (charge.replayed) throw new Error("funds_settle_invariant_breach");
+  return charge;
 }
 
 /** Appends a mirror transaction (each line's direction swapped) referencing the original; nothing is edited or deleted. */
@@ -254,7 +310,8 @@ export async function reverseFundsTransactionInTransaction(tx: Prisma.Transactio
   const payer = await lockPayer(tx, input.payerAccountId);
   const original = await readTransaction(tx, Prisma.sql`id = ${input.originalTransactionId}`);
   if (!original || original.id !== input.originalTransactionId || original.payerAccountId !== input.payerAccountId ||
-      original.reversalOfId !== null || original.kind === "charge" || original.kind === "credit_draw") refuse("funds_reversal_invalid");
+      original.reversalOfId !== null || original.kind === "charge" || original.kind === "credit_draw" ||
+      original.kind === "overdraft_draw") refuse("funds_reversal_invalid");
   const mirrored = (await readEntries(tx, original.id)).map(entry => ({ account: entry.account,
     direction: entry.direction === "debit" ? "credit" as const : "debit" as const, amountFen: entry.amountFen }));
   const posting = normalizeFundsPosting({ payerAccountId: input.payerAccountId, kind: "correction",

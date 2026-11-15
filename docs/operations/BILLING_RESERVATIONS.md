@@ -46,12 +46,26 @@ S3-b1/S3-b2 (Core): migrations `20261110200000_billing_reservations`, `202611102
   calls `drawCreditShortfallInTransaction` with the settled `chargeFen`, the locked row's frozen `reservedAt`, `sourceRef`
   `reservation:<id>` and the service actor: it borrows only `max(0, chargeFen - wallet)` (`credit-draw:reservation:<id>`), so the
   wallet pays first and nets to 0, and the charge then debits the wallet in full. A same-key replay returns before it (never a
-  second draw). A shortfall the line cannot cover (`credit_insufficient`, `credit_not_active`) is `insufficient_funds`.
+  second draw). **Overdraft (C-OD, migration `20261115100000_billing_overdraft`)**: for a `post_delivery` reservation only
+  (any other keeps the rule above), settle passes `upToAvailable`, so credit lends what it can (possibly 0), and
+  the settle module's overdraft channel posts all that the wallet still lacks as one `overdraft_draw` (debit
+  `overdraft_receivable`, credit wallet, `overdraft-draw:reservation:<id>`). Order: wallet -> credit -> overdraft -> full wallet
+  charge, so the wallet never goes negative. The payer's `overdraftLimitFen` is a **soft** limit (design Q9, §2.5): delivered
+  usage is always recorded, never refused; beyond the limit the balance summary reports `overLimit` (and arrears). Standard
+  reserve admission is unchanged (wallet + remaining credit - held). `overdraft_draw` is posted only by
+  `postSettleChargeFundsInTransaction`, the funds leg of settle: in the payer lock it re-reads the reservation (this payer, enforce,
+  held/unknown, 0 < charge <= cap), computes the shortfall from the locked wallet itself and posts the overdraft and the same
+  reservation's `charge` in one call, so an overdraft never exists without that charge. **Trust boundary** (as for
+  `postCreditDrawFundsInTransaction`): in-process callers are trusted to use it from settle, which borrows credit first and writes
+  the BillingCharge row, state change and buckets in the same transaction; the funds module does not and cannot prove that the
+  caller is settle. The generic `postFundsTransactionInTransaction` still accepts `charge` as on main. Never reversed;
+  projection triggers keep the overdraft projection >= 0. Limit 0 = not configured: no overdraft room; tails are still recorded
+  and at once `overLimit`.
   A 0-fen settle (smaller quantity) is `settled` with `chargeFen` 0 and no draw or funds entry.
   Shadow writes the charge (`fundsTransactionId` null) and `billing.charge.shadow_settled`, never funds or credit. Settle of a held
   reservation never checks payer status or mode (R05: delivered results are processed; only new reserves are blocked, for shadow
-  and enforce alike); the funds journal admits a `charge` or `credit_draw` posting for a suspended/off payer only when
-  `charge:<id>` / `credit-draw:reservation:<id>` names that payer's held or unknown enforce reservation (resolveUnknown posts
+  and enforce alike); the funds journal admits a `charge`, `credit_draw` or `overdraft_draw` posting for a suspended/off payer
+  only when `charge:<id>` / `credit-draw:reservation:<id>` / `overdraft-draw:reservation:<id>` names that payer's held or unknown enforce reservation (resolveUnknown posts
   before the state moves), and the draw also requires that row's own `reservedAt`; free-standing draws need an active payer.
   `insufficient_funds` (wallet corrected below the hold, no credit left) is refused: the business side keeps it retryable or
   `review_needed` and must not release.
@@ -73,7 +87,13 @@ S3-b1/S3-b2 (Core): migrations `20261110200000_billing_reservations`, `202611102
   throws `reservation_invariant_breach` (not a code): the S3-b3 route must alert on it; do not retry.
 - **Verify / rollback**: `reservations.test.ts`; `npm run test:billing:mysql` (over-limit and 16-payer concurrency, racing keys,
   double settle, settle vs release, cross-period settle, triggers, guarded rollbacks; S3-w: credit-backed reserve, shortfall-only
-  draw, replay without a second draw, tightened line, 0-fen/shadow, suspended payer, concurrent draws). S3-w adds no migration;
+  draw, replay without a second draw, tightened line, 0-fen/shadow, suspended payer, concurrent draws; C-OD: no
+  limit refusal at limits 0/30/50/10000, wallet -> credit -> overdraft order, replay without a second overdraft, overLimit and
+  overdraft room, two contending tails both recorded, standard tails never overdraw, overdraft only with its charge, rollback
+  after a late failure, no reversal, triggers). C-OD rollback: while the new code is online reject drafted `overdraft_limit`
+  operations; stop writers and drain; run `prisma/rollback/20261115_rollback_billing_overdraft.sql` (refuses while any overdraft
+  row, non-zero limit, post_delivery reservation or drafted operation exists, or a later billing migration is applied); then
+  roll the code back. S3-w adds no migration;
   undo it by reverting the code (the S3-e rollback still refuses while credit rows exist). P1-1: revert the code first (the old code
   does not write the binding columns), then `prisma/rollback/20261112_rollback_billing_reservation_payer_binding.sql` (refuses while
   any reservation row or later billing migration exists; restores the S3-b1 trigger), before the charges and reservations rollbacks;
