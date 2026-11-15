@@ -652,7 +652,7 @@ jobs:
           LLM_ENABLED: 'false'
         run: npm run test:billing:mysql
 
-      - name: The inflow-repay rollback refuses while repayment rows exist and changes nothing
+      - name: The inflow-repay rollback refuses while repayment rows exist and keeps the kind ENUM, triggers and migration record
         env:
           HELM_CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
         run: |
@@ -667,7 +667,8 @@ jobs:
             echo "rollback ran although repayment rows exist" >&2; exit 1
           fi
           grep -q 'rollback refused: repayment rows exist; fix forward' <<<"${output}" || { echo "${output}" >&2; exit 1; }
-          [ "$(q -e "${state}")" = "${before}" ] || { echo "the refused rollback changed the schema" >&2; exit 1; }
+          after="$(q -e "${state}")" || exit 1
+          [ "${after}" = "${before}" ] || { echo "the refused rollback changed the kind ENUM, triggers or migration record" >&2; exit 1; }
 
       - name: Remove isolated bootstrap credential on all outcomes
         if: always()

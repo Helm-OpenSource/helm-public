@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { ActorType, Prisma, type PaymentOrder, type PaymentOrderState, type PrismaClient } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { canManageWorkspaceBilling } from "@/lib/auth/billing-governance";
+import { repayArrearsFromInflowInTransaction } from "../credit/inflow-repay";
 import { FundsRefusal, postFundsTransactionInTransaction, runFundsTransactionWithRetry } from "../funds/funds-journal";
 import { lockBillingAuthority, resolvePayerForWorkspaceInTransaction } from "../payer/payer-accounts";
 import { observeAlipayTrade, observeWeChatPayTransaction, type MerchantRefLookup, type ObservedPayment, type ObservedRefund,
@@ -38,7 +39,7 @@ export type TopupRefusalCode = "topup_input_invalid" | "topup_amount_out_of_rang
   "topup_observation_invalid" | "topup_signature_invalid" | "topup_order_unknown" | "topup_order_type_invalid" |
   "topup_provider_mismatch" | "topup_merchant_mismatch" | "topup_amount_mismatch" | "topup_currency_mismatch" |
   "topup_txn_conflict" | "topup_order_paid_by_other_txn" | "topup_invariant_breach" | "topup_observation_untrusted" |
-  "payer_billing_off";
+  "payer_billing_off" | "topup_repay_invariant_breach";
 /** A pending-reconciliation record for money a provider reports that cannot be credited (never a balance change). */
 export type PaymentException = { key: string; reason: string; paymentOrderId: string; workspaceId: string; payerAccountId: string;
   provider: TopupProvider; providerTxnId: string | null; amountFen: string | null; source: string; observed: ObservedStatus;
@@ -331,6 +332,11 @@ async function verifyInTransaction(tx: Prisma.TransactionClient, provider: Topup
     .catch((error: unknown) => { throw error instanceof FundsRefusal && error.code === "payer_billing_off"
       ? new TopupRefusal("payer_billing_off", exception("payer_billing_off")) : error; });
   if (funds.replayed) refuse("topup_invariant_breach"); // journal and VerifiedPayment always commit together
+  // C-REPAY (protocol v3.10 clause 5): the spendable wallet repays overdraft, then credit, in this transaction. A broken repayment
+  // invariant refuses the whole credit (fail-closed) and keeps a `repay_invariant_breach` exception for finance.
+  await repayArrearsFromInflowInTransaction(tx, { payerAccountId: order.payerAccountId, inflowTransactionId: funds.transaction.id,
+    actor: VERIFIER }).catch((error: unknown) => { throw error instanceof FundsRefusal && error.code === "funds_repay_invariant_breach"
+    ? new TopupRefusal("topup_repay_invariant_breach", exception("repay_invariant_breach")) : error; });
   const payment = await tx.verifiedPayment.create({ data: { provider, providerTxnId: txnId, paymentOrderId: order.id, amountFen,
     currency: "CNY", source: observed.source, lateAfterClose, fundsTransactionId: funds.transaction.id } }).catch((error: unknown) => {
     throw error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002" ? new FundsRefusal("funds_write_conflict") : error; });
@@ -369,7 +375,9 @@ async function verifyObserved(client: PrismaClient, provider: TopupProvider, obs
     throw error;
   }
   try {
-    return await runFundsTransactionWithRetry(client, tx => verifyInTransaction(tx, provider, observed));
+    // READ COMMITTED as reservations: the repayment's locking reads then take no gap locks across payers.
+    return await runFundsTransactionWithRetry(client, tx => verifyInTransaction(tx, provider, observed), 3,
+      Prisma.TransactionIsolationLevel.ReadCommitted);
   } catch (error) {
     // The credit rolled back; persist the pending-reconciliation record in its own (idempotent) transaction.
     const pending = error instanceof TopupRefusal ? error.exception : undefined;
