@@ -261,30 +261,36 @@ export async function postCreditDrawFundsInTransaction(tx: Prisma.TransactionCli
   return postLocked(tx, await lockPayer(tx, posting.payerAccountId), posting);
 }
 
-export type OverdraftDraw = { overdraftFen: bigint; fundsTransactionId: string | null };
+type OverdraftInput = { payerAccountId: string; reservationId: string; chargeFen: bigint; actor: FundsActor };
+let overdraftChannelClaimed = false;
 /**
- * C-OD settle seam, under the PayerAccount lock, after the credit shortfall draw: posts what the wallet still lacks for `chargeFen`
- * as one `overdraft_draw` (debit overdraft_receivable, credit the wallet), so the caller's full wallet charge never takes the
- * wallet below 0. Bound to this payer's held/unknown enforce reservation and its cap. Delivered usage is never refused here: the
- * payer's `overdraftLimitFen` is a soft limit (design Q9) read only by the balance summary (headroom, overLimit). Nothing to
- * cover writes nothing; settle never calls this on a replay, so a recorded draw under the key is an invariant breach.
+ * C-OD: the only way to post an `overdraft_draw`. The channel is handed out once; the settle module (reservations.ts) claims it
+ * when it loads, so no other caller can post an overdraft outside a settle (a later claim throws). The returned function runs
+ * under the PayerAccount lock, inside settle, after the credit draw: the reservation must be this payer's held/unknown enforce
+ * `post_delivery` reservation with a cap >= `chargeFen`; what the wallet still lacks is posted as one `overdraft_draw` (debit
+ * overdraft_receivable, credit the wallet). The soft limit is never compared (design Q9). Settle posts its charge, charge row and
+ * state change in the same transaction, so any later failure rolls the overdraft back with them.
  */
-export async function drawOverdraftShortfallInTransaction(tx: Prisma.TransactionClient,
-  input: { payerAccountId: string; reservationId: string; chargeFen: bigint; actor: FundsActor }): Promise<OverdraftDraw> {
-  const operationKey = `${OVERDRAFT_PREFIX}${input.reservationId}`;
-  const payer = await lockPayer(tx, input.payerAccountId);
-  const settling = await settlingReservationInTransaction(tx, input.payerAccountId, "overdraft_draw", operationKey);
-  if (!settling || input.chargeFen > settling.chargeFen) refuse("funds_input_invalid");
-  const [wallet] = await tx.$queryRaw<Array<{ balanceFen: bigint }>>`SELECT balanceFen FROM FundsAccountProjection
-    WHERE payerAccountId = ${input.payerAccountId} AND account = 'customer_wallet_available' FOR UPDATE`;
-  const shortfall = input.chargeFen - BigInt(wallet?.balanceFen ?? ZERO);
-  if (shortfall <= ZERO) return { overdraftFen: ZERO, fundsTransactionId: null };
-  const posted = await postLocked(tx, payer, normalizeFundsPosting({ payerAccountId: input.payerAccountId, kind: "overdraft_draw",
-    operationKey, actor: input.actor, evidenceRef: `reservation:${input.reservationId}`,
-    entries: [{ account: "overdraft_receivable", direction: "debit", amountFen: shortfall },
-      { account: WALLET, direction: "credit", amountFen: shortfall }] }, null, "overdraft_draw"));
-  if (posted.replayed) throw new Error("funds_overdraft_invariant_breach");
-  return { overdraftFen: shortfall, fundsTransactionId: posted.transaction.id };
+export function claimOverdraftChannel() {
+  if (overdraftChannelClaimed) throw new Error("funds_overdraft_channel_claimed");
+  overdraftChannelClaimed = true;
+  return async function drawOverdraftShortfall(tx: Prisma.TransactionClient, input: OverdraftInput) {
+    const payer = await lockPayer(tx, input.payerAccountId);
+    const [open] = await tx.$queryRaw<Array<{ chargeFen: bigint }>>`SELECT chargeFen FROM BillingReservation
+      WHERE id = ${input.reservationId} AND payerAccountId = ${input.payerAccountId} AND billingMode = 'enforce'
+        AND admission = 'post_delivery' AND state IN ('held', 'unknown') FOR SHARE`;
+    if (!open || input.chargeFen <= ZERO || input.chargeFen > BigInt(open.chargeFen)) refuse("funds_input_invalid");
+    const [wallet] = await tx.$queryRaw<Array<{ balanceFen: bigint }>>`SELECT balanceFen FROM FundsAccountProjection
+      WHERE payerAccountId = ${input.payerAccountId} AND account = 'customer_wallet_available' FOR UPDATE`;
+    const shortfall = input.chargeFen - BigInt(wallet?.balanceFen ?? ZERO);
+    if (shortfall <= ZERO) return ZERO;
+    const posted = await postLocked(tx, payer, normalizeFundsPosting({ payerAccountId: input.payerAccountId, kind: "overdraft_draw",
+      operationKey: `${OVERDRAFT_PREFIX}${input.reservationId}`, actor: input.actor, evidenceRef: `reservation:${input.reservationId}`,
+      entries: [{ account: "overdraft_receivable", direction: "debit", amountFen: shortfall },
+        { account: WALLET, direction: "credit", amountFen: shortfall }] }, null, "overdraft_draw"));
+    if (posted.replayed) throw new Error("funds_overdraft_invariant_breach"); // settle never reaches this on a replay
+    return shortfall;
+  };
 }
 
 /** Appends a mirror transaction (each line's direction swapped) referencing the original; nothing is edited or deleted. */

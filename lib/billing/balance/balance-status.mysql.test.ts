@@ -174,7 +174,7 @@ describe.skipIf(!url)("balance-status and the balance summary against MySQL", ()
     const answer = await call({ workspaceIds: [p.ws] }, service);
     expect(answer.status).toBe(200);
     expect(answer.body).toEqual({ ok: true, results: [{ workspaceId: p.ws, ok: true, billingMode: "enforce", payerStatus: "active", balanceFen: "-490",
-      headroomFen: String(MILLION_YUAN - 665), overdraftUsedFen: "0", overLimit: false, arrears: false, arrearsReason: null, asOf: expect.stringMatching(/^2\d{3}-.*Z$/) }] });
+      headroomFen: String(MILLION_YUAN - 665), overdraftUsedFen: "0", overdraftRoomFen: "0", overLimit: false, arrears: false, arrearsReason: null, asOf: expect.stringMatching(/^2\d{3}-.*Z$/) }] });
     expect(Math.abs(Date.parse(answer.body.results[0].asOf) - Date.now())).toBeLessThan(60_000);
     expect(await moneyRows()).toEqual(before); // read-only: no funds, reservation or credit row
     const wallet = await a.$transaction(tx => getWalletInTransaction(tx, { workspaceId: p.ws, actorUserId: owner }));
@@ -216,9 +216,9 @@ describe.skipIf(!url)("balance-status and the balance summary against MySQL", ()
     expect(await summary(suspended)).toEqual({ balance: 30, headroom: 30, arrears: "payer_inactive", mode: "enforce", status: "suspended" });
     expect((await call({ workspaceIds: [suspended.ws, closed.ws] }, service)).body.results).toEqual([
       { workspaceId: suspended.ws, ok: true, billingMode: "enforce", payerStatus: "suspended", balanceFen: "30", headroomFen: "30",
-        overdraftUsedFen: "0", overLimit: false, arrears: true, arrearsReason: "payer_inactive", asOf: expect.any(String) },
+        overdraftUsedFen: "0", overdraftRoomFen: "0", overLimit: false, arrears: true, arrearsReason: "payer_inactive", asOf: expect.any(String) },
       { workspaceId: closed.ws, ok: true, billingMode: "enforce", payerStatus: "closed", balanceFen: "0", headroomFen: "0",
-        overdraftUsedFen: "0", overLimit: false, arrears: true, arrearsReason: "payer_inactive", asOf: expect.any(String) }]); // both causes
+        overdraftUsedFen: "0", overdraftRoomFen: "0", overLimit: false, arrears: true, arrearsReason: "payer_inactive", asOf: expect.any(String) }]); // both causes
     // Outside enforce a non-active payer is in arrears only for funds (callers do not gate it anyway).
     const pausedShadow = await payer("shadow", 40);
     await a.$executeRaw`UPDATE PayerAccount SET status = 'suspended' WHERE id = ${pausedShadow.payerRef}`;
@@ -233,44 +233,81 @@ describe.skipIf(!url)("balance-status and the balance summary against MySQL", ()
     const unbound = `bal-unbound-${run}`;
     const answer = await call({ workspaceIds: [shadow.ws, unbound, off.ws, enforce.ws] }, service);
     expect(answer).toEqual({ status: 200, body: { ok: true, results: [
-      { workspaceId: shadow.ws, ok: true, billingMode: "shadow", payerStatus: "active", balanceFen: "500", headroomFen: "500", overdraftUsedFen: "0", overLimit: false, arrears: false, arrearsReason: null, asOf: expect.any(String) },
+      { workspaceId: shadow.ws, ok: true, billingMode: "shadow", payerStatus: "active", balanceFen: "500", headroomFen: "500", overdraftUsedFen: "0", overdraftRoomFen: "0", overLimit: false, arrears: false, arrearsReason: null, asOf: expect.any(String) },
       { workspaceId: unbound, ok: false, code: "billing_mode_off" },
-      { workspaceId: off.ws, ok: true, billingMode: "off", payerStatus: "active", balanceFen: "0", headroomFen: String(MILLION_YUAN), overdraftUsedFen: "0", overLimit: false, arrears: false, arrearsReason: null, asOf: expect.any(String) },
-      { workspaceId: enforce.ws, ok: true, billingMode: "enforce", payerStatus: "active", balanceFen: "0", headroomFen: "930", overdraftUsedFen: "0", overLimit: false, arrears: false, arrearsReason: null, asOf: expect.any(String) },
+      { workspaceId: off.ws, ok: true, billingMode: "off", payerStatus: "active", balanceFen: "0", headroomFen: String(MILLION_YUAN), overdraftUsedFen: "0", overdraftRoomFen: "0", overLimit: false, arrears: false, arrearsReason: null, asOf: expect.any(String) },
+      { workspaceId: enforce.ws, ok: true, billingMode: "enforce", payerStatus: "active", balanceFen: "0", headroomFen: "930", overdraftUsedFen: "0", overdraftRoomFen: "0", overLimit: false, arrears: false, arrearsReason: null, asOf: expect.any(String) },
     ] } });
     const fresh = await payer("off", 0); // bound, no wallet, no credit: arrears is reported; the caller gates only enforce payers
     expect((await call({ workspaceIds: [fresh.ws] }, service)).body.results[0]).toMatchObject({ billingMode: "off", balanceFen: "0", headroomFen: "0", arrears: true, arrearsReason: "funds" });
   });
 
-  it("prices pending usage at the current grant's price into headroomAfterPendingFen, only when asked (C-OD)", async () => {
+  it("adds pending usage per payer, rounded up, into headroomAfterPendingFen and arrearsAfterPending, only when asked (C-OD)", async () => {
     const service = await grant("pending", ["balance-status"]);
-    const funded = await payer("enforce", 1000), other = await payer("enforce", 0, 500), unbound = `bal-unbound-p-${run}`;
+    const funded = await payer("enforce", 1000), other = await payer("enforce", 0, 500), broke = await payer("enforce", 0), unbound = `bal-unbound-p-${run}`;
     await hold(funded, "p1", 2); // 70 held: headroom 930
     const pending = (workspaceId: string, quantity: string, extra: object = {}) =>
       ({ workspaceId, billingEventRef: event, meterUnit: "minute", pendingQuantity: quantity, ...extra });
+    const results = async (workspaceIds: string[], items: object[]) => (await call({ workspaceIds, pending: items }, service)).body.results;
     const plain = (await call({ workspaceIds: [funded.ws] }, service)).body.results[0];
     expect(plain).not.toHaveProperty("headroomAfterPendingFen"); // the v3.10 shape is unchanged without pending
-    const answer = await call({ workspaceIds: [funded.ws, other.ws, unbound], pending: [pending(funded.ws, "30"),
-      pending(other.ws, "1", { meterUnit: "segment" })] }, service);
-    expect(answer.status).toBe(200);
-    expect(answer.body.results[0]).toMatchObject({ headroomFen: "930", headroomAfterPendingFen: "-120", arrears: false }); // 930 - 30 x 35
-    expect(answer.body.results[1]).toMatchObject({ headroomFen: "500", headroomAfterPendingFen: null }); // no grant for that unit
-    expect(answer.body.results[2]).toEqual({ workspaceId: unbound, ok: false, code: "billing_mode_off" });
-    expect((await call({ workspaceIds: [other.ws], pending: [] }, service)).body.results[0]).toMatchObject({ headroomAfterPendingFen: "500" });
-    expect((await call({ workspaceIds: [funded.ws], pending: [pending(funded.ws, "9007199254740991")] }, service)).body.results[0])
-      .toMatchObject({ headroomAfterPendingFen: null }); // beyond the fen bound: not priced, never wrapped
+    expect(plain).not.toHaveProperty("arrearsAfterPending");
+    const [big, none, poor, off] = await results([funded.ws, other.ws, broke.ws, unbound], [pending(funded.ws, "30"),
+      pending(other.ws, "1", { meterUnit: "segment" }), pending(broke.ws, "1", { meterUnit: "segment" })]);
+    expect(big).toMatchObject({ headroomFen: "930", headroomAfterPendingFen: "-120", arrears: false, arrearsAfterPending: true }); // 930 - 30 x 35
+    expect(none).toMatchObject({ headroomFen: "500", headroomAfterPendingFen: null, arrears: false, arrearsAfterPending: null }); // not priceable
+    expect(poor).toMatchObject({ headroomAfterPendingFen: null, arrears: true, arrearsAfterPending: true }); // arrears wins over null
+    expect(off).toEqual({ workspaceId: unbound, ok: false, code: "billing_mode_off" });
+    expect((await results([funded.ws], [pending(funded.ws, "1")]))[0]).toMatchObject({ headroomAfterPendingFen: "895", arrearsAfterPending: false });
+    expect((await results([other.ws], []))[0]).toMatchObject({ headroomAfterPendingFen: "500", arrearsAfterPending: false });
+    expect((await results([funded.ws], [pending(funded.ws, "9007199254740991")]))[0]).toMatchObject({ headroomAfterPendingFen: null }); // fen bound
+    // Two workspaces of one payer share its headroom: 70 + 70 pending against 100 leaves -40 for both, not 30 each.
+    const shared = await payer("enforce", 100), second = `bal-ws2-${run}`;
+    await a.$executeRaw`INSERT INTO Workspace (id,name,slug,updatedAt) VALUES (${second},'Synthetic balance',${second},NOW(3))`;
+    await a.$executeRaw`INSERT INTO Membership (id,workspaceId,userId,role,status,updatedAt) VALUES (${`m-${second}`},${second},${owner},'OWNER','ACTIVE',NOW(3))`;
+    const version = (await a.payerAccount.findUniqueOrThrow({ where: { id: shared.payerRef } })).version;
+    await bindScope(a, { actorUserId: owner, payerAccountId: shared.payerRef, expectedPayerVersion: version, scopeKind: "workspace",
+      scopeRef: second, evidenceRef: "consent:bind" });
+    expect((await results([shared.ws, second], [pending(shared.ws, "2"), pending(second, "2")])).map(r => r.headroomAfterPendingFen)).toEqual(["-40", "-40"]);
+    // A fractional price is rounded up for the estimate: 4 x 1/3 fen is 2 (half-up would say 1), so 2 fen of headroom is exhausted.
+    const thirds = (await publishPriceVersion(a, { actor: { type: "SYSTEM", ref: "synthetic-catalog" }, productCode: `synthetic.bal3${run}`,
+      version: 1, meterUnit: "segment", billingEventRef: event, acceptanceRef: "acceptance:synthetic", scopeKind: "workspace",
+      unitPriceFenNumerator: BigInt(1), unitPriceDenominator: BigInt(3), effectiveFrom: new Date("2026-11-01T00:00:00Z"),
+      effectiveUntil: null, approvalRef: "approval:synthetic" })).priceVersion.id;
+    const tiny = await payer("enforce", 2);
+    const { grant: seg } = await createSpendGrant(a, { actorUserId: owner, payerAccountId: tiny.payerRef, priceVersionId: thirds,
+      operationKey: "grant:bal3", evidenceRef: "consent:synthetic", validFrom: new Date("2026-11-01T00:00:00Z"),
+      validUntil: new Date("2027-02-01T00:00:00Z"), limits: { perChargeLimitFen: BigInt(10), dailyLimitFen: BigInt(10), monthlyLimitFen: BigInt(10) } });
+    await changeSpendGrant(a, { actorUserId: owner, grantId: seg.id, expectedVersion: 1, action: "activate", evidenceRef: "consent:on" });
+    expect((await results([tiny.ws], [pending(tiny.ws, "4", { meterUnit: "segment" })]))[0])
+      .toMatchObject({ headroomFen: "2", headroomAfterPendingFen: "0", arrears: false, arrearsAfterPending: true });
     // Two active grants for the same event and unit (another product): ambiguous, so not priced (the quote rule).
-    const second = (await publishPriceVersion(a, { actor: { type: "SYSTEM", ref: "synthetic-catalog" }, productCode: `synthetic.bal2${run}`,
+    const second2 = (await publishPriceVersion(a, { actor: { type: "SYSTEM", ref: "synthetic-catalog" }, productCode: `synthetic.bal2${run}`,
       version: 1, meterUnit: "minute", billingEventRef: event, acceptanceRef: "acceptance:synthetic", scopeKind: "workspace",
       unitPriceFenNumerator: BigInt(1), unitPriceDenominator: BigInt(1), effectiveFrom: new Date("2026-11-01T00:00:00Z"),
       effectiveUntil: null, approvalRef: "approval:synthetic" })).priceVersion.id;
-    const { grant: extra } = await createSpendGrant(a, { actorUserId: owner, payerAccountId: funded.payerRef, priceVersionId: second,
+    const { grant: extra } = await createSpendGrant(a, { actorUserId: owner, payerAccountId: funded.payerRef, priceVersionId: second2,
       operationKey: "grant:bal2", evidenceRef: "consent:synthetic", validFrom: new Date("2026-11-01T00:00:00Z"),
       validUntil: new Date("2027-02-01T00:00:00Z"), limits: { perChargeLimitFen: BigInt(1), dailyLimitFen: BigInt(1), monthlyLimitFen: BigInt(1) } });
     await changeSpendGrant(a, { actorUserId: owner, grantId: extra.id, expectedVersion: 1, action: "activate", evidenceRef: "consent:on" });
-    expect((await call({ workspaceIds: [funded.ws], pending: [pending(funded.ws, "1")] }, service)).body.results[0])
-      .toMatchObject({ headroomAfterPendingFen: null });
-    // Delivered work settled with no soft limit: recorded as overdraft, reported overLimit and in arrears.
+    expect((await results([funded.ws], [pending(funded.ws, "1")]))[0]).toMatchObject({ headroomAfterPendingFen: null, arrearsAfterPending: null });
+    const invalid = { status: 400, body: { ok: false, code: "request_invalid" } };
+    for (const bad of [[pending(unbound, "1")], [pending(funded.ws, "0")], [pending(funded.ws, "01")], [pending(funded.ws, "1", { extra: 1 })],
+      [pending(funded.ws, "1"), pending(funded.ws, "2")], [pending(funded.ws, "1", { meterUnit: "Minute" })], [pending(funded.ws, 1 as never)]]) {
+      expect(await call({ workspaceIds: [funded.ws], pending: bad }, service)).toEqual(invalid);
+    }
+  });
+  it("keeps headroom's reserve meaning on the service and wallet reads and reports overdraft room and arrears (C-OD)", async () => {
+    const service = await grant("room", ["balance-status"]);
+    const room = await payer("enforce", 0);
+    await a.$executeRaw`UPDATE PayerAccount SET overdraftLimitFen = 10000 WHERE id = ${room.payerRef}`; // fixture: the approved operation's effect
+    expect((await call({ workspaceIds: [room.ws] }, service)).body.results[0]).toMatchObject({ headroomFen: "0", overdraftRoomFen: "10000",
+      overLimit: false, arrears: false, arrearsReason: null }); // owner ruling: may overdraw up to the limit before it stops
+    expect((await call({ workspaceIds: [room.ws], pending: [{ workspaceId: room.ws, billingEventRef: event, meterUnit: "minute",
+      pendingQuantity: "1" }] }, service)).body.results[0]).toMatchObject({ headroomAfterPendingFen: "9965", arrearsAfterPending: false });
+    const wallet = await a.$transaction(tx => getWalletInTransaction(tx, { workspaceId: room.ws, actorUserId: owner }));
+    expect(wallet).toMatchObject({ headroomFen: "0", arrears: false });
+    // Delivered work settled with no limit configured: recorded as overdraft, at once overLimit and in arrears.
     const od = await payer("enforce", 0);
     const pd = await reserve(a, settler, { idempotencyKey: `idem:pd:${run}`, operationRef: `op:pd:${run}`, subjectScope: { kind: "workspace",
       workspaceId: od.ws }, payerRef: od.payerRef, grantId: od.grantId, priceVersionId: priceId, billingEventRef: event, meterUnit: "minute",
@@ -278,12 +315,8 @@ describe.skipIf(!url)("balance-status and the balance summary against MySQL", ()
     if (!pd.ok) throw new Error(pd.code);
     expect(await settleUsed(pd.reservationId, "pd", 2)).toMatchObject({ ok: true, chargeFen: "70" });
     expect((await call({ workspaceIds: [od.ws] }, service)).body.results[0]).toMatchObject({ balanceFen: "-70", headroomFen: "0",
-      overdraftUsedFen: "70", overLimit: true, arrears: true, arrearsReason: "funds" });
-    const invalid = { status: 400, body: { ok: false, code: "request_invalid" } };
-    for (const bad of [[pending(unbound, "1")], [pending(funded.ws, "0")], [pending(funded.ws, "01")], [pending(funded.ws, "1", { extra: 1 })],
-      [pending(funded.ws, "1"), pending(funded.ws, "2")], [pending(funded.ws, "1", { meterUnit: "Minute" })]]) {
-      expect(await call({ workspaceIds: [funded.ws], pending: bad }, service)).toEqual(invalid);
-    }
+      overdraftUsedFen: "70", overdraftRoomFen: "0", overLimit: true, arrears: true, arrearsReason: "funds" });
+    expect(await a.$transaction(tx => getWalletInTransaction(tx, { workspaceId: od.ws, actorUserId: owner }))).toMatchObject({ balanceFen: "-70", arrears: true });
   });
 
   it("refuses malformed batches as request_invalid and accepts exactly 50", async () => {

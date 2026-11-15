@@ -1964,7 +1964,8 @@ model PayerAccount {
   currency             String              @default("CNY") @db.VarChar(3)
   billingMode          PayerBillingMode    @default(off)
   status               PayerAccountStatus  @default(active)
-  // C-OD: bound on outstanding overdraft (fen); 0 = no overdraft. Written only by an approved platform `overdraft_limit` operation.
+  // C-OD overdraft soft limit (fen). 0 = not configured: no overdraft room; post-delivery tails are still recorded and at once
+  // overLimit. Written only by an approved platform `overdraft_limit` operation; never refuses a settle.
   overdraftLimitFen    BigInt              @default(0)
   version              Int                 @default(1)
   createdAt            DateTime            @default(now())

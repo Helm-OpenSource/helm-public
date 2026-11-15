@@ -71,13 +71,14 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
   closed facility's draws still count); `headroomFen = wallet + creditRemaining - held` is the reserve admission formula
   (remaining credit of the drawable, in-term facility, 0 for a payer that is not active; held = enforce `held`/`unknown`
   reservations). `headroomFen` includes remaining credit: a stop/go input only, clients must never display it as a balance.
-  `overdraftUsedFen` is the `overdraft_receivable` projection (C-OD post-delivery settle tails). C-OD adds the unused overdraft
-  soft limit to headroom: `headroomFen = wallet + creditRemaining + max(0, overdraftLimit - overdraftUsed) - held` (never
-  negative for an overdraft over its limit; standard reserve admission keeps wallet + credit - held), and arrears with reason
-  `funds` also when the overdraft is over its limit (any overdraft with limit 0). `payerStatus` is the PayerAccount status
+  `overdraftUsedFen` is the `overdraft_receivable` projection (C-OD post-delivery settle tails). C-OD keeps `headroomFen` as
+  above and reports the overdraft separately: overdraft room = `max(0, overdraftLimit - overdraftUsed)` (never negative; limit 0
+  = not configured, no room) and `overLimit` = used above the limit. Arrears for `funds` becomes `headroom + overdraft room <= 0`
+  or `overLimit` (owner ruling: overdraw up to the limit, then stop). Switching a payer to enforce still needs headroom > 0. `payerStatus` is the PayerAccount status
   (`active|suspended|closed`); numbers are returned in every mode and status, `off` included.
-  **`arrears`** is the one boolean callers gate on (only for `billingMode: "enforce"`), with two causes in `arrearsReason`:
-  `funds` when `headroomFen <= 0` (Q8), `payer_inactive` when an enforce payer is suspended or closed (coordinator 11-12: Core
+  **`arrears`** is the boolean callers gate on (only for `billingMode: "enforce"`; a C-OD caller that sends `pending` gates on
+  `arrearsAfterPending` instead, see below), with two causes in `arrearsReason`:
+  `funds` when `headroomFen` + overdraft room `<= 0` (Q8 with C-OD) or the overdraft is over its limit, `payer_inactive` when an enforce payer is suspended or closed (coordinator 11-12: Core
   refuses its new reserves, so work would run unbilled); `payer_inactive` wins when both hold, `null` when not in arrears.
   One lock-free statement per batch: a consistent read that never waits on, or delays, a reserve or settle. Writes only the
   auth nonce. The wallet read (`/api/billing/v1/wallet`) carries the same `balanceFen`, `headroomFen` and `arrears` next to
@@ -100,18 +101,26 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
   routes accept; there is no separate declarable list.
 - **reserve** `expectedMode` (v3.4, optional `shadow|enforce`): a payer in the other mode is `mode_mismatch` before any bucket
   or reservation row; a replay of the key is also checked against it (not part of the content hash).
-- **reserve** `admission: "post_delivery"` (C-OD, protocol v3.10 clause 1; any other value is `request_invalid`): for work
-  already delivered. Needs the grant scope `reserve-post-delivery` **in addition to** `reserve` (otherwise 403
-  `service_unauthorized`, nothing written); it is a scope only, not a route. Core skips the funds check only; mode, binding,
+- **reserve** `admission: "post_delivery"` (C-OD, protocol v3.10 clause 1): for work already delivered. Needs the grant scope
+  `reserve-post-delivery` **in addition to** `reserve`; without it ANY `admission` value is 403 `service_unauthorized` first (no
+  business write; the auth nonce is still recorded), and with it any value other than `post_delivery` is `request_invalid`. It
+  is a scope only, not a route: a grant holding only it cannot reserve. Core skips the funds check only; mode, binding,
   grant, limits and price apply as before, and settle records the whole tail as overdraft, never refused by the soft limit
   (BILLING_RESERVATIONS.md). The admission is in the content hash and frozen on the row (migration `20261115100000_billing_overdraft`).
   Reverting this code after a grant with `reserve-post-delivery` was issued makes that scope unknown, so the grant is refused on
   every route (as for `balance-status` below): rotate to a grant without it (v3.9) before reverting.
 - **balance-status** `pending` (C-OD, optional): `[{ workspaceId, billingEventRef, meterUnit, pendingQuantity }]`, at most 50,
-  each for a listed workspace, distinct per workspace, event and unit, positive integer quantity (else `request_invalid`). With
-  it every bound entry gains `headroomAfterPendingFen` = headroomFen minus the pending usage priced half-up per entry at the
-  payer's single active grant on an effective price for that event and unit (the quote rule, database time; one more
-  lock-free read). `null` when any entry of the workspace has no such grant or leaves the fen bound. `arrears` is unchanged.
+  each for a listed workspace, distinct per workspace, event and unit, `pendingQuantity` a positive integer **string** (else
+  `request_invalid`). Every bound entry also carries `overdraftRoomFen`. With `pending`, every bound entry gains:
+  - `headroomAfterPendingFen` = `headroomFen + overdraftRoomFen` minus the batch's pending usage **of its payer** (summed over
+    all the payer's workspaces in this batch), each entry priced at the payer's single active grant on an effective price for
+    that event and unit (the quote rule, database time; one more lock-free read) and **rounded up** (an estimate only; settle
+    keeps its half-up rounding). It includes overdraft room. `null` when an entry of that payer has no such grant or the total
+    leaves the fen bound. Declare all workspaces of a payer in the same batch, otherwise the result is only an upper bound of
+    the real room (a lower bound of the pending);
+  - `arrearsAfterPending` = `true` when `arrears`, otherwise `headroomAfterPendingFen <= 0`; `null` when that is `null`.
+  **Second-stage caller rule**: a caller that sends `pending` stops new billable work on `arrearsAfterPending`; when it is
+  `null` it falls back to `arrears` and raises an alert. `arrears` itself keeps its meaning.
 - **Verify / rollback**: `npm run test:billing:mysql` (`internal-routes.mysql.test.ts`: gate, signature/expiry/replay/scope/
   revocation/pin/validity/content hash/scope canonicality/public key, bounded and exact body bytes, shape and refusal
   mapping, expectedMode, issuer isolation and rotation, connection-error mapping, every operation, separate reconciliation

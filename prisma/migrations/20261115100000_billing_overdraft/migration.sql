@@ -9,7 +9,12 @@
 --    post_delivery reservation (delivered work, reserved without the funds check) may overdraw at settle. The update trigger is
 --    dropped and recreated with `admission` frozen; MySQL has no CREATE OR REPLACE TRIGGER, so between those two statements the
 --    table has no update guard: run with the internal billing routes off (their default), so no reservation writer is active.
--- No existing row changes, no money moves.
+-- No existing row changes, no money moves. Algorithms and locks above are the expected MySQL 8.0 behaviour, not measured here.
+-- Order: stop the writers (internal billing routes off, settler and finance commands stopped), let open transactions drain,
+-- migrate, check that BillingReservation_guard_update exists again and names `admission`, deploy the code, reopen the entries.
+-- Not idempotent: a partial failure cannot simply be re-run (e.g. the column exists). Keep writers stopped, finish the missing
+-- statements by hand from this file (recreate the trigger first if it was dropped), then mark the migration applied
+-- (`prisma migrate resolve --applied`). Needs binlog_format=ROW and trigger privileges (or log_bin_trust_function_creators=1).
 -- Rollback: prisma/rollback/20261115_rollback_billing_overdraft.sql (refuses while any overdraft row, non-zero limit or post_delivery reservation exists).
 ALTER TABLE `FundsTransaction` MODIFY `kind` ENUM('topup', 'correction', 'bank_topup', 'charge', 'credit_draw', 'overdraft_draw') NOT NULL;
 ALTER TABLE `FundsJournalEntry` MODIFY `account` ENUM('customer_wallet_available', 'topup_clearing', 'correction_suspense', 'bank_clearing', 'charge_revenue', 'credit_receivable', 'overdraft_receivable') NOT NULL;
