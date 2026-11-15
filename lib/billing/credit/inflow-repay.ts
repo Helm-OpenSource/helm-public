@@ -7,12 +7,12 @@ import { creditRepayKeyPrefix, creditRepayOperationKey, FundsRefusal, heldEnforc
  * Billing V1 C-REPAY (S3 protocol v3.10 clause 5; design §1.2-1.3): right after a `topup` or `bank_topup` is posted, in the same
  * transaction and under the same PayerAccount lock, the spendable wallet (wallet - held, at least 0; ruling M-1) repays the
  * overdraft first, then credit; the rest stays in the wallet. Held (what admitted enforce reservations count on) stays, so their
- * settles remain funded. After every inflow: wallet - held > 0 implies credit used = 0 and overdraft used = 0; a wallet > 0 beside
- * a debt can still exist (holds, pre-C-REPAY balances, a hold released later) until a later inflow. Held is a locking read, so it
- * is current under the payer lock whatever the caller's isolation level: `@@transaction_isolation` does not show a Prisma
- * transaction's own level (measured, C-REPAY part 2), so a level check would prove nothing. Callers still run in READ COMMITTED,
- * where that locking read takes no gap locks (as reservations do). Amounts are computed here from
- * locked rows, never passed in; owing nothing writes nothing.
+ * settles remain funded. When an inflow's repayment completes: wallet - held > 0 implies credit used = 0 and overdraft used = 0 (at
+ * that moment only); a wallet > 0 beside a debt can still exist (holds, pre-C-REPAY balances, a hold released later) until a later
+ * inflow. Held is a locking read, so it is current under the payer lock whatever the caller's isolation level:
+ * `@@transaction_isolation` does not show a Prisma transaction's own level (measured, C-REPAY part 2), so a level check would prove
+ * nothing. Callers still run in READ COMMITTED, where that locking read takes no gap locks (as reservations do). Amounts are
+ * computed here from locked rows, never passed in; owing nothing writes nothing.
  * - `overdraft_repay` (key `overdraft-repay:<inflowId>`): debit the wallet, credit overdraft_receivable.
  * - `credit_repay`, one per facility repaid (key `credit-repay:<inflowId>:<facilityId>`, evidence `credit-facility:<id>` as for
  *   draws): debit the wallet, credit credit_receivable, and that facility's usedFen falls by the same amount (the trigger's repay
@@ -20,7 +20,9 @@ import { creditRepayKeyPrefix, creditRepayOperationKey, FundsRefusal, heldEnforc
  * Refusals: `funds_input_invalid` (not this payer's unreversed topup / bank_topup), `funds_repay_invariant_breach` (this inflow
  * already has a repayment, credit_receivable differs from Σ usedFen (S5), or a facility row moved under the lock). Any refusal
  * rolls the inflow back with it (fail-closed, coordinator ruling B); the inflow entry points map it (C-REPAY part 2).
- * Lock order: PayerAccount -> FundsTransaction (share) -> CreditFacility -> projections -> journal postings, as credit draws.
+ * Lock order inside this function: PayerAccount -> FundsTransaction (share) -> CreditFacility -> projections -> BillingReservation
+ * (share, the held sum) -> journal postings. That is not the whole transaction's order: the entry point has already locked the
+ * payer, posted the inflow and locked its projections before calling here. Every step runs after the PayerAccount lock.
  */
 export type InflowRepayInput = { payerAccountId: string; inflowTransactionId: string; actor: FundsActor };
 export type InflowRepayment = { overdraftRepaidFen: bigint; overdraftTransactionId: string | null;
@@ -32,8 +34,9 @@ const ZERO = BigInt(0);
 const REF = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,190}$/;
 const WALLET = "customer_wallet_available";
 const breach = (): never => { throw new FundsRefusal("funds_repay_invariant_breach"); };
-/** Closed (expired / revoked) facilities first, oldest debt first; then the drawable one. Coordinator default 11-15, pending owner
- * confirmation: when the wallet cannot repay everything, repaying a closed facility lowers headroom. Change the order only here. */
+/** Closed (expired / revoked) facilities first, then the drawable one; within each, by activatedAt, then id. Closed-first is
+ * owner-confirmed (2026-11-15): when the wallet cannot repay everything, repaying a closed facility lowers headroom. Change the
+ * order only here. */
 const REPAY_ORDER = Prisma.sql`ORDER BY (state IN ('active', 'reduced')) ASC, activatedAt ASC, id ASC`;
 
 export async function repayArrearsFromInflowInTransaction(tx: Prisma.TransactionClient,
