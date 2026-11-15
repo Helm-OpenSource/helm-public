@@ -1,12 +1,15 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
-import { creditRepayKeyPrefix, creditRepayOperationKey, FundsRefusal, overdraftRepayOperationKey, postRepayFundsInTransaction,
-  type FundsActor } from "../funds/funds-journal";
+import { creditRepayKeyPrefix, creditRepayOperationKey, FundsRefusal, heldEnforceFenInTransaction, overdraftRepayOperationKey,
+  postRepayFundsInTransaction, type FundsActor } from "../funds/funds-journal";
 
 /**
  * Billing V1 C-REPAY (S3 protocol v3.10 clause 5; design §1.2-1.3): right after a `topup` or `bank_topup` is posted, in the same
- * transaction and under the same PayerAccount lock, the whole wallet repays the overdraft first, then credit; what is left stays
- * in the wallet. So after every inflow: wallet > 0 implies credit used = 0 and overdraft used = 0. Amounts are computed here from
+ * transaction and under the same PayerAccount lock, the spendable wallet (wallet - held, at least 0; ruling M-1) repays the
+ * overdraft first, then credit; the rest stays in the wallet. Held (what admitted enforce reservations count on) stays, so their
+ * settles remain funded. After every inflow: wallet - held > 0 implies credit used = 0 and overdraft used = 0; a wallet > 0 beside
+ * a debt can still exist (holds, pre-C-REPAY balances) until a later inflow. Callers run in READ COMMITTED (held is a plain read,
+ * see heldEnforceFenInTransaction). Amounts are computed here from
  * locked rows, never passed in; owing nothing writes nothing.
  * - `overdraft_repay` (key `overdraft-repay:<inflowId>`): debit the wallet, credit overdraft_receivable.
  * - `credit_repay`, one per facility repaid (key `credit-repay:<inflowId>:<facilityId>`, evidence `credit-facility:<id>` as for
@@ -64,7 +67,8 @@ export async function repayArrearsFromInflowInTransaction(tx: Prisma.Transaction
   // S5: the credit receivable is exactly what the facilities record as used; otherwise the books are already wrong.
   if (facilities.reduce((sum, row) => sum + row.usedFen, ZERO) !== balance("credit_receivable")) breach();
 
-  let wallet = balance(WALLET);
+  const spendable = balance(WALLET) - await heldEnforceFenInTransaction(tx, payerAccountId);
+  let wallet = spendable > ZERO ? spendable : ZERO; // what may still repay
   const overdraftRepaidFen = wallet < balance("overdraft_receivable") ? wallet : balance("overdraft_receivable");
   let overdraftTransactionId: string | null = null;
   if (overdraftRepaidFen > ZERO) {
@@ -91,5 +95,6 @@ export async function repayArrearsFromInflowInTransaction(tx: Prisma.Transaction
     creditRepaid.push({ facilityId: facility.id, amountFen, fundsTransactionId: posted.transaction.id });
     wallet -= amountFen;
   }
-  return { overdraftRepaidFen, overdraftTransactionId, creditRepaid, walletLeftFen: wallet };
+  const repaidFen = creditRepaid.reduce((sum, row) => sum + row.amountFen, overdraftRepaidFen);
+  return { overdraftRepaidFen, overdraftTransactionId, creditRepaid, walletLeftFen: balance(WALLET) - repaidFen };
 }

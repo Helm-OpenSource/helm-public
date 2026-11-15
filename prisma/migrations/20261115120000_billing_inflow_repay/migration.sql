@@ -8,14 +8,8 @@
 --    and stays >= 0, on an activated facility in any state (expired and revoked included), every other column unchanged. MySQL
 --    has no CREATE OR REPLACE TRIGGER, so between those two statements the table has no update guard: run with the writers stopped.
 --    The table CHECKs are unchanged (CreditFacility_amount_check already holds usedFen >= 0).
--- No existing row changes, no money moves. Algorithms and locks above are the expected MySQL 8.0 / 8.4 behaviour, not measured here.
--- Order: stop the writers (internal billing routes off, settler, credit and bank-receipt finance commands stopped, top-up
--- notifications off), let open transactions drain, migrate, check that CreditFacility_guard_update exists again and has the
--- repayment shape, deploy the code, reopen the entries.
--- Not idempotent: a partial failure cannot simply be re-run. Keep writers stopped, finish the missing statements by hand from
--- this file (recreate the trigger first if it was dropped), then mark the migration applied (`prisma migrate resolve --applied`).
--- Needs binlog_format=ROW and the TRIGGER privilege; with binary logging on and no SUPER, log_bin_trust_function_creators=1 is
--- needed in addition (it never replaces the privilege).
+-- No existing row changes, no money moves; algorithms and locks are expected MySQL 8.0 / 8.4 behaviour, not measured. Run order,
+-- writer stop, privileges and the by-hand finish after a partial failure (not idempotent): the upgrade note of this migration.
 -- Rollback: prisma/rollback/20261115_rollback_billing_inflow_repay.sql (refuses once any repayment row exists). While this
 -- migration is applied, 20261115100000_billing_overdraft cannot be rolled back (its guard refuses a later billing migration).
 ALTER TABLE `FundsTransaction` MODIFY `kind` ENUM('topup', 'correction', 'bank_topup', 'charge', 'credit_draw', 'overdraft_draw', 'overdraft_repay', 'credit_repay') NOT NULL;

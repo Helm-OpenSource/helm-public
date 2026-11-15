@@ -1,11 +1,10 @@
--- Rollback of 20261115120000_billing_inflow_repay for an unused migration only. Order: stop the writers and drain open
--- transactions; run this script; then roll the code back to the C-OD code (which neither posts nor reads repayments). Refuses while
--- any `overdraft_repay` / `credit_repay` row exists, or a later billing migration is applied. Once a repayment is recorded the ENUM
--- values are referenced and this cannot run: fix forward. A code-only rollback with this schema kept is safe (the funds code reads
--- FundsTransaction with raw SQL only, and the recreated trigger only admits one more shape), but new inflows then stop repaying.
--- This rollback must run before 20261115_rollback_billing_overdraft.sql, whose guard refuses while this migration is applied.
--- Shrinks FundsTransaction.kind to the C-OD union, drops the credit projection triggers, restores the
--- 20261110215000_billing_credit_facilities update trigger, and lets `prisma migrate deploy` re-apply.
+-- Rollback of 20261115120000_billing_inflow_repay for an unused migration only: stop the writers, drain, run this, then roll the
+-- code back to C-OD. Refuses while a repayment row exists (fix forward) or a later billing migration is applied; must run before
+-- the C-OD rollback, which refuses while this is applied. A code-only rollback keeping the schema is safe (raw-SQL reads, one more
+-- trigger shape), but inflows then stop repaying. Shrinks the kind ENUM, drops the credit projection triggers, restores the
+-- 20261110215000 update trigger, and removes the migration record last (it also unblocks the C-OD rollback).
+-- Run it whole with a client that stops at the first error, `mysql --batch <database> < this-file` (non-zero exit = refused), never
+-- in a continue-on-error mode such as `mysql --force`: the trigger statements after the CALL cannot live in a routine.
 DROP PROCEDURE IF EXISTS `rollback_billing_inflow_repay`;
 DELIMITER $$
 CREATE PROCEDURE `rollback_billing_inflow_repay`()
@@ -18,7 +17,6 @@ BEGIN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'rollback refused: repayment rows exist; fix forward';
   END IF;
   ALTER TABLE `FundsTransaction` MODIFY `kind` ENUM('topup', 'correction', 'bank_topup', 'charge', 'credit_draw', 'overdraft_draw') NOT NULL;
-  DELETE FROM `_prisma_migrations` WHERE `migration_name` = '20261115120000_billing_inflow_repay';
 END$$
 DELIMITER ;
 CALL `rollback_billing_inflow_repay`();
@@ -52,3 +50,6 @@ FOR EACH ROW BEGIN
  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='credit_facility_guard'; END IF;
 END$$
 DELIMITER ;
+-- Last: the completion mark, and only where no repayment exists (a refusal leaves it in place even if a client went on).
+DELETE FROM `_prisma_migrations` WHERE `migration_name` = '20261115120000_billing_inflow_repay'
+  AND NOT EXISTS (SELECT 1 FROM `FundsTransaction` WHERE `kind` IN ('overdraft_repay', 'credit_repay'));

@@ -36,8 +36,8 @@
   "env": [],
   "verification": [
     {
-      "zh": "顺序：停相关写入方（内部计费路由关闭、结算器与授信、对公到账财务命令停止、充值通知保持关闭）→ 等在途事务排空 → 迁移 → 核对 CreditFacility_guard_update 已重建且含还款形状 → 部署代码 → 恢复入口。删除与重建触发器之间该表没有更新守卫，所以必须停写。",
-      "en": "Order: stop the writers (internal billing routes off, settler, credit and bank-receipt finance commands stopped, top-up notifications kept off), drain open transactions, migrate, check that CreditFacility_guard_update was recreated with the repayment shape, deploy the code, reopen the entries. Between dropping and recreating the trigger the table has no update guard, hence the stopped writers."
+      "zh": "顺序：停相关写入方（内部计费路由关闭、结算器与授信、对公到账财务命令停止、充值通知保持关闭）→ 等在途事务排空 → 迁移 → 核对 CreditFacility_guard_update 已重建且含还款形状 → 部署代码 → 恢复入口。删除与重建触发器之间该表没有更新守卫，所以必须停写。本片只代表账本能力就绪：第 2 片两处入账接线及其验证完成并部署之后，才能做支付宝切换、开放对公收款路由。",
+      "en": "Order: stop the writers (internal billing routes off, settler, credit and bank-receipt finance commands stopped, top-up notifications kept off), drain open transactions, migrate, check that CreditFacility_guard_update was recreated with the repayment shape, deploy the code, reopen the entries. Between dropping and recreating the trigger the table has no update guard, hence the stopped writers. This part only makes the ledger ready: switch the Alipay channel or open the bank receipt route only after part 2 (both inflow entry points wired, verified and deployed)."
     },
     {
       "zh": "迁移不幂等，中途失败不能原样重跑：保持停写，按迁移文件手工补完剩余语句（若触发器已删先重建），再用 prisma migrate resolve --applied 标记。",
@@ -48,8 +48,8 @@
       "en": "Check that FundsTransaction.kind ends with overdraft_repay, credit_repay; FundsAccountProjection has the two new credit_insert / credit_update triggers; no credit_receivable projection is negative."
     },
     {
-      "zh": "回滚：本片迁移在位时，20261115100000_billing_overdraft 不能单独回滚（其守卫拒绝更晚的 billing 迁移），须先回滚本片；一旦有还款行，本片回滚脚本拒绝执行，只能前滚修复。只回滚代码、保留库结构是安全的，但之后新入账不再抵扣。",
-      "en": "Rollback: while this migration is applied, 20261115100000_billing_overdraft cannot be rolled back alone (its guard refuses a later billing migration), so roll this one back first; once any repayment row exists this rollback refuses and only a fix-forward remains. A code-only rollback keeping this schema is safe, but new inflows then stop repaying."
+      "zh": "回滚：本片迁移在位时，20261115100000_billing_overdraft 不能单独回滚（其守卫拒绝更晚的 billing 迁移），须先回滚本片；一旦有还款行，本片回滚脚本拒绝执行，只能前滚修复。脚本必须用遇错即停的方式整份执行（mysql --batch <库名> < 脚本，非零退出即拒绝），禁止 --force 等继续执行模式。只回滚代码、保留库结构是安全的，但之后新入账不再抵扣。",
+      "en": "Rollback: while this migration is applied, 20261115100000_billing_overdraft cannot be rolled back alone (its guard refuses a later billing migration), so roll this one back first; once any repayment row exists this rollback refuses and only a fix-forward remains. Run the script whole with a stop-on-error client (mysql --batch <database> < file; non-zero exit = refused), never in a continue-on-error mode such as --force. A code-only rollback keeping this schema is safe, but new inflows then stop repaying."
     },
     {
       "zh": "上表的算法与锁为 MySQL 8.0 / 8.4 的预期行为，未实测。生产启用前置：binlog_format=ROW；必须具备建触发器权限；binlog 开启且无 SUPER 时还须另设 log_bin_trust_function_creators=1（不能替代该权限）。",

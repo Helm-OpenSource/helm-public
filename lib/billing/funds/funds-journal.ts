@@ -250,6 +250,15 @@ export async function settlingReservationInTransaction(tx: Prisma.TransactionCli
   return row ? { reservedAt: row.reservedAt, chargeFen: BigInt(row.chargeFen) } : null;
 }
 
+/** Σ chargeFen of the payer's enforce held/unknown reservations: the `held` of reserve admission (and of balance-status). A plain
+ * read, current only under READ COMMITTED (or before any earlier consistent read) while the PayerAccount lock is held, which
+ * every hold writer takes first. */
+export async function heldEnforceFenInTransaction(tx: Prisma.TransactionClient, payerAccountId: string) {
+  const [{ held }] = await tx.$queryRaw<Array<{ held: bigint }>>`SELECT CAST(COALESCE(SUM(chargeFen), 0) AS SIGNED) AS held
+    FROM BillingReservation WHERE payerAccountId = ${payerAccountId} AND billingMode = 'enforce' AND state IN ('held', 'unknown')`;
+  return BigInt(held);
+}
+
 /** Conflicts that abort the whole transaction and are safe to re-run: Prisma P2034, a MySQL 1213 deadlock from a raw query
  * (P2010), or a concurrent same-key insert (`funds_write_conflict`). */
 export function isRetryableFundsConflict(error: unknown) {

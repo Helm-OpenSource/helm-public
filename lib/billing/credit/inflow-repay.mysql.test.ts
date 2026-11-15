@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { PrismaClient, type Prisma } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readPayerBalanceSummaries } from "../balance/balance-status";
 import { grantPlatformFinanceRole } from "../bank-receipts/bank-receipts";
-import { postFundsTransactionInTransaction, recomputeFundsProjection, reverseFundsTransactionInTransaction,
-  runFundsTransactionWithRetry } from "../funds/funds-journal";
+import { heldEnforceFenInTransaction, postFundsTransactionInTransaction, recomputeFundsProjection,
+  reverseFundsTransactionInTransaction } from "../funds/funds-journal";
 import { changeSpendGrant, createSpendGrant, publishPriceVersion } from "../grants/price-grants";
 import { bindScope, createPayerAccount } from "../payer/payer-accounts";
 import { reserve as reserveSpend, settle as settleSpend } from "../reservations/reservations";
@@ -112,16 +112,19 @@ describe.skipIf(!url)("inflow repayment against MySQL (C-REPAY)", () => {
       evidenceRef: "charge:synthetic", entries: [{ account: "customer_wallet_available", direction: "debit", amountFen: fen(amount) },
         { account: "correction_suspense", direction: "credit", amountFen: fen(amount) }] });
   });
-  /** Real post_delivery reserve + settle: what wallet and credit cannot cover is recorded as overdraft (C-OD). */
-  async function deliver(ids: Ids, documents: number, client: PrismaClient = a) {
-    const key = `pd:${(seq += 1)}`;
+  /** A real held reservation (100 fen per document) and its settle; standard holds need funds, post_delivery ones do not. */
+  async function hold(ids: Ids, documents: number, admission: "standard" | "post_delivery" = "standard") {
+    const key = `h:${(seq += 1)}`;
     const held = await reserveSpend(a, service, { idempotencyKey: `idem:${key}`, operationRef: `ref:${key}`,
       subjectScope: { kind: "workspace", workspaceId: ids.workspaceId }, payerRef: ids.payerAccountId, grantId: ids.grantId, priceVersionId: priceId,
-      billingEventRef: "service-billing-event-v1:synthetic", meterUnit: "document", quantity: String(documents), admission: "post_delivery" });
+      billingEventRef: "service-billing-event-v1:synthetic", meterUnit: "document", quantity: String(documents),
+      ...(admission === "post_delivery" ? { admission } : {}) });
     if (!held.ok) throw new Error(held.code);
-    return settleSpend(client, service, { idempotencyKey: `idem:set:${key}`, reservationId: held.reservationId, operationRef: `ref:${key}`,
-      quantityUsed: String(documents), evidenceRef: "acceptance:usable" });
+    return { settle: (client: PrismaClient = a) => settleSpend(client, service, { idempotencyKey: `idem:set:${key}`,
+      reservationId: held.reservationId, operationRef: `ref:${key}`, quantityUsed: String(documents), evidenceRef: "acceptance:usable" }) };
   }
+  /** Real post_delivery reserve + settle: what wallet and credit cannot cover is recorded as overdraft (C-OD). */
+  const deliver = async (ids: Ids, documents: number) => (await hold(ids, documents, "post_delivery")).settle();
   /** An inflow as part 2 will post it: the topup / bank_topup and its repayment in one transaction. */
   const inflowTx = async (tx: Prisma.TransactionClient, payerAccountId: string, amount: number, kind: "topup" | "bank_topup" = "topup") => {
     const key = `${(seq += 1)}`;
@@ -133,7 +136,7 @@ describe.skipIf(!url)("inflow repayment against MySQL (C-REPAY)", () => {
     return { inflowId: posted.transaction.id, repayment };
   };
   const inflow = (payerAccountId: string, amount: number, kind: "topup" | "bank_topup" = "topup", client: PrismaClient = a) =>
-    runFundsTransactionWithRetry(client, tx => inflowTx(tx, payerAccountId, amount, kind));
+    client.$transaction(tx => inflowTx(tx, payerAccountId, amount, kind), { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
   /** Pre-C-REPAY inflow (no repayment): how a wallet > 0 with debts can exist today. */
   const legacyTopup = (payerAccountId: string, amount: number) => a.$transaction(tx => postFundsTransactionInTransaction(tx, { payerAccountId,
     kind: "topup", operationKey: `topup:legacy:${(seq += 1)}`, actor: VERIFIER, evidenceRef: "inflow:legacy",
@@ -151,7 +154,8 @@ describe.skipIf(!url)("inflow repayment against MySQL (C-REPAY)", () => {
     const facilities = await a.creditFacility.findMany({ where: { payerAccountId } });
     const now = await balances(payerAccountId);
     expect(facilities.reduce((sum, row) => sum + row.usedFen, fen(0))).toBe(now.credit);
-    if (now.wallet > fen(0)) expect([now.credit, now.overdraft]).toEqual([fen(0), fen(0)]);
+    const held = await a.$transaction(tx => heldEnforceFenInTransaction(tx, payerAccountId));
+    if (now.wallet - held > fen(0)) expect([now.credit, now.overdraft]).toEqual([fen(0), fen(0)]); // spendable > 0: no debt
     return now;
   }
   const repayRows = (payerAccountId: string) => a.fundsTransaction.findMany({ where: { payerAccountId, kind: { in: ["overdraft_repay", "credit_repay"] } },
@@ -193,7 +197,7 @@ describe.skipIf(!url)("inflow repayment against MySQL (C-REPAY)", () => {
     }
   });
 
-  it("repays from the whole wallet, writes nothing when nothing is owed, and repays expired and revoked facilities closed-first", async () => {
+  it("repays from the spendable wallet (no holds: the whole wallet), writes nothing when nothing is owed, and repays expired and revoked facilities closed-first", async () => {
     // Pool: a wallet left > 0 beside a debt by a pre-C-REPAY inflow is swept with the next inflow.
     const legacy = await payer();
     const line = await facility(legacy.payerAccountId, 1000);
@@ -298,14 +302,16 @@ describe.skipIf(!url)("inflow repayment against MySQL (C-REPAY)", () => {
     expect(await books(p.payerAccountId)).toEqual({ wallet: fen(0), credit: fen(100), overdraft: fen(0) });
   });
 
-  /** Holds the payer row on a third connection until every transaction in `start` waits on it, so they really contend (bounded). */
+  /** Holds the payer row on a third connection until `start`'s transactions are distinct waiters on that very row lock (bounded). */
   async function contended<T>(payerAccountId: string, start: () => Array<Promise<T>>) {
     let pending: Array<Promise<T>> = [];
     await a.$transaction(async tx => {
       await tx.$queryRaw`SELECT id FROM PayerAccount WHERE id = ${payerAccountId} FOR UPDATE`;
       pending = start();
       for (const deadline = Date.now() + 10_000; ;) {
-        const [row] = await a.$queryRaw<Array<{ n: bigint }>>`SELECT COUNT(*) AS n FROM performance_schema.data_lock_waits`;
+        const [row] = await a.$queryRaw<Array<{ n: bigint }>>`SELECT COUNT(DISTINCT w.REQUESTING_ENGINE_TRANSACTION_ID) AS n
+          FROM performance_schema.data_lock_waits w JOIN performance_schema.data_locks l ON l.ENGINE_LOCK_ID = w.REQUESTING_ENGINE_LOCK_ID
+          WHERE l.OBJECT_NAME = 'PayerAccount' AND l.LOCK_DATA = QUOTE(${payerAccountId})`;
         if (Number(row.n) >= pending.length) break;
         if (Date.now() > deadline) throw new Error("rendezvous_timeout");
         await sleep(20);
@@ -321,31 +327,34 @@ describe.skipIf(!url)("inflow repayment against MySQL (C-REPAY)", () => {
     const both = await contended(p.payerAccountId, () => [inflow(p.payerAccountId, 80, "topup", a), inflow(p.payerAccountId, 80, "bank_topup", b)]);
     expect(both.map(r => r.repayment.creditRepaid[0]?.amountFen ?? fen(0)).sort()).toEqual([fen(20), fen(80)]);
     expect(await books(p.payerAccountId)).toEqual({ wallet: fen(60), credit: fen(0), overdraft: fen(0) });
-    // A delivered 200 settling while 150 arrives: either order ends with an empty wallet and 50 owed.
-    const q = await payer();
-    const [settled] = await contended(q.payerAccountId, () => [deliver(q, 2, b), inflow(q.payerAccountId, 150, "topup", a)]);
+    // A delivered 200 (reserved beforehand) settling while 150 arrives: either order ends with an empty wallet and 50 owed.
+    const q = await payer(), call = await hold(q, 2, "post_delivery");
+    const [settled] = await contended(q.payerAccountId, () => [call.settle(b), inflow(q.payerAccountId, 150, "topup", a)]);
     expect(settled).toMatchObject({ ok: true, chargeFen: "200" });
     const after = await books(q.payerAccountId);
     expect([after.wallet, after.credit + after.overdraft]).toEqual([fen(0), fen(50)]);
   });
 
-  it("pins the known edge: a wallet-funded standard hold beside a closed facility's debt is refused at settle and stays held", async () => {
+  it("repays only the spendable wallet (wallet - held): a funded hold still settles, the rest stays owed (ruling M-1)", async () => {
     const p = await payer();
     const line = await facility(p.payerAccountId, 100);
     await borrow(p.payerAccountId, 100);
     await close(line.id, "revoke");
     await legacyTopup(p.payerAccountId, 100);
-    const key = `std:${(seq += 1)}`;
-    const held = await reserveSpend(a, service, { idempotencyKey: `idem:${key}`, operationRef: `ref:${key}`,
-      subjectScope: { kind: "workspace", workspaceId: p.workspaceId }, payerRef: p.payerAccountId, grantId: p.grantId, priceVersionId: priceId,
-      billingEventRef: "service-billing-event-v1:synthetic", meterUnit: "document", quantity: "1" });
-    if (!held.ok) throw new Error(held.code); // admitted against the wallet (100) with no drawable credit
-    expect((await inflow(p.payerAccountId, 1)).repayment).toMatchObject({ creditRepaid: [{ facilityId: line.id, amountFen: fen(100) }],
-      walletLeftFen: fen(1) });
-    expect(await settleSpend(a, service, { idempotencyKey: `idem:set:${key}`, reservationId: held.reservationId, operationRef: `ref:${key}`,
-      quantityUsed: "1", evidenceRef: "acceptance:usable" })).toMatchObject({ ok: false, code: "insufficient_funds" });
-    expect((await a.billingReservation.findUniqueOrThrow({ where: { id: held.reservationId } })).state).toBe("held");
-    await books(p.payerAccountId);
+    const funded = await hold(p, 1); // admitted against the wallet (100) with no drawable credit
+    expect((await inflow(p.payerAccountId, 1)).repayment).toMatchObject({ creditRepaid: [{ facilityId: line.id, amountFen: fen(1) }],
+      walletLeftFen: fen(100) }); // spendable 101 - 100 held = 1
+    expect(await funded.settle()).toMatchObject({ ok: true, state: "settled", chargeFen: "100" });
+    expect(await books(p.payerAccountId)).toEqual({ wallet: fen(0), credit: fen(99), overdraft: fen(0) }); // still owed, next inflow
+    // Holds above the wallet (funded by remaining credit): nothing is spendable, so nothing is repaid or written.
+    const q = await payer();
+    await facility(q.payerAccountId, 1000);
+    await borrow(q.payerAccountId, 100);
+    await hold(q, 3); // 300 held on remaining credit, wallet 0
+    expect((await inflow(q.payerAccountId, 50)).repayment).toEqual({ overdraftRepaidFen: fen(0), overdraftTransactionId: null,
+      creditRepaid: [], walletLeftFen: fen(50) });
+    expect(await repayRows(q.payerAccountId)).toHaveLength(0);
+    expect(await books(q.payerAccountId)).toEqual({ wallet: fen(50), credit: fen(100), overdraft: fen(0) });
   });
 
   it("orders the rollbacks: C-OD refuses while this migration is applied; this one refuses once a repayment exists", async () => {

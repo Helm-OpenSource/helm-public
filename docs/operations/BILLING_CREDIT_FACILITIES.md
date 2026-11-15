@@ -43,26 +43,25 @@ Billing V1 S3-e (Core): migrations `20261110215000_billing_credit_facilities` an
   refuses `credit_input_invalid`. Lock order: PayerAccount -> BillingReservation (share) -> FundsTransaction (share) ->
   CreditFacility -> wallet projection -> journal posting. Only this module posts `credit_draw`; it is never reversed as a correction. S5 reconciliation must check the invariant `credit_receivable` projection = Σ `usedFen`.
 - **Repayment (C-REPAY part 1, protocol v3.10 clause 5)**: `repayArrearsFromInflowInTransaction(tx, { payerAccountId,
-  inflowTransactionId, actor })` (`inflow-repay.ts`) runs right after a `topup` / `bank_topup` in the same transaction. Under the payer
-  lock it repays from the **whole** wallet: the overdraft first (`overdraft_repay`), then credit, one `credit_repay` per facility
-  (`usedFen -= x` in the same transaction, `version` unchanged); the rest stays in the wallet, so afterwards wallet > 0 implies no
-  debt. Amounts come from locked rows only; owing nothing writes nothing. Expired and revoked facilities are repaid too; order (one
-  `ORDER BY`, `REPAY_ORDER`): closed facilities first, then the drawable one, each by `activatedAt`, then `id` (coordinator default,
-  pending owner confirmation: when the wallet cannot repay everything, repaying a closed facility lowers headroom). The update
-  trigger's repayment shape admits only `usedFen` falling to `>= 0` with version and every other column unchanged. Refusals:
-  `funds_input_invalid` (not this payer's unreversed inflow), `funds_repay_invariant_breach` (a repayment already recorded for the
-  inflow, `credit_receivable` != Σ `usedFen`, or a facility row that moved): the inflow rolls back with it (fail-closed); part 2 wires
-  the two inflow entry points and maps the refusal to a reconciliation record. Known limits: a wallet-funded standard hold beside a
-  closed facility's debt loses its funding when the next inflow repays, and its settle then refuses `insufficient_funds` and stays
-  held (as when a wallet is lowered); a database writer can lower `usedFen` alone (repayment shape) without a journal line, which only
-  the next repayment's S5 check catches until routine reconciliation lands. Lock order: PayerAccount -> FundsTransaction (share) ->
-  CreditFacility -> projections -> journal postings.
+  inflowTransactionId, actor })` (`inflow-repay.ts`) runs right after a `topup` / `bank_topup` in the same READ COMMITTED transaction.
+  Under the payer lock it repays from the **spendable** wallet, wallet - held (enforce held/unknown, the reserve admission `held`), at
+  least 0: the overdraft first, then credit, one `credit_repay` per facility (`usedFen -= x`, `version` unchanged); the rest stays.
+  So wallet - held > 0 implies no debt; a positive wallet beside a debt can remain (holds, pre-C-REPAY balances) until a later inflow.
+  Admitted holds keep their funding and still settle. Order (one `ORDER BY`, `REPAY_ORDER`): closed facilities first, then the drawable
+  one, each by `activatedAt`, then `id` (coordinator default, pending owner confirmation: repaying a closed facility first lowers
+  headroom when the wallet cannot repay everything). The trigger's repayment shape admits `usedFen` falling to `>= 0` with version and
+  the other controlled business columns unchanged; it does not pair the facility with the journal. Refusals: `funds_input_invalid`
+  (not this payer's unreversed inflow), `funds_repay_invariant_breach` (repayment already recorded for the inflow, `credit_receivable`
+  != Σ `usedFen`, or a facility row moved): the inflow rolls back with it (fail-closed); part 2 wires the inflow entry points. Limit:
+  a direct database writer can lower `usedFen` alone (no journal line); S5 is checked only at the next repayment until routine
+  reconciliation lands, so direct writes stay restricted. Lock order: PayerAccount -> FundsTransaction (share) -> CreditFacility ->
+  projections -> journal postings. Release order: part 2 deployed and verified before any top-up channel or bank route opens.
 - **Verify / rollback**: unit `credit-facilities.test.ts`; `npm run test:billing:mysql`. Rollback: stop calling the service;
   `prisma/rollback/20261110_rollback_billing_credit_facilities.sql` refuses while any facility or credit journal row exists, removes
   both migrations and shrinks the ENUMs to the union minus `credit_draw` / `credit_receivable`. Order: S3-e first, then S3-b2 charges,
   then reservations / S2-c. C-REPAY: `prisma/rollback/20261115_rollback_billing_inflow_repay.sql` refuses once any repayment row
-  exists (fix forward) and must run before the C-OD rollback, which refuses while it is applied; a code-only rollback keeping the
-  schema is safe, but new inflows then stop repaying.
+  exists (fix forward) and must run before the C-OD rollback; run it whole with a stop-on-error client (`mysql --batch`, never
+  `--force`). A code-only rollback keeping the schema is safe, but new inflows then stop repaying.
 
 ## Operator CLI / 运维命令
 

@@ -651,6 +651,23 @@ jobs:
           LLM_ENABLED: 'false'
         run: npm run test:billing:mysql
 
+      - name: The inflow-repay rollback refuses while repayment rows exist and changes nothing
+        env:
+          HELM_CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -uo pipefail
+          MYSQL_PWD="$(node -e 'process.stdout.write(decodeURIComponent(new URL(process.env.DATABASE_URL).password))')"
+          export MYSQL_PWD
+          q() { docker exec -e MYSQL_PWD -i "${HELM_CI_MYSQL_CONTAINER}" mysql --host=127.0.0.1 --protocol=tcp \
+            --user="${HELM_CI_MYSQL_USER}" --batch "${HELM_CI_MYSQL_DATABASE}" "$@"; }
+          state="SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'FundsTransaction' AND COLUMN_NAME = 'kind'; SELECT TRIGGER_NAME, ACTION_STATEMENT FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = DATABASE() AND EVENT_OBJECT_TABLE IN ('FundsAccountProjection', 'CreditFacility') ORDER BY TRIGGER_NAME; SELECT COUNT(*) FROM _prisma_migrations WHERE migration_name = '20261115120000_billing_inflow_repay'"
+          before="$(q -e "${state}")" || exit 1
+          if output="$(q <prisma/rollback/20261115_rollback_billing_inflow_repay.sql 2>&1)"; then
+            echo "rollback ran although repayment rows exist" >&2; exit 1
+          fi
+          grep -q 'rollback refused: repayment rows exist; fix forward' <<<"${output}" || { echo "${output}" >&2; exit 1; }
+          [ "$(q -e "${state}")" = "${before}" ] || { echo "the refused rollback changed the schema" >&2; exit 1; }
+
       - name: Remove isolated bootstrap credential on all outcomes
         if: always()
         run: rm -f "${RUNNER_TEMP}/helm-c4-root-password"
