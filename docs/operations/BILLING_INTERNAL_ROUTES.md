@@ -16,8 +16,8 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
   `true` answers `404 { error: "NOT_FOUND" }` before reading the body or any grant; callers treat any non-protocol response as
   `core_unavailable` (fail closed, do not execute).
 - **BillingServiceGrant** (LLMSpendIssuerGrant pattern, protocol v3.7): `id`, `issuerRef`, canonical sorted `scopesJson`
-  (`quote`, `reserve`, `settle`, `release`, `mark-unknown`, `balance-status`; `resolve-unknown` is the reconciliation channel and only ever
-  alone, DB CHECK), the caller's Ed25519 `publicKeyPem` + `keyFingerprint` (sha256 of SPKI DER, unique), `approvalRef`,
+  (`quote`, `reserve`, `settle`, `release`, `mark-unknown`, `balance-status`, and C-OD `reserve-post-delivery`, an extra scope
+  only valid next to `reserve`; `resolve-unknown` is the reconciliation channel and only ever alone, DB CHECK), the caller's Ed25519 `publicKeyPem` + `keyFingerprint` (sha256 of SPKI DER, unique), `approvalRef`,
   `createdBy`, `contentHash` (`billingServiceGrantHash`), `validFrom/validUntil`, one-way `revokedAt/revokedBy`. Immutable and
   undeletable (triggers); none exists by default and there is no issuance API: rows come only from the reviewed operator
   CLI `npm run billing:service-grant` (see *Issuance, rotation and revocation* below).
@@ -65,7 +65,7 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
 - **balance-status** (C-BAL, protocol v3.10; scope `balance-status`, read-only, `lib/billing/balance/balance-status.ts`): request
   `{ workspaceIds: [...] }`, 1-50 distinct ids (empty, more than 50, duplicates, bad formats or extra fields are
   `request_invalid`). Answer `{ ok: true, results: [...] }` in request order; per workspace either `{ workspaceId, ok: true,
-  billingMode, payerStatus, balanceFen, headroomFen, overdraftUsedFen, arrears, arrearsReason, asOf }` or, with no active
+  billingMode, payerStatus, balanceFen, headroomFen, overdraftUsedFen, overLimit, arrears, arrearsReason, asOf }` (`overLimit` C-OD) or, with no active
   binding, `{ workspaceId, ok: false, code: "billing_mode_off" }` (not billed). Signed integer fen strings:
   `balanceFen = wallet - creditUsed - overdraftUsed` (may be negative; creditUsed is the `credit_receivable` projection, so a
   closed facility's draws still count); `headroomFen = wallet + creditRemaining - held` is the reserve admission formula
@@ -78,7 +78,8 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
   information only and admits nothing. Arrears for `funds` is `headroomFen <= 0` or `overLimit`. Switching a payer to enforce
   still needs headroom > 0. `payerStatus` is the PayerAccount status
   (`active|suspended|closed`); numbers are returned in every mode and status, `off` included.
-  **`arrears`** is the one boolean callers gate on (only for `billingMode: "enforce"`), with two causes in `arrearsReason`:
+  **`arrears`** is the boolean callers gate on (only for `billingMode: "enforce"`; a C-OD caller that sends `pending` gates on
+  `arrearsAfterPending` instead, see below), with two causes in `arrearsReason`:
   `funds` when `headroomFen <= 0` (Q8) or the overdraft is over its limit (C-OD), `payer_inactive` when an enforce payer is suspended or closed (coordinator 11-12: Core
   refuses its new reserves, so work would run unbilled); `payer_inactive` wins when both hold, `null` when not in arrears.
   One lock-free statement per batch: a consistent read that never waits on, or delays, a reserve or settle. Writes only the
@@ -102,6 +103,30 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
   routes accept; there is no separate declarable list.
 - **reserve** `expectedMode` (v3.4, optional `shadow|enforce`): a payer in the other mode is `mode_mismatch` before any bucket
   or reservation row; a replay of the key is also checked against it (not part of the content hash).
+- **reserve** `admission: "post_delivery"` (C-OD, protocol v3.10 clause 1): for work already delivered. Needs the grant scope
+  `reserve-post-delivery` **in addition to** `reserve`; without it ANY `admission` value is 403 `service_unauthorized` first (no
+  business write; the auth nonce is still recorded), and with it any value other than `post_delivery` is `request_invalid`. It
+  is a scope only, not a route: a grant holding only it cannot reserve. Core skips the funds check only; mode, binding,
+  grant, limits and price apply as before, and settle records the whole tail as overdraft, never refused by the soft limit
+  (BILLING_RESERVATIONS.md). The admission is in the content hash and frozen on the row (migration `20261115100000_billing_overdraft`).
+  Reverting this code after a grant with `reserve-post-delivery` was issued makes that scope unknown, so the grant is refused on
+  every route (as for `balance-status` below): rotate to a grant without it (v3.9) before reverting.
+- **balance-status** `pending` (C-OD, optional): `[{ workspaceId, billingEventRef, meterUnit, pendingQuantity, pendingSettlements? }]`,
+  at most 50, each for a listed workspace, distinct per workspace, event and unit; `pendingQuantity` a positive integer
+  **string**, optional `pendingSettlements` (how many settles it will be split into) a positive integer string `<= pendingQuantity`
+  (else `request_invalid`). Every bound entry also carries `overdraftRoomFen` (information only: the tail tolerance left; owner
+  11-15 "zero means stop", it admits nothing). With `pending`, every bound entry gains:
+  - `headroomFen` minus the batch's pending usage **of its payer** (summed over all the payer's workspaces in this batch) as
+    `headroomAfterPendingFen`; overdraft room is NOT added. Each entry is priced at the payer's single active grant on an
+    effective price for that event and unit (the quote rule, database time; one more lock-free read) as an upper bound of what
+    settle will charge: an integral price is exact (quantity x price); a fractional price is `ceil(quantity x price + n/2)` with
+    n = `pendingSettlements` (default: the quantity), since each half-up settle exceeds the exact amount by at most 1/2 fen.
+    Settle keeps its half-up rounding. `null` when an entry of that payer has no such grant or the total leaves the fen bound;
+  - `arrearsAfterPending` = `true` when `arrears`, otherwise `headroomAfterPendingFen <= 0`; `null` when that is `null`.
+  **Second-stage caller rule**: a caller that sends `pending` stops new billable work on `arrearsAfterPending`; when it is
+  `null` it falls back to `arrears` and raises an alert. `arrears` itself keeps its meaning. **Completeness**: declare all
+  workspaces of a payer in the same batch, otherwise the pending is under-counted and `headroomAfterPendingFen` over-states the
+  room. One call takes at most 50 workspaces and 50 pending lines, so a payer with more cannot be judged completely here.
 - **Verify / rollback**: `npm run test:billing:mysql` (`internal-routes.mysql.test.ts`: gate, signature/expiry/replay/scope/
   revocation/pin/validity/content hash/scope canonicality/public key, bounded and exact body bytes, shape and refusal
   mapping, expectedMode, issuer isolation and rotation, connection-error mapping, every operation, separate reconciliation

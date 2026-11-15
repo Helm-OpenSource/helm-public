@@ -73,7 +73,17 @@ describe.skipIf(!url)("BillingServiceGrant issuance CLI against MySQL", () => {
     pin = applied.pin;
     expect(await a.billingServiceGrant.findUnique({ where: { id: grantId } })).toMatchObject({ contentHash: dry.contentHash,
       scopesJson: '["balance-status","quote","reserve"]', revokedAt: null });
-    expect(await authenticate(pin)).toEqual({ grantId, actor: { type: "SYSTEM", ref: `billing-service:synthetic-e1c/${grantId}` } });
+    expect(await authenticate(pin)).toEqual({ grantId, scopes: ["balance-status", "quote", "reserve"], actor: { type: "SYSTEM", ref: `billing-service:synthetic-e1c/${grantId}` } });
+  });
+
+  it("issues the C-OD reserve-post-delivery scope through the same CLI chain and stores it on the grant", async () => {
+    const pd = generateKeyPairSync("ed25519"), pdFile = join(dir, "public-pd.pem");
+    writeFileSync(pdFile, pd.publicKey.export({ type: "spki", format: "pem" }));
+    const args = issueArgs.map(arg => arg === `--grant-id=${grantId}` ? `--grant-id=e1c-pd-${run}` : arg === `--public-key-file=${keyFile}`
+      ? `--public-key-file=${pdFile}` : arg === "--scopes=reserve,balance-status,quote" ? "--scopes=reserve,reserve-post-delivery,settle" : arg);
+    const applied = cli([...args, "--apply"]);
+    expect(applied).toMatchObject({ applied: true, alreadyIssued: false });
+    expect(await a.billingServiceGrant.findUnique({ where: { id: `e1c-pd-${run}` } })).toMatchObject({ scopesJson: '["reserve","reserve-post-delivery","settle"]' });
   });
 
   it("a pin differing in one character, or a different signing key, is refused", async () => {

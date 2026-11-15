@@ -1,6 +1,6 @@
 import "server-only";
 import { Prisma, type PrismaClient } from "@prisma/client";
-import { fenToDecimalString } from "../funds/money";
+import { fenToDecimalString, MAX_FEN } from "../funds/money";
 import type { BillingRejectCode, ServiceActor } from "../reservations/reservations";
 
 /**
@@ -24,14 +24,14 @@ import type { BillingRejectCode, ServiceActor } from "../reservations/reservatio
 export const BALANCE_STATUS_MAX_WORKSPACES = 50;
 export type PayerStatus = "active" | "suspended" | "closed"; // PayerAccount.status ENUM
 export type ArrearsReason = "funds" | "payer_inactive";
-export type PayerBalanceSummary = { billingMode: "off" | "shadow" | "enforce"; payerStatus: PayerStatus; walletFen: bigint; creditUsedFen: bigint;
-  overdraftUsedFen: bigint; overdraftLimitFen: bigint; overdraftRoomFen: bigint; overLimit: boolean; creditRemainingFen: bigint; heldFen: bigint; balanceFen: bigint;
-  headroomFen: bigint; arrears: boolean;
+export type PayerBalanceSummary = { payerAccountId: string; billingMode: "off" | "shadow" | "enforce"; payerStatus: PayerStatus; walletFen: bigint;
+  creditUsedFen: bigint; overdraftUsedFen: bigint; overdraftLimitFen: bigint; overdraftRoomFen: bigint; overLimit: boolean; creditRemainingFen: bigint;
+  heldFen: bigint; balanceFen: bigint; headroomFen: bigint; arrears: boolean;
   arrearsReason: ArrearsReason | null; asOf: Date };
 
 const ZERO = BigInt(0);
 const REF = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,190}$/;
-type Row = { workspaceId: string; billingMode: PayerBalanceSummary["billingMode"]; payerStatus: PayerStatus; walletFen: bigint | null;
+type Row = { workspaceId: string; payerAccountId: string; billingMode: PayerBalanceSummary["billingMode"]; payerStatus: PayerStatus; walletFen: bigint | null;
   creditUsedFen: bigint | null; overdraftUsedFen: bigint | null; overdraftLimitFen: bigint; creditRemainingFen: bigint | null; heldFen: bigint; asOf: Date };
 
 /**
@@ -41,7 +41,8 @@ type Row = { workspaceId: string; billingMode: PayerBalanceSummary["billingMode"
  */
 export async function readPayerBalanceSummaries(client: PrismaClient | Prisma.TransactionClient, workspaceIds: readonly string[]) {
   if (workspaceIds.length === 0) return new Map<string, PayerBalanceSummary>();
-  const rows = await client.$queryRaw<Row[]>`SELECT b.scopeRef AS workspaceId, p.billingMode, p.status AS payerStatus, p.overdraftLimitFen,
+  const rows = await client.$queryRaw<Row[]>`SELECT b.scopeRef AS workspaceId, p.id AS payerAccountId, p.billingMode, p.status AS payerStatus,
+      p.overdraftLimitFen,
       (SELECT w.balanceFen FROM FundsAccountProjection w WHERE w.payerAccountId = p.id AND w.account = 'customer_wallet_available') AS walletFen,
       (SELECT r.balanceFen FROM FundsAccountProjection r WHERE r.payerAccountId = p.id AND r.account = 'credit_receivable') AS creditUsedFen,
       (SELECT o.balanceFen FROM FundsAccountProjection o WHERE o.payerAccountId = p.id AND o.account = 'overdraft_receivable') AS overdraftUsedFen,
@@ -65,34 +66,117 @@ export async function readPayerBalanceSummaries(client: PrismaClient | Prisma.Tr
     const headroomFen = walletFen + creditRemainingFen - heldFen;
     const arrearsReason: ArrearsReason | null = row.billingMode === "enforce" && row.payerStatus !== "active" ? "payer_inactive"
       : headroomFen <= ZERO || overLimit ? "funds" : null;
-    summaries.set(row.workspaceId, { billingMode: row.billingMode, payerStatus: row.payerStatus, walletFen, creditUsedFen,
-      overdraftUsedFen, overdraftLimitFen, overdraftRoomFen, overLimit, creditRemainingFen, heldFen, balanceFen: walletFen - creditUsedFen - overdraftUsedFen, headroomFen,
+    summaries.set(row.workspaceId, { payerAccountId: row.payerAccountId, billingMode: row.billingMode, payerStatus: row.payerStatus, walletFen,
+      creditUsedFen, overdraftUsedFen, overdraftLimitFen, overdraftRoomFen, overLimit, creditRemainingFen, heldFen,
+      balanceFen: walletFen - creditUsedFen - overdraftUsedFen, headroomFen,
       arrears: arrearsReason !== null, arrearsReason, asOf: row.asOf });
   }
   return summaries;
 }
 
-export type BalanceStatusRequest = { workspaceIds: string[] };
+/** C-OD: work the caller has delivered but not yet settled (e.g. connected minutes waiting for the settler), per event and unit. */
+export type PendingUsage = { workspaceId: string; billingEventRef: string; meterUnit: string; pendingQuantity: string;
+  /** How many settles the quantity will be split into (1..pendingQuantity); default pendingQuantity, the widest margin. */
+  pendingSettlements?: string };
+export type BalanceStatusRequest = { workspaceIds: string[]; pending?: PendingUsage[] };
 export type BalanceStatusEntry = { workspaceId: string; ok: true; billingMode: PayerBalanceSummary["billingMode"]; payerStatus: PayerStatus;
-  balanceFen: string; headroomFen: string; overdraftUsedFen: string; arrears: boolean; arrearsReason: ArrearsReason | null; asOf: string } | { workspaceId: string; ok: false; code: "billing_mode_off" };
+  balanceFen: string; headroomFen: string; overdraftUsedFen: string; overdraftRoomFen: string; overLimit: boolean; arrears: boolean;
+  arrearsReason: ArrearsReason | null; asOf: string;
+  /** Only with `pending`: headroom - this payer's pending in the batch (an upper-bound estimate); null when not priceable. */
+  headroomAfterPendingFen?: string | null;
+  /** Only with `pending`: true when arrears, else headroomAfterPendingFen <= 0; null when that is null (fall back to arrears, alert). */
+  arrearsAfterPending?: boolean | null } | { workspaceId: string; ok: false; code: "billing_mode_off" };
+
+const UNIT = /^[a-z][a-z0-9_]{0,31}$/, QUANTITY = /^[1-9][0-9]{0,15}$/;
+function pendingValid(ids: readonly string[], pending: unknown): pending is PendingUsage[] {
+  if (!Array.isArray(pending) || pending.length > BALANCE_STATUS_MAX_WORKSPACES) return false;
+  const seen = new Set<string>();
+  return pending.every(item => {
+    const keys = item && typeof item === "object" ? Object.keys(item).sort().join() : "";
+    if (keys !== "billingEventRef,meterUnit,pendingQuantity,workspaceId" &&
+        keys !== "billingEventRef,meterUnit,pendingQuantity,pendingSettlements,workspaceId") return false;
+    const { workspaceId, billingEventRef, meterUnit, pendingQuantity, pendingSettlements } = item as PendingUsage;
+    if (pendingSettlements !== undefined && (typeof pendingSettlements !== "string" || !QUANTITY.test(pendingSettlements) ||
+        typeof pendingQuantity !== "string" || !QUANTITY.test(pendingQuantity) || BigInt(pendingSettlements) > BigInt(pendingQuantity))) return false;
+    const key = JSON.stringify([workspaceId, billingEventRef, meterUnit]);
+    if (!ids.includes(workspaceId) || typeof billingEventRef !== "string" || !REF.test(billingEventRef) || typeof meterUnit !== "string" ||
+        !UNIT.test(meterUnit) || typeof pendingQuantity !== "string" || !QUANTITY.test(pendingQuantity) ||
+        BigInt(pendingQuantity) > MAX_FEN || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+/**
+ * Totals the batch's pending usage per PAYER (workspaces sharing a payer share its headroom, so their pending adds up), each entry
+ * priced with the payer's single active, in-validity grant on an effective price for that event and unit (the quote rule, at
+ * database time) as an upper bound of what settle will charge: each half-up settle exceeds the exact amount by at most 1/2 fen,
+ * so n settles of a fractional price total at most quantity x price + n/2, and the estimate is ceil(quantity x price + n/2) with
+ * n = pendingSettlements (default: the quantity); an integral price is exact (quantity x price). One more lock-free statement, so the price read
+ * may be a moment newer than the balance snapshot. A payer with an entry that has no single such grant, or beyond the fen bound,
+ * gets null. Only what this batch declares is counted: a payer's workspaces must be declared together, else it is a lower bound.
+ */
+async function pendingFenByPayer(client: PrismaClient | Prisma.TransactionClient, pending: PendingUsage[],
+  summaries: Map<string, PayerBalanceSummary>) {
+  const payers = [...new Set(pending.flatMap(item => summaries.get(item.workspaceId)?.payerAccountId ?? []))];
+  const prices = payers.length === 0 ? [] : await client.$queryRaw<Array<{ payerAccountId: string; billingEventRef: string; meterUnit: string;
+    unitPriceFenNumerator: bigint; unitPriceDenominator: bigint }>>`SELECT g.payerAccountId, p.billingEventRef, p.meterUnit,
+      p.unitPriceFenNumerator, p.unitPriceDenominator FROM SpendGrant g JOIN BillingPriceVersion p ON p.id = g.priceVersionId
+    WHERE g.payerAccountId IN (${Prisma.join(payers)}) AND g.state = 'active' AND g.validFrom <= UTC_TIMESTAMP(3)
+      AND g.validUntil > UTC_TIMESTAMP(3) AND p.effectiveFrom <= UTC_TIMESTAMP(3)
+      AND (p.effectiveUntil IS NULL OR p.effectiveUntil > UTC_TIMESTAMP(3))`;
+  const totals = new Map<string, bigint | null>();
+  for (const item of pending) {
+    const payerAccountId = summaries.get(item.workspaceId)?.payerAccountId;
+    if (!payerAccountId) continue; // unbound: billing_mode_off, nothing to price
+    const matches = prices.filter(price => price.payerAccountId === payerAccountId && price.billingEventRef === item.billingEventRef &&
+      price.meterUnit === item.meterUnit);
+    const sum = totals.has(payerAccountId) ? totals.get(payerAccountId)! : ZERO;
+    let fen: bigint | null = null;
+    if (sum !== null && matches.length === 1) {
+      const numerator = BigInt(matches[0].unitPriceFenNumerator), denominator = BigInt(matches[0].unitPriceDenominator);
+      const quantity = BigInt(item.pendingQuantity), settles = BigInt(item.pendingSettlements ?? item.pendingQuantity);
+      const two = BigInt(2), one = BigInt(1);
+      const up = numerator % denominator === ZERO ? quantity * (numerator / denominator) // integral price: exact
+        : (two * quantity * numerator + settles * denominator + two * denominator - one) / (two * denominator); // ceil(q*p + n/2)
+      fen = sum + up > MAX_FEN ? null : sum + up; // beyond the fen bound: not priceable, never a wrapped number
+    }
+    totals.set(payerAccountId, fen);
+  }
+  return totals;
+}
 
 /**
  * `balance-status` (v3.10): 1-50 distinct workspace ids, answered in request order. A bound payer is reported whatever its mode
  * (off included, so balances can be checked before enforce); an unbound workspace is `billing_mode_off` (not billed). The
- * caller reads one boolean, `arrears`, and applies it only to `billingMode: "enforce"`; `arrearsReason` only tells alerts
- * apart. The service identity is authenticated by the route; a read leaves no per-identity trace beyond the auth nonce.
+ * caller reads one boolean, `arrears` (with `pending`: `arrearsAfterPending`, falling back to `arrears` with an alert when it is
+ * null), and applies it only to `billingMode: "enforce"`; `arrearsReason` only tells alerts apart. The service identity is authenticated by the route; a read leaves no per-identity trace beyond the auth nonce.
+ * C-OD: optional `pending` (at most 50 entries, each for a listed workspace, distinct per workspace, event and unit, positive
+ * quantity string, optional settlement count) adds `headroomAfterPendingFen` and `arrearsAfterPending` to every bound entry;
+ * `arrears` keeps its meaning. A payer with more than 50 workspaces or 50 pending lines cannot be judged completely here.
  */
+function afterPending(summary: PayerBalanceSummary, pendingFen: bigint | null | undefined) {
+  // Zero means stop (owner 11-15): overdraft room is a tail tolerance, never room for new work.
+  const after = pendingFen === null ? null : summary.headroomFen - (pendingFen ?? ZERO);
+  const fen = after === null || after < -MAX_FEN ? null : after;
+  return { headroomAfterPendingFen: fen === null ? null : fenToDecimalString(fen),
+    arrearsAfterPending: summary.arrears ? true : fen === null ? null : fen <= ZERO };
+}
+
 export async function balanceStatus(client: PrismaClient, _actor: ServiceActor, req: BalanceStatusRequest):
   Promise<{ ok: true; results: BalanceStatusEntry[] } | { ok: false; code: BillingRejectCode }> {
   const ids = req?.workspaceIds;
   if (!Array.isArray(ids) || ids.length < 1 || ids.length > BALANCE_STATUS_MAX_WORKSPACES || new Set(ids).size !== ids.length ||
-      ids.some(id => typeof id !== "string" || !REF.test(id))) return { ok: false, code: "request_invalid" };
+      ids.some(id => typeof id !== "string" || !REF.test(id)) ||
+      (req.pending !== undefined && !pendingValid(ids, req.pending))) return { ok: false, code: "request_invalid" };
   const summaries = await readPayerBalanceSummaries(client, ids);
+  const pendingFen = req.pending === undefined ? null : await pendingFenByPayer(client, req.pending, summaries);
   return { ok: true, results: ids.map((workspaceId): BalanceStatusEntry => {
     const summary = summaries.get(workspaceId);
     if (!summary) return { workspaceId, ok: false, code: "billing_mode_off" };
     return { workspaceId, ok: true, billingMode: summary.billingMode, payerStatus: summary.payerStatus, balanceFen: fenToDecimalString(summary.balanceFen),
       headroomFen: fenToDecimalString(summary.headroomFen), overdraftUsedFen: fenToDecimalString(summary.overdraftUsedFen),
-      arrears: summary.arrears, arrearsReason: summary.arrearsReason, asOf: summary.asOf.toISOString() };
+      overdraftRoomFen: fenToDecimalString(summary.overdraftRoomFen), overLimit: summary.overLimit, arrears: summary.arrears,
+      arrearsReason: summary.arrearsReason, asOf: summary.asOf.toISOString(),
+      ...(pendingFen === null ? {} : afterPending(summary, pendingFen.get(summary.payerAccountId))) };
   }) };
 }
