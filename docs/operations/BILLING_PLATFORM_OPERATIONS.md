@@ -32,11 +32,14 @@ CLI `npm run billing:platform-ops` (`lib/billing/platform/platform-batch.ts`); n
   payer and updates it with the expected old mode in the UPDATE's own WHERE (CAS); a mode changed since the draft refuses
   `billing_mode_conflict` and leaves the draft pending (reject it and draft again). `version + 1` on success.
 - `overdraft_limit { workspaceId, fromLimitFen, toLimitFen }` (C-OD): sets the payer's `overdraftLimitFen`, the overdraft **soft**
-  limit (decimal fen strings, 0 to the fen bound, `from != to`). Every payer starts at 0 (no overdraft headroom; no default
-  amount, the owner sets it per payer). It is a tolerance for the tails of work still running when the balance reached
-  zero (owner 11-15: zero means stop), not spendable credit: it never refuses a settle, the reported overdraft room
-  `max(0, limit - overdraftUsed)` is information only, and `overLimit` (overdraft above it, or any overdraft at 0) raises the
-  alert; arrears already follows headroom <= 0. Approval is a CAS on the expected old limit (`overdraft_limit_conflict`,
+  limit (decimal fen strings, 0 to the fen bound, `from != to`). Every payer starts at 0 (not configured: no tail
+  tolerance; no default amount, the owner sets it per payer). It is the tail tolerance for work still running when the balance
+  reached zero (owner 11-15: zero means stop), not spendable credit: it never refuses a settle and the reported overdraft room
+  `max(0, limit - overdraftUsed)` is information only. Funds arrears is `headroomFen <= 0` **or** `overLimit` (overdraft above
+  the limit, or any overdraft at 0): e.g. limit 30, overdraft 50, wallet 0, no remaining credit and nothing held; a top-up of
+  100 then gives headroom (wallet + creditRemaining - held) 100, and the payer is still in arrears because it is over the
+  limit. In this slice a top-up does not repay overdraft (repaying overdraft first on arrival is the later C-REPAY slice), so
+  it stays in arrears until the overdraft is repaid. Approval is a CAS on the expected old limit (`overdraft_limit_conflict`,
   also at draft); audit `BILLING_PAYER_OVERDRAFT_LIMIT_CHANGED`. Lowering it below what is already overdrawn is allowed (the
   payer is then overLimit). Batch entries: `{ "kind": "overdraft_limit", "workspaceId", "fromLimitFen", "toLimitFen" }`; the dry
   run shows `currentOverdraftLimitFen`.

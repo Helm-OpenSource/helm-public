@@ -124,7 +124,11 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
     Settle keeps its half-up rounding. `null` when an entry of that payer has no such grant or the total leaves the fen bound;
   - `arrearsAfterPending` = `true` when `arrears`, otherwise `headroomAfterPendingFen <= 0`; `null` when that is `null`.
   **Second-stage caller rule**: a caller that sends `pending` stops new billable work on `arrearsAfterPending`; when it is
-  `null` it falls back to `arrears` and raises an alert. `arrears` itself keeps its meaning. **Completeness**: declare all
+  `null` it falls back to `arrears` and raises an alert. `arrears` itself keeps its meaning. **`pendingSettlements` is the
+  caller's responsibility**: it must not be lower than the real number of settles; when unsure, omit it and Core uses the most
+  conservative bound (n = quantity). A low count under-estimates: price 1/2 fen, quantity 6 settled as 6 settles of 1 charges
+  6 fen, but `pendingSettlements: "1"` estimates `ceil(3 + 0.5) = 4`, so 5 fen of headroom would answer `1` / `false` instead of
+  `-1` / `true`. **Completeness**: declare all
   workspaces of a payer in the same batch, otherwise the pending is under-counted and `headroomAfterPendingFen` over-states the
   room. One call takes at most 50 workspaces and 50 pending lines, so a payer with more cannot be judged completely here.
 - **Verify / rollback**: `npm run test:billing:mysql` (`internal-routes.mysql.test.ts`: gate, signature/expiry/replay/scope/
