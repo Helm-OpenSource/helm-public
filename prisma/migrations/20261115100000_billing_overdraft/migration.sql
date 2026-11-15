@@ -1,7 +1,7 @@
 -- Billing V1 C-OD (2026-11-15): overdraft for the settle shortfall left after wallet and credit (S3 protocol v3.10 clause 4).
 -- 1. Funds ENUMs: the FULL union (protocol v3.6) plus `overdraft_draw` / `overdraft_receivable`, appended last (metadata-only).
 -- 2. PayerAccount.overdraftLimitFen: the per-payer overdraft SOFT limit (design Q9), 0 unless platform finance sets it by
---    maker/checker; no default allowance. It only feeds headroom and the overLimit flag: settle never refuses delivered usage over
+--    maker/checker; no default allowance. It only feeds the overdraft room and overLimit: settle never refuses delivered usage over
 --    it, so it is deliberately not compared in any CHECK or trigger. ADD COLUMN is INSTANT; the non-negative ADD CHECK forces
 --    ALGORITHM=COPY (writes to the small PayerAccount table wait for the copy). Existing rows get 0, which passes the CHECK.
 -- 3. FundsAccountProjection triggers (new; the table had none): the overdraft projection starts at 0 and never goes negative.
@@ -14,7 +14,8 @@
 -- migrate, check that BillingReservation_guard_update exists again and names `admission`, deploy the code, reopen the entries.
 -- Not idempotent: a partial failure cannot simply be re-run (e.g. the column exists). Keep writers stopped, finish the missing
 -- statements by hand from this file (recreate the trigger first if it was dropped), then mark the migration applied
--- (`prisma migrate resolve --applied`). Needs binlog_format=ROW and trigger privileges (or log_bin_trust_function_creators=1).
+-- (`prisma migrate resolve --applied`). Needs binlog_format=ROW and the TRIGGER privilege; with binary logging on and no SUPER,
+-- log_bin_trust_function_creators=1 is needed in addition (it never replaces the privilege).
 -- Rollback: prisma/rollback/20261115_rollback_billing_overdraft.sql (refuses while any overdraft row, non-zero limit or post_delivery reservation exists).
 ALTER TABLE `FundsTransaction` MODIFY `kind` ENUM('topup', 'correction', 'bank_topup', 'charge', 'credit_draw', 'overdraft_draw') NOT NULL;
 ALTER TABLE `FundsJournalEntry` MODIFY `account` ENUM('customer_wallet_available', 'topup_clearing', 'correction_suspense', 'bank_clearing', 'charge_revenue', 'credit_receivable', 'overdraft_receivable') NOT NULL;

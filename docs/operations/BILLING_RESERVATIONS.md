@@ -54,9 +54,13 @@ S3-b1/S3-b2 (Core): migrations `20261110200000_billing_reservations`, `202611102
   `overdraft_receivable`, credit wallet, `overdraft-draw:reservation:<id>`). Order: wallet -> credit -> overdraft -> full wallet
   charge, so the wallet never goes negative. The payer's `overdraftLimitFen` is a **soft** limit (design Q9, §2.5): delivered
   usage is always recorded, never refused; beyond the limit the balance summary reports `overLimit` (and arrears). Standard
-  reserve admission is unchanged (wallet + remaining credit - held). `overdraft_draw` has one posting channel
-  (`claimOverdraftChannel`, handed out once; reservations.ts claims it at load, any later claim throws), which re-reads the locked
-  `post_delivery` reservation; the charge, charge row and state change follow in the same transaction. Never reversed;
+  reserve admission is unchanged (wallet + remaining credit - held). `overdraft_draw` is posted only by
+  `postSettleChargeFundsInTransaction`, the funds leg of settle: in the payer lock it re-reads the reservation (this payer, enforce,
+  held/unknown, 0 < charge <= cap), computes the shortfall from the locked wallet itself and posts the overdraft and the same
+  reservation's `charge` in one call, so an overdraft never exists without that charge. **Trust boundary** (as for
+  `postCreditDrawFundsInTransaction`): in-process callers are trusted to use it from settle, which borrows credit first and writes
+  the BillingCharge row, state change and buckets in the same transaction; the funds module does not and cannot prove that the
+  caller is settle. The generic `postFundsTransactionInTransaction` still accepts `charge` as on main. Never reversed;
   projection triggers keep the overdraft projection >= 0. Limit 0 = not configured: no overdraft room; tails are still recorded
   and at once `overLimit`.
   A 0-fen settle (smaller quantity) is `settled` with `chargeFen` 0 and no draw or funds entry.
@@ -87,9 +91,11 @@ S3-b1/S3-b2 (Core): migrations `20261110200000_billing_reservations`, `202611102
   double settle, settle vs release, cross-period settle, triggers, guarded rollbacks; S3-w: credit-backed reserve, shortfall-only
   draw, replay without a second draw, tightened line, 0-fen/shadow, suspended payer, concurrent draws; C-OD: no
   limit refusal at limits 0/30/50/10000, wallet -> credit -> overdraft order, replay without a second overdraft, overLimit and
-  headroom, two contending tails both recorded, standard tails never overdraw, private posting channel, no reversal, triggers). C-OD rollback: revert the code, then
-  `prisma/rollback/20261115_rollback_billing_overdraft.sql` (refuses while any overdraft row or non-zero limit exists, or a later
-  billing migration is applied). S3-w adds no migration;
+  overdraft room, two contending tails both recorded, standard tails never overdraw, overdraft only with its charge, rollback
+  after a late failure, no reversal, triggers). C-OD rollback: while the new code is online reject drafted `overdraft_limit`
+  operations; stop writers and drain; run `prisma/rollback/20261115_rollback_billing_overdraft.sql` (refuses while any overdraft
+  row, non-zero limit, post_delivery reservation or drafted operation exists, or a later billing migration is applied); then
+  roll the code back. S3-w adds no migration;
   undo it by reverting the code (the S3-e rollback still refuses while credit rows exist). P1-1: revert the code first (the old code
   does not write the binding columns), then `prisma/rollback/20261112_rollback_billing_reservation_payer_binding.sql` (refuses while
   any reservation row or later billing migration exists; restores the S3-b1 trigger), before the charges and reservations rollbacks;

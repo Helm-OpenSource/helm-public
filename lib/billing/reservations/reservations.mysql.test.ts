@@ -5,7 +5,7 @@ import { type Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { grantPlatformFinanceRole } from "../bank-receipts/bank-receipts";
 import { changeCreditFacility, drawCreditShortfallInTransaction, proposeCreditFacility } from "../credit/credit-facilities";
-import { claimOverdraftChannel, postFundsTransactionInTransaction, recomputeFundsProjection,
+import { postFundsTransactionInTransaction, postSettleChargeFundsInTransaction, recomputeFundsProjection,
   reverseFundsTransactionInTransaction } from "../funds/funds-journal";
 import { changeSpendGrant, createSpendGrant, publishPriceVersion } from "../grants/price-grants";
 import { bindScope, createPayerAccount, revokeBinding } from "../payer/payer-accounts";
@@ -567,18 +567,34 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
         workspaceId: ids.workspaceId, fromLimitFen: "10", toLimitFen: "60" } })).rejects.toThrow("overdraft_limit_conflict");
     }
   });
-  it("never posts an overdraft outside settle: the channel is settle's alone; a standard hold never overdraws", async () => {
-    expect(() => claimOverdraftChannel()).toThrow("funds_overdraft_channel_claimed"); // reservations.ts claimed it at load
-    const ids = await setup("enforce", 100);
+  it("posts an overdraft only together with the same reservation's charge, in one funds call; never for a standard hold", async () => {
+    const ids = await setup("enforce", 100), other = await setup("enforce", 1000);
+    const legs = (payerAccountId: string, reservationId: string, chargeFen: number) => a.$transaction(tx => postSettleChargeFundsInTransaction(tx,
+      { payerAccountId, reservationId, chargeFen: fen(chargeFen), actor: service, evidenceRef: "direct:synthetic" }));
+    const entries = (payerAccountId: string) => a.fundsJournalEntry.count({ where: { payerAccountId } });
     const plain = await held(ids, "op:od-std", 1);
     await correct(ids.payerAccountId, 100, "corr:od-std");
     await overdraftLimit(ids.workspaceId, 0, 10000);
+    const before = await entries(ids.payerAccountId);
+    await expect(legs(ids.payerAccountId, plain.reservationId, 100)).rejects.toThrow("funds_insufficient"); // (a) standard never overdraws
     expect(await settle(plain.reservationId, "set:od-std", "1")).toEqual(rejected("insufficient_funds"));
-    const pd = await delivered(ids, "op:od-pd", 1);
-    expect([await overdrafts(ids.payerAccountId), (await a.billingReservation.findUniqueOrThrow({ where: { id: plain.reservationId } })).state,
-      await a.billingCharge.count({ where: { payerAccountId: ids.payerAccountId } })]).toEqual([0, "held", 0]);
-    expect(await settle(pd.reservationId, "set:od-pd", "1")).toMatchObject({ ok: true, chargeFen: "100" });
-    expect(await overdrafts(ids.payerAccountId)).toBe(1);
+    expect([await entries(ids.payerAccountId), await overdrafts(ids.payerAccountId)]).toEqual([before, 0]);
+    const pd = await delivered(ids, "op:od-pd", 2); // cap 200
+    await expect(legs(ids.payerAccountId, pd.reservationId, 201)).rejects.toThrow("funds_input_invalid"); // (c) above its cap
+    await expect(legs(other.payerAccountId, pd.reservationId, 100)).rejects.toThrow("funds_input_invalid"); // (c) another payer's hold
+    await topup(ids.payerAccountId, 30, "topup:od-pd");
+    const posted = await legs(ids.payerAccountId, pd.reservationId, 150); // (b) overdraft and charge together, nothing else
+    const kinds = await a.fundsTransaction.findMany({ where: { payerAccountId: ids.payerAccountId, kind: { in: ["overdraft_draw", "charge"] } },
+      include: { entries: true } });
+    expect(kinds.map(row => [row.kind, row.entries.find(e => e.account === "customer_wallet_available")?.amountFen]).sort())
+      .toEqual([["charge", fen(150)], ["overdraft_draw", fen(120)]]); // overdraft = charge - wallet before (30)
+    expect(posted.transaction.operationKey).toBe(`charge:${pd.reservationId}`);
+    expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(0), overdraft_receivable: fen(120), charge_revenue: fen(150) });
+    // Again: the wallet is now 0, so the recomputed overdraft (150) differs from the recorded one (120) under the same key.
+    await expect(legs(ids.payerAccountId, pd.reservationId, 150)).rejects.toThrow("funds_operation_conflict");
+    const paid = await held(other, "op:od-paid", 1); // a standard hold the wallet covers: its charge, then a same-content repeat
+    await legs(other.payerAccountId, paid.reservationId, 100);
+    await expect(legs(other.payerAccountId, paid.reservationId, 100)).rejects.toThrow("funds_settle_invariant_breach");
   });
   it("rolls back a post-delivery settle that fails after borrowing credit and overdrawing: no entries, hold intact", async () => {
     const ids = await setup("enforce", 100);
@@ -592,11 +608,13 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
       VALUES (${`blocker-${call.reservationId}`}, ${call.reservationId}, ${ids.payerAccountId}, ${ids.grantId}, 'blocker', 'blocker', 'shadow',
       ${priceId}, ${reservation.priceContentHash}, 1, 0, 1, '2026-11-30', '2026-11', 'fault-injection', 'test')`;
     const outbox = await a.billingOutbox.count(), before = await balances(ids.payerAccountId), bucketsBefore = await buckets(ids);
+    const lines = await a.fundsJournalEntry.count({ where: { payerAccountId: ids.payerAccountId } });
     expect(await settle(call.reservationId, "set:od-fail", "2")).toEqual(rejected("core_unavailable"));
     expect(await balances(ids.payerAccountId)).toEqual(before);
     expect([await draws(ids.payerAccountId), await overdrafts(ids.payerAccountId), await usedFen(ids.payerAccountId),
       await a.fundsTransaction.count({ where: { payerAccountId: ids.payerAccountId, kind: "charge" } }), await a.billingOutbox.count()])
       .toEqual([0, 0, fen(0), 0, outbox]);
+    expect(await a.fundsJournalEntry.count({ where: { payerAccountId: ids.payerAccountId } })).toBe(lines);
     expect(await a.billingReservation.findUniqueOrThrow({ where: { id: call.reservationId } })).toMatchObject({ state: "held", version: reservation.version });
     expect(await buckets(ids)).toEqual(bucketsBefore);
   });

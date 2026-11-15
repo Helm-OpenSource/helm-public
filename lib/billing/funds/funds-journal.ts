@@ -261,36 +261,47 @@ export async function postCreditDrawFundsInTransaction(tx: Prisma.TransactionCli
   return postLocked(tx, await lockPayer(tx, posting.payerAccountId), posting);
 }
 
-type OverdraftInput = { payerAccountId: string; reservationId: string; chargeFen: bigint; actor: FundsActor };
-let overdraftChannelClaimed = false;
+export type SettleChargeFundsInput = { payerAccountId: string; reservationId: string; chargeFen: bigint; actor: FundsActor;
+  evidenceRef: string };
 /**
- * C-OD: the only way to post an `overdraft_draw`. The channel is handed out once; the settle module (reservations.ts) claims it
- * when it loads, so no other caller can post an overdraft outside a settle (a later claim throws). The returned function runs
- * under the PayerAccount lock, inside settle, after the credit draw: the reservation must be this payer's held/unknown enforce
- * `post_delivery` reservation with a cap >= `chargeFen`; what the wallet still lacks is posted as one `overdraft_draw` (debit
- * overdraft_receivable, credit the wallet). The soft limit is never compared (design Q9). Settle posts its charge, charge row and
- * state change in the same transaction, so any later failure rolls the overdraft back with them.
+ * The funds leg of a settle (S3-b2 charge; C-OD overdraft), under the PayerAccount lock. The reservation is re-read in-lock: this
+ * payer's held/unknown enforce reservation with 0 < chargeFen <= its cap. For a `post_delivery` reservation, what the locked
+ * wallet still lacks for `chargeFen` (computed here, never passed in) is first posted as one `overdraft_draw` (debit
+ * overdraft_receivable, credit the wallet; key bound to the reservation; the soft limit is never compared, design Q9); then the
+ * `charge` (debit the wallet, credit charge_revenue, `charge:<reservationId>`) is posted in the same call. So an overdraft only
+ * ever exists together with the same reservation's charge, in one transaction; there is no other entry point for
+ * `overdraft_draw`. Any other reservation never overdraws: a wallet short of `chargeFen` refuses `funds_insufficient` as before.
+ * Trust boundary (as for postCreditDrawFundsInTransaction): in-process callers are trusted to call this only from settle, which
+ * borrows credit first and writes the BillingCharge row, state change and buckets in the same transaction. A recorded overdraft
+ * or charge under these keys means the reservation was already settled: an invariant breach (settle replays before this).
  */
-export function claimOverdraftChannel() {
-  if (overdraftChannelClaimed) throw new Error("funds_overdraft_channel_claimed");
-  overdraftChannelClaimed = true;
-  return async function drawOverdraftShortfall(tx: Prisma.TransactionClient, input: OverdraftInput) {
-    const payer = await lockPayer(tx, input.payerAccountId);
-    const [open] = await tx.$queryRaw<Array<{ chargeFen: bigint }>>`SELECT chargeFen FROM BillingReservation
-      WHERE id = ${input.reservationId} AND payerAccountId = ${input.payerAccountId} AND billingMode = 'enforce'
-        AND admission = 'post_delivery' AND state IN ('held', 'unknown') FOR SHARE`;
-    if (!open || input.chargeFen <= ZERO || input.chargeFen > BigInt(open.chargeFen)) refuse("funds_input_invalid");
+export async function postSettleChargeFundsInTransaction(tx: Prisma.TransactionClient, input: SettleChargeFundsInput) {
+  reference(input.reservationId); reference(input.evidenceRef);
+  const payer = await lockPayer(tx, input.payerAccountId);
+  const [open] = await tx.$queryRaw<Array<{ chargeFen: bigint; admission: string }>>`SELECT chargeFen, admission FROM BillingReservation
+    WHERE id = ${input.reservationId} AND payerAccountId = ${input.payerAccountId} AND billingMode = 'enforce'
+      AND state IN ('held', 'unknown') FOR SHARE`;
+  if (!open || typeof input.chargeFen !== "bigint" || input.chargeFen <= ZERO || input.chargeFen > BigInt(open.chargeFen)) {
+    refuse("funds_input_invalid");
+  }
+  if (open.admission === "post_delivery") {
     const [wallet] = await tx.$queryRaw<Array<{ balanceFen: bigint }>>`SELECT balanceFen FROM FundsAccountProjection
       WHERE payerAccountId = ${input.payerAccountId} AND account = 'customer_wallet_available' FOR UPDATE`;
     const shortfall = input.chargeFen - BigInt(wallet?.balanceFen ?? ZERO);
-    if (shortfall <= ZERO) return ZERO;
-    const posted = await postLocked(tx, payer, normalizeFundsPosting({ payerAccountId: input.payerAccountId, kind: "overdraft_draw",
-      operationKey: `${OVERDRAFT_PREFIX}${input.reservationId}`, actor: input.actor, evidenceRef: `reservation:${input.reservationId}`,
-      entries: [{ account: "overdraft_receivable", direction: "debit", amountFen: shortfall },
-        { account: WALLET, direction: "credit", amountFen: shortfall }] }, null, "overdraft_draw"));
-    if (posted.replayed) throw new Error("funds_overdraft_invariant_breach"); // settle never reaches this on a replay
-    return shortfall;
-  };
+    if (shortfall > ZERO) {
+      const overdraft = await postLocked(tx, payer, normalizeFundsPosting({ payerAccountId: input.payerAccountId, kind: "overdraft_draw",
+        operationKey: `${OVERDRAFT_PREFIX}${input.reservationId}`, actor: input.actor, evidenceRef: `reservation:${input.reservationId}`,
+        entries: [{ account: "overdraft_receivable", direction: "debit", amountFen: shortfall },
+          { account: WALLET, direction: "credit", amountFen: shortfall }] }, null, "overdraft_draw"));
+      if (overdraft.replayed) throw new Error("funds_settle_invariant_breach");
+    }
+  }
+  const charge = await postLocked(tx, payer, normalizeFundsPosting({ payerAccountId: input.payerAccountId, kind: "charge",
+    operationKey: chargeOperationKey(input.reservationId), actor: input.actor, evidenceRef: input.evidenceRef,
+    entries: [{ account: WALLET, direction: "debit", amountFen: input.chargeFen },
+      { account: "charge_revenue", direction: "credit", amountFen: input.chargeFen }] }));
+  if (charge.replayed) throw new Error("funds_settle_invariant_breach");
+  return charge;
 }
 
 /** Appends a mirror transaction (each line's direction swapped) referencing the original; nothing is edited or deleted. */

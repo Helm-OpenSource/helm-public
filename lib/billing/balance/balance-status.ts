@@ -15,9 +15,8 @@ import type { BillingRejectCode, ServiceActor } from "../reservations/reservatio
  * - overdraftRoom (C-OD) = max(0, overdraftLimitFen - overdraftUsed): what post-delivery work may still overdraw. Never negative,
  *   so an overdraft over its soft limit never eats wallet or credit; reported separately, never part of headroom;
  * - overLimit (C-OD, Q9): overdraftUsed > overdraftLimitFen (with no limit configured, any overdraft at all);
- * - arrears: stop new billable work. Two causes, reported as arrearsReason: "funds" when headroom <= 0 (Q8: effective
- *   headroom + overdraftRoom at or below zero; owner ruling: overdraw up to the limit, then stop) or overLimit (Q9: stop at
- *   once), "payer_inactive" when an enforce payer is suspended or closed (coordinator 11-12): Core
+ * - arrears: stop new billable work. Two causes, reported as arrearsReason: "funds" when headroom + overdraftRoom <= 0 (Q8;
+ *   owner ruling: overdraw up to the limit, then stop) or overLimit (Q9: stop at once), "payer_inactive" when an enforce payer is suspended or closed (coordinator 11-12): Core
  *   refuses its new reserves, so work would run unbilled. payer_inactive wins when both hold; null when not in arrears.
  * creditUsed is the credit_receivable projection, so a revoked or expired facility's outstanding draws still count.
  * overdraftUsed is the overdraft_receivable projection (C-OD post-delivery settle tails).
@@ -76,7 +75,9 @@ export async function readPayerBalanceSummaries(client: PrismaClient | Prisma.Tr
 }
 
 /** C-OD: work the caller has delivered but not yet settled (e.g. connected minutes waiting for the settler), per event and unit. */
-export type PendingUsage = { workspaceId: string; billingEventRef: string; meterUnit: string; pendingQuantity: string };
+export type PendingUsage = { workspaceId: string; billingEventRef: string; meterUnit: string; pendingQuantity: string;
+  /** How many settles the quantity will be split into (1..pendingQuantity); default pendingQuantity, the widest margin. */
+  pendingSettlements?: string };
 export type BalanceStatusRequest = { workspaceIds: string[]; pending?: PendingUsage[] };
 export type BalanceStatusEntry = { workspaceId: string; ok: true; billingMode: PayerBalanceSummary["billingMode"]; payerStatus: PayerStatus;
   balanceFen: string; headroomFen: string; overdraftUsedFen: string; overdraftRoomFen: string; overLimit: boolean; arrears: boolean;
@@ -91,8 +92,12 @@ function pendingValid(ids: readonly string[], pending: unknown): pending is Pend
   if (!Array.isArray(pending) || pending.length > BALANCE_STATUS_MAX_WORKSPACES) return false;
   const seen = new Set<string>();
   return pending.every(item => {
-    if (!item || typeof item !== "object" || Object.keys(item).sort().join() !== "billingEventRef,meterUnit,pendingQuantity,workspaceId") return false;
-    const { workspaceId, billingEventRef, meterUnit, pendingQuantity } = item as PendingUsage;
+    const keys = item && typeof item === "object" ? Object.keys(item).sort().join() : "";
+    if (keys !== "billingEventRef,meterUnit,pendingQuantity,workspaceId" &&
+        keys !== "billingEventRef,meterUnit,pendingQuantity,pendingSettlements,workspaceId") return false;
+    const { workspaceId, billingEventRef, meterUnit, pendingQuantity, pendingSettlements } = item as PendingUsage;
+    if (pendingSettlements !== undefined && (typeof pendingSettlements !== "string" || !QUANTITY.test(pendingSettlements) ||
+        typeof pendingQuantity !== "string" || !QUANTITY.test(pendingQuantity) || BigInt(pendingSettlements) > BigInt(pendingQuantity))) return false;
     const key = JSON.stringify([workspaceId, billingEventRef, meterUnit]);
     if (!ids.includes(workspaceId) || typeof billingEventRef !== "string" || !REF.test(billingEventRef) || typeof meterUnit !== "string" ||
         !UNIT.test(meterUnit) || typeof pendingQuantity !== "string" || !QUANTITY.test(pendingQuantity) ||
@@ -104,7 +109,9 @@ function pendingValid(ids: readonly string[], pending: unknown): pending is Pend
 /**
  * Totals the batch's pending usage per PAYER (workspaces sharing a payer share its headroom, so their pending adds up), each entry
  * priced with the payer's single active, in-validity grant on an effective price for that event and unit (the quote rule, at
- * database time) and rounded UP: a conservative estimate, unlike settle's half-up. One more lock-free statement, so the price read
+ * database time) as an upper bound of what settle will charge: each half-up settle exceeds the exact amount by at most 1/2 fen,
+ * so n settles of a fractional price total at most quantity x price + n/2, and the estimate is ceil(quantity x price + n/2) with
+ * n = pendingSettlements (default: the quantity); an integral price is exact (quantity x price). One more lock-free statement, so the price read
  * may be a moment newer than the balance snapshot. A payer with an entry that has no single such grant, or beyond the fen bound,
  * gets null. Only what this batch declares is counted: a payer's workspaces must be declared together, else it is a lower bound.
  */
@@ -126,8 +133,11 @@ async function pendingFenByPayer(client: PrismaClient | Prisma.TransactionClient
     const sum = totals.has(payerAccountId) ? totals.get(payerAccountId)! : ZERO;
     let fen: bigint | null = null;
     if (sum !== null && matches.length === 1) {
-      const denominator = BigInt(matches[0].unitPriceDenominator);
-      const up = (BigInt(matches[0].unitPriceFenNumerator) * BigInt(item.pendingQuantity) + denominator - BigInt(1)) / denominator;
+      const numerator = BigInt(matches[0].unitPriceFenNumerator), denominator = BigInt(matches[0].unitPriceDenominator);
+      const quantity = BigInt(item.pendingQuantity), settles = BigInt(item.pendingSettlements ?? item.pendingQuantity);
+      const two = BigInt(2), one = BigInt(1);
+      const up = numerator % denominator === ZERO ? quantity * (numerator / denominator) // integral price: exact
+        : (two * quantity * numerator + settles * denominator + two * denominator - one) / (two * denominator); // ceil(q*p + n/2)
       fen = sum + up > MAX_FEN ? null : sum + up; // beyond the fen bound: not priceable, never a wrapped number
     }
     totals.set(payerAccountId, fen);
@@ -138,10 +148,11 @@ async function pendingFenByPayer(client: PrismaClient | Prisma.TransactionClient
 /**
  * `balance-status` (v3.10): 1-50 distinct workspace ids, answered in request order. A bound payer is reported whatever its mode
  * (off included, so balances can be checked before enforce); an unbound workspace is `billing_mode_off` (not billed). The
- * caller reads one boolean, `arrears`, and applies it only to `billingMode: "enforce"`; `arrearsReason` only tells alerts
- * apart. The service identity is authenticated by the route; a read leaves no per-identity trace beyond the auth nonce.
+ * caller reads one boolean, `arrears` (with `pending`: `arrearsAfterPending`, falling back to `arrears` with an alert when it is
+ * null), and applies it only to `billingMode: "enforce"`; `arrearsReason` only tells alerts apart. The service identity is authenticated by the route; a read leaves no per-identity trace beyond the auth nonce.
  * C-OD: optional `pending` (at most 50 entries, each for a listed workspace, distinct per workspace, event and unit, positive
- * quantity string) adds `headroomAfterPendingFen` and `arrearsAfterPending` to every bound entry; `arrears` keeps its meaning.
+ * quantity string, optional settlement count) adds `headroomAfterPendingFen` and `arrearsAfterPending` to every bound entry;
+ * `arrears` keeps its meaning. A payer with more than 50 workspaces or 50 pending lines cannot be judged completely here.
  */
 function afterPending(summary: PayerBalanceSummary, pendingFen: bigint | null | undefined) {
   const after = pendingFen === null ? null : summary.headroomFen + summary.overdraftRoomFen - (pendingFen ?? ZERO);

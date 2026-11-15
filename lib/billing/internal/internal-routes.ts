@@ -38,7 +38,8 @@ const OPERATIONS = {
   "resolve-unknown": operation(z.object({ ...resolution, outcome: z.enum(["settled", "released"]), quantityUsed: text.optional() })
     .strict(), resolveUnknown),
   "balance-status": operation(z.object({ workspaceIds: z.array(text).min(1).max(BALANCE_STATUS_MAX_WORKSPACES),
-    pending: z.array(z.object({ workspaceId: text, billingEventRef: text, meterUnit: text, pendingQuantity: text }).strict())
+    pending: z.array(z.object({ workspaceId: text, billingEventRef: text, meterUnit: text, pendingQuantity: text,
+      pendingSettlements: text.optional() }).strict())
       .max(BALANCE_STATUS_MAX_WORKSPACES).optional() }).strict(), balanceStatus),
 } satisfies Record<Exclude<BillingServiceScope, typeof POST_DELIVERY_SCOPE>, unknown>;
 export type BillingInternalOperation = keyof typeof OPERATIONS;
