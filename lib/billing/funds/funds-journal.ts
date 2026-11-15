@@ -24,8 +24,7 @@ export type ReverseFundsInput = { payerAccountId: string; originalTransactionId:
   actor: FundsActor; evidenceRef: string };
 export type FundsRefusalCode = "funds_input_invalid" | "funds_unbalanced" | "funds_accounts_not_allowed" |
   "payer_account_unavailable" | "payer_billing_off" | "funds_operation_conflict" | "funds_insufficient" |
-  "funds_projection_conflict" | "funds_write_conflict" | "funds_reversal_invalid" | "funds_already_reversed" |
-  "funds_overdraft_limit_exceeded";
+  "funds_projection_conflict" | "funds_write_conflict" | "funds_reversal_invalid" | "funds_already_reversed";
 
 export class FundsRefusal extends Error {
   constructor(readonly code: FundsRefusalCode) { super(code); this.name = "FundsRefusal"; }
@@ -110,11 +109,10 @@ export function normalizeFundsPosting(input: PostFundsInput, reversalOfId: strin
     evidenceRef: input.evidenceRef, createdBy, actor: input.actor, entries, contentHash: sha256(basis) };
 }
 
-type PayerRow = { id: string; status: string; billingMode: string; currency: string; governingWorkspaceId: string | null;
-  overdraftLimitFen: bigint };
+type PayerRow = { id: string; status: string; billingMode: string; currency: string; governingWorkspaceId: string | null };
 async function lockPayer(tx: Prisma.TransactionClient, payerAccountId: string) {
   const [payer] = await tx.$queryRaw<PayerRow[]>`
-    SELECT id, status, billingMode, currency, governingWorkspaceId, overdraftLimitFen FROM PayerAccount
+    SELECT id, status, billingMode, currency, governingWorkspaceId FROM PayerAccount
     WHERE id = ${payerAccountId} AND CAST(id AS BINARY) = CAST(${payerAccountId} AS BINARY) FOR UPDATE`;
   if (!payer || payer.id !== payerAccountId) refuse("payer_account_unavailable");
   return payer;
@@ -267,10 +265,9 @@ export type OverdraftDraw = { overdraftFen: bigint; fundsTransactionId: string |
 /**
  * C-OD settle seam, under the PayerAccount lock, after the credit shortfall draw: posts what the wallet still lacks for `chargeFen`
  * as one `overdraft_draw` (debit overdraft_receivable, credit the wallet), so the caller's full wallet charge never takes the
- * wallet below 0. Bound to this payer's held/unknown enforce reservation and its cap. The payer's `overdraftLimitFen` (0 unless
- * platform finance set it by maker/checker) bounds the outstanding overdraft: beyond it `funds_overdraft_limit_exceeded` rolls
- * the whole settle back and the reservation stays held. The projection trigger re-checks the same bound. Nothing to cover
- * writes nothing; settle never calls this on a replay, so a recorded draw under the key is an invariant breach.
+ * wallet below 0. Bound to this payer's held/unknown enforce reservation and its cap. Delivered usage is never refused here: the
+ * payer's `overdraftLimitFen` is a soft limit (design Q9) read only by the balance summary (headroom, overLimit). Nothing to
+ * cover writes nothing; settle never calls this on a replay, so a recorded draw under the key is an invariant breach.
  */
 export async function drawOverdraftShortfallInTransaction(tx: Prisma.TransactionClient,
   input: { payerAccountId: string; reservationId: string; chargeFen: bigint; actor: FundsActor }): Promise<OverdraftDraw> {
@@ -278,12 +275,10 @@ export async function drawOverdraftShortfallInTransaction(tx: Prisma.Transaction
   const payer = await lockPayer(tx, input.payerAccountId);
   const settling = await settlingReservationInTransaction(tx, input.payerAccountId, "overdraft_draw", operationKey);
   if (!settling || input.chargeFen > settling.chargeFen) refuse("funds_input_invalid");
-  const projection = async (account: FundsAccountName) => BigInt((await tx.$queryRaw<Array<{ balanceFen: bigint }>>`SELECT balanceFen
-    FROM FundsAccountProjection WHERE payerAccountId = ${input.payerAccountId} AND account = ${account} FOR UPDATE`)[0]?.balanceFen ?? ZERO);
-  const shortfall = input.chargeFen - await projection(WALLET);
+  const [wallet] = await tx.$queryRaw<Array<{ balanceFen: bigint }>>`SELECT balanceFen FROM FundsAccountProjection
+    WHERE payerAccountId = ${input.payerAccountId} AND account = 'customer_wallet_available' FOR UPDATE`;
+  const shortfall = input.chargeFen - BigInt(wallet?.balanceFen ?? ZERO);
   if (shortfall <= ZERO) return { overdraftFen: ZERO, fundsTransactionId: null };
-  // No configured limit is 0: no overdraft at all (never a default allowance).
-  if (await projection("overdraft_receivable") + shortfall > BigInt(payer.overdraftLimitFen)) refuse("funds_overdraft_limit_exceeded");
   const posted = await postLocked(tx, payer, normalizeFundsPosting({ payerAccountId: input.payerAccountId, kind: "overdraft_draw",
     operationKey, actor: input.actor, evidenceRef: `reservation:${input.reservationId}`,
     entries: [{ account: "overdraft_receivable", direction: "debit", amountFen: shortfall },

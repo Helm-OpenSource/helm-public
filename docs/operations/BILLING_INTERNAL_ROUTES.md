@@ -65,14 +65,16 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
 - **balance-status** (C-BAL, protocol v3.10; scope `balance-status`, read-only, `lib/billing/balance/balance-status.ts`): request
   `{ workspaceIds: [...] }`, 1-50 distinct ids (empty, more than 50, duplicates, bad formats or extra fields are
   `request_invalid`). Answer `{ ok: true, results: [...] }` in request order; per workspace either `{ workspaceId, ok: true,
-  billingMode, payerStatus, balanceFen, headroomFen, overdraftUsedFen, arrears, arrearsReason, asOf }` or, with no active
+  billingMode, payerStatus, balanceFen, headroomFen, overdraftUsedFen, overLimit, arrears, arrearsReason, asOf }` (`overLimit` C-OD) or, with no active
   binding, `{ workspaceId, ok: false, code: "billing_mode_off" }` (not billed). Signed integer fen strings:
   `balanceFen = wallet - creditUsed - overdraftUsed` (may be negative; creditUsed is the `credit_receivable` projection, so a
   closed facility's draws still count); `headroomFen = wallet + creditRemaining - held` is the reserve admission formula
   (remaining credit of the drawable, in-term facility, 0 for a payer that is not active; held = enforce `held`/`unknown`
   reservations). `headroomFen` includes remaining credit: a stop/go input only, clients must never display it as a balance.
-  `overdraftUsedFen` is the `overdraft_receivable` projection (C-OD settle tails); the unused overdraft limit is never headroom,
-  so a payer living on overdraft is in arrears. `payerStatus` is the PayerAccount status
+  `overdraftUsedFen` is the `overdraft_receivable` projection (C-OD post-delivery settle tails). C-OD adds the unused overdraft
+  soft limit to headroom: `headroomFen = wallet + creditRemaining + max(0, overdraftLimit - overdraftUsed) - held` (never
+  negative for an overdraft over its limit; standard reserve admission keeps wallet + credit - held), and arrears with reason
+  `funds` also when the overdraft is over its limit (any overdraft with limit 0). `payerStatus` is the PayerAccount status
   (`active|suspended|closed`); numbers are returned in every mode and status, `off` included.
   **`arrears`** is the one boolean callers gate on (only for `billingMode: "enforce"`), with two causes in `arrearsReason`:
   `funds` when `headroomFen <= 0` (Q8), `payer_inactive` when an enforce payer is suspended or closed (coordinator 11-12: Core
@@ -80,6 +82,20 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
   One lock-free statement per batch: a consistent read that never waits on, or delays, a reserve or settle. Writes only the
   auth nonce. The wallet read (`/api/billing/v1/wallet`) carries the same `balanceFen`, `headroomFen` and `arrears` next to
   `availableFen` (unchanged: wallet projection only).
+- **Member balance view** (B-1, library only, no route; `lib/billing/balance/member-balance.ts`
+  `readMemberBalanceSummaryInTransaction(tx, { workspaceId, userId })`): the balance a workspace member may see, for a caller
+  that already authenticated that member. Role rule: any ACTIVE, unscoped member of an
+  ACTIVE workspace reads it, anyone else is `balance_forbidden`. Answer `{ canTopUp, topUpUrl, payer }`: `payer` is null for
+  an unbound workspace, otherwise `{ billingMode, payerStatus, balanceFen, arrears, arrearsReason, asOf }` from the same
+  summary as `balance-status` (no headroom, ledger, transaction, reservation or payer ids). `balanceFen` is a bigint
+  in fen; serializing it (for example to JSON, which has no bigint) is the caller's job. `canTopUp` is the
+  top-up page's rule: OWNER or BILLING_ADMIN, an active payer in shadow or enforce, `alipayTopupGateOpen` and a usable `APP_URL`;
+  only then `topUpUrl` = `APP_URL` + `/billing/topup` (no prefill). Two plain statements, lock-free under READ COMMITTED or
+  REPEATABLE READ; under SERIALIZABLE InnoDB would take shared locks a settle waits on, so callers must not use it there.
+  Verified by `member-balance.mysql.test.ts` in `npm run test:billing:mysql` (roles, scoped/inactive/foreign/suspended
+  readers, unbound and off payers, gate and `APP_URL` closures, no wait on a locked projection row). Reverting it removes
+  only this function (no migration, no data). The view carries exactly the fields above; credit fields (remaining credit,
+  limit) are not part of it, and any later field would come from the same C-BAL summary row.
 - **Scope list, single source**: `BILLING_SERVICE_SCOPES` is both what a grant may declare (verifier and issuance CLI) and what
   routes accept; there is no separate declarable list.
 - **reserve** `expectedMode` (v3.4, optional `shadow|enforce`): a payer in the other mode is `mode_mismatch` before any bucket
@@ -87,8 +103,8 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
 - **reserve** `admission: "post_delivery"` (C-OD, protocol v3.10 clause 1; any other value is `request_invalid`): for work
   already delivered. Needs the grant scope `reserve-post-delivery` **in addition to** `reserve` (otherwise 403
   `service_unauthorized`, nothing written); it is a scope only, not a route. Core skips the funds check only; mode, binding,
-  grant, limits and price apply as before, and settle overdraws the tail within the payer's limit (BILLING_RESERVATIONS.md).
-  The admission is in the content hash and frozen on the row (migration `20261115110000_billing_reservation_admission`).
+  grant, limits and price apply as before, and settle records the whole tail as overdraft, never refused by the soft limit
+  (BILLING_RESERVATIONS.md). The admission is in the content hash and frozen on the row (migration `20261115100000_billing_overdraft`).
   Reverting this code after a grant with `reserve-post-delivery` was issued makes that scope unknown, so the grant is refused on
   every route (as for `balance-status` below): rotate to a grant without it (v3.9) before reverting.
 - **balance-status** `pending` (C-OD, optional): `[{ workspaceId, billingEventRef, meterUnit, pendingQuantity }]`, at most 50,

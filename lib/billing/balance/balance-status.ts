@@ -10,27 +10,30 @@ import type { BillingRejectCode, ServiceActor } from "../reservations/reservatio
  * wholly before or wholly after) and no reserve or settle ever waits on it. Integer fen:
  * - balance = wallet - creditUsed - overdraftUsed (may be negative; the one number shown to customers). headroom includes
  *   remaining credit and is a stop/go input only: clients must never display it as a balance;
- * - headroom = wallet + creditRemaining - held, the reserve admission formula (reservations.ts reserveInTransaction with
- *   credit-facilities.ts availableCreditFen): creditRemaining is max(0, limit - used) of the drawable, in-term facility and 0
- *   for a payer that is not active; held is enforce held/unknown reservations;
+ * - headroom = wallet + creditRemaining + overdraftRemaining - held: creditRemaining is max(0, limit - used) of the drawable,
+ *   in-term facility and 0 for a payer that is not active (credit-facilities.ts availableCreditFen); overdraftRemaining (C-OD)
+ *   is max(0, overdraftLimitFen - overdraftUsed), never negative, so an overdraft over its soft limit adds 0 and never eats
+ *   wallet or credit; held is enforce held/unknown reservations. Standard reserve admission still uses wallet + credit - held;
+ *   overdraft room serves post-delivery work, which reserve admits without a funds check;
+ * - overLimit (C-OD, Q9): overdraftUsed > overdraftLimitFen (with no limit configured, any overdraft at all);
  * - arrears: stop new billable work. Two causes, reported as arrearsReason: "funds" when headroom <= 0 (Q8: effective
- *   headroom at or below zero), "payer_inactive" when an enforce payer is suspended or closed (coordinator 11-12): Core
+ *   headroom at or below zero) or overLimit (Q9: stop at once), "payer_inactive" when an enforce payer is suspended or closed (coordinator 11-12): Core
  *   refuses its new reserves, so work would run unbilled. payer_inactive wins when both hold; null when not in arrears.
  * creditUsed is the credit_receivable projection, so a revoked or expired facility's outstanding draws still count.
- * overdraftUsed is the overdraft_receivable projection (C-OD settle tails). Overdraft is never headroom: the unused part of a
- * payer's overdraft limit does not admit new work, so a payer living on overdraft is in arrears (owner 11-11 18:03).
+ * overdraftUsed is the overdraft_receivable projection (C-OD post-delivery settle tails).
  */
 export const BALANCE_STATUS_MAX_WORKSPACES = 50;
 export type PayerStatus = "active" | "suspended" | "closed"; // PayerAccount.status ENUM
 export type ArrearsReason = "funds" | "payer_inactive";
-export type PayerBalanceSummary = { payerAccountId: string; billingMode: "off" | "shadow" | "enforce"; payerStatus: PayerStatus; walletFen: bigint; creditUsedFen: bigint;
-  overdraftUsedFen: bigint; creditRemainingFen: bigint; heldFen: bigint; balanceFen: bigint; headroomFen: bigint; arrears: boolean;
+export type PayerBalanceSummary = { payerAccountId: string; billingMode: "off" | "shadow" | "enforce"; payerStatus: PayerStatus; walletFen: bigint;
+  creditUsedFen: bigint; overdraftUsedFen: bigint; overdraftLimitFen: bigint; overLimit: boolean; creditRemainingFen: bigint; heldFen: bigint;
+  balanceFen: bigint; headroomFen: bigint; arrears: boolean;
   arrearsReason: ArrearsReason | null; asOf: Date };
 
 const ZERO = BigInt(0);
 const REF = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,190}$/;
 type Row = { workspaceId: string; payerAccountId: string; billingMode: PayerBalanceSummary["billingMode"]; payerStatus: PayerStatus; walletFen: bigint | null;
-  creditUsedFen: bigint | null; overdraftUsedFen: bigint | null; creditRemainingFen: bigint | null; heldFen: bigint; asOf: Date };
+  creditUsedFen: bigint | null; overdraftUsedFen: bigint | null; overdraftLimitFen: bigint; creditRemainingFen: bigint | null; heldFen: bigint; asOf: Date };
 
 /**
  * Summaries keyed by workspace id for the workspaces with exactly one active binding (others are absent: not billed). The
@@ -40,6 +43,7 @@ type Row = { workspaceId: string; payerAccountId: string; billingMode: PayerBala
 export async function readPayerBalanceSummaries(client: PrismaClient | Prisma.TransactionClient, workspaceIds: readonly string[]) {
   if (workspaceIds.length === 0) return new Map<string, PayerBalanceSummary>();
   const rows = await client.$queryRaw<Row[]>`SELECT b.scopeRef AS workspaceId, p.id AS payerAccountId, p.billingMode, p.status AS payerStatus,
+      p.overdraftLimitFen,
       (SELECT w.balanceFen FROM FundsAccountProjection w WHERE w.payerAccountId = p.id AND w.account = 'customer_wallet_available') AS walletFen,
       (SELECT r.balanceFen FROM FundsAccountProjection r WHERE r.payerAccountId = p.id AND r.account = 'credit_receivable') AS creditUsedFen,
       (SELECT o.balanceFen FROM FundsAccountProjection o WHERE o.payerAccountId = p.id AND o.account = 'overdraft_receivable') AS overdraftUsedFen,
@@ -58,11 +62,14 @@ export async function readPayerBalanceSummaries(client: PrismaClient | Prisma.Tr
     const walletFen = BigInt(row.walletFen ?? ZERO), creditUsedFen = BigInt(row.creditUsedFen ?? ZERO);
     const overdraftUsedFen = BigInt(row.overdraftUsedFen ?? ZERO);
     const creditRemainingFen = BigInt(row.creditRemainingFen ?? ZERO), heldFen = BigInt(row.heldFen);
-    const headroomFen = walletFen + creditRemainingFen - heldFen;
+    const overdraftLimitFen = BigInt(row.overdraftLimitFen), overLimit = overdraftUsedFen > overdraftLimitFen;
+    const overdraftRemainingFen = overLimit ? ZERO : overdraftLimitFen - overdraftUsedFen;
+    const headroomFen = walletFen + creditRemainingFen + overdraftRemainingFen - heldFen;
     const arrearsReason: ArrearsReason | null = row.billingMode === "enforce" && row.payerStatus !== "active" ? "payer_inactive"
-      : headroomFen <= ZERO ? "funds" : null;
-    summaries.set(row.workspaceId, { payerAccountId: row.payerAccountId, billingMode: row.billingMode, payerStatus: row.payerStatus, walletFen, creditUsedFen,
-      overdraftUsedFen, creditRemainingFen, heldFen, balanceFen: walletFen - creditUsedFen - overdraftUsedFen, headroomFen,
+      : headroomFen <= ZERO || overLimit ? "funds" : null;
+    summaries.set(row.workspaceId, { payerAccountId: row.payerAccountId, billingMode: row.billingMode, payerStatus: row.payerStatus, walletFen,
+      creditUsedFen, overdraftUsedFen, overdraftLimitFen, overLimit, creditRemainingFen, heldFen,
+      balanceFen: walletFen - creditUsedFen - overdraftUsedFen, headroomFen,
       arrears: arrearsReason !== null, arrearsReason, asOf: row.asOf });
   }
   return summaries;
@@ -72,7 +79,8 @@ export async function readPayerBalanceSummaries(client: PrismaClient | Prisma.Tr
 export type PendingUsage = { workspaceId: string; billingEventRef: string; meterUnit: string; pendingQuantity: string };
 export type BalanceStatusRequest = { workspaceIds: string[]; pending?: PendingUsage[] };
 export type BalanceStatusEntry = { workspaceId: string; ok: true; billingMode: PayerBalanceSummary["billingMode"]; payerStatus: PayerStatus;
-  balanceFen: string; headroomFen: string; overdraftUsedFen: string; arrears: boolean; arrearsReason: ArrearsReason | null; asOf: string;
+  balanceFen: string; headroomFen: string; overdraftUsedFen: string; overLimit: boolean; arrears: boolean; arrearsReason: ArrearsReason | null;
+  asOf: string;
   /** Only when the request carries `pending`: headroom minus the pending usage at the current price; null when it cannot be priced. */
   headroomAfterPendingFen?: string | null } | { workspaceId: string; ok: false; code: "billing_mode_off" };
 
@@ -145,7 +153,7 @@ export async function balanceStatus(client: PrismaClient, _actor: ServiceActor, 
     const summary = summaries.get(workspaceId);
     if (!summary) return { workspaceId, ok: false, code: "billing_mode_off" };
     return { workspaceId, ok: true, billingMode: summary.billingMode, payerStatus: summary.payerStatus, balanceFen: fenToDecimalString(summary.balanceFen),
-      headroomFen: fenToDecimalString(summary.headroomFen), overdraftUsedFen: fenToDecimalString(summary.overdraftUsedFen),
+      headroomFen: fenToDecimalString(summary.headroomFen), overdraftUsedFen: fenToDecimalString(summary.overdraftUsedFen), overLimit: summary.overLimit,
       arrears: summary.arrears, arrearsReason: summary.arrearsReason, asOf: summary.asOf.toISOString(),
       ...(pendingFen === null ? {} : { headroomAfterPendingFen: headroomAfterPending(summary.headroomFen, pendingFen.get(workspaceId)) }) };
   }) };

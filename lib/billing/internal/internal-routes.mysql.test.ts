@@ -430,9 +430,10 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
     expect(held).toMatchObject({ status: 200, body: { ok: true, mode: "enforce", state: "held", capFen: "200" } });
     expect(await a.billingReservation.findUniqueOrThrow({ where: { id: held.body.reservationId } })).toMatchObject({ admission: "post_delivery" });
     expect(await call("reserve", reserveBody(ids, "pd"), { grantId: settler })).toEqual(refused(409, "idempotency_conflict")); // admission is hashed
-    // No overdraft limit: the delivered work stays held (retryable), it is never released by Core.
+    // No overdraft limit configured: the soft limit never refuses delivered work; the whole charge is recorded as overdraft.
     expect(await call("settle", { idempotencyKey: `idem:pds:${run}`, reservationId: held.body.reservationId, operationRef: `op:pd:${run}`,
-      quantityUsed: "2", evidenceRef: "cdr:synthetic" }, { grantId: settler })).toEqual(refused(422, "insufficient_funds"));
+      quantityUsed: "2", evidenceRef: "cdr:synthetic" }, { grantId: settler })).toMatchObject({ status: 200, body: { ok: true, state: "settled", chargeFen: "200" } });
+    expect(await a.fundsTransaction.count({ where: { payerAccountId: ids.payerRef, kind: "overdraft_draw" } })).toBe(1);
     await expect(a.$executeRaw`UPDATE BillingReservation SET admission = 'standard', version = version + 1 WHERE id = ${held.body.reservationId}`)
       .rejects.toThrow(/billing_reservation_snapshot_immutable/);
   });
