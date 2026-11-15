@@ -5,9 +5,12 @@ import { type Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { grantPlatformFinanceRole } from "../bank-receipts/bank-receipts";
 import { changeCreditFacility, drawCreditShortfallInTransaction, proposeCreditFacility } from "../credit/credit-facilities";
-import { postFundsTransactionInTransaction, recomputeFundsProjection, reverseFundsTransactionInTransaction } from "../funds/funds-journal";
+import { drawOverdraftShortfallInTransaction, postFundsTransactionInTransaction, recomputeFundsProjection,
+  reverseFundsTransactionInTransaction } from "../funds/funds-journal";
 import { changeSpendGrant, createSpendGrant, publishPriceVersion } from "../grants/price-grants";
 import { bindScope, createPayerAccount, revokeBinding } from "../payer/payer-accounts";
+import { readPayerBalanceSummaries } from "../balance/balance-status";
+import { draftPlatformOperation, reviewPlatformOperation } from "../platform/platform-operations";
 import { markUnknown as markUnknownSpend, quote as quoteSpend, release as releaseSpend, type ReleaseReasonCode, reserve as reserveSpend,
   resolveUnknown as resolveSpend, settle as settleSpend } from "./reservations";
 
@@ -482,6 +485,99 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
         : { charge_revenue: fen(700), customer_wallet_available: fen(100000 - 700) });
     }
   });
+  // C-OD: the settle tail beyond wallet and credit is overdrawn within the payer's maker/checker limit (0 = none).
+  const overdrafts = (payerAccountId: string) => a.fundsTransaction.count({ where: { payerAccountId, kind: "overdraft_draw" } });
+  const correct = (payerAccountId: string, amount: number, key: string) => a.$transaction(tx => postFundsTransactionInTransaction(tx, {
+    payerAccountId, kind: "correction", operationKey: key, actor: service, evidenceRef: "correction:synthetic",
+    entries: [{ account: "customer_wallet_available", direction: "debit", amountFen: fen(amount) },
+      { account: "correction_suspense", direction: "credit", amountFen: fen(amount) }] }));
+  async function overdraftLimit(workspaceId: string, from: number, to: number) {
+    const request = { kind: "overdraft_limit" as const, workspaceId, fromLimitFen: String(from), toLimitFen: String(to) };
+    const evidenceRef = `owner-ruling:overdraft-${workspaceId}-${to}`;
+    await draftPlatformOperation(a, { actorUserId: maker, evidenceRef, request });
+    await expect(reviewPlatformOperation(a, { actorUserId: maker, evidenceRef, request, decision: "approve", reviewEvidenceRef: "review:self" }))
+      .rejects.toThrow("platform_operation_forbidden"); // the maker can never approve it
+    return reviewPlatformOperation(a, { actorUserId: checker, evidenceRef, request, decision: "approve", reviewEvidenceRef: "review:limit" });
+  }
+  /** Holds the payer row on a third connection until every settle in `start` waits on it, so they really contend (bounded). */
+  async function contended<T>(payerAccountId: string, start: () => Array<Promise<T>>) {
+    let pending: Array<Promise<T>> = [];
+    await a.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM PayerAccount WHERE id = ${payerAccountId} FOR UPDATE`;
+      pending = start();
+      for (const deadline = Date.now() + 10_000; ;) {
+        const [row] = await a.$queryRaw<Array<{ n: bigint }>>`SELECT COUNT(*) AS n FROM performance_schema.data_lock_waits`;
+        if (Number(row.n) >= pending.length) break;
+        if (Date.now() > deadline) throw new Error("settle_rendezvous_timeout");
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+    }, { timeout: 15_000 });
+    return Promise.all(pending);
+  }
+
+  it("overdraws only the settle tail after wallet and credit, within the limit finance approved; never admits on it", async () => {
+    const ids = await setup("enforce", 100);
+    await credit(ids.payerAccountId, 100);
+    const call = await held(ids, "op:1", 2); // 100 wallet + 100 credit covers the 200 hold
+    await correct(ids.payerAccountId, 50, "corr:half"); // the wallet drops after admission: 150 left for a 200 charge
+    expect(await settle(call.reservationId, "set:1", "2")).toEqual(rejected("insufficient_funds")); // no limit: no overdraft
+    expect(await a.billingReservation.findUniqueOrThrow({ where: { id: call.reservationId } })).toMatchObject({ state: "held" });
+    expect([await draws(ids.payerAccountId), await overdrafts(ids.payerAccountId), await usedFen(ids.payerAccountId)]).toEqual([0, 0, fen(0)]);
+    await expect(draftPlatformOperation(a, { actorUserId: maker, evidenceRef: "owner-ruling:stale", request: { kind: "overdraft_limit",
+      workspaceId: ids.workspaceId, fromLimitFen: "10", toLimitFen: "60" } })).rejects.toThrow("overdraft_limit_conflict");
+    await overdraftLimit(ids.workspaceId, 0, 30);
+    expect(await settle(call.reservationId, "set:1", "2")).toEqual(rejected("insufficient_funds")); // 50 needed > 30 allowed
+    await overdraftLimit(ids.workspaceId, 30, 60);
+    const before = await balances(ids.payerAccountId);
+    const first = await settle(call.reservationId, "set:1", "2");
+    expect(first).toMatchObject({ ok: true, state: "settled", chargeFen: "200" });
+    expect(before).toEqual({ customer_wallet_available: fen(50), topup_clearing: fen(100), correction_suspense: fen(-50) });
+    expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(0), credit_receivable: fen(100),
+      overdraft_receivable: fen(50), charge_revenue: fen(200) }); // wallet 50 -> credit 100 -> overdraft 50
+    const drawn = await a.fundsTransaction.findFirstOrThrow({ where: { payerAccountId: ids.payerAccountId, kind: "overdraft_draw" },
+      include: { entries: { orderBy: { lineNo: "asc" } } } });
+    expect(drawn).toMatchObject({ operationKey: `overdraft-draw:reservation:${call.reservationId}`, createdBy: "SYSTEM:synthetic-metering" });
+    expect(drawn.entries.map(entry => [entry.account, entry.direction, entry.amountFen])).toEqual([
+      ["customer_wallet_available", "credit", fen(50)], ["overdraft_receivable", "debit", fen(50)]]);
+    expect(await settle(call.reservationId, "set:1", "2")).toEqual(first); // a replay never overdraws again
+    expect(await overdrafts(ids.payerAccountId)).toBe(1);
+    const [summary] = (await readPayerBalanceSummaries(a, [ids.workspaceId])).values();
+    expect(summary).toMatchObject({ walletFen: fen(0), creditUsedFen: fen(100), overdraftUsedFen: fen(50), balanceFen: fen(-150),
+      headroomFen: fen(0), arrears: true, arrearsReason: "funds" }); // unused overdraft limit is never headroom
+    expect(await reserve(ids, "op:2", 1)).toEqual(rejected("insufficient_funds"));
+    expect((await a.$transaction(tx => recomputeFundsProjection(tx, ids.payerAccountId))).consistent).toBe(true);
+    // Only settle posts it: never the public path, never reversed, never for a reservation that is not open, never above the limit.
+    await expect(a.$transaction(tx => postFundsTransactionInTransaction(tx, { payerAccountId: ids.payerAccountId, kind: "overdraft_draw",
+      operationKey: "overdraft-draw:free", actor: service, evidenceRef: "e", entries: [{ account: "overdraft_receivable", direction: "debit",
+        amountFen: fen(1) }, { account: "customer_wallet_available", direction: "credit", amountFen: fen(1) }] }))).rejects.toThrow("funds_accounts_not_allowed");
+    await expect(a.$transaction(tx => reverseFundsTransactionInTransaction(tx, { payerAccountId: ids.payerAccountId,
+      originalTransactionId: drawn.id, operationKey: "reverse:od", actor: service, evidenceRef: "e" }))).rejects.toThrow("funds_reversal_invalid");
+    await expect(a.$transaction(tx => drawOverdraftShortfallInTransaction(tx, { payerAccountId: ids.payerAccountId,
+      reservationId: call.reservationId, chargeFen: fen(1), actor: service }))).rejects.toThrow("funds_input_invalid");
+    await expect(a.$executeRaw`UPDATE FundsAccountProjection SET balanceFen = 61, version = version + 1
+      WHERE payerAccountId = ${ids.payerAccountId} AND account = 'overdraft_receivable'`).rejects.toThrow(/funds_overdraft_limit_exceeded/);
+    await expect(a.$executeRaw`UPDATE PayerAccount SET overdraftLimitFen = -1 WHERE id = ${ids.payerAccountId}`).rejects.toThrow();
+  });
+  it("lets only the in-limit share of two contending settle tails overdraw, and settles one reservation once", async () => {
+    const ids = await setup("enforce", 200);
+    const one = await held(ids, "op:1", 1), two = await held(ids, "op:2", 1);
+    await correct(ids.payerAccountId, 200, "corr:all"); // both 100 tails now need overdraft; the limit covers one
+    await overdraftLimit(ids.workspaceId, 0, 100);
+    const pair = await contended(ids.payerAccountId, () => [settle(one.reservationId, "set:1", "1", "e", 0), settle(two.reservationId, "set:2", "1", "e", 1)]);
+    expect(pair.filter(result => result.ok)).toHaveLength(1);
+    expect(pair).toContainEqual(rejected("insufficient_funds"));
+    expect(await overdrafts(ids.payerAccountId)).toBe(1);
+    expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(0), overdraft_receivable: fen(100), charge_revenue: fen(100) });
+    const open = pair[0].ok ? two : one;
+    await overdraftLimit(ids.workspaceId, 100, 300);
+    const twice = await contended(ids.payerAccountId, () => [settle(open.reservationId, "set:a", "1", "e", 0),
+      settle(open.reservationId, "set:b", "1", "e", 1)]);
+    expect(twice.filter(result => result.ok)).toHaveLength(1);
+    expect(twice).toContainEqual(rejected("reservation_state_conflict"));
+    expect(await overdrafts(ids.payerAccountId)).toBe(2);
+    expect(await balances(ids.payerAccountId)).toMatchObject({ customer_wallet_available: fen(0), overdraft_receivable: fen(200), charge_revenue: fen(200) });
+    expect((await a.$transaction(tx => recomputeFundsProjection(tx, ids.payerAccountId))).consistent).toBe(true);
+  });
   // #528 review P1-1: the payer comes from the declared workspace's current binding, resolved under the PayerAccount lock.
   const reservation = (id: string) => a.billingReservation.findUniqueOrThrow({ where: { id } });
   it("reserves only for the payer the declared workspace is bound to now and freezes that binding", async () => {
@@ -573,6 +669,6 @@ describe.skipIf(!url)("budget buckets and reservations against MySQL", () => {
     expect(await guard("20261110_rollback_billing_funds_journal.sql")).toBe(1);
     const [kind] = await a.$queryRaw<Array<{ type: string }>>`SELECT COLUMN_TYPE AS type FROM information_schema.COLUMNS
       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'FundsTransaction' AND COLUMN_NAME = 'kind'`;
-    expect(kind.type).toBe("enum('topup','correction','bank_topup','charge','credit_draw')");
+    expect(kind.type).toBe("enum('topup','correction','bank_topup','charge','credit_draw','overdraft_draw')");
   });
 });

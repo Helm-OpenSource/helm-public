@@ -31,6 +31,12 @@ CLI `npm run billing:platform-ops` (`lib/billing/platform/platform-batch.ts`); n
 - `billing_mode { workspaceId, fromMode, toMode }`: any step between two distinct modes of `off | shadow | enforce`. Approval locks the
   payer and updates it with the expected old mode in the UPDATE's own WHERE (CAS); a mode changed since the draft refuses
   `billing_mode_conflict` and leaves the draft pending (reject it and draft again). `version + 1` on success.
+- `overdraft_limit { workspaceId, fromLimitFen, toLimitFen }` (C-OD): sets the payer's `overdraftLimitFen`, the bound on
+  outstanding settle-tail overdraft (decimal fen strings, 0 to the fen bound, `from != to`). Every payer starts at 0 (no overdraft;
+  there is no default amount, the owner sets it per payer). Approval is a CAS on the expected old limit (`overdraft_limit_conflict`,
+  also at draft); audit `BILLING_PAYER_OVERDRAFT_LIMIT_CHANGED`. Lowering it below what is already overdrawn is allowed and only
+  stops further overdraft. Batch entries: `{ "kind": "overdraft_limit", "workspaceId", "fromLimitFen", "toLimitFen" }`; the dry
+  run shows `currentOverdraftLimitFen`.
 - **Enforce** (owner 11-12: skip shadow, `off -> enforce` is the main path): any step to `enforce` needs `--confirm-enforce` on both
   draft and approval (`platform_enforce_not_confirmed`). Approval also requires exactly one grant per billing event and meter unit
   that quote would use (active, inside its validity, on a price inside its effective window, at DB time; `enforce_grant_not_ready`) and headroom = wallet + undrawn credit - held/unknown enforce reservations > 0

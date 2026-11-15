@@ -187,7 +187,9 @@ export async function availableCreditFen(tx: Prisma.TransactionClient, payerAcco
   return payer.status === "active" && remaining > ZERO ? remaining : ZERO; // held settles may leave usedFen > limitFen
 }
 
-export type DrawCreditShortfallInput = { payerAccountId: string; chargeFen: bigint; sourceRef: string; actor: FundsActor; reservedAt: Date };
+export type DrawCreditShortfallInput = { payerAccountId: string; chargeFen: bigint; sourceRef: string; actor: FundsActor; reservedAt: Date;
+  /** C-OD settle only: borrow what the facility can still give (possibly 0) instead of refusing; settle overdraws the rest. */
+  upToAvailable?: boolean };
 export type CreditShortfallDraw = { borrowedFen: bigint; facilityId: string | null; fundsTransactionId: string | null;
   walletCovered: boolean; replayed: boolean };
 const FACILITY_PREFIX = "credit-facility:";
@@ -202,6 +204,7 @@ const FACILITY_PREFIX = "credit-facility:";
  * §3); any other sourceRef is a free-standing draw and needs an active payer. A future `reservedAt` refuses. Key
  * `credit-draw:<sourceRef>` returns a recorded draw (larger than the charge refuses); a wallet-covered settle wrote nothing, so
  * settle never calls this on a replay.
+ * With `upToAvailable` (C-OD settle) a missing, closed or exhausted facility lends what it can (possibly 0) instead of refusing.
  * Lock order: PayerAccount -> BillingReservation (share; settle already holds it) -> FundsTransaction (share) -> CreditFacility
  * -> wallet projection -> journal posting.
  */
@@ -236,20 +239,27 @@ export async function drawCreditShortfallInTransaction(tx: Prisma.TransactionCli
     WHERE payerAccountId = ${input.payerAccountId} AND account = 'customer_wallet_available' FOR UPDATE`;
   const shortfall = input.chargeFen - (wallet ? BigInt(wallet.balanceFen) : ZERO);
   if (shortfall <= ZERO) return { borrowedFen: ZERO, facilityId: null, fundsTransactionId: null, walletCovered: true, replayed: false };
-  if (!facility || facility.approvedLimitFen === null || (!held && !facility.inTerm)) refuse("credit_not_active");
+  const none = { borrowedFen: ZERO, facilityId: null, fundsTransactionId: null, walletCovered: false, replayed: false };
+  if (!facility || facility.approvedLimitFen === null || (!held && !facility.inTerm)) {
+    if (input.upToAvailable) return none;
+    refuse("credit_not_active");
+  }
   // Tightened after reservedAt: only possible for the facility that was drawable then; it falls back to the approved cap.
   const tightened = (facility.state !== "active" && facility.state !== "reduced") || !facility.inTerm ||
     (facility.lastReducedAt !== null && facility.lastReducedAt > input.reservedAt);
   const cap = tightened ? facility.approvedLimitFen : facility.limitFen;
-  if (facility.usedFen + shortfall > cap) refuse("credit_insufficient");
+  const left = cap - facility.usedFen;
+  const borrow = input.upToAvailable && shortfall > left ? left : shortfall;
+  if (input.upToAvailable && borrow <= ZERO) return none;
+  if (facility.usedFen + borrow > cap) refuse("credit_insufficient");
   // Guarded by its own predicate under the row lock; `version` stays (it versions configuration, not usage).
-  const changed = await tx.$executeRaw`UPDATE CreditFacility SET usedFen = usedFen + ${shortfall}, updatedAt = UTC_TIMESTAMP(3)
-    WHERE id = ${facility.id} AND usedFen + ${shortfall} <= ${cap} AND usedFen + ${shortfall} <= approvedLimitFen`;
+  const changed = await tx.$executeRaw`UPDATE CreditFacility SET usedFen = usedFen + ${borrow}, updatedAt = UTC_TIMESTAMP(3)
+    WHERE id = ${facility.id} AND usedFen + ${borrow} <= ${cap} AND usedFen + ${borrow} <= approvedLimitFen`;
   if (changed !== 1) refuse("credit_insufficient");
   const posted = await postCreditDrawFundsInTransaction(tx, { payerAccountId: input.payerAccountId, kind: "credit_draw", operationKey,
     actor: input.actor, evidenceRef: `${FACILITY_PREFIX}${facility.id}`,
-    entries: [{ account: "credit_receivable", direction: "debit", amountFen: shortfall },
-      { account: "customer_wallet_available", direction: "credit", amountFen: shortfall }] });
+    entries: [{ account: "credit_receivable", direction: "debit", amountFen: borrow },
+      { account: "customer_wallet_available", direction: "credit", amountFen: borrow }] });
   if (posted.replayed) refuse("credit_write_conflict"); // checked absent above under the same locks
-  return { borrowedFen: shortfall, facilityId: facility.id, fundsTransactionId: posted.transaction.id, walletCovered: false, replayed: false };
+  return { borrowedFen: borrow, facilityId: facility.id, fundsTransactionId: posted.transaction.id, walletCovered: false, replayed: false };
 }

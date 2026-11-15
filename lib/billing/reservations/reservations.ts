@@ -2,7 +2,8 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { availableCreditFen, CreditFacilityRefusal, drawCreditShortfallInTransaction } from "../credit/credit-facilities";
-import { chargeOperationKey, FundsRefusal, postFundsTransactionInTransaction, settleDrawSourceRef } from "../funds/funds-journal";
+import { chargeOperationKey, drawOverdraftShortfallInTransaction, FundsRefusal, postFundsTransactionInTransaction,
+  settleDrawSourceRef } from "../funds/funds-journal";
 import { MAX_FEN } from "../funds/money";
 import { resolvePayerForWorkspaceInTransaction } from "../payer/payer-accounts";
 import { type BillingPeriodKeys, chargeFenForQuantity, lockSpendGrantForUseInTransaction, SpendGrantRefusal,
@@ -33,7 +34,9 @@ const GRANT_REJECTS: Partial<Record<SpendGrantRefusalCode, BillingRejectCode>> =
   grant_charge_zero: "grant_charge_zero", grant_input_invalid: "request_invalid", price_input_invalid: "request_invalid",
   price_amount_out_of_range: "request_invalid",
 };
+// C-OD: a settle tail beyond the payer's overdraft limit is insufficient_funds too (the reservation stays held, v3.5 §3).
 const FUNDS_REJECTS: Partial<Record<FundsRefusal["code"], BillingRejectCode>> = { funds_insufficient: "insufficient_funds",
+  funds_overdraft_limit_exceeded: "insufficient_funds",
   payer_billing_off: "billing_mode_off", payer_account_unavailable: "grant_not_active", funds_write_conflict: "core_unavailable" };
 // A settle shortfall the credit line cannot cover is insufficient_funds (retryable, never a release; protocol v3.5 §3).
 const CREDIT_REJECTS: Partial<Record<CreditFacilityRefusal["code"], BillingRejectCode>> = { credit_insufficient: "insufficient_funds",
@@ -329,8 +332,9 @@ export type SettleRequest = { idempotencyKey: string; reservationId: string; ope
  * held|unknown -> settled, exactly once. The charge is repriced from the frozen price row for `quantityUsed` (<= the reserved
  * quantity, so <= capFen), moves from reserved to settled in the reservation's frozen-period buckets (not settle time), posts a
  * balanced `charge` funds transaction (wallet debit, charge revenue credit; its audit and funds outbox) and a charge outbox row,
- * all in this transaction. An enforce wallet shortfall is first borrowed from credit (S3-w). A refusal (e.g. wallet corrected
- * below the hold and no credit left) leaves the reservation held.
+ * all in this transaction. An enforce wallet shortfall is first borrowed from credit (S3-w) as far as the facility allows, and
+ * what is still missing is overdrawn within the payer's overdraft limit (C-OD; limit 0 = none). A refusal (e.g. wallet corrected
+ * below the hold, no credit and no overdraft left) leaves the reservation held.
  */
 export async function settleInTransaction(tx: Prisma.TransactionClient, actor: ServiceActor, req: SettleRequest) {
   return settleFrom(tx, actor, req, false);
@@ -362,10 +366,16 @@ async function settleFrom(tx: Prisma.TransactionClient, actor: ServiceActor, req
   }
   // Shadow records the would-be charge only, and a 0-fen settle (smaller quantity, v3.5) has nothing to post: no draw, no funds.
   const posting = reservation.billingMode === "enforce" && chargeFen > ZERO;
-  // Owner v3: the wallet pays first and only the shortfall is borrowed (none when the wallet covers it), then the wallet is
-  // charged in full. Bound to this locked reservation and its frozen reservedAt; a replay returned above and never draws again.
-  if (posting) await drawCreditShortfallInTransaction(tx, { payerAccountId: reservation.payerAccountId, chargeFen,
-    sourceRef: settleDrawSourceRef(reservation.id), actor, reservedAt: reservation.reservedAt });
+  // Owner v3: the wallet pays first, then credit lends what it can of the shortfall, then (C-OD, design §1.3) the rest is
+  // overdrawn within the payer's limit; the wallet is then charged in full and never goes negative. Admission is unchanged:
+  // reserve still requires wallet + credit to cover the hold, so overdraft only absorbs a tail found at settle. Bound to this
+  // locked reservation and its frozen reservedAt; a replay returned above and never draws again.
+  if (posting) {
+    await drawCreditShortfallInTransaction(tx, { payerAccountId: reservation.payerAccountId, chargeFen,
+      sourceRef: settleDrawSourceRef(reservation.id), actor, reservedAt: reservation.reservedAt, upToAvailable: true });
+    await drawOverdraftShortfallInTransaction(tx, { payerAccountId: reservation.payerAccountId, reservationId: reservation.id,
+      chargeFen, actor });
+  }
   const funds = !posting ? null : await postFundsTransactionInTransaction(tx, {
     payerAccountId: reservation.payerAccountId, kind: "charge", operationKey: chargeOperationKey(reservation.id), actor,
     evidenceRef: req.evidenceRef, entries: [{ account: "customer_wallet_available", direction: "debit", amountFen: chargeFen },

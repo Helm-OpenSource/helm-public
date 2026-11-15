@@ -71,7 +71,8 @@ request, the response body is the library result `{ ok: true, ... }` or `{ ok: f
   closed facility's draws still count); `headroomFen = wallet + creditRemaining - held` is the reserve admission formula
   (remaining credit of the drawable, in-term facility, 0 for a payer that is not active; held = enforce `held`/`unknown`
   reservations). `headroomFen` includes remaining credit: a stop/go input only, clients must never display it as a balance.
-  `overdraftUsedFen` is always `"0"` until the overdraft slice adds its account. `payerStatus` is the PayerAccount status
+  `overdraftUsedFen` is the `overdraft_receivable` projection (C-OD settle tails); the unused overdraft limit is never headroom,
+  so a payer living on overdraft is in arrears. `payerStatus` is the PayerAccount status
   (`active|suspended|closed`); numbers are returned in every mode and status, `off` included.
   **`arrears`** is the one boolean callers gate on (only for `billingMode: "enforce"`), with two causes in `arrearsReason`:
   `funds` when `headroomFen <= 0` (Q8), `payer_inactive` when an enforce payer is suspended or closed (coordinator 11-12: Core

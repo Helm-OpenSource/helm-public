@@ -4,6 +4,7 @@ import { ActorType, Prisma, type PlatformBillingOperation, type PrismaClient } f
 import { writeAuditLog } from "@/lib/audit";
 import { findPlatformFinanceActorInTransaction, type PlatformFinanceRoleName } from "../bank-receipts/bank-receipts";
 import { availableCreditFen } from "../credit/credit-facilities";
+import { MAX_FEN } from "../funds/money";
 import { changeSpendGrantInTransaction, createSpendGrantInTransaction, normalizePriceVersion,
   publishPriceVersionInTransaction } from "../grants/price-grants";
 
@@ -14,11 +15,15 @@ import { changeSpendGrantInTransaction, createSpendGrantInTransaction, normalize
  * Lock order: finance grant + reserved Membership (share) -> PayerAccount FOR UPDATE -> PlatformBillingOperation FOR UPDATE ->
  * PayerScopeBinding (share). Switching to `enforce` is not enablement: real charging has separate prerequisites (docs).
  * E1b adds `price_publish` (append a price version; never 0) and `spend_grant` (create -> set_limits -> activate on approval).
+ * C-OD adds `overdraft_limit`: a CAS on the payer's overdraft limit (fen; 0 = no overdraft, the default and the only value a payer
+ * has until finance approves one). Lowering it below what is already overdrawn is allowed: it only stops further overdraft.
  */
 export type PlatformBillingMode = "off" | "shadow" | "enforce";
 export type PlatformOperationRequest =
   | { kind: "payer_onboard"; workspaceId: string; contractSubjectRef: string }
   | { kind: "billing_mode"; workspaceId: string; fromMode: PlatformBillingMode; toMode: PlatformBillingMode }
+  /** Decimal fen strings; `fromLimitFen` must equal the current limit (CAS), as `fromMode` does. */
+  | { kind: "overdraft_limit"; workspaceId: string; fromLimitFen: string; toLimitFen: string }
   /** Amounts are decimal strings (JSON has no BigInt), times ISO-8601 UTC. `priceLabel` is part of the reviewed content. */
   | { kind: "price_publish"; productCode: string; version: number; billingEventRef: string; meterUnit: string; acceptanceRef: string;
       unitPriceFenNumerator: string; unitPriceDenominator: string; effectiveFrom: string; effectiveUntil: string | null;
@@ -32,7 +37,8 @@ export type PlatformOperationRefusalCode = "platform_operation_input_invalid" | 
   "platform_operation_self_review_forbidden" | "platform_operation_conflict" | "platform_operation_unavailable" |
   "platform_operation_not_pending" | "platform_enforce_not_confirmed" | "platform_write_conflict" | "billing_mode_conflict" |
   "workspace_unavailable" | "payer_scope_already_bound" | "payer_unresolved" | "enforce_grant_not_ready" | "enforce_headroom_insufficient" |
-  "price_zero_refused" | "price_version_unavailable" | "grant_active_exists" | "platform_operation_stale_replay";
+  "price_zero_refused" | "price_version_unavailable" | "grant_active_exists" | "platform_operation_stale_replay" |
+  "overdraft_limit_conflict";
 
 export class PlatformOperationRefusal extends Error {
   constructor(readonly code: PlatformOperationRefusalCode) { super(code); this.name = "PlatformOperationRefusal"; }
@@ -101,12 +107,23 @@ export function normalizePlatformOperation(evidenceRef: unknown, request: Platfo
     }
     canonical = { kind: request.kind, workspaceId: request.workspaceId, fromMode: request.fromMode, toMode: request.toMode };
     identity = { workspaceId: canonical.workspaceId, step: `${canonical.fromMode}>${canonical.toMode}` };
+  } else if (request.kind === "overdraft_limit") {
+    digits(request.fromLimitFen); digits(request.toLimitFen);
+    if (request.fromLimitFen === request.toLimitFen || BigInt(request.toLimitFen) > MAX_FEN) refuse("platform_operation_input_invalid");
+    canonical = { kind: request.kind, workspaceId: request.workspaceId, fromLimitFen: request.fromLimitFen, toLimitFen: request.toLimitFen };
+    identity = { workspaceId: canonical.workspaceId, step: `overdraft:${canonical.fromLimitFen}>${canonical.toLimitFen}` };
   } else refuse("platform_operation_input_invalid");
   const key = sha256({ v: 1, evidenceRef, kind: canonical.kind, ...identity }).slice(0, 40);
   return { evidenceRef, request: canonical, operationKey: `pbo:${canonical.kind}:${key}`,
     contentHash: sha256({ v: 1, evidenceRef, ...canonical }) };
 }
 const isEnforce = (request: PlatformOperationRequest) => request.kind === "billing_mode" && request.toMode === "enforce";
+/** A replay of an applied mode or limit step must not report success once the payer has moved on (e.g. a second rollback). */
+async function staleStep(tx: Prisma.TransactionClient, request: PlatformOperationRequest) {
+  if (request.kind === "billing_mode") return (await activeBinding(tx, request.workspaceId))?.billingMode !== request.toMode;
+  if (request.kind === "overdraft_limit") return (await activeBinding(tx, request.workspaceId))?.overdraftLimitFen !== request.toLimitFen;
+  return false;
+}
 
 function run<T>(client: PrismaClient, body: (tx: Prisma.TransactionClient) => Promise<T>) {
   // No automatic retry: a conflicting writer re-reads and decides again (a re-run replays what already committed).
@@ -129,8 +146,8 @@ async function assertTargetWorkspace(tx: Prisma.TransactionClient, workspaceId: 
   if (!row || row.status !== "ACTIVE" || row.workspaceClass === "HELM_RESERVED") refuse("workspace_unavailable");
 }
 async function activeBinding(tx: Prisma.TransactionClient, workspaceId: string) {
-  const [row] = await tx.$queryRaw<Array<{ id: string; payerAccountId: string; billingMode: PlatformBillingMode }>>`
-    SELECT b.id, b.payerAccountId, a.billingMode FROM PayerScopeBinding b JOIN PayerAccount a ON a.id = b.payerAccountId
+  const [row] = await tx.$queryRaw<Array<{ id: string; payerAccountId: string; billingMode: PlatformBillingMode; overdraftLimitFen: string }>>`
+    SELECT b.id, b.payerAccountId, a.billingMode, CAST(a.overdraftLimitFen AS CHAR) AS overdraftLimitFen FROM PayerScopeBinding b JOIN PayerAccount a ON a.id = b.payerAccountId
     WHERE b.scopeKind = 'workspace' AND b.state = 'active' AND b.activeScopeRef = ${workspaceId} FOR SHARE OF b`;
   return row ?? null;
 }
@@ -159,9 +176,7 @@ export async function draftPlatformOperation(client: PrismaClient, input: DraftP
     const existing = await lockOperation(tx, op.operationKey);
     if (existing) {
       if (existing.contentHash !== op.contentHash) refuse("platform_operation_conflict");
-      // A mode step already taken under this ruling must not report success once the mode has moved on (e.g. a second rollback).
-      if (op.request.kind === "billing_mode" && existing.state === "applied" &&
-          (await activeBinding(tx, op.request.workspaceId))?.billingMode !== op.request.toMode) refuse("platform_operation_stale_replay");
+      if (existing.state === "applied" && await staleStep(tx, op.request)) refuse("platform_operation_stale_replay");
       return { operation: existing, replayed: true };
     }
     const { request } = op;
@@ -174,6 +189,7 @@ export async function draftPlatformOperation(client: PrismaClient, input: DraftP
       if (request.kind === "payer_onboard" && binding) refuse("payer_scope_already_bound");
       if (request.kind !== "payer_onboard" && !binding) refuse("payer_unresolved");
       if (request.kind === "billing_mode" && binding!.billingMode !== request.fromMode) refuse("billing_mode_conflict");
+      if (request.kind === "overdraft_limit" && binding!.overdraftLimitFen !== request.fromLimitFen) refuse("overdraft_limit_conflict");
       payerAccountId = request.kind === "payer_onboard" ? null : binding!.payerAccountId;
     }
     const operation = await tx.platformBillingOperation.create({ data: { kind: request.kind, operationKey: op.operationKey,
@@ -208,8 +224,7 @@ export async function reviewPlatformOperation(client: PrismaClient, input: Revie
     if (!row) refuse("platform_operation_unavailable");
     if (row.contentHash !== op.contentHash) refuse("platform_operation_conflict");
     if (row.state === (approve ? "applied" : "rejected") && row.reviewedByUserId === input.actorUserId) {
-      if (approve && op.request.kind === "billing_mode" &&
-          (await activeBinding(tx, op.request.workspaceId))?.billingMode !== op.request.toMode) refuse("platform_operation_stale_replay");
+      if (approve && await staleStep(tx, op.request)) refuse("platform_operation_stale_replay");
       return { operation: row, replayed: true };
     }
     if (row.state !== "drafted") refuse("platform_operation_not_pending");
@@ -250,6 +265,15 @@ async function applyInTransaction(tx: Prisma.TransactionClient, request: Platfor
   }
   if (!binding || binding.payerAccountId !== row.payerAccountId) refuse("payer_unresolved");
   if (request.kind === "spend_grant") return openSpendGrant(tx, request, row, binding.payerAccountId, actorUserId);
+  if (request.kind === "overdraft_limit") {
+    // CAS on the expected old limit in the UPDATE's own WHERE (the payer row is locked FOR UPDATE above); the CHECK bounds the value.
+    const changed = await tx.$executeRaw`UPDATE PayerAccount SET overdraftLimitFen = ${BigInt(request.toLimitFen)}, version = version + 1,
+      updatedAt = CURRENT_TIMESTAMP(3) WHERE id = ${binding.payerAccountId} AND overdraftLimitFen = ${BigInt(request.fromLimitFen)}`;
+    if (changed !== 1) refuse("overdraft_limit_conflict");
+    await audit(tx, [request.workspaceId], actorUserId, "BILLING_PAYER_OVERDRAFT_LIMIT_CHANGED", { type: "PayerAccount", id: binding.payerAccountId },
+      { from: request.fromLimitFen, to: request.toLimitFen, platformOperationId: row.id, evidenceRef: row.evidenceRef });
+    return binding.payerAccountId;
+  }
   if (request.toMode === "enforce") await assertEnforceReady(tx, binding.payerAccountId);
   // CAS: the expected old mode stays in the UPDATE's own WHERE (the payer row is already locked FOR UPDATE above).
   const changed = await tx.$executeRaw`UPDATE PayerAccount SET billingMode = ${request.toMode}, version = version + 1,

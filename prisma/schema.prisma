@@ -1964,6 +1964,8 @@ model PayerAccount {
   currency             String              @default("CNY") @db.VarChar(3)
   billingMode          PayerBillingMode    @default(off)
   status               PayerAccountStatus  @default(active)
+  // C-OD: bound on outstanding overdraft (fen); 0 = no overdraft. Written only by an approved platform `overdraft_limit` operation.
+  overdraftLimitFen    BigInt              @default(0)
   version              Int                 @default(1)
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
@@ -2003,6 +2005,7 @@ enum FundsTransactionKind {
   bank_topup // S2-c
   charge // S3-b2 (the DB ENUM also holds S3-e's credit_draw from the agreed-union MODIFY; S3-e adds it here)
   credit_draw // S3-e
+  overdraft_draw // C-OD
 }
 
 enum FundsAccount {
@@ -2012,6 +2015,7 @@ enum FundsAccount {
   bank_clearing // S2-c
   charge_revenue // S3-b2 (DB ENUM also holds S3-e's credit_receivable; S3-e adds it here)
   credit_receivable // S3-e
+  overdraft_receivable // C-OD
 }
 
 enum FundsEntryDirection {

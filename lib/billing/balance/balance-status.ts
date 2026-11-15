@@ -16,7 +16,8 @@ import type { BillingRejectCode, ServiceActor } from "../reservations/reservatio
  *   headroom at or below zero), "payer_inactive" when an enforce payer is suspended or closed (coordinator 11-12): Core
  *   refuses its new reserves, so work would run unbilled. payer_inactive wins when both hold; null when not in arrears.
  * creditUsed is the credit_receivable projection, so a revoked or expired facility's outstanding draws still count.
- * overdraftUsed is always 0 until the overdraft slice (C-OD) adds its account; the field is reserved in the response now.
+ * overdraftUsed is the overdraft_receivable projection (C-OD settle tails). Overdraft is never headroom: the unused part of a
+ * payer's overdraft limit does not admit new work, so a payer living on overdraft is in arrears (owner 11-11 18:03).
  */
 export const BALANCE_STATUS_MAX_WORKSPACES = 50;
 export type PayerStatus = "active" | "suspended" | "closed"; // PayerAccount.status ENUM
@@ -28,7 +29,7 @@ export type PayerBalanceSummary = { billingMode: "off" | "shadow" | "enforce"; p
 const ZERO = BigInt(0);
 const REF = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,190}$/;
 type Row = { workspaceId: string; billingMode: PayerBalanceSummary["billingMode"]; payerStatus: PayerStatus; walletFen: bigint | null;
-  creditUsedFen: bigint | null; creditRemainingFen: bigint | null; heldFen: bigint; asOf: Date };
+  creditUsedFen: bigint | null; overdraftUsedFen: bigint | null; creditRemainingFen: bigint | null; heldFen: bigint; asOf: Date };
 
 /**
  * Summaries keyed by workspace id for the workspaces with exactly one active binding (others are absent: not billed). The
@@ -40,6 +41,7 @@ export async function readPayerBalanceSummaries(client: PrismaClient | Prisma.Tr
   const rows = await client.$queryRaw<Row[]>`SELECT b.scopeRef AS workspaceId, p.billingMode, p.status AS payerStatus,
       (SELECT w.balanceFen FROM FundsAccountProjection w WHERE w.payerAccountId = p.id AND w.account = 'customer_wallet_available') AS walletFen,
       (SELECT r.balanceFen FROM FundsAccountProjection r WHERE r.payerAccountId = p.id AND r.account = 'credit_receivable') AS creditUsedFen,
+      (SELECT o.balanceFen FROM FundsAccountProjection o WHERE o.payerAccountId = p.id AND o.account = 'overdraft_receivable') AS overdraftUsedFen,
       (SELECT IF(p.status = 'active' AND (f.validUntil IS NULL OR f.validUntil > UTC_TIMESTAMP(3)), GREATEST(f.limitFen - f.usedFen, 0), 0)
         FROM CreditFacility f WHERE f.activePayerAccountId = p.id ORDER BY f.activatedAt DESC LIMIT 1) AS creditRemainingFen,
       (SELECT CAST(COALESCE(SUM(h.chargeFen), 0) AS SIGNED) FROM BillingReservation h
@@ -52,7 +54,8 @@ export async function readPayerBalanceSummaries(client: PrismaClient | Prisma.Tr
     // Mirrors resolvePayerForWorkspaceInTransaction's byte-exact check; unreachable today (activeScopeRef is utf8mb4_bin and
     // REF admits no trailing space), kept so the two resolvers cannot drift apart.
     if (!workspaceIds.includes(row.workspaceId)) continue;
-    const walletFen = BigInt(row.walletFen ?? ZERO), creditUsedFen = BigInt(row.creditUsedFen ?? ZERO), overdraftUsedFen = ZERO;
+    const walletFen = BigInt(row.walletFen ?? ZERO), creditUsedFen = BigInt(row.creditUsedFen ?? ZERO);
+    const overdraftUsedFen = BigInt(row.overdraftUsedFen ?? ZERO);
     const creditRemainingFen = BigInt(row.creditRemainingFen ?? ZERO), heldFen = BigInt(row.heldFen);
     const headroomFen = walletFen + creditRemainingFen - heldFen;
     const arrearsReason: ArrearsReason | null = row.billingMode === "enforce" && row.payerStatus !== "active" ? "payer_inactive"
