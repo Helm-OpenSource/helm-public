@@ -2,7 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { availableCreditFen, CreditFacilityRefusal, drawCreditShortfallInTransaction } from "../credit/credit-facilities";
-import { chargeOperationKey, drawOverdraftShortfallInTransaction, FundsRefusal, postFundsTransactionInTransaction,
+import { chargeOperationKey, claimOverdraftChannel, FundsRefusal, postFundsTransactionInTransaction,
   settleDrawSourceRef } from "../funds/funds-journal";
 import { MAX_FEN } from "../funds/money";
 import { resolvePayerForWorkspaceInTransaction } from "../payer/payer-accounts";
@@ -59,6 +59,8 @@ export async function asBillingResult<T extends object>(work: Promise<T>): Promi
 }
 
 const ZERO = BigInt(0);
+// C-OD: this module holds the only overdraft posting channel (funds-journal.ts); claimed once, at load.
+const drawOverdraftShortfall = claimOverdraftChannel();
 const RELEASE_REASONS = ["not_executed", "failed", "partial_unusable"] as const;
 export type ReleaseReasonCode = (typeof RELEASE_REASONS)[number];
 /** The authenticated service identity (BillingServiceGrant in S3-b3); never a user. */
@@ -384,7 +386,7 @@ async function settleFrom(tx: Prisma.TransactionClient, actor: ServiceActor, req
     const postDelivery = reservation.admission === "post_delivery";
     await drawCreditShortfallInTransaction(tx, { payerAccountId: reservation.payerAccountId, chargeFen,
       sourceRef: settleDrawSourceRef(reservation.id), actor, reservedAt: reservation.reservedAt, upToAvailable: postDelivery });
-    if (postDelivery) await drawOverdraftShortfallInTransaction(tx, { payerAccountId: reservation.payerAccountId,
+    if (postDelivery) await drawOverdraftShortfall(tx, { payerAccountId: reservation.payerAccountId,
       reservationId: reservation.id, chargeFen, actor });
   }
   const funds = !posting ? null : await postFundsTransactionInTransaction(tx, {

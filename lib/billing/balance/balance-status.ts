@@ -9,14 +9,15 @@ import type { BillingRejectCode, ServiceActor } from "../reservations/reservatio
  * wholly before or wholly after) and no reserve or settle ever waits on it. Integer fen:
  * - balance = wallet - creditUsed - overdraftUsed (may be negative; the one number shown to customers). headroom includes
  *   remaining credit and is a stop/go input only: clients must never display it as a balance;
- * - headroom = wallet + creditRemaining + overdraftRemaining - held: creditRemaining is max(0, limit - used) of the drawable,
- *   in-term facility and 0 for a payer that is not active (credit-facilities.ts availableCreditFen); overdraftRemaining (C-OD)
- *   is max(0, overdraftLimitFen - overdraftUsed), never negative, so an overdraft over its soft limit adds 0 and never eats
- *   wallet or credit; held is enforce held/unknown reservations. Standard reserve admission still uses wallet + credit - held;
- *   overdraft room serves post-delivery work, which reserve admits without a funds check;
+ * - headroom = wallet + creditRemaining - held, the reserve admission formula (reservations.ts reserveInTransaction with
+ *   credit-facilities.ts availableCreditFen): creditRemaining is max(0, limit - used) of the drawable, in-term facility and 0
+ *   for a payer that is not active; held is enforce held/unknown reservations;
+ * - overdraftRoom (C-OD) = max(0, overdraftLimitFen - overdraftUsed): what post-delivery work may still overdraw. Never negative,
+ *   so an overdraft over its soft limit never eats wallet or credit; reported separately, never part of headroom;
  * - overLimit (C-OD, Q9): overdraftUsed > overdraftLimitFen (with no limit configured, any overdraft at all);
  * - arrears: stop new billable work. Two causes, reported as arrearsReason: "funds" when headroom <= 0 (Q8: effective
- *   headroom at or below zero) or overLimit (Q9: stop at once), "payer_inactive" when an enforce payer is suspended or closed (coordinator 11-12): Core
+ *   headroom + overdraftRoom at or below zero; owner ruling: overdraw up to the limit, then stop) or overLimit (Q9: stop at
+ *   once), "payer_inactive" when an enforce payer is suspended or closed (coordinator 11-12): Core
  *   refuses its new reserves, so work would run unbilled. payer_inactive wins when both hold; null when not in arrears.
  * creditUsed is the credit_receivable projection, so a revoked or expired facility's outstanding draws still count.
  * overdraftUsed is the overdraft_receivable projection (C-OD post-delivery settle tails).
@@ -25,7 +26,7 @@ export const BALANCE_STATUS_MAX_WORKSPACES = 50;
 export type PayerStatus = "active" | "suspended" | "closed"; // PayerAccount.status ENUM
 export type ArrearsReason = "funds" | "payer_inactive";
 export type PayerBalanceSummary = { billingMode: "off" | "shadow" | "enforce"; payerStatus: PayerStatus; walletFen: bigint; creditUsedFen: bigint;
-  overdraftUsedFen: bigint; overdraftLimitFen: bigint; overLimit: boolean; creditRemainingFen: bigint; heldFen: bigint; balanceFen: bigint;
+  overdraftUsedFen: bigint; overdraftLimitFen: bigint; overdraftRoomFen: bigint; overLimit: boolean; creditRemainingFen: bigint; heldFen: bigint; balanceFen: bigint;
   headroomFen: bigint; arrears: boolean;
   arrearsReason: ArrearsReason | null; asOf: Date };
 
@@ -61,12 +62,12 @@ export async function readPayerBalanceSummaries(client: PrismaClient | Prisma.Tr
     const overdraftUsedFen = BigInt(row.overdraftUsedFen ?? ZERO);
     const creditRemainingFen = BigInt(row.creditRemainingFen ?? ZERO), heldFen = BigInt(row.heldFen);
     const overdraftLimitFen = BigInt(row.overdraftLimitFen), overLimit = overdraftUsedFen > overdraftLimitFen;
-    const overdraftRemainingFen = overLimit ? ZERO : overdraftLimitFen - overdraftUsedFen;
-    const headroomFen = walletFen + creditRemainingFen + overdraftRemainingFen - heldFen;
+    const overdraftRoomFen = overLimit ? ZERO : overdraftLimitFen - overdraftUsedFen;
+    const headroomFen = walletFen + creditRemainingFen - heldFen;
     const arrearsReason: ArrearsReason | null = row.billingMode === "enforce" && row.payerStatus !== "active" ? "payer_inactive"
-      : headroomFen <= ZERO || overLimit ? "funds" : null;
+      : headroomFen + overdraftRoomFen <= ZERO || overLimit ? "funds" : null;
     summaries.set(row.workspaceId, { billingMode: row.billingMode, payerStatus: row.payerStatus, walletFen, creditUsedFen,
-      overdraftUsedFen, overdraftLimitFen, overLimit, creditRemainingFen, heldFen, balanceFen: walletFen - creditUsedFen - overdraftUsedFen, headroomFen,
+      overdraftUsedFen, overdraftLimitFen, overdraftRoomFen, overLimit, creditRemainingFen, heldFen, balanceFen: walletFen - creditUsedFen - overdraftUsedFen, headroomFen,
       arrears: arrearsReason !== null, arrearsReason, asOf: row.asOf });
   }
   return summaries;

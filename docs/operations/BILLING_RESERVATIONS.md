@@ -48,12 +48,15 @@ S3-b1/S3-b2 (Core): migrations `20261110200000_billing_reservations`, `202611102
   wallet pays first and nets to 0, and the charge then debits the wallet in full. A same-key replay returns before it (never a
   second draw). **Overdraft (C-OD, migration `20261115100000_billing_overdraft`)**: for a `post_delivery` reservation only
   (any other keeps the rule above), settle passes `upToAvailable`, so credit lends what it can (possibly 0), and
-  `drawOverdraftShortfallInTransaction` posts all that the wallet still lacks as one `overdraft_draw` (debit
+  the settle module's overdraft channel posts all that the wallet still lacks as one `overdraft_draw` (debit
   `overdraft_receivable`, credit wallet, `overdraft-draw:reservation:<id>`). Order: wallet -> credit -> overdraft -> full wallet
   charge, so the wallet never goes negative. The payer's `overdraftLimitFen` is a **soft** limit (design Q9, §2.5): delivered
   usage is always recorded, never refused; beyond the limit the balance summary reports `overLimit` (and arrears). Standard
-  reserve admission is unchanged (wallet + remaining credit - held). Only settle posts `overdraft_draw`; it is never reversed;
-  projection triggers keep the overdraft projection >= 0.
+  reserve admission is unchanged (wallet + remaining credit - held). `overdraft_draw` has one posting channel
+  (`claimOverdraftChannel`, handed out once; reservations.ts claims it at load, any later claim throws), which re-reads the locked
+  `post_delivery` reservation; the charge, charge row and state change follow in the same transaction. Never reversed;
+  projection triggers keep the overdraft projection >= 0. Limit 0 = not configured: no overdraft room; tails are still recorded
+  and at once `overLimit`.
   A 0-fen settle (smaller quantity) is `settled` with `chargeFen` 0 and no draw or funds entry.
   Shadow writes the charge (`fundsTransactionId` null) and `billing.charge.shadow_settled`, never funds or credit. Settle of a held
   reservation never checks payer status or mode (R05: delivered results are processed; only new reserves are blocked, for shadow

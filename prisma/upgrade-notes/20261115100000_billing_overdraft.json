@@ -64,16 +64,20 @@
   "env": [],
   "verification": [
     {
-      "zh": "核对 PayerAccount 存在 overdraftLimitFen 且所有行为 0；FundsAccountProjection 有两个 overdraft 触发器；BillingReservation.admission 已有行均为 standard。",
-      "en": "Check that PayerAccount has overdraftLimitFen with every row at 0, FundsAccountProjection has the two overdraft triggers, and every existing BillingReservation.admission is standard."
+      "zh": "顺序：停相关写入方（内部计费路由关闭、结算器与财务命令停止）→ 等在途事务排空 → 迁移 → 核对预占更新触发器已重建且包含 admission → 部署代码 → 恢复入口。",
+      "en": "Order: stop the writers (internal billing routes off, settler and finance commands stopped), drain open transactions, migrate, check that the reservation update trigger was recreated with admission, deploy the code, reopen the entries."
     },
     {
-      "zh": "核对 FundsTransaction.kind 的枚举以 overdraft_draw 结尾。",
-      "en": "Check that the FundsTransaction.kind enum ends with overdraft_draw."
+      "zh": "迁移不幂等，中途失败不能原样重跑：保持停写，按迁移文件手工补完剩余语句（若触发器已删先重建），再用 prisma migrate resolve --applied 标记。",
+      "en": "Not idempotent: after a partial failure keep writers stopped, finish the remaining statements by hand (recreate the trigger first if it was dropped), then mark it with prisma migrate resolve --applied."
     },
     {
-      "zh": "迁移期间保持内部计费路由关闭：预占更新触发器删除与重建之间没有更新保护。",
-      "en": "Keep the internal billing routes off while migrating: there is no reservation update guard between dropping and recreating the trigger."
+      "zh": "核对 PayerAccount.overdraftLimitFen 全为 0（0 = 未配置、无透支空间）；FundsTransaction.kind 以 overdraft_draw 结尾；已有预占 admission 均为 standard。",
+      "en": "Check that every PayerAccount.overdraftLimitFen is 0 (not configured, no overdraft room), FundsTransaction.kind ends with overdraft_draw, and existing reservations are standard."
+    },
+    {
+      "zh": "上表的算法与锁为 MySQL 8.0 的预期行为，未实测。生产启用前置：binlog_format=ROW，具备建触发器权限（或 log_bin_trust_function_creators=1）。",
+      "en": "The algorithms and locks above are expected MySQL 8.0 behaviour, not measured. Production prerequisites: binlog_format=ROW and trigger privileges (or log_bin_trust_function_creators=1)."
     }
   ]
 }
