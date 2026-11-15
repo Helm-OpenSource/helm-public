@@ -76,7 +76,7 @@ describe.skipIf(!url)("BillingServiceGrant issuance CLI against MySQL", () => {
     expect(await authenticate(pin)).toEqual({ grantId, scopes: ["balance-status", "quote", "reserve"], actor: { type: "SYSTEM", ref: `billing-service:synthetic-e1c/${grantId}` } });
   });
 
-  it("issues the C-OD reserve-post-delivery scope through the same CLI chain and authenticates with it", async () => {
+  it("issues the C-OD reserve-post-delivery scope through the same CLI chain and stores it on the grant", async () => {
     const pd = generateKeyPairSync("ed25519"), pdFile = join(dir, "public-pd.pem");
     writeFileSync(pdFile, pd.publicKey.export({ type: "spki", format: "pem" }));
     const args = issueArgs.map(arg => arg === `--grant-id=${grantId}` ? `--grant-id=e1c-pd-${run}` : arg === `--public-key-file=${keyFile}`

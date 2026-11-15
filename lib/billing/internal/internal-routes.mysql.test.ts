@@ -419,7 +419,7 @@ describe.skipIf(!url)("internal billing routes with service grants against MySQL
     expect(await reservations(ids.payerRef)).toBe(0);
   });
 
-  it("admits a post_delivery reserve only for a grant that also holds reserve-post-delivery, writing nothing otherwise (C-OD)", async () => {
+  it("admits a post_delivery reserve only for a grant that also holds reserve-post-delivery, holding no reservation otherwise (C-OD)", async () => {
     const plain = await grant("pd-plain", ["reserve", "settle"]), settler = await grant("pd-settler", ["reserve", "reserve-post-delivery", "settle"]);
     const extraOnly = await grant("pd-extra", ["reserve-post-delivery"]); // the extra scope is never a reserve scope by itself
     const ids = await payer("enforce", 0); // no wallet, no credit

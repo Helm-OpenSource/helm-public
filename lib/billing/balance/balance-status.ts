@@ -12,11 +12,11 @@ import type { BillingRejectCode, ServiceActor } from "../reservations/reservatio
  * - headroom = wallet + creditRemaining - held, the reserve admission formula (reservations.ts reserveInTransaction with
  *   credit-facilities.ts availableCreditFen): creditRemaining is max(0, limit - used) of the drawable, in-term facility and 0
  *   for a payer that is not active; held is enforce held/unknown reservations;
- * - overdraftRoom (C-OD) = max(0, overdraftLimitFen - overdraftUsed): what post-delivery work may still overdraw. Never negative,
- *   so an overdraft over its soft limit never eats wallet or credit; reported separately, never part of headroom;
+ * - overdraftRoom (C-OD) = max(0, overdraftLimitFen - overdraftUsed): how much of the per-payer tail tolerance is left. Information
+ *   only: it admits nothing and is part of no stop/go decision (owner 11-15 "zero means stop");
  * - overLimit (C-OD, Q9): overdraftUsed > overdraftLimitFen (with no limit configured, any overdraft at all);
- * - arrears: stop new billable work. Two causes, reported as arrearsReason: "funds" when headroom + overdraftRoom <= 0 (Q8;
- *   owner ruling: overdraw up to the limit, then stop) or overLimit (Q9: stop at once), "payer_inactive" when an enforce payer is suspended or closed (coordinator 11-12): Core
+ * - arrears: stop new billable work. Two causes, reported as arrearsReason: "funds" when headroom <= 0 (Q8: effective
+ *   headroom at or below zero; owner 11-15: zero means stop) or overLimit (Q9: stop at once), "payer_inactive" when an enforce payer is suspended or closed (coordinator 11-12): Core
  *   refuses its new reserves, so work would run unbilled. payer_inactive wins when both hold; null when not in arrears.
  * creditUsed is the credit_receivable projection, so a revoked or expired facility's outstanding draws still count.
  * overdraftUsed is the overdraft_receivable projection (C-OD post-delivery settle tails).
@@ -65,7 +65,7 @@ export async function readPayerBalanceSummaries(client: PrismaClient | Prisma.Tr
     const overdraftRoomFen = overLimit ? ZERO : overdraftLimitFen - overdraftUsedFen;
     const headroomFen = walletFen + creditRemainingFen - heldFen;
     const arrearsReason: ArrearsReason | null = row.billingMode === "enforce" && row.payerStatus !== "active" ? "payer_inactive"
-      : headroomFen + overdraftRoomFen <= ZERO || overLimit ? "funds" : null;
+      : headroomFen <= ZERO || overLimit ? "funds" : null;
     summaries.set(row.workspaceId, { payerAccountId: row.payerAccountId, billingMode: row.billingMode, payerStatus: row.payerStatus, walletFen,
       creditUsedFen, overdraftUsedFen, overdraftLimitFen, overdraftRoomFen, overLimit, creditRemainingFen, heldFen,
       balanceFen: walletFen - creditUsedFen - overdraftUsedFen, headroomFen,
@@ -82,7 +82,7 @@ export type BalanceStatusRequest = { workspaceIds: string[]; pending?: PendingUs
 export type BalanceStatusEntry = { workspaceId: string; ok: true; billingMode: PayerBalanceSummary["billingMode"]; payerStatus: PayerStatus;
   balanceFen: string; headroomFen: string; overdraftUsedFen: string; overdraftRoomFen: string; overLimit: boolean; arrears: boolean;
   arrearsReason: ArrearsReason | null; asOf: string;
-  /** Only with `pending`: headroom + overdraft room - this payer's pending in the batch (rounded up); null when not priceable. */
+  /** Only with `pending`: headroom - this payer's pending in the batch (an upper-bound estimate); null when not priceable. */
   headroomAfterPendingFen?: string | null;
   /** Only with `pending`: true when arrears, else headroomAfterPendingFen <= 0; null when that is null (fall back to arrears, alert). */
   arrearsAfterPending?: boolean | null } | { workspaceId: string; ok: false; code: "billing_mode_off" };
@@ -155,7 +155,8 @@ async function pendingFenByPayer(client: PrismaClient | Prisma.TransactionClient
  * `arrears` keeps its meaning. A payer with more than 50 workspaces or 50 pending lines cannot be judged completely here.
  */
 function afterPending(summary: PayerBalanceSummary, pendingFen: bigint | null | undefined) {
-  const after = pendingFen === null ? null : summary.headroomFen + summary.overdraftRoomFen - (pendingFen ?? ZERO);
+  // Zero means stop (owner 11-15): overdraft room is a tail tolerance, never room for new work.
+  const after = pendingFen === null ? null : summary.headroomFen - (pendingFen ?? ZERO);
   const fen = after === null || after < -MAX_FEN ? null : after;
   return { headroomAfterPendingFen: fen === null ? null : fenToDecimalString(fen),
     arrearsAfterPending: summary.arrears ? true : fen === null ? null : fen <= ZERO };

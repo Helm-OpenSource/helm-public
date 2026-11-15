@@ -93,10 +93,10 @@ describe.skipIf(!url)("member balance view (B-1) against MySQL", () => {
     expect(await view(off.ws, owner)).toMatchObject({ canTopUp: false, topUpUrl: null, payer: { billingMode: "off", balanceFen: BigInt(10_000) } });
   });
 
-  it("applies the C-OD arrears rule: an enforce payer with overdraft room is not in arrears, headroom stays wallet + credit", async () => {
+  it("applies the C-OD zero-means-stop rule: an overdraft tolerance never takes an empty enforce payer out of arrears", async () => {
     const roomy = await bound("enforce", 0);
     await a.$executeRaw`UPDATE PayerAccount SET overdraftLimitFen = 10000 WHERE id = ${roomy.payerAccountId}`; // fixture: approved limit
-    expect((await view(roomy.ws, seat)).payer).toMatchObject({ balanceFen: BigInt(0), arrears: false, arrearsReason: null });
+    expect((await view(roomy.ws, seat)).payer).toMatchObject({ balanceFen: BigInt(0), arrears: true, arrearsReason: "funds" });
   });
 
   it("never offers top-up for a suspended or closed payer, but still shows its numbers and arrears", async () => {

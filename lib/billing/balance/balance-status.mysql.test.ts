@@ -242,7 +242,7 @@ describe.skipIf(!url)("balance-status and the balance summary against MySQL", ()
     expect((await call({ workspaceIds: [fresh.ws] }, service)).body.results[0]).toMatchObject({ billingMode: "off", balanceFen: "0", headroomFen: "0", arrears: true, arrearsReason: "funds" });
   });
 
-  it("adds pending usage per payer, rounded up, into headroomAfterPendingFen and arrearsAfterPending, only when asked (C-OD)", async () => {
+  it("adds pending usage per payer, as an upper bound, into headroomAfterPendingFen and arrearsAfterPending, only when asked (C-OD)", async () => {
     const service = await grant("pending", ["balance-status"]);
     const funded = await payer("enforce", 1000), other = await payer("enforce", 0, 500), broke = await payer("enforce", 0), unbound = `bal-unbound-p-${run}`;
     await hold(funded, "p1", 2); // 70 held: headroom 930
@@ -255,6 +255,8 @@ describe.skipIf(!url)("balance-status and the balance summary against MySQL", ()
     const [big, none, poor, off] = await results([funded.ws, other.ws, broke.ws, unbound], [pending(funded.ws, "30"),
       pending(other.ws, "1", { meterUnit: "segment" }), pending(broke.ws, "1", { meterUnit: "segment" })]);
     expect(big).toMatchObject({ headroomFen: "930", headroomAfterPendingFen: "-120", arrears: false, arrearsAfterPending: true }); // 930 - 30 x 35
+    // An integral price is exact: no margin, whatever the settlement count.
+    expect((await results([funded.ws], [pending(funded.ws, "30", { pendingSettlements: "30" })]))[0]).toMatchObject({ headroomAfterPendingFen: "-120" });
     expect(none).toMatchObject({ headroomFen: "500", headroomAfterPendingFen: null, arrears: false, arrearsAfterPending: null }); // not priceable
     expect(poor).toMatchObject({ headroomAfterPendingFen: null, arrears: true, arrearsAfterPending: true }); // arrears wins over null
     expect(off).toEqual({ workspaceId: unbound, ok: false, code: "billing_mode_off" });
@@ -269,18 +271,34 @@ describe.skipIf(!url)("balance-status and the balance summary against MySQL", ()
     await bindScope(a, { actorUserId: owner, payerAccountId: shared.payerRef, expectedPayerVersion: version, scopeKind: "workspace",
       scopeRef: second, evidenceRef: "consent:bind" });
     expect((await results([shared.ws, second], [pending(shared.ws, "2"), pending(second, "2")])).map(r => r.headroomAfterPendingFen)).toEqual(["-40", "-40"]);
-    // A fractional price is rounded up for the estimate: 4 x 1/3 fen is 2 (half-up would say 1), so 2 fen of headroom is exhausted.
+    // Only one of the payer's workspaces declares pending: it still counts for both.
+    expect((await results([shared.ws, second], [pending(second, "2")])).map(r => r.headroomAfterPendingFen)).toEqual(["30", "30"]);
+    // One unpriceable line nulls that payer on all its workspaces, never another payer in the batch.
+    expect((await results([shared.ws, second, funded.ws], [pending(shared.ws, "2"), pending(second, "1", { meterUnit: "segment" }),
+      pending(funded.ws, "1")])).map(r => [r.headroomAfterPendingFen, r.arrearsAfterPending])).toEqual([[null, null], [null, null], ["895", false]]);
+    // Each line fits the fen bound, their sum does not: both new fields are null (arrears is false here).
+    expect((await results([shared.ws, second], [pending(shared.ws, "130000000000000"), pending(second, "130000000000000")])).map(r =>
+      [r.headroomAfterPendingFen, r.arrearsAfterPending, r.arrears])).toEqual([[null, null, false], [null, null, false]]);
+    // A fractional price is bounded by ceil(quantity x price + settles/2): n half-up settles exceed the exact amount by <= n/2 fen.
     const thirds = (await publishPriceVersion(a, { actor: { type: "SYSTEM", ref: "synthetic-catalog" }, productCode: `synthetic.bal3${run}`,
       version: 1, meterUnit: "segment", billingEventRef: event, acceptanceRef: "acceptance:synthetic", scopeKind: "workspace",
       unitPriceFenNumerator: BigInt(1), unitPriceDenominator: BigInt(3), effectiveFrom: new Date("2026-11-01T00:00:00Z"),
       effectiveUntil: null, approvalRef: "approval:synthetic" })).priceVersion.id;
-    const tiny = await payer("enforce", 2);
-    const { grant: seg } = await createSpendGrant(a, { actorUserId: owner, payerAccountId: tiny.payerRef, priceVersionId: thirds,
-      operationKey: "grant:bal3", evidenceRef: "consent:synthetic", validFrom: new Date("2026-11-01T00:00:00Z"),
-      validUntil: new Date("2027-02-01T00:00:00Z"), limits: { perChargeLimitFen: BigInt(10), dailyLimitFen: BigInt(10), monthlyLimitFen: BigInt(10) } });
-    await changeSpendGrant(a, { actorUserId: owner, grantId: seg.id, expectedVersion: 1, action: "activate", evidenceRef: "consent:on" });
+    const withThirds = async (walletFen: number) => {
+      const p = await payer("enforce", walletFen);
+      const { grant: seg } = await createSpendGrant(a, { actorUserId: owner, payerAccountId: p.payerRef, priceVersionId: thirds,
+        operationKey: "grant:bal3", evidenceRef: "consent:synthetic", validFrom: new Date("2026-11-01T00:00:00Z"),
+        validUntil: new Date("2027-02-01T00:00:00Z"), limits: { perChargeLimitFen: BigInt(10), dailyLimitFen: BigInt(10), monthlyLimitFen: BigInt(10) } });
+      await changeSpendGrant(a, { actorUserId: owner, grantId: seg.id, expectedVersion: 1, action: "activate", evidenceRef: "consent:on" });
+      return p;
+    };
+    const tiny = await withThirds(2); // default n = quantity: ceil(4/3 + 2) = 4
     expect((await results([tiny.ws], [pending(tiny.ws, "4", { meterUnit: "segment" })]))[0])
-      .toMatchObject({ headroomFen: "2", headroomAfterPendingFen: "0", arrears: false, arrearsAfterPending: true });
+      .toMatchObject({ headroomFen: "2", headroomAfterPendingFen: "-2", arrears: false, arrearsAfterPending: true });
+    // Review counterexample: 3 settles of 2 units at 1/3 fen charge 1 + 1 + 1 = 3; a plain ceil(6/3) = 2 would miss it.
+    const three = await withThirds(3);
+    expect((await results([three.ws], [pending(three.ws, "6", { meterUnit: "segment", pendingSettlements: "3" })]))[0])
+      .toMatchObject({ headroomFen: "3", headroomAfterPendingFen: "-1", arrears: false, arrearsAfterPending: true }); // ceil(2 + 1.5) = 4
     // Two active grants for the same event and unit (another product): ambiguous, so not priced (the quote rule).
     const second2 = (await publishPriceVersion(a, { actor: { type: "SYSTEM", ref: "synthetic-catalog" }, productCode: `synthetic.bal2${run}`,
       version: 1, meterUnit: "minute", billingEventRef: event, acceptanceRef: "acceptance:synthetic", scopeKind: "workspace",
@@ -293,20 +311,24 @@ describe.skipIf(!url)("balance-status and the balance summary against MySQL", ()
     expect((await results([funded.ws], [pending(funded.ws, "1")]))[0]).toMatchObject({ headroomAfterPendingFen: null, arrearsAfterPending: null });
     const invalid = { status: 400, body: { ok: false, code: "request_invalid" } };
     for (const bad of [[pending(unbound, "1")], [pending(funded.ws, "0")], [pending(funded.ws, "01")], [pending(funded.ws, "1", { extra: 1 })],
-      [pending(funded.ws, "1"), pending(funded.ws, "2")], [pending(funded.ws, "1", { meterUnit: "Minute" })], [pending(funded.ws, 1 as never)]]) {
+      [pending(funded.ws, "1"), pending(funded.ws, "2")], [pending(funded.ws, "1", { meterUnit: "Minute" })], [pending(funded.ws, 1 as never)],
+      [pending(funded.ws, "2", { pendingSettlements: "3" })], [pending(funded.ws, "2", { pendingSettlements: "0" })]]) {
       expect(await call({ workspaceIds: [funded.ws], pending: bad }, service)).toEqual(invalid);
     }
   });
-  it("keeps headroom's reserve meaning on the service and wallet reads and reports overdraft room and arrears (C-OD)", async () => {
+  it("zero means stop on the service and wallet reads: overdraft room is reported but admits nothing (C-OD)", async () => {
     const service = await grant("room", ["balance-status"]);
     const room = await payer("enforce", 0);
     await a.$executeRaw`UPDATE PayerAccount SET overdraftLimitFen = 10000 WHERE id = ${room.payerRef}`; // fixture: the approved operation's effect
     expect((await call({ workspaceIds: [room.ws] }, service)).body.results[0]).toMatchObject({ headroomFen: "0", overdraftRoomFen: "10000",
-      overLimit: false, arrears: false, arrearsReason: null }); // owner ruling: may overdraw up to the limit before it stops
-    expect((await call({ workspaceIds: [room.ws], pending: [{ workspaceId: room.ws, billingEventRef: event, meterUnit: "minute",
-      pendingQuantity: "1" }] }, service)).body.results[0]).toMatchObject({ headroomAfterPendingFen: "9965", arrearsAfterPending: false });
+      overLimit: false, arrears: true, arrearsReason: "funds" }); // owner 11-15: zero means stop; the limit is a tail tolerance only
     const wallet = await a.$transaction(tx => getWalletInTransaction(tx, { workspaceId: room.ws, actorUserId: owner }));
-    expect(wallet).toMatchObject({ headroomFen: "0", arrears: false });
+    expect(wallet).toMatchObject({ headroomFen: "0", arrears: true });
+    const tolerant = await payer("enforce", 100);
+    await a.$executeRaw`UPDATE PayerAccount SET overdraftLimitFen = 10000 WHERE id = ${tolerant.payerRef}`;
+    expect((await call({ workspaceIds: [tolerant.ws], pending: [{ workspaceId: tolerant.ws, billingEventRef: event, meterUnit: "minute",
+      pendingQuantity: "4" }] }, service)).body.results[0]).toMatchObject({ headroomFen: "100", overdraftRoomFen: "10000", arrears: false,
+      headroomAfterPendingFen: "-40", arrearsAfterPending: true }); // 100 - 4 x 35; the 10000 room is not counted
     // Delivered work settled with no limit configured: recorded as overdraft, at once overLimit and in arrears.
     const od = await payer("enforce", 0);
     const pd = await reserve(a, settler, { idempotencyKey: `idem:pd:${run}`, operationRef: `op:pd:${run}`, subjectScope: { kind: "workspace",
@@ -317,6 +339,14 @@ describe.skipIf(!url)("balance-status and the balance summary against MySQL", ()
     expect((await call({ workspaceIds: [od.ws] }, service)).body.results[0]).toMatchObject({ balanceFen: "-70", headroomFen: "0",
       overdraftUsedFen: "70", overdraftRoomFen: "0", overLimit: true, arrears: true, arrearsReason: "funds" });
     expect(await a.$transaction(tx => getWalletInTransaction(tx, { workspaceId: od.ws, actorUserId: owner }))).toMatchObject({ balanceFen: "-70", arrears: true });
+    // arrears (overLimit) wins even when money came in and the room after pending is positive.
+    await a.$transaction(tx => postFundsTransactionInTransaction(tx, { payerAccountId: od.payerRef, kind: "topup", operationKey: `topup:od:${run}`,
+      actor: settler, evidenceRef: "verified-payment:synthetic", entries: [{ account: "topup_clearing", direction: "debit", amountFen: BigInt(1000) },
+        { account: "customer_wallet_available", direction: "credit", amountFen: BigInt(1000) }] }));
+    const pendingOne = [{ workspaceId: od.ws, billingEventRef: event, meterUnit: "minute", pendingQuantity: "1" }];
+    expect((await call({ workspaceIds: [od.ws], pending: pendingOne }, service)).body.results[0]).toMatchObject({ headroomFen: "1000",
+      overLimit: true, arrears: true, headroomAfterPendingFen: "965", arrearsAfterPending: true });
+    expect((await call({ workspaceIds: [od.ws], pending: [] }, service)).body.results[0]).toMatchObject({ overLimit: true, arrearsAfterPending: true });
   });
 
   it("refuses malformed batches as request_invalid and accepts exactly 50", async () => {
