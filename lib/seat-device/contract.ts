@@ -120,6 +120,9 @@ export const SEAT_DEVICE_ERROR_STATUS = {
   password_invalid: 400,
   // The session's workspace is not the one the page showed (switched since).
   workspace_mismatch: 409,
+  // Approve named no audience, or one outside the options offered right now,
+  // or one while none are offered (the page looks the code up again).
+  audience_invalid: 409,
   forbidden: 403,
   reauthentication_required: 403,
   temporarily_unavailable: 503,
@@ -336,6 +339,59 @@ export function seatDeviceIdentity(input: {
   };
 }
 
+// Audience options (approval-time pin). An extension may offer the member a
+// short list of audiences for the device being approved; the chosen value is
+// written as the device's audiencePin when the request is approved, once and
+// for good. Without a registered extension, or with an empty list, approval
+// is unchanged and the pin stays for the extension to write on first use.
+// Values are opaque to Core: printable ASCII without whitespace, compared
+// exactly in code, never in SQL (the column collation is case-insensitive and
+// ignores trailing spaces).
+export const SEAT_DEVICE_AUDIENCE_VALUE_PATTERN = /^[\x21-\x7E]{1,191}$/;
+export const SEAT_DEVICE_AUDIENCE_OPTIONS_MAX = 20;
+// Every live device of a member counts toward this total whatever its pin:
+// 3 per audience times the most options a list may hold.
+export const SEAT_DEVICE_MAX_ACTIVE_TOTAL_PER_MEMBER = SEAT_DEVICE_MAX_ACTIVE_PER_MEMBER * SEAT_DEVICE_AUDIENCE_OPTIONS_MAX;
+export const SEAT_DEVICE_AUDIENCE_LABEL_MAX_LENGTH = 80;
+// Control, zero-width and bidirectional formatting characters: a label must
+// read on the approval page as it reads in the notification and the audit.
+const AUDIENCE_LABEL_HIDDEN = /[\p{Cc}\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/u;
+
+export type SeatDeviceAudienceOption = { value: string; label: string };
+
+// What an extension registers (PackContributions.seatDeviceAudienceOptions).
+// listOptions is called outside any transaction of the caller's, before the
+// approval is written, and may be called more than once for one approval:
+// it reads only and never depends on a caller's transaction. Between that
+// call and the commit an audience can stop being valid; the extension's own
+// check of every device request is what refuses such a device afterwards.
+export type SeatDeviceAudienceOptionsContribution = {
+  listOptions: (input: {
+    workspaceId: string;
+    userId: string;
+    membershipId: string;
+    role: WorkspaceRole;
+    signal: AbortSignal;
+  }) => Promise<ReadonlyArray<SeatDeviceAudienceOption>>;
+};
+
+// The extension's list as Core accepts it, or null when any entry is unusable:
+// the caller treats null as the extension failing and never drops entries.
+export function normalizeSeatDeviceAudienceOptions(raw: unknown): SeatDeviceAudienceOption[] | null {
+  if (!Array.isArray(raw) || raw.length > SEAT_DEVICE_AUDIENCE_OPTIONS_MAX) return null;
+  const options: SeatDeviceAudienceOption[] = [];
+  for (const entry of raw as unknown[]) {
+    if (!entry || typeof entry !== "object") return null;
+    const { value, label } = entry as Record<string, unknown>;
+    if (typeof value !== "string" || !SEAT_DEVICE_AUDIENCE_VALUE_PATTERN.test(value)) return null;
+    if (options.some((option) => option.value === value) || typeof label !== "string") return null;
+    const shown = label.trim().replace(/\s+/g, " ");
+    if (shown.length < 1 || shown.length > SEAT_DEVICE_AUDIENCE_LABEL_MAX_LENGTH || AUDIENCE_LABEL_HIDDEN.test(shown)) return null;
+    options.push({ value, label: shown });
+  }
+  return options;
+}
+
 // Request bodies. Every schema is strict: an unknown field is invalid_input.
 const requestIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,191}$/);
 const pollTokenSchema = z.string().regex(SEAT_DEVICE_POLL_TOKEN_PATTERN);
@@ -373,6 +429,8 @@ export const SEAT_DEVICE_WEBSITE_ACTION_SCHEMA = z.discriminatedUnion("action", 
     pairingCode: pairingCodeSchema,
     workspaceId: requestIdSchema,
     password: z.string().min(1).max(256),
+    // Only when the lookup offered audience options: the chosen value.
+    audience: z.string().regex(SEAT_DEVICE_AUDIENCE_VALUE_PATTERN).optional(),
   }).strict(),
   z.object({ action: z.literal("reject"), requestId: requestIdSchema, pairingCode: pairingCodeSchema }).strict(),
   z.object({ action: z.literal("revoke"), deviceId: requestIdSchema }).strict(),

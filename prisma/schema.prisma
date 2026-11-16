@@ -1378,7 +1378,8 @@ model MemberAgentApproverGrant {
 /// writes are CAS on version; "expired" is derived (lib/seat-device/contract.ts).
 /// expiresAt is fixed at approval and never extended by a refresh.
 /// devicePublicKeyThumbprint is reserved for proof of possession: not read or
-/// written in D1. audiencePin is written once by the consuming extension.
+/// written in D1. audiencePin is written once: at approval, from the audience option
+/// the member chose when an extension offers options; otherwise by the consuming extension.
 model SeatDeviceAuthorization {
   id                        String    @id @default(cuid())
   clientType                String    @db.VarChar(32)
