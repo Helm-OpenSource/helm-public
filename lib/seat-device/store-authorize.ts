@@ -667,7 +667,7 @@ function audienceOptionsFailed(reason: "threw" | "timeout" | "invalid"): never {
   throw new SeatDeviceAuthError("temporarily_unavailable");
 }
 
-// null: no extension registered. Read outside any transaction (P2-7).
+// null: no extension registered. Read outside any transaction.
 async function loadAudienceOptions(member: MemberContext): Promise<SeatDeviceAudienceOption[] | null> {
   const provider = getRegisteredSeatDeviceAudienceOptions();
   if (!provider) return null;
@@ -947,16 +947,36 @@ export async function decideSeatDeviceAuthorization(input: {
 }
 
 // Notification.body is VARCHAR(191). The audience sentence goes in only when
-// it fits, so the closing revoke hint is never cut off and a long device name,
-// source and label never make the insert fail; the audit keeps the audience.
+// it fits; without it, a body still too long has its client-reported device
+// name shortened, so the closing revoke hint is never cut off and the insert
+// never fails; the audit keeps the full name and the audience. The source is
+// at most 64 characters (approvalSource, written just before), so shortening
+// the name is always enough; the source is shortened only past that.
 // String length counts UTF-16 units, never fewer than the column's characters.
 const NOTIFICATION_BODY_MAX_LENGTH = 191;
 
 function approvalNotificationBody(deviceLabel: string, now: Date, source: string | null, audience: SeatDeviceAudienceOption | null) {
-  const head = `设备「${deviceLabel}」（客户端自报）于 ${now.toISOString()} 获得授权，来源：${source ?? "未知"}。`;
-  const tail = "如果不是你本人操作，请立即在设备列表中撤销。";
-  const withAudience = audience ? `${head}授权对象：${audience.label}。${tail}` : null;
-  return withAudience && withAudience.length <= NOTIFICATION_BODY_MAX_LENGTH ? withAudience : `${head}${tail}`;
+  const compose = (label: string, from: string, audienceSentence = "") =>
+    `设备「${label}」（客户端自报）于 ${now.toISOString()} 获得授权，来源：${from}。${audienceSentence}如果不是你本人操作，请立即在设备列表中撤销。`;
+  const from = source ?? "未知";
+  const withAudience = audience ? compose(deviceLabel, from, `授权对象：${audience.label}。`) : null;
+  if (withAudience && withAudience.length <= NOTIFICATION_BODY_MAX_LENGTH) return withAudience;
+  const plain = compose(deviceLabel, from);
+  if (plain.length <= NOTIFICATION_BODY_MAX_LENGTH) return plain;
+  const label = shortenBy(deviceLabel, plain.length - NOTIFICATION_BODY_MAX_LENGTH);
+  const shortened = compose(label, from);
+  return shortened.length <= NOTIFICATION_BODY_MAX_LENGTH
+    ? shortened
+    : compose(label, shortenBy(from, shortened.length - NOTIFICATION_BODY_MAX_LENGTH));
+}
+
+// At least `excess` UTF-16 units shorter, ending in "…"; whole code points are
+// dropped, so a surrogate pair is never split.
+function shortenBy(text: string, excess: number) {
+  const kept = Array.from(text);
+  let dropped = 0;
+  while (kept.length > 0 && dropped < excess + 1) dropped += kept.pop()!.length;
+  return `${kept.join("")}…`;
 }
 
 // Approved-but-unclaimed requests count: each becomes a device on claim.
