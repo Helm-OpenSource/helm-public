@@ -244,10 +244,12 @@ export async function revokeSeatDevicesInTx(
 }
 
 // Design §6.4: the extension's first /me pins the device to its audience
-// (for example its registration). Written once, never changed: "pinned" on
-// the first write, "unchanged" when the same pin is already there,
-// "mismatch" when another one is, "not_active" for a device that is not
-// active. One UPDATE whose WHERE carries the expected state.
+// (an opaque value of the extension's choosing), unless approval already
+// pinned it to the audience option the member chose (store-authorize.ts).
+// Written once, never changed, whoever writes it: "pinned" on the first
+// write, "unchanged" when the same pin is already there, "mismatch" when
+// another one is, "not_active" for a device that is not active. One UPDATE
+// whose WHERE carries the expected state.
 export async function pinSeatDeviceAudienceInTx(
   tx: Prisma.TransactionClient,
   input: { deviceId: string; audiencePin: string; now?: Date },
