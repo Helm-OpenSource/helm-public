@@ -927,7 +927,7 @@ describeMysql("seat device authorization (request, decide, cancel) on MySQL", ()
     expect(((results.find((result) => result.status === "rejected") as PromiseRejectedResult).reason as SeatDeviceAuthError).code).toBe("too_many_devices");
   });
 
-  it("approves with an audience at the longest device name, source and label, keeping the revoke hint in the notification", async () => {
+  it("approves with an audience at the longest device name and label, keeping the revoke hint in the notification", async () => {
     const now = nextClock();
     const label = "长".repeat(80);
     offerAudiences(async () => [{ value: "audience:long", label }]);
@@ -948,12 +948,73 @@ describeMysql("seat device authorization (request, decide, cancel) on MySQL", ()
     })).resolves.toMatchObject({ status: "approved" });
     expect((await deviceRow(grant.requestId)).audiencePin).toBe("audience:long");
     const notification = await db.notification.findFirstOrThrow({ where: { userId: who.userId } });
-    expect(notification.body.length).toBeLessThanOrEqual(191);
+    expect(notification.body).not.toContain("授权对象");
+    expect(notification.body).toContain(`设备「${"设".repeat(80)}」`);
     expect(notification.body).toContain(`来源：${source}。`);
     expect(notification.body.endsWith("如果不是你本人操作，请立即在设备列表中撤销。")).toBe(true);
     // The audit keeps the full record the notification has no room for.
     const audit = await db.auditLog.findFirstOrThrow({ where: { targetId: grant.requestId, actionType: "SEAT_DEVICE_AUTHORIZATION_APPROVED" } });
     expect(audit.summary).toContain(`（${label}）`);
+  });
+
+  // Without the audience sentence the body is 69 characters plus the device
+  // name and the source: an 80-character name and a 42-character source fill
+  // the 191 of the column exactly. Lengths are UTF-16 units, as the code counts.
+  const SOURCE_42 = "0000:0000:0000:0000:0000:ffff:255.255.25.1";
+  const SOURCE_43 = "0000:0000:0000:0000:0000:ffff:255.255.255.1";
+  const REVOKE_HINT = "如果不是你本人操作，请立即在设备列表中撤销。";
+  async function approvedNotificationBody(deviceLabel: string, source: string, audience: string | null = null) {
+    const now = nextClock();
+    const who = await member();
+    const grant = await requestSeatDeviceAuthorization({ ...device, deviceLabel, source: freshSource(), now });
+    await expect(decideSeatDeviceAuthorization({
+      authSessionId: await session(who, at(now, -60)),
+      userId: who.userId,
+      requestId: grant.requestId,
+      pairingCode: normalizeSeatDevicePairingCode(grant.pairingCode)!,
+      decision: "approve",
+      passwordProof: await proofAt(who, at(now, -30)),
+      expectedWorkspaceId: workspaceId,
+      audience,
+      source,
+      now,
+    })).resolves.toMatchObject({ status: "approved" });
+    return (await db.notification.findFirstOrThrow({ where: { userId: who.userId } })).body;
+  }
+
+  it.each([
+    ["an 80-character name", "设".repeat(80)],
+    ["a name of 40 surrogate pairs", "😀".repeat(40)],
+  ])("keeps %s whole when the body is exactly 191 long", async (_case, deviceLabel) => {
+    const body = await approvedNotificationBody(deviceLabel, SOURCE_42);
+    expect(body).toHaveLength(191);
+    expect(body).toContain(`设备「${deviceLabel}」`);
+    expect(body).toContain(`来源：${SOURCE_42}。`);
+    expect(body.endsWith(REVOKE_HINT)).toBe(true);
+  });
+
+  it.each([
+    ["an 80-character name", "设".repeat(80), `${"设".repeat(78)}…`],
+    ["a name of 40 surrogate pairs", "😀".repeat(40), `${"😀".repeat(39)}…`],
+  ])("shortens %s when the body would be 192 long, never splitting a character", async (_case, deviceLabel, shown) => {
+    const body = await approvedNotificationBody(deviceLabel, SOURCE_43);
+    expect(body).toHaveLength(191);
+    expect(body).toContain(`设备「${shown}」`);
+    expect(body).not.toMatch(/\p{Cs}/u);
+    expect(body).toContain(`来源：${SOURCE_43}。`);
+    expect(body.endsWith(REVOKE_HINT)).toBe(true);
+  });
+
+  it("fits the body at the longest device name, source and label", async () => {
+    // 64 characters, the width of the approval source column.
+    const source = `fe80::1%${"z".repeat(56)}`;
+    offerAudiences(async () => [{ value: "audience:long", label: "长".repeat(80) }]);
+    const body = await approvedNotificationBody("设".repeat(80), source, "audience:long");
+    expect(body).toHaveLength(191);
+    expect(body).not.toContain("授权对象");
+    expect(body).toContain(`设备「${"设".repeat(57)}…」`);
+    expect(body).toContain(`来源：${source}。`);
+    expect(body.endsWith(REVOKE_HINT)).toBe(true);
   });
 
   it("caps a member at 60 live devices in all, also once pins outlive the options they came from", async () => {

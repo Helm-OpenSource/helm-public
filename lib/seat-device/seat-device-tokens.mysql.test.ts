@@ -16,6 +16,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { hashPassword } from "@/lib/auth/formal-auth";
 import { db } from "@/lib/db";
+import { __resetPackRegistryForTest, registerPackContributions } from "@/lib/extensions/registry-contract";
 import { hashSeatDeviceToken, mintSeatDeviceToken, normalizeSeatDevicePairingCode } from "@/lib/seat-device/contract";
 import {
   SeatDeviceAuthDisabledError,
@@ -391,6 +392,43 @@ describeMysql("seat device credentials (classify, pin, revoke) on MySQL", () => 
     // Without an audience, every remaining device of the membership goes.
     await expect(revoke()).resolves.toBe(2);
     for (const id of [second.deviceId, unpinned.deviceId]) expect((await row(id)).status).toBe("revoked");
+  });
+
+  it("revokes by audience a device pinned at approval and not yet claimed", async () => {
+    const now = nextClock();
+    const who = await member();
+    registerPackContributions("audience-revoke-test", {
+      seatDeviceAudienceOptions: { listOptions: async () => [{ value: "audience:a1", label: "对象甲" }, { value: "audience:b2", label: "对象乙" }] },
+    });
+    const approved = async (audience: string) => {
+      const grant = await requestSeatDeviceAuthorization({ deviceLabel: "前台电脑", clientType: "seat_desktop", clientVersion: "1.0.0", source: freshSource(), now });
+      await decideSeatDeviceAuthorization({
+        authSessionId: await session(who, now),
+        userId: who.userId,
+        requestId: grant.requestId,
+        pairingCode: normalizeSeatDevicePairingCode(grant.pairingCode)!,
+        decision: "approve",
+        passwordProof: await verifySeatDeviceApprovalPassword({ userId: who.userId, password: PASSWORD, now: at(now, -30) }),
+        expectedWorkspaceId: who.workspaceId,
+        audience,
+        source: null,
+        now,
+      });
+      return grant;
+    };
+    try {
+      const [first, second] = [await approved("audience:a1"), await approved("audience:b2")];
+      expect(await row(first.requestId)).toMatchObject({ status: "approved", audiencePin: "audience:a1" });
+      await expect(db.$transaction((tx) =>
+        revokeSeatDevicesInTx(tx, { workspaceId, membershipId: who.membershipId, reason: "seat_inactive", audiencePin: "audience:a1", now: at(now, 10) }),
+      )).resolves.toBe(1);
+      expect(await row(first.requestId)).toMatchObject({ status: "revoked", revokeReason: "seat_inactive" });
+      expect((await row(second.requestId)).status).toBe("approved");
+      // The revoked request never hands out credentials.
+      await expectCode(claimSeatDeviceAuthorization({ requestId: first.requestId, pollToken: first.pollToken, source: null, now: at(now, 20) }), "poll_token_invalid");
+    } finally {
+      __resetPackRegistryForTest();
+    }
   });
 
   it("pins the audience once and never changes it", async () => {

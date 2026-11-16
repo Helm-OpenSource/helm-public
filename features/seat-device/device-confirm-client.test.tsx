@@ -6,7 +6,7 @@
 // one, "拒绝" as the default button, the page refusing to be framed, its
 // deployment switch, and a signed-out visitor coming back to it after login.
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -28,6 +28,7 @@ import {
   type SeatDeviceLookupView,
 } from "@/features/seat-device/device-confirm-client";
 import { SeatDeviceTable, type SeatDeviceListItem } from "@/features/seat-device/seat-devices-client";
+import { SEAT_DEVICE_MAX_ACTIVE_PER_MEMBER, SEAT_DEVICE_MAX_ACTIVE_TOTAL_PER_MEMBER } from "@/lib/seat-device/contract";
 
 const LOOKUP: SeatDeviceLookupView = {
   requestId: "req1",
@@ -206,13 +207,37 @@ describe("seat device verification page", () => {
     expect(chosen).toEqual({ action: "approve", requestId: "req1", pairingCode: "BCDF-GHJK", workspaceId: "ws1", password: "typed password", audience: "audience:a1" });
   });
 
-  it("does not reject on Enter in an audience option", () => {
+  it("does not reject on Enter in an audience option", async () => {
     const onReject = vi.fn();
     render(<SeatDeviceDecisionPanel lookup={WITH_OPTIONS} pending={false} onReject={onReject} onApprove={() => {}} />);
-    const option = screen.getByLabelText("对象甲");
-    // fireEvent answers false when the handler prevented the default (the implicit submission).
-    expect(fireEvent.keyDown(option, { key: "Enter" })).toBe(false);
+    const user = userEvent.setup();
+    await user.click(screen.getByLabelText("对象甲"));
+    // userEvent submits the form on Enter in an input (implicit submission) unless the default is prevented.
+    await user.keyboard("{Enter}");
     expect(onReject).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["too_many_devices", `这个授权对象下已有 ${SEAT_DEVICE_MAX_ACTIVE_PER_MEMBER} 台设备，或你的设备总数已达 ${SEAT_DEVICE_MAX_ACTIVE_TOTAL_PER_MEMBER} 台`],
+    ["", "操作失败，请稍后重试。"],
+  ])("shows the message for an approval with an audience refused with code %j", async (code, message) => {
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      if (body.action === "lookup") return new Response(JSON.stringify(WITH_OPTIONS), { status: 200, headers: { "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ error: { code } }), { status: 409, headers: { "Content-Type": "application/json" } });
+    }));
+    try {
+      render(<DeviceConfirmClient />);
+      const user = userEvent.setup();
+      await user.type(screen.getByLabelText("配对码"), "BCDF-GHJK");
+      await user.click(screen.getByRole("button", { name: "查找" }));
+      await user.type(await screen.findByLabelText("授权前请再次输入登录密码"), "typed password");
+      await user.click(screen.getByLabelText("对象甲"));
+      await user.click(screen.getByRole("button", { name: "授权这台设备" }));
+      await screen.findByText((text) => text.includes(message));
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it.each(["audience_invalid", "workspace_mismatch"])("goes back to the code lookup after %s, keeping the code", async (code) => {
