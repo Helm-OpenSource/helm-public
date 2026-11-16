@@ -27,6 +27,7 @@ import { hashPassword, verifyPassword } from "@/lib/auth/formal-auth";
 import { LOGIN_RATE_LIMIT, hashLoginIdentifier } from "@/lib/auth/login-rate-limit";
 import { getLoginLockStatus } from "@/lib/auth/login-rate-limit.service";
 import { db } from "@/lib/db";
+import { __resetPackRegistryForTest, registerPackContributions } from "@/lib/extensions/registry-contract";
 import { hashSeatDeviceToken } from "@/lib/seat-device/contract";
 import { requestSeatDeviceAuthorization } from "@/lib/seat-device/store-authorize";
 import { handleSeatDeviceWebsiteList, handleSeatDeviceWebsiteRequest, type SeatDeviceWebsiteSession } from "@/lib/seat-device/website-routes";
@@ -378,6 +379,39 @@ describeMysql("seat device website pairing on MySQL", () => {
       }
     } finally {
       vi.stubEnv("HELM_SEAT_DEVICE_AUTH_ENABLED", "true");
+    }
+  });
+
+  it("offers an extension's audience options, refuses an approval without a choice (an outdated page) and pins the choice", async () => {
+    nextDay();
+    const options = [{ value: "audience:a1", label: "对象甲" }, { value: "audience:b2", label: "对象乙" }];
+    let failWith: Error | null = null;
+    registerPackContributions("website-audience-options-test", {
+      seatDeviceAudienceOptions: { listOptions: async () => { if (failWith) throw failWith; return options; } },
+    });
+    try {
+      const who = await member();
+      const grant = await pending();
+      const found = await post(who, { action: "lookup", pairingCode: grant.pairingCode });
+      expect(found).toMatchObject({ status: 200, body: { requestId: grant.requestId, audienceOptions: options } });
+
+      // The body an outdated page sends: no audience. Refused before anything is written; the right password is not a failure.
+      expect(await post(who, decision("approve", grant, { password: PASSWORD }))).toEqual({ status: 409, body: errorOf("audience_invalid") });
+      expect(await row(grant.requestId)).toMatchObject({ status: "pending", version: 0 });
+      expect(await loginFailures(who.email)).toBe(0);
+      expect(await post(who, decision("approve", grant, { password: PASSWORD, audience: "has space" }))).toEqual({ status: 400, body: errorOf("invalid_input") });
+
+      // An extension failure answers 503 with a fixed log line, never its message.
+      failWith = new Error(`extension failure quoting ${PASSWORD} ${grant.pairingCode}`);
+      const before = logLines.length;
+      expect(await post(who, decision("approve", grant, { password: PASSWORD, audience: "audience:a1" }))).toEqual({ status: 503, body: errorOf("temporarily_unavailable") });
+      expect(logLines.slice(before)).toEqual([`[seat-device] ${JSON.stringify({ event: "audience_options_failed", reason: "threw" })}`]);
+      failWith = null;
+
+      expect(await post(who, decision("approve", grant, { password: PASSWORD, audience: "audience:a1" }))).toEqual({ status: 200, body: { requestId: grant.requestId, status: "approved" } });
+      expect(await row(grant.requestId)).toMatchObject({ status: "approved", audiencePin: "audience:a1" });
+    } finally {
+      __resetPackRegistryForTest();
     }
   });
 

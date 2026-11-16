@@ -89,6 +89,7 @@ async function answer(request: Request, resolveSession: () => Promise<SeatDevice
     decision: body.action,
     passwordProof,
     expectedWorkspaceId: body.action === "approve" ? body.workspaceId : null,
+    audience: body.action === "approve" ? body.audience ?? null : null,
   });
   return NextResponse.json(decided, { headers: NO_STORE });
 }
@@ -96,7 +97,8 @@ async function answer(request: Request, resolveSession: () => Promise<SeatDevice
 // Bound devices only (approved, active, revoked): a pending, rejected or
 // cancelled request has no member. Live devices (an unclaimed approval or an
 // unexpired active device) are read in full: the device cap keeps them to 3
-// per member, so ended rows can never push one off the page. Ended devices
+// per member (per audience when an extension offers audience options), so
+// ended rows can never push one off the page. Ended devices
 // (revoked or expired) are history: the newest 50 of the member's own and,
 // for OWNER/ADMIN, the newest 100 of the workspace.
 const OWN_HISTORY_LIMIT = 50;

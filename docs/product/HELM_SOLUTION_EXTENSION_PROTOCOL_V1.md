@@ -369,6 +369,10 @@ customer overlays and commercial Pack source are intentionally excluded.
 
 External member landing takes precedence over deployment home and Core onboarding. Unknown scopes fail closed. Extensions must guard server-rendered management pages before exposing their shell; API authorization remains independent.
 
+坐席客户端设备批准时的受众选项由已登记的 `seatDeviceAudienceOptions` 提供，只允许一个扩展登记，第二个登记会在注册时报错。扩展列出成员可选的受众；Core 负责展示，并校验所选值确实在当时的清单里，批准时把它写入设备的 `audiencePin`，只写一次，之后不再改。扩展抛错、超时或返回不合法的清单时，批准一律拒绝，不会退回无选项流程。清单在批准事务之外读取：从读取到提交之间若某个受众失效，留下的设备由扩展在每次设备请求时按钉住值核验并拒绝。选定受众时，设备上限按受众计；尚未钉住的设备计入每一个受众，这是保守口径，这类设备在扩展首次使用时被钉住，之后只计入那一个受众。没有登记扩展或清单为空时，批准与原来完全相同。
+
+Seat device approval offers audience options only from the registered `seatDeviceAudienceOptions`, and only one extension may register it: a second registration throws. Core shows the list, checks that the chosen value is in the list as read at that moment, and writes it as the device's `audiencePin` at approval, once. An extension that throws, times out or answers an unusable list fails the approval closed, never back to the no-options flow. The list is read outside the approval transaction: an audience that becomes invalid before the commit leaves a device that the extension's per-request check against the pin refuses. With an audience chosen, the device cap counts per audience, and unpinned devices count for every audience (conservative: the extension pins such a device on first use, after which it counts for that audience only). Without a registration or with an empty list, approval is unchanged.
+
 当不确定某个东西属于哪一层时，默认先问：
 
 1. 它回答的是能力，还是一整套场景化产品面？

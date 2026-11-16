@@ -9,12 +9,13 @@
 //   npm run test:seat-device:mysql   (sets SEAT_DEVICE_MYSQL_REQUIRED=1: a missing URL fails instead of skipping)
 
 import { MembershipStatus, WorkspaceRole, WorkspaceStatus } from "@prisma/client";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { hashPassword } from "@/lib/auth/formal-auth";
 import { hashLoginIdentifier } from "@/lib/auth/login-rate-limit";
 import { db } from "@/lib/db";
 import { classifyResetTarget } from "@/lib/db-url";
+import { __resetPackRegistryForTest, registerPackContributions } from "@/lib/extensions/registry-contract";
 import {
   SEAT_DEVICE_CODE_ENTRY_MAX_FAILURES,
   SEAT_DEVICE_CODE_ENTRY_MAX_FAILURES_PER_SOURCE_BUCKET,
@@ -23,6 +24,7 @@ import {
   hashSeatDevicePairingCode,
   hashSeatDeviceToken,
   normalizeSeatDevicePairingCode,
+  type SeatDeviceAudienceOptionsContribution,
 } from "@/lib/seat-device/contract";
 import {
   SeatDeviceAuthDisabledError,
@@ -35,6 +37,7 @@ import {
   requestSeatDeviceAuthorization,
   verifySeatDeviceApprovalPassword,
 } from "@/lib/seat-device/store-authorize";
+import { pinSeatDeviceAudienceInTx } from "@/lib/seat-device/store-tokens";
 
 const integrationDatabaseUrl = process.env.SEAT_DEVICE_DATABASE_URL;
 if (process.env.SEAT_DEVICE_MYSQL_REQUIRED === "1" && !integrationDatabaseUrl) {
@@ -734,5 +737,201 @@ describeMysql("seat device authorization (request, decide, cancel) on MySQL", ()
     await db.seatDeviceAuthorization.update({ where: { id: rotated.grant.requestId }, data: { rotatedAt: at(now, 15) } });
     await expect(cancelSeatDeviceAuthorization({ ...rotated.grant, now: at(now, 20) })).resolves.toEqual({ status: "claimed" });
     expect((await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: rotated.grant.requestId } })).status).toBe("active");
+  });
+
+  // -------------------------------------------------------------------------
+  // Audience options offered by an extension at approval
+  // -------------------------------------------------------------------------
+
+  const OPTIONS = [
+    { value: "audience:a1", label: "对象甲" },
+    { value: "audience:b2", label: "对象乙" },
+  ];
+  type ListOptions = SeatDeviceAudienceOptionsContribution["listOptions"];
+  let audiencePacks = 0;
+  // Registers `listOptions` as the extension's (a fresh pack id each time:
+  // registration is idempotent per id) and counts its calls.
+  function offerAudiences(list: ListOptions) {
+    __resetPackRegistryForTest();
+    audiencePacks += 1;
+    const calls: Parameters<ListOptions>[0][] = [];
+    registerPackContributions(`audience-options-test-${audiencePacks}`, {
+      seatDeviceAudienceOptions: { listOptions: (input) => { calls.push(input); return list(input); } },
+    });
+    return calls;
+  }
+  afterEach(() => __resetPackRegistryForTest());
+
+  async function approveWith(who: Member, grant: { requestId: string; pairingCode: string }, now: Date, audience: string | null, sessionId?: string) {
+    return decideSeatDeviceAuthorization({
+      authSessionId: sessionId ?? (await session(who, at(now, -60))),
+      userId: who.userId,
+      requestId: grant.requestId,
+      pairingCode: normalizeSeatDevicePairingCode(grant.pairingCode)!,
+      decision: "approve",
+      passwordProof: await proofAt(who, at(now, -30)),
+      expectedWorkspaceId: workspaceId,
+      audience,
+      source: null,
+      now,
+    });
+  }
+  const lookupAs = async (who: Member, grant: { pairingCode: string }, now: Date) =>
+    lookupSeatDeviceAuthorization({ authSessionId: await session(who, at(now, -60)), userId: who.userId, pairingCode: normalizeSeatDevicePairingCode(grant.pairingCode)!, source: null, now });
+  const deviceRow = (id: string) => db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id } });
+  const codeFailures = async (who: Member) =>
+    (await db.failedLoginAttempt.findUnique({ where: { identifierHash: hashLoginIdentifier(`seat-device-code:user:${who.userId}`) } }))?.attemptCount ?? 0;
+
+  it("changes nothing while the extension lists no options, and refuses a value nobody offered", async () => {
+    const now = nextClock();
+    const calls = offerAudiences(async () => []);
+    const who = await member();
+    const grant = await request(now);
+    expect(await lookupAs(who, grant, now)).not.toHaveProperty("audienceOptions");
+    await expectCode(approveWith(who, grant, now, "audience:a1"), "audience_invalid");
+    expect(await deviceRow(grant.requestId)).toMatchObject({ status: "pending", version: 0 });
+    await expect(approveWith(who, grant, now, null)).resolves.toEqual({ requestId: grant.requestId, status: "approved" });
+    expect((await deviceRow(grant.requestId)).audiencePin).toBeNull();
+    expect(calls).toHaveLength(3);
+    expect(await codeFailures(who)).toBe(0);
+  });
+
+  it("pins the chosen option at approval, once, and names it in the audit and the notification", async () => {
+    const now = nextClock();
+    const calls = offerAudiences(async () => OPTIONS);
+    const who = await member();
+    const source = freshSource();
+    const grant = await request(now, source);
+    expect((await lookupAs(who, grant, now)).audienceOptions).toEqual(OPTIONS);
+    expect(calls[0]).toMatchObject({ workspaceId, userId: who.userId, membershipId: who.membershipId, role: WorkspaceRole.OPERATOR });
+    expect(calls[0].signal).toBeInstanceOf(AbortSignal);
+
+    // No choice, a value outside the list, and one equal but for case: refused, not counted as a wrong code.
+    for (const audience of [null, "audience:zz", "AUDIENCE:A1"]) await expectCode(approveWith(who, grant, now, audience), "audience_invalid");
+    expect(await deviceRow(grant.requestId)).toMatchObject({ status: "pending", version: 0, audiencePin: null });
+    expect(await codeFailures(who)).toBe(0);
+
+    await expect(approveWith(who, grant, now, "audience:b2")).resolves.toMatchObject({ status: "approved" });
+    expect(await deviceRow(grant.requestId)).toMatchObject({ status: "approved", version: 1, audiencePin: "audience:b2" });
+    const audit = await db.auditLog.findFirstOrThrow({ where: { targetId: grant.requestId, actionType: "SEAT_DEVICE_AUTHORIZATION_APPROVED" } });
+    expect(audit.summary).toBe("授权设备登录：前台电脑（对象乙）");
+    expect(JSON.parse(String(audit.payload))).toMatchObject({ audiencePin: "audience:b2", audienceLabel: "对象乙" });
+    const notification = await db.notification.findFirstOrThrow({ where: { userId: who.userId } });
+    expect(notification.body).toContain("授权对象：对象乙。");
+
+    // Written once: after the claim the extension's pin reads it back and can never change it.
+    const claimed = await claimSeatDeviceAuthorization({ requestId: grant.requestId, pollToken: grant.pollToken, source, now: at(now, 5) });
+    expect(claimed.status).toBe("approved");
+    const pin = (audiencePin: string) => db.$transaction((tx) => pinSeatDeviceAudienceInTx(tx, { deviceId: grant.requestId, audiencePin, now: at(now, 6) }));
+    await expect(pin("audience:b2")).resolves.toBe("unchanged");
+    await expect(pin("audience:a1")).resolves.toBe("mismatch");
+    expect((await deviceRow(grant.requestId)).audiencePin).toBe("audience:b2");
+  });
+
+  it("reads the options again at approval: a value withdrawn since the lookup is refused", async () => {
+    const now = nextClock();
+    let offered = OPTIONS;
+    offerAudiences(async () => offered);
+    const who = await member();
+    const grant = await request(now);
+    expect((await lookupAs(who, grant, now)).audienceOptions).toHaveLength(2);
+    offered = [OPTIONS[1]];
+    await expectCode(approveWith(who, grant, now, "audience:a1"), "audience_invalid");
+    expect((await deviceRow(grant.requestId)).status).toBe("pending");
+    await expect(approveWith(who, grant, now, "audience:b2")).resolves.toMatchObject({ status: "approved" });
+  });
+
+  it("fails closed when the extension throws, times out or lists unusable options; reject and wrong codes never ask it", async () => {
+    const failures: [string, ListOptions][] = [
+      ["throws", async () => { throw new Error("extension down"); }],
+      ["unusable", async () => [{ value: "audience:a1", label: "对象\u202E甲" }]],
+      ["times out", (input) => new Promise((resolve) => {
+        const timer = setTimeout(() => resolve(OPTIONS), 3_000);
+        input.signal.addEventListener("abort", () => { clearTimeout(timer); resolve(OPTIONS); });
+      })],
+    ];
+    for (const [name, list] of failures) {
+      const now = nextClock();
+      const calls = offerAudiences(list);
+      const who = await member();
+      const grant = await request(now);
+      await expectCode(lookupAs(who, grant, now), "temporarily_unavailable");
+      await expectCode(approveWith(who, grant, now, "audience:a1"), "temporarily_unavailable");
+      expect(await deviceRow(grant.requestId), name).toMatchObject({ status: "pending", version: 0, audiencePin: null });
+      expect(await db.auditLog.count({ where: { targetId: grant.requestId } }), name).toBe(0);
+      expect(await db.notification.count({ where: { userId: who.userId } }), name).toBe(0);
+      if (name === "times out") expect(calls.every((input) => input.signal.aborted)).toBe(true);
+
+      const asked = calls.length;
+      await expectCode(decideSeatDeviceAuthorization({ authSessionId: await session(who, at(now, -60)), userId: who.userId, requestId: grant.requestId, pairingCode: "ZZZZZZZZ", decision: "approve", passwordProof: await proofAt(who, at(now, -30)), expectedWorkspaceId: workspaceId, audience: "audience:a1", source: null, now }), "pairing_code_invalid");
+      await expect(decide(who, grant, now, "reject", undefined, null)).resolves.toEqual({ requestId: grant.requestId, status: "rejected" });
+      expect(calls, name).toHaveLength(asked);
+    }
+  });
+
+  it("never asks the extension while code entry is locked, so a right code is not confirmed", async () => {
+    const now = nextClock();
+    const calls = offerAudiences(async () => OPTIONS);
+    const who = await member();
+    const grant = await request(now);
+    await db.failedLoginAttempt.create({
+      data: { identifierHash: hashLoginIdentifier(`seat-device-code:user:${who.userId}`), attemptCount: 8, windowStartedAt: now, lockedUntil: at(now, 900) },
+    });
+    await expectCode(approveWith(who, grant, now, null), "rate_limited");
+    await expectCode(approveWith(who, grant, now, "audience:a1"), "rate_limited");
+    expect(calls).toHaveLength(0);
+    expect((await deviceRow(grant.requestId)).status).toBe("pending");
+
+    // A lock seen before the transaction but gone inside it: still nothing approved without asking the extension.
+    const other = await member();
+    const next = await request(now);
+    const sawLock = vi.spyOn(db.failedLoginAttempt, "findMany").mockResolvedValueOnce([{ lockedUntil: at(now, 900) }] as never);
+    try {
+      await expectCode(approveWith(other, next, now, "audience:a1"), "temporarily_unavailable");
+      expect(sawLock).toHaveBeenCalledTimes(1);
+    } finally {
+      sawLock.mockRestore();
+    }
+    expect(calls).toHaveLength(0);
+    expect(await deviceRow(next.requestId)).toMatchObject({ status: "pending", audiencePin: null });
+  });
+
+  it("caps each audience at three live devices, counting unpinned ones for every audience", async () => {
+    const now = nextClock();
+    const who = await member();
+    const sessionId = await session(who, at(now, -30));
+    const approve = async (audience: string | null) => approveWith(who, await request(now), now, audience, sessionId);
+    // Approved while no extension offered options: unpinned.
+    await approve(null);
+    offerAudiences(async () => OPTIONS);
+    await approve("audience:a1");
+    await approve("audience:a1");
+    await expectCode(approve("audience:a1"), "too_many_devices");
+    await approve("audience:b2");
+    await approve("audience:b2");
+    await expectCode(approve("audience:b2"), "too_many_devices");
+    // Without an audience every live device counts, pinned or not.
+    __resetPackRegistryForTest();
+    await expectCode(approve(null), "too_many_devices");
+    expect(await db.seatDeviceAuthorization.count({ where: { userId: who.userId, status: "approved" } })).toBe(5);
+
+    // Concurrent approvals for one audience stay under its cap.
+    const racer = await member();
+    const racerSession = await session(racer, at(now, -30));
+    offerAudiences(async () => OPTIONS);
+    const grants = await Promise.all([0, 1, 2, 3].map(() => request(now)));
+    const results = await Promise.allSettled(grants.map((grant) => approveWith(racer, grant, now, "audience:a1", racerSession)));
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(3);
+    expect(((results.find((result) => result.status === "rejected") as PromiseRejectedResult).reason as SeatDeviceAuthError).code).toBe("too_many_devices");
+  });
+
+  it("compares audience values exactly, not by the column's case-insensitive collation", async () => {
+    const now = nextClock();
+    offerAudiences(async () => [{ value: "audience:Upper", label: "对象甲" }, { value: "audience:upper", label: "对象乙" }]);
+    const who = await member();
+    const sessionId = await session(who, at(now, -30));
+    for (let index = 0; index < 3; index += 1) await approveWith(who, await request(now), now, "audience:Upper", sessionId);
+    await expectCode(approveWith(who, await request(now), now, "audience:Upper", sessionId), "too_many_devices");
+    await expect(approveWith(who, await request(now), now, "audience:upper", sessionId)).resolves.toMatchObject({ status: "approved" });
   });
 });

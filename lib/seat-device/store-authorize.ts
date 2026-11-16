@@ -17,7 +17,8 @@ import "server-only";
 // retries run out, a closed error code; the cross-path concurrency test with
 // refresh/revoke (1b) and the extension belongs to slice 3a-2.
 // Every lifecycle write is a CAS on (id, status, version) after re-reading the
-// row in the same transaction.
+// row in the same transaction. An extension's audience options are read the
+// same way, before the transaction (see SeatDeviceAudienceOptionsContribution).
 //
 // No plaintext token or pairing code is stored, logged or put in an error or
 // audit payload: only sha256 hashes reach the database.
@@ -30,6 +31,7 @@ import { LOGIN_RATE_LIMIT, evaluateLock, hashLoginIdentifier, nextStateOnFailure
 import { AUTH_SESSION_PROVIDER_TYPES } from "@/lib/auth/provider-seam";
 import { db } from "@/lib/db";
 import { isWriteConflictError } from "@/lib/db/conflict-aware-write";
+import { getRegisteredSeatDeviceAudienceOptions } from "@/lib/extensions/registry-contract";
 import {
   SEAT_DEVICE_ACCESS_TOKEN_TTL_SECONDS,
   SEAT_DEVICE_CODE_ENTRY_LOCK_SECONDS,
@@ -54,11 +56,13 @@ import {
   isSeatDeviceAuthDeploymentEnabled,
   isSeatDeviceWorkspaceEnabled,
   mintSeatDeviceToken,
+  normalizeSeatDeviceAudienceOptions,
   seatDeviceCredentialExpiresAt,
   seatDeviceHashesEqual,
   seatDeviceIdentity,
   seatDeviceSourceBucket,
   seatDeviceUnclaimedPollStatus,
+  type SeatDeviceAudienceOption,
   type SeatDeviceCancelStatus,
   type SeatDeviceClientType,
   type SeatDeviceErrorCode,
@@ -647,7 +651,68 @@ export type SeatDeviceLookup = {
   source: string | null;
   expiresInSeconds: number;
   workspace: { id: string; name: string };
+  // Present only when the extension offers audience options to choose from.
+  audienceOptions?: SeatDeviceAudienceOption[];
 };
+
+// The extension gets 2 seconds; an extension that throws, times out or
+// answers an unusable list fails the lookup or approval closed (503): falling
+// back to no options would bind a device to an audience nobody chose.
+const AUDIENCE_OPTIONS_TIMEOUT_MS = 2_000;
+const AUDIENCE_OPTIONS_TIMED_OUT = Symbol("audience options timed out");
+
+function audienceOptionsFailed(reason: "threw" | "timeout" | "invalid"): never {
+  console.error("[seat-device]", JSON.stringify({ event: "audience_options_failed", reason }));
+  throw new SeatDeviceAuthError("temporarily_unavailable");
+}
+
+// null: no extension registered. Read outside any transaction (P2-7).
+async function loadAudienceOptions(member: MemberContext): Promise<SeatDeviceAudienceOption[] | null> {
+  const provider = getRegisteredSeatDeviceAudienceOptions();
+  if (!provider) return null;
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<typeof AUDIENCE_OPTIONS_TIMED_OUT>((resolve) => {
+    timer = setTimeout(() => resolve(AUDIENCE_OPTIONS_TIMED_OUT), AUDIENCE_OPTIONS_TIMEOUT_MS);
+  });
+  const listed = Promise.resolve().then(() =>
+    provider.listOptions({
+      workspaceId: member.workspace.id,
+      userId: member.userId,
+      membershipId: member.membershipId,
+      role: member.role,
+      signal: controller.signal,
+    }),
+  );
+  // A list that settles after the timeout is dropped; its failure must not surface unhandled.
+  listed.catch(() => undefined);
+  let raw: unknown;
+  try {
+    raw = await Promise.race([listed, timedOut]);
+  } catch {
+    audienceOptionsFailed("threw");
+  } finally {
+    clearTimeout(timer);
+  }
+  if (raw === AUDIENCE_OPTIONS_TIMED_OUT) {
+    controller.abort();
+    audienceOptionsFailed("timeout");
+  }
+  return normalizeSeatDeviceAudienceOptions(raw) ?? audienceOptionsFailed("invalid");
+}
+
+// The option the member chose, from the list read now; the label shown in
+// the notification and the audit comes from this list, never from the request.
+async function chooseAudience(member: MemberContext, value: string | null): Promise<SeatDeviceAudienceOption | null> {
+  const options = await loadAudienceOptions(member);
+  if (!options || options.length === 0) {
+    if (value !== null) throw new SeatDeviceAuthError("audience_invalid");
+    return null;
+  }
+  const chosen = value === null ? undefined : options.find((option) => option.value === value);
+  if (!chosen) throw new SeatDeviceAuthError("audience_invalid");
+  return chosen;
+}
 
 // `pairingCode` is the normalized code (SEAT_DEVICE_LOOKUP_REQUEST_SCHEMA).
 export async function lookupSeatDeviceAuthorization(input: {
@@ -672,6 +737,7 @@ export async function lookupSeatDeviceAuthorization(input: {
     return null;
   }, TX), "rate_limited", isCodeEntryConflict);
   if (!row) throw new SeatDeviceAuthError("pairing_code_invalid");
+  const audienceOptions = await loadAudienceOptions(member);
   return {
     requestId: row.id,
     deviceName: row.deviceLabel,
@@ -681,7 +747,22 @@ export async function lookupSeatDeviceAuthorization(input: {
     source: row.sourceIp,
     expiresInSeconds: Math.max(0, Math.floor((row.requestExpiresAt.getTime() - now.getTime()) / 1000)),
     workspace: { id: member.workspace.id, name: member.workspace.name },
+    ...(audienceOptions && audienceOptions.length > 0 ? { audienceOptions } : {}),
   };
+}
+
+// Whether an approval would get past the code-entry lock and the code itself,
+// read before the transaction that decides it (which checks both again): the
+// extension is asked for audience options only then, so neither a wrong code
+// nor a right one during a lock is ever answered differently because of it.
+async function approvalReachesDecision(keys: CodeEntryKey[], requestId: string, pairingCodeHash: string | null, now: Date) {
+  const counters = await db.failedLoginAttempt.findMany({
+    where: { identifierHash: { in: keys.map((key) => key.identifierHash) } },
+    select: { lockedUntil: true },
+  });
+  if (counters.some((counter) => evaluateLock(counter, now).locked)) return false;
+  const row = pairingCodeHash ? await db.seatDeviceAuthorization.findUnique({ where: { id: requestId } }) : null;
+  return Boolean(row && seatDeviceHashesEqual(row.pairingCodeHash, pairingCodeHash) && effectiveSeatDeviceStatus(row, now) === "pending");
 }
 
 // Step-up (design §4.3, server design §2C.3): rotating a session creates a
@@ -769,6 +850,8 @@ export async function decideSeatDeviceAuthorization(input: {
   passwordProof: SeatDevicePasswordProof | null;
   // Approve only: the workspace id the page showed (lookup answer).
   expectedWorkspaceId: string | null;
+  // Approve only: the audience option chosen, when the lookup offered some.
+  audience?: string | null;
   source: string | null;
   now?: Date;
 }): Promise<{ requestId: string; status: "approved" | "rejected" }> {
@@ -790,6 +873,11 @@ export async function decideSeatDeviceAuthorization(input: {
   }
   const keys = codeEntryKeys(input.userId, input.source);
   const pairingCodeHash = hashSeatDevicePairingCode(input.pairingCode);
+  // Chosen before the transaction from the options read now; between here and
+  // the commit an audience may stop being valid, and the extension's check of
+  // every device request is what refuses that device afterwards.
+  const audienceChosen = input.decision === "approve" && (await approvalReachesDecision(keys, input.requestId, pairingCodeHash, now));
+  const audience = audienceChosen ? await chooseAudience(member, input.audience ?? null) : null;
 
   const outcome = await retried(() => db.$transaction(async (tx) => {
     const counters = await openCodeEntryInTx(tx, keys, now);
@@ -803,8 +891,14 @@ export async function decideSeatDeviceAuthorization(input: {
       await countCodeEntryFailureInTx(tx, keys, counters, now);
       return "code_invalid" as const;
     }
-    if (input.decision === "approve") await assertDeviceCap(tx, member, now);
-    const cas = { id: row.id, status: "pending", version: row.version, pairingCodeHash, requestExpiresAt: { gt: now } };
+    // The read before the transaction saw a lock or a stale code that this one
+    // does not: never approve with an extension registered but not asked.
+    if (input.decision === "approve" && !audienceChosen && getRegisteredSeatDeviceAudienceOptions()) {
+      throw new SeatDeviceAuthError("temporarily_unavailable");
+    }
+    if (input.decision === "approve") await assertDeviceCap(tx, member, now, audience?.value ?? null);
+    // A pending row is never pinned; the condition keeps the pin written once.
+    const cas = { id: row.id, status: "pending", version: row.version, pairingCodeHash, requestExpiresAt: { gt: now }, audiencePin: null };
     const decided = { decidedByUserId: member.userId, decidedAt: now, pairingCodeHash: null, version: { increment: 1 } };
     const result = await tx.seatDeviceAuthorization.updateMany({
       where: cas,
@@ -820,6 +914,7 @@ export async function decideSeatDeviceAuthorization(input: {
               approvalSource: input.source,
               approvedAuthSessionId: member.authSessionId,
               expiresAt: seatDeviceCredentialExpiresAt(now),
+              ...(audience ? { audiencePin: audience.value } : {}),
             }
           : { ...decided, status: "rejected", workspaceId: member.workspace.id, sourceIp: null },
     });
@@ -830,9 +925,10 @@ export async function decideSeatDeviceAuthorization(input: {
       await auditDevice(tx, bound, "SEAT_DEVICE_AUTHORIZATION_REJECTED", `拒绝设备授权：${row.deviceLabel}`, {}, actor);
       return "rejected" as const;
     }
-    await auditDevice(tx, bound, "SEAT_DEVICE_AUTHORIZATION_APPROVED", `授权设备登录：${row.deviceLabel}`, {
+    await auditDevice(tx, bound, "SEAT_DEVICE_AUTHORIZATION_APPROVED", `授权设备登录：${row.deviceLabel}${audience ? `（${audience.label}）` : ""}`, {
       clientVersion: row.clientVersion,
       approvalSourceTrusted: input.source !== null,
+      ...(audience ? { audiencePin: audience.value, audienceLabel: audience.label } : {}),
     }, actor);
     await tx.notification.create({
       data: {
@@ -840,7 +936,7 @@ export async function decideSeatDeviceAuthorization(input: {
         userId: member.userId,
         type: "SYSTEM",
         title: "新设备已获授权登录坐席客户端",
-        body: `设备「${row.deviceLabel}」（客户端自报）于 ${now.toISOString()} 获得授权，来源：${input.source ?? "未知"}。如果不是你本人操作，请立即在设备列表中撤销。`,
+        body: `设备「${row.deviceLabel}」（客户端自报）于 ${now.toISOString()} 获得授权，来源：${input.source ?? "未知"}。${audience ? `授权对象：${audience.label}。` : ""}如果不是你本人操作，请立即在设备列表中撤销。`,
       },
     });
     return "approved" as const;
@@ -850,14 +946,24 @@ export async function decideSeatDeviceAuthorization(input: {
 }
 
 // Approved-but-unclaimed requests count: each becomes a device on claim.
-async function assertDeviceCap(tx: Prisma.TransactionClient, member: MemberContext, now: Date) {
+// With an audience chosen the cap is per audience: the member's live devices
+// pinned to it, plus every unpinned one. Counting unpinned devices is the
+// conservative reading: the extension pins such a device on its first use, to
+// one audience, after which it counts for that audience only. Without an
+// audience every live device of the member counts, pinned or not. The same
+// range of the (workspaceId, userId, status) index is read either way, so the
+// Serializable lock that keeps concurrent approvals under the cap is
+// unchanged; the pin is compared in code (the column collation is
+// case-insensitive).
+async function assertDeviceCap(tx: Prisma.TransactionClient, member: MemberContext, now: Date, audiencePin: string | null) {
   const rows = await tx.seatDeviceAuthorization.findMany({
     where: { workspaceId: member.workspace.id, userId: member.userId, status: { in: ["approved", "active"] } },
-    select: { status: true, requestExpiresAt: true, expiresAt: true },
+    select: { status: true, requestExpiresAt: true, expiresAt: true, audiencePin: true },
   });
   const live = rows.filter((row) => {
     const status = effectiveSeatDeviceStatus(row, now);
-    return status === "approved" || status === "active";
+    const counted = audiencePin === null || row.audiencePin === null || row.audiencePin === audiencePin;
+    return (status === "approved" || status === "active") && counted;
   });
   if (live.length >= SEAT_DEVICE_MAX_ACTIVE_PER_MEMBER) throw new SeatDeviceAuthError("too_many_devices");
 }

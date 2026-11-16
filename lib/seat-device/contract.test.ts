@@ -1,9 +1,16 @@
 import { createHash } from "node:crypto";
 import { WorkspaceRole } from "@prisma/client";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  __resetPackRegistryForTest,
+  getRegisteredSeatDeviceAudienceOptions,
+  registerPackContributions,
+} from "@/lib/extensions/registry-contract";
+import {
   SEAT_DEVICE_ACCESS_TOKEN_PATTERN,
+  SEAT_DEVICE_AUDIENCE_OPTIONS_MAX,
+  SEAT_DEVICE_WEBSITE_ACTION_SCHEMA,
   SEAT_DEVICE_CANCEL_STATUSES,
   SEAT_DEVICE_DECISION_REQUEST_SCHEMA,
   SEAT_DEVICE_ERROR_STATUS,
@@ -21,6 +28,7 @@ import {
   hashSeatDeviceToken,
   isSeatDeviceWorkspaceEnabled,
   mintSeatDeviceToken,
+  normalizeSeatDeviceAudienceOptions,
   normalizeSeatDevicePairingCode,
   parseSeatDeviceAuthorizationRequest,
   parseSeatDeviceRequest,
@@ -275,5 +283,78 @@ describe("seat device request validation", () => {
     expect(parseSeatDeviceRequest(SEAT_DEVICE_LOOKUP_REQUEST_SCHEMA, { pairingCode: "BCDF-GHJA" }).ok).toBe(false);
     expect(parseSeatDeviceRequest(SEAT_DEVICE_DECISION_REQUEST_SCHEMA, { requestId: "c1", pairingCode: "BCDFGHJK" }).ok).toBe(true);
     expect(parseSeatDeviceRequest(SEAT_DEVICE_DECISION_REQUEST_SCHEMA, { pairingCode: "BCDFGHJK" }).ok).toBe(false);
+  });
+});
+
+describe("seat device audience options", () => {
+  afterEach(() => __resetPackRegistryForTest());
+
+  it("accepts a list of opaque values with readable labels, normalizing the labels", () => {
+    expect(normalizeSeatDeviceAudienceOptions([])).toEqual([]);
+    expect(normalizeSeatDeviceAudienceOptions([
+      { value: "audience:a1", label: "  对象甲 " },
+      { value: "AUDIENCE:A1", label: "对象\n乙" },
+      { value: "x".repeat(191), label: "y".repeat(80) },
+    ])).toEqual([
+      { value: "audience:a1", label: "对象甲" },
+      // Exact values: case alone makes another option.
+      { value: "AUDIENCE:A1", label: "对象 乙" },
+      { value: "x".repeat(191), label: "y".repeat(80) },
+    ]);
+  });
+
+  it("refuses the whole list when any entry is unusable", () => {
+    const ok = { value: "audience:a1", label: "对象甲" };
+    for (const bad of [
+      { value: "", label: "对象" },
+      { value: "has space", label: "对象" },
+      { value: "x".repeat(192), label: "对象" },
+      { value: "中文", label: "对象" },
+      { value: "audience:b2", label: "   " },
+      { value: "audience:b2", label: "y".repeat(81) },
+      { value: "audience:b2", label: "对象\u0007" },
+      { value: "audience:b2", label: "对象\u202E乙" },
+      { value: "audience:b2", label: "对\u200B象" },
+      { value: "audience:a1", label: "重复" },
+      { value: 1, label: "对象" },
+      { value: "audience:b2" },
+      null,
+      "audience:b2",
+    ]) {
+      expect(normalizeSeatDeviceAudienceOptions([ok, bad])).toBeNull();
+    }
+    expect(normalizeSeatDeviceAudienceOptions("audience:a1")).toBeNull();
+    expect(normalizeSeatDeviceAudienceOptions(null)).toBeNull();
+    const many = Array.from({ length: SEAT_DEVICE_AUDIENCE_OPTIONS_MAX + 1 }, (_, index) => ({ value: `audience:${index}`, label: `对象${index}` }));
+    expect(normalizeSeatDeviceAudienceOptions(many.slice(0, -1))).toHaveLength(SEAT_DEVICE_AUDIENCE_OPTIONS_MAX);
+    expect(normalizeSeatDeviceAudienceOptions(many)).toBeNull();
+  });
+
+  it("takes an optional audience value on approve only, in the value format", () => {
+    const approve = { action: "approve", requestId: "c1", pairingCode: "BCDFGHJK", workspaceId: "w1", password: "pw" };
+    expect(parseSeatDeviceRequest(SEAT_DEVICE_WEBSITE_ACTION_SCHEMA, approve).ok).toBe(true);
+    expect(parseSeatDeviceRequest(SEAT_DEVICE_WEBSITE_ACTION_SCHEMA, { ...approve, audience: "audience:a1" })).toMatchObject({ ok: true, value: { audience: "audience:a1" } });
+    for (const audience of ["", "has space", "x".repeat(192), 1, null]) {
+      expect(parseSeatDeviceRequest(SEAT_DEVICE_WEBSITE_ACTION_SCHEMA, { ...approve, audience })).toEqual({ ok: false, code: "invalid_input" });
+    }
+    expect(parseSeatDeviceRequest(SEAT_DEVICE_WEBSITE_ACTION_SCHEMA, { action: "reject", requestId: "c1", pairingCode: "BCDFGHJK", audience: "audience:a1" }).ok).toBe(false);
+    expect(SEAT_DEVICE_ERROR_STATUS.audience_invalid).toBe(409);
+  });
+
+  it("lets one pack register audience options and refuses a second", () => {
+    expect(getRegisteredSeatDeviceAudienceOptions()).toBeNull();
+    const first = { listOptions: async () => [] };
+    registerPackContributions("pack-one", { seatDeviceAudienceOptions: first });
+    registerPackContributions("pack-one", { seatDeviceAudienceOptions: { listOptions: async () => [] } });
+    expect(getRegisteredSeatDeviceAudienceOptions()).toBe(first);
+    expect(() =>
+      registerPackContributions("pack-two", {
+        catalog: [],
+        seatDeviceAudienceOptions: { listOptions: async () => [] },
+      }),
+    ).toThrow('already registered by pack "pack-one"');
+    expect(getRegisteredSeatDeviceAudienceOptions()).toBe(first);
+    // Refused whole: the pack id was not taken, so a corrected registration still goes through.
+    registerPackContributions("pack-two", { catalog: [] });
   });
 });
