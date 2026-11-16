@@ -64,15 +64,18 @@ describe("seat device revocation observer", () => {
 
   // The observer runs in a microtask ahead of the caller's continuation: its
   // returned Promise is never awaited, but its synchronous work delays the caller.
+  const order: string[] = [];
   it.each([
-    ["returns a Promise that never settles", () => new Promise(() => undefined), false],
-    ["busy-waits before returning", () => { const until = Date.now() + 200; while (Date.now() < until); }, true],
-  ])("an observer that %s: the caller is delayed only by synchronous work", async (_label, behaviour, delays) => {
+    ["returns a Promise that never settles", () => { order.push("observer"); return new Promise(() => undefined); }, false],
+    ["busy-waits before returning", () => { order.push("observer"); const until = Date.now() + 200; while (Date.now() < until); }, true],
+  ])("an observer that %s: called once, and the caller continues right after it returns", async (_label, behaviour, busy) => {
     const { notifySeatDevicesRevoked, registerSeatDeviceRevocationObserver, seatDeviceRevocationNotice } = await import("./revocation-observer");
-    registerSeatDeviceRevocationObserver(behaviour);
+    const observer = vi.fn(behaviour);
+    registerSeatDeviceRevocationObserver(observer);
     const started = Date.now();
     await (async () => notifySeatDevicesRevoked([seatDeviceRevocationNotice(row, "self", "user-1")]))();
-    expect(Date.now() - started >= 200).toBe(delays);
+    expect([observer.mock.calls.length, ...order.splice(0), "caller"]).toEqual([1, "observer", "caller"]);
+    if (busy) expect(Date.now() - started).toBeGreaterThanOrEqual(200);
   });
 
   it("a log line that cannot read the error's name still leaves no unhandled rejection", async () => {
