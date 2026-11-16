@@ -296,7 +296,7 @@ const D2_DOCKER_SMOKE_INVOCATION = "bash scripts/d2-docker-smoke.sh";
 // Re-pinned 2026-11-16: add PR-only superseded-run cancellation.
 // Trigger coverage, every job/step and the local-clone binding are unchanged.
 const D2_DOCKER_SMOKE_WORKFLOW_SHA256 =
-  "92dd21e93c176498b6e3b0746a9297bb01a4d2acbfc94c6b407e7dfd48793fff";
+  "d7bda23a5469209020dc9f2e64cf3d9ad7981a3eebe8a32a61f2dbc615bf6a33";
 const D2_DOCKER_SMOKE_HELPER_SHA256 =
   "3aeb35c0d89a3826e8e5867f5a609f9052b53c6ca4b46a8e3846e9efc0a06b83";
 const GATEWAY_REVERSE_COMPOSITION_MARKERS = [

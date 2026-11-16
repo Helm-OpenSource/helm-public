@@ -184,6 +184,6 @@ The resource reservation SDK contract defines canonical demand and atomic store 
 版本化 server startup 的固定准入、等待屏障与超时边界见[可信用量组合](operations/LLM_TRUSTED_USAGE_EVIDENCE.md)；公开默认保留 legacy，未发行收费安装许可。 Versioned server startup supplies source admission and an awaited barrier, not payment authority.
 
 <!-- CI cost-control boundary -->
-CI / D2 Docker Smoke 仅取消同一 PR 的过期运行；push、手动运行及其重跑保持独立。所有现有检查与触发范围不变。
-CI / D2 Docker Smoke cancel superseded runs of the same PR only; push/manual runs and their retries remain isolated. Existing checks and trigger coverage are unchanged.
+CI / D2 Docker Smoke 仅取消同一 PR 的过期运行；所有重跑（包括旧 PR SHA）、push 和手动运行保持独立。所有现有检查与触发范围不变。
+CI / D2 Docker Smoke cancel superseded runs of the same PR only; all reruns (including old PR SHAs), push and manual runs remain isolated. Existing checks and trigger coverage are unchanged.
 验证 / Verify: `node scripts/check-pr-ci-concurrency.mjs`（由 CI Repo Guards 执行 / run by CI Repo Guards）。节省金额须以后续账单验证 / Savings require subsequent billing evidence.

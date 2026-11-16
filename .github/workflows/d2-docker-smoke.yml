@@ -29,10 +29,10 @@ permissions:
   contents: read
 
 # Cancel only superseded runs of this workflow on the same pull request.
-# Push and manual runs keep unique groups, including re-run attempts.
+# All reruns, including older PR SHAs, keep unique run/attempt groups.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}-${{ github.event_name != 'pull_request' && github.run_attempt || 0 }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.run_attempt == 1 && format('pr-{0}', github.event.pull_request.number) || format('run-{0}-{1}', github.run_id, github.run_attempt) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.run_attempt == 1 }}
 
 jobs:
   d2-docker-smoke:
