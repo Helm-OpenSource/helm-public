@@ -29,6 +29,7 @@ import { getLoginLockStatus } from "@/lib/auth/login-rate-limit.service";
 import { db } from "@/lib/db";
 import { __resetPackRegistryForTest, registerPackContributions } from "@/lib/extensions/registry-contract";
 import { hashSeatDeviceToken } from "@/lib/seat-device/contract";
+import { registerSeatDeviceRevocationObserver, type SeatDeviceRevocationNotice } from "@/lib/seat-device/revocation-observer";
 import { requestSeatDeviceAuthorization } from "@/lib/seat-device/store-authorize";
 import { handleSeatDeviceWebsiteList, handleSeatDeviceWebsiteRequest, type SeatDeviceWebsiteSession } from "@/lib/seat-device/website-routes";
 
@@ -64,6 +65,12 @@ type Answer = { status: number; body: unknown };
 const errorOf = (code: string) => ({ error: { code } });
 
 const SAME_ORIGIN = { origin: APP_ORIGIN, "sec-fetch-site": "same-origin", "content-type": "application/json" };
+
+// The revoke answers below are asserted with a registered observer.
+const observed: SeatDeviceRevocationNotice[] = [];
+registerSeatDeviceRevocationObserver((notices) => {
+  observed.push(...notices);
+});
 
 describeMysql("seat device website pairing on MySQL", () => {
   let workspaceId = "";
@@ -365,6 +372,11 @@ describeMysql("seat device website pairing on MySQL", () => {
     expect(await post(admin, { action: "revoke", deviceId: theirs })).toEqual({ status: 200, body: { revoked: true } });
     expect(await row(theirs)).toMatchObject({ status: "revoked", revokeReason: "admin", revokedByUserId: admin.userId });
     expect(await post(admin, { action: "revoke", deviceId: theirs })).toEqual({ status: 200, body: { revoked: false } });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(observed.filter((notice) => notice.deviceId === own || notice.deviceId === theirs)).toEqual([
+      expect.objectContaining({ deviceId: own, reason: "self", actorUserId: seat.userId }),
+      expect.objectContaining({ deviceId: theirs, reason: "admin", actorUserId: admin.userId }),
+    ]);
     expect((await list(seat)).body.mine).toEqual([expect.objectContaining({ deviceId: own, status: "revoked", revokeReason: "self" })]);
   });
 

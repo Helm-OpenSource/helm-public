@@ -369,6 +369,24 @@ customer overlays and commercial Pack source are intentionally excluded.
 
 External member landing takes precedence over deployment home and Core onboarding. Unknown scopes fail closed. Extensions must guard server-rendered management pages before exposing their shell; API authorization remains independent.
 
+坐席客户端设备被撤销后，Core 可以通知一个观察者，由扩展在组合根用 `registerSeatDeviceRevocationObserver` 登记。只允许登记一次：同一个函数重复登记不报错，另一个函数登记会报错。没有登记时，撤销与原来完全相同。
+
+- 何时调用：每条把设备置为已撤销的路径（设备用刷新令牌自撤、成员或管理员撤销、刷新时发现令牌复用或成员已失效、客户端取消一台从未使用过的设备），都在各自事务提交之后调用观察者一次，传入本次被撤销的设备列表；在调用方事务里批量撤销时，由调用方在提交后通知（见下条）。事务回滚或被重试的那次尝试不会通知。
+- 调用方事务：`revokeSeatDevicesInTx` 跑在调用方的事务里，自己不通知。调用方要通知时，传入 `onRevoked` 收集通知（每次事务尝试用新的收集容器），在自己的事务提交后调用 `notifySeatDevicesRevoked`；没有登记观察者时（`isSeatDeviceRevocationObserved` 为假）可以不传，省去收集时的一次读取。返回值仍是撤销的台数。`onRevoked` 抛错会让调用方的事务回滚。
+- 不等待、失败隔离：Core 调用观察者，但不等待它返回的 Promise。它抛错、返回被拒绝的 Promise 或返回的 Promise 一直不落定，都不改变撤销的应答与返回值；抛错或拒绝只记一行固定字段的日志，不含错误原文，也不含设备标识，扩展需要时自己记录。观察者返回之前的同步执行仍占用这次撤销请求，所以观察者必须立即返回，耗时的工作放进它返回的 Promise 里。
+- 通知字段：`deviceId`、`workspaceId`、`userId`、`membershipId`（可空）、`reason`（撤销原因）、`actorUserId`（操作人，可空）、`audiencePin`（设备上钉住的授权对象，可空）。不含任何令牌、口令或设备名称。没有工作区或用户的设备行不通知。
+- 扩展的责任：观察者必须自己保证幂等，扩展自己的补偿对账可能与通知处理同一台设备。进程在事务提交之后、观察者执行完之前重启，这次通知就丢失；需要完整收尾的扩展要自备补偿，例如按设备表里的撤销记录对账。
+- 不通知的情形：观察者失败后 Core 不重试；数据库提交已成功、但提交确认没有回到进程（例如连接在确认途中断开）时也不通知。只有状态被写成已撤销才通知，设备因过期、开关关闭或扩展自己的拒绝而不能用时，没有通知。
+
+After a seat device is revoked, Core can tell one observer, which an extension registers at the composition root with `registerSeatDeviceRevocationObserver`. It registers once: the same function again is accepted, another one throws. Without a registration every revoke is unchanged.
+
+- When: every path that sets a device revoked (the device revoking with its refresh token, the member or an admin revoking it, a refresh that finds token reuse or a member who no longer qualifies, the client cancelling a device it never used) calls the observer once after its own transaction commits, with the devices that call revoked; for the bulk revoke inside a caller's transaction, the caller notifies after its commit (next item). A rolled-back or retried attempt tells nothing.
+- Caller's transaction: `revokeSeatDevicesInTx` runs in the caller's transaction and does not notify. A caller that wants the notice passes `onRevoked` to collect it (a fresh collector for every attempt) and calls `notifySeatDevicesRevoked` after its own commit; without a registered observer (`isSeatDeviceRevocationObserved` is false) it may leave `onRevoked` out and save the read collecting takes. The return value is still the number of devices revoked. An `onRevoked` that throws rolls the caller's transaction back.
+- Not awaited, failures isolated: Core calls the observer but never awaits the Promise it returns. An observer that throws, rejects or returns a Promise that never settles changes no revoke answer or return value; a throw or rejection logs one fixed line without the error's text or any device identifier, so an extension that needs one records it itself. What the observer does before it returns still runs on the revoking request, so it must return at once and do slow work inside the Promise it returns.
+- Fields: `deviceId`, `workspaceId`, `userId`, `membershipId` (nullable), `reason`, `actorUserId` (nullable), `audiencePin` (the audience the device is pinned to, nullable). No token, password or device name. A device row without a workspace or a user is not told.
+- The extension's part: the observer must be idempotent, since the extension's own reconciliation may handle a device a notice already did. A process that stops after the commit and before the observer finishes loses that notice; an extension that needs every revoke brings its own reconciliation, for example against the revoke records in the device table.
+- Not told: Core does not retry a failed observer, and a commit that succeeded in the database but whose confirmation never reached the process (for example a connection dropped during the acknowledgement) tells nothing. Only setting a device revoked tells; a device that stops working because it expired, a switch is off or the extension refuses it is not told.
+
 坐席客户端设备批准时的授权对象（受众选项）由已登记的 `seatDeviceAudienceOptions` 提供。只允许一个扩展登记，第二个登记会在注册时报错。扩展的 `listOptions` 列出当前成员可选的授权对象，Core 负责展示，并校验所选值确实在当时读到的清单里，批准时把它写入设备的 `audiencePin`，只写一次，之后不再改。没有登记扩展或清单为空时，批准与原来完全相同；此时请求若带了所选值，答 `audience_invalid`。
 
 - 调用约定：`listOptions` 只读、不写库，可能被重复调用（查找一次、批准再一次），在 Core 的任何事务之外调用，不得依赖调用方事务。每次调用限时 2 秒，超时后 Core 触发传入的 `AbortSignal` 并丢弃结果；不理会信号的扩展会继续跑完，结果不会被采用。
