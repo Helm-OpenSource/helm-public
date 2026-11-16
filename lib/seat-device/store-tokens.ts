@@ -206,6 +206,12 @@ export async function revokeSeatDeviceByMember(input: {
 // it case-insensitively and ignore trailing spaces. A device pinned after the
 // caller's snapshot reads unpinned here and is kept; the extension's check of
 // every device request still refuses it once that audience's seat is inactive.
+// Keeping unpinned devices has a cost: an unpinned device that was never used
+// survives the deactivation, and if that seat is enabled again its first use
+// pins it there and it works, which is what revoking on deactivation is meant
+// to prevent. So an extension passes `audiencePin` only while the member still
+// has another valid audience; when the deactivated one was the member's last,
+// it omits `audiencePin` and every device of the membership is revoked.
 // Returns the number of devices this call revoked.
 export async function revokeSeatDevicesInTx(
   tx: Prisma.TransactionClient,
