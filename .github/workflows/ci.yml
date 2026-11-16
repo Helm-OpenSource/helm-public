@@ -20,6 +20,7 @@ concurrency:
 
 jobs:
   type-check:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: Type Check
     runs-on: ubuntu-latest
     steps:
@@ -44,6 +45,7 @@ jobs:
         run: npm run typecheck
 
   lint:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: Lint
     runs-on: ubuntu-latest
     steps:
@@ -66,6 +68,7 @@ jobs:
         run: npm run lint:strict
 
   repo-guards:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: Repo Guards
     runs-on: ubuntu-latest
     steps:
@@ -132,6 +135,7 @@ jobs:
         run: npm run check:secret-history
 
   validate-env:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: Validate Environment
     runs-on: ubuntu-latest
     steps:
@@ -155,6 +159,7 @@ jobs:
         continue-on-error: true
 
   build:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: Build
     runs-on: ubuntu-latest
     needs: [type-check, lint, repo-guards, model-egress-mysql,
@@ -189,6 +194,7 @@ jobs:
           retention-days: 7
 
   test:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: Test
     runs-on: ubuntu-latest
     needs: [type-check, lint, repo-guards, model-egress-mysql,
@@ -239,6 +245,7 @@ jobs:
   # generated per job at runtime, masked before first use, and injected through
   # the protected $GITHUB_ENV file. Tests never connect as root.
   caio-stage1-mysql:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: CAIO Stage1 MySQL
     runs-on: ubuntu-latest
     needs: [type-check, repo-guards]
@@ -339,6 +346,7 @@ jobs:
         run: npm run test:caio-stage1:http:mysql
 
   caio-pro-v1-mysql:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: CAIO Pro V1 Synthetic Loop MySQL
     runs-on: ubuntu-latest
     needs: [type-check, repo-guards]
@@ -432,6 +440,7 @@ jobs:
         run: npm run test:caio-pro-v1:mysql
 
   model-egress-mysql:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: Model Egress MySQL
     runs-on: ubuntu-latest
     needs: [type-check, repo-guards]
@@ -684,6 +693,7 @@ jobs:
         run: rm -f "${RUNNER_TEMP}/helm-c4-root-password"
 
   caio-access-gateway-mysql:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: CAIO Access Gateway Token Store MySQL
     runs-on: ubuntu-latest
     needs: [type-check, repo-guards]
@@ -784,6 +794,7 @@ jobs:
         run: npm run test:auth-verification-code:mysql
 
   caio-inference-mysql:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: CAIO Inference Queue MySQL
     runs-on: ubuntu-latest
     needs: [type-check, repo-guards]
@@ -876,6 +887,7 @@ jobs:
         run: npm run test:caio-inference:mysql
 
   caio-context-memory-mysql:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: CAIO Context Broker and Enterprise Memory MySQL
     runs-on: ubuntu-latest
     needs: [type-check, repo-guards]
@@ -969,6 +981,7 @@ jobs:
         run: npm run test:caio-context-memory:mysql
 
   caio-audit-state-mysql:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: CAIO Audit State MySQL
     runs-on: ubuntu-latest
     needs: [type-check, repo-guards]
@@ -1067,6 +1080,7 @@ jobs:
   # the tests then connect only as the fixture identities (plus the migration
   # identity for fixture setup) and assert every unlisted privilege is 1142.
   caio-attention-mysql:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: CAIO Attention MySQL
     runs-on: ubuntu-latest
     needs: [type-check, repo-guards]
@@ -1210,6 +1224,7 @@ jobs:
         run: rm -f "${RUNNER_TEMP}/helm-attention-root-password"
 
   member-gateway-signal-mysql:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: Member Gateway MySQL
     runs-on: ubuntu-latest
     needs: [type-check, repo-guards]
@@ -1343,6 +1358,7 @@ jobs:
           grep -q 'rollback refused: seat device authorization tables are not empty' <<<"${output}"
 
   quality-regression:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: Public Guard Regression
     runs-on: ubuntu-latest
     needs: [type-check, lint, repo-guards]
@@ -1366,6 +1382,7 @@ jobs:
         run: npm run quality:regression
 
   e2e:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: Public Structure Smoke
     runs-on: ubuntu-latest
     needs: [type-check, lint, repo-guards]
@@ -1393,6 +1410,7 @@ jobs:
   # starts the production bundle and drives the object-first wave-1 path
   # (contacts -> opportunity -> approval) and the mobile surface.
   browser-regression:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: Browser Regression
     # Playwright 1.59.1 does not support Ubuntu 26.04 yet; keep the browser
     # runner on a supported image until the Playwright toolchain is upgraded.

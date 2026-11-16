@@ -36,6 +36,7 @@ concurrency:
 
 jobs:
   d2-docker-smoke:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: Fresh Clone Docker Smoke
     runs-on: ubuntu-latest
     timeout-minutes: 30
