@@ -57,7 +57,7 @@ async function post(body: Record<string, string>, labels: Record<string, string>
   const data = await response.json().catch(() => null);
   if (!response.ok) {
     const code = typeof data?.error?.code === "string" ? data.error.code : null;
-    throw new SeatDeviceRequestError((code && (labels[code] ?? ERROR_LABELS[code])) ?? "操作失败，请稍后重试。", code);
+    throw new SeatDeviceRequestError((code ? labels[code] ?? ERROR_LABELS[code] : undefined) ?? "操作失败，请稍后重试。", code);
   }
   return data;
 }
