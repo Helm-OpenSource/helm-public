@@ -12,6 +12,12 @@ on:
   # Any base branch: stacked PRs whose base is a feature branch need the same
   # checks as PRs into main/develop. `push:` stays limited to main/develop.
 
+# Cancel only superseded runs of this workflow on the same pull request.
+# All reruns, including older PR SHAs, keep unique run/attempt groups.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.run_attempt == 1 && format('pr-{0}', github.event.pull_request.number) || format('run-{0}-{1}', github.run_id, github.run_attempt) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.run_attempt == 1 }}
+
 jobs:
   type-check:
     name: Type Check
@@ -76,6 +82,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: PR concurrency safety guard
+        run: node scripts/check-pr-ci-concurrency.mjs
 
       - name: Self check
         run: npm run self-check

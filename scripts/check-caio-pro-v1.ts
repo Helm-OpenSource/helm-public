@@ -293,11 +293,10 @@ const WORKFLOW_USES =
 const D2_DOCKER_SMOKE_WORKFLOW = ".github/workflows/d2-docker-smoke.yml";
 const D2_DOCKER_SMOKE_HELPER = "scripts/d2-docker-smoke.sh";
 const D2_DOCKER_SMOKE_INVOCATION = "bash scripts/d2-docker-smoke.sh";
-// Re-pinned 2026-10-16: the only change is the `pull_request:` arm dropping its
-// main/develop branch filter so stacked PRs get the same smoke; the job body and
-// the local-clone binding are byte-identical to the previous pin.
+// Re-pinned 2026-11-16: add PR-only superseded-run cancellation.
+// Trigger coverage, every job/step and the local-clone binding are unchanged.
 const D2_DOCKER_SMOKE_WORKFLOW_SHA256 =
-  "5c524f19b50d389bcd8c82733048946695031b63412c76191771af9fe65d843f";
+  "d7bda23a5469209020dc9f2e64cf3d9ad7981a3eebe8a32a61f2dbc615bf6a33";
 const D2_DOCKER_SMOKE_HELPER_SHA256 =
   "3aeb35c0d89a3826e8e5867f5a609f9052b53c6ca4b46a8e3846e9efc0a06b83";
 const GATEWAY_REVERSE_COMPOSITION_MARKERS = [
