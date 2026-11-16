@@ -200,6 +200,12 @@ export async function revokeSeatDeviceByMember(input: {
 // transaction, so the deactivation and the revocation commit together. The
 // extension passes the acting membership's own workspace and id (a
 // contractor's member belongs to another workspace than the case binding).
+// With `audiencePin`, only the devices pinned to exactly that audience are
+// revoked: the member's devices of other audiences and unpinned ones stay.
+// The pin is compared here, not in SQL: the column's collation would match
+// it case-insensitively and ignore trailing spaces. A device pinned after the
+// caller's snapshot reads unpinned here and is kept; the extension's check of
+// every device request still refuses it once that audience's seat is inactive.
 // Returns the number of devices this call revoked.
 export async function revokeSeatDevicesInTx(
   tx: Prisma.TransactionClient,
@@ -207,6 +213,7 @@ export async function revokeSeatDevicesInTx(
     workspaceId: string;
     membershipId: string;
     reason: Extract<SeatDeviceRevokeReason, "membership_inactive" | "seat_inactive">;
+    audiencePin?: string;
     actor?: { userId: string; name: string } | null;
     now?: Date;
   },
@@ -215,10 +222,11 @@ export async function revokeSeatDevicesInTx(
   const actor = input.actor ?? null;
   const rows = await tx.seatDeviceAuthorization.findMany({
     where: { workspaceId: input.workspaceId, membershipId: input.membershipId, status: { in: REVOCABLE_STATUSES } },
-    select: { id: true, workspaceId: true, userId: true, clientType: true, deviceLabel: true },
+    select: { id: true, workspaceId: true, userId: true, clientType: true, deviceLabel: true, audiencePin: true },
   });
   let revoked = 0;
-  for (const row of rows) {
+  for (const { audiencePin, ...row } of rows) {
+    if (input.audiencePin !== undefined && audiencePin !== input.audiencePin) continue;
     // Matched on the revocable states, not the version read: an UPDATE reads
     // the latest committed row, so a device rotated after the caller's
     // snapshot is still revoked, and one revoked meanwhile is skipped.
