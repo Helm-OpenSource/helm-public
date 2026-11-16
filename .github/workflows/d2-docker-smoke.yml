@@ -28,6 +28,12 @@ on:
 permissions:
   contents: read
 
+# Cancel only superseded runs of this workflow on the same pull request.
+# Push and manual runs keep unique groups, including re-run attempts.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}-${{ github.event_name != 'pull_request' && github.run_attempt || 0 }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   d2-docker-smoke:
     name: Fresh Clone Docker Smoke
