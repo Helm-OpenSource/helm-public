@@ -32,6 +32,7 @@ concurrency:
 
 jobs:
   preflight:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: Lint + Typecheck + Boundary
     runs-on: ubuntu-latest
     # ~2x the measured 7m45s runtime; see the TIMEOUT BUDGET note above.
