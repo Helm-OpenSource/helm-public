@@ -6,7 +6,7 @@
 // one, "拒绝" as the default button, the page refusing to be framed, its
 // deployment switch, and a signed-out visitor coming back to it after login.
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -204,5 +204,41 @@ describe("seat device verification page", () => {
     cleanup();
     const chosen = await approveThroughPage(WITH_OPTIONS, "对象甲");
     expect(chosen).toEqual({ action: "approve", requestId: "req1", pairingCode: "BCDF-GHJK", workspaceId: "ws1", password: "typed password", audience: "audience:a1" });
+  });
+
+  it("does not reject on Enter in an audience option", () => {
+    const onReject = vi.fn();
+    render(<SeatDeviceDecisionPanel lookup={WITH_OPTIONS} pending={false} onReject={onReject} onApprove={() => {}} />);
+    const option = screen.getByLabelText("对象甲");
+    // fireEvent answers false when the handler prevented the default (the implicit submission).
+    expect(fireEvent.keyDown(option, { key: "Enter" })).toBe(false);
+    expect(onReject).not.toHaveBeenCalled();
+  });
+
+  it.each(["audience_invalid", "workspace_mismatch"])("goes back to the code lookup after %s, keeping the code", async (code) => {
+    const actions: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      actions.push(body.action);
+      if (body.action === "lookup") return new Response(JSON.stringify(WITH_OPTIONS), { status: 200, headers: { "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ error: { code } }), { status: 409, headers: { "Content-Type": "application/json" } });
+    }));
+    try {
+      render(<DeviceConfirmClient />);
+      const user = userEvent.setup();
+      await user.type(screen.getByLabelText("配对码"), "BCDF-GHJK");
+      await user.click(screen.getByRole("button", { name: "查找" }));
+      await user.type(await screen.findByLabelText("授权前请再次输入登录密码"), "typed password");
+      await user.click(screen.getByLabelText("对象甲"));
+      await user.click(screen.getByRole("button", { name: "授权这台设备" }));
+      await screen.findByText(/请重新输入配对码查找/);
+      expect(screen.queryByRole("button", { name: "授权这台设备" })).toBeNull();
+      expect(screen.getByLabelText("配对码")).toHaveProperty("value", "BCDF-GHJK");
+      await user.click(screen.getByRole("button", { name: "查找" }));
+      await screen.findByLabelText("授权前请再次输入登录密码");
+      expect(actions).toEqual(["lookup", "approve", "lookup"]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

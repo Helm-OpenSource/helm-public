@@ -33,10 +33,20 @@ const ERROR_LABELS: Record<string, string> = {
   invalid_input: "输入不符合要求。",
   audience_invalid: "可选的授权对象已变化，请重新输入配对码查找。",
 };
-// With an audience chosen the device cap counts per audience.
+// With an audience chosen the device cap counts per audience, and every
+// device of the member counts toward a total of 60.
 const AUDIENCE_ERROR_LABELS: Record<string, string> = {
-  too_many_devices: "这个授权对象下已有 3 台设备，请先在设备列表中撤销不用的设备。",
+  too_many_devices: "这个授权对象下已有 3 台设备，或你的设备总数已达 60 台，请先在设备列表中撤销不用的设备。",
 };
+// Answers whose way out is looking the code up again (their text says so):
+// the page goes back to the lookup step with the code still typed in.
+const LOOK_UP_AGAIN = new Set(["audience_invalid", "workspace_mismatch"]);
+
+class SeatDeviceRequestError extends Error {
+  constructor(message: string, readonly code: string | null) {
+    super(message);
+  }
+}
 
 async function post(body: Record<string, string>, labels: Record<string, string> = {}) {
   const response = await fetch("/api/settings/seat-devices", {
@@ -45,7 +55,10 @@ async function post(body: Record<string, string>, labels: Record<string, string>
     body: JSON.stringify(body),
   });
   const data = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(labels[data?.error?.code] ?? ERROR_LABELS[data?.error?.code] ?? "操作失败，请稍后重试。");
+  if (!response.ok) {
+    const code = typeof data?.error?.code === "string" ? data.error.code : null;
+    throw new SeatDeviceRequestError((code && (labels[code] ?? ERROR_LABELS[code])) ?? "操作失败，请稍后重试。", code);
+  }
   return data;
 }
 
@@ -72,7 +85,15 @@ export function SeatDeviceDecisionPanel(props: {
           <legend>选择这台设备的授权对象</legend>
           {options.map((option) => (
             <label key={option.value} className="flex items-center gap-2">
-              <input type="radio" name="seat-device-audience" value={option.value} checked={audience === option.value} onChange={() => setAudience(option.value)} />
+              <input
+                type="radio"
+                name="seat-device-audience"
+                value={option.value}
+                checked={audience === option.value}
+                onChange={() => setAudience(option.value)}
+                // Like the password field: Enter here must not submit the form, which rejects.
+                onKeyDown={(event) => { if (event.key === "Enter") event.preventDefault(); }}
+              />
               {option.label}
             </label>
           ))}
@@ -132,7 +153,12 @@ export function DeviceConfirmClient() {
       ...(action === "approve" && audience !== undefined ? { audience } : {}),
     };
     run(async () => {
-      await post(body, audience !== undefined ? AUDIENCE_ERROR_LABELS : {});
+      try {
+        await post(body, audience !== undefined ? AUDIENCE_ERROR_LABELS : {});
+      } catch (error) {
+        if (error instanceof SeatDeviceRequestError && error.code && LOOK_UP_AGAIN.has(error.code)) setLookup(null);
+        throw error;
+      }
       setLookup(null);
       setCode("");
       return action === "approve" ? "已授权。回到坐席客户端即可继续；如需撤销，请到设备列表。" : "已拒绝，这个配对码已作废。";
