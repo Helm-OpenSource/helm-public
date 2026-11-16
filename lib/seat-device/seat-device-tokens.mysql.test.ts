@@ -367,6 +367,32 @@ describeMysql("seat device credentials (classify, pin, revoke) on MySQL", () => 
     expect((await row(kept.deviceId)).status).toBe("active");
   });
 
+  it("revokes only a membership's devices of one audience when asked to", async () => {
+    const now = nextClock();
+    const who = await member();
+    const [first, second, unpinned] = [await device(now, who), await device(now, who), await device(now, who)];
+    await db.$transaction(async (tx) => {
+      await pinSeatDeviceAudienceInTx(tx, { deviceId: first.deviceId, audiencePin: "audience:a1", now });
+      await pinSeatDeviceAudienceInTx(tx, { deviceId: second.deviceId, audiencePin: "audience:b2", now });
+    });
+    const revoke = (audiencePin?: string) =>
+      db.$transaction((tx) => revokeSeatDevicesInTx(tx, { workspaceId, membershipId: who.membershipId, reason: "seat_inactive", audiencePin, now: at(now, 10) }));
+
+    // Exact match only: the column's case-insensitive collation plays no part.
+    await expect(revoke("AUDIENCE:A1")).resolves.toBe(0);
+    await expect(revoke("audience:a1 ")).resolves.toBe(0);
+    await expect(revoke("audience:a1")).resolves.toBe(1);
+    expect(await row(first.deviceId)).toMatchObject({ status: "revoked", revokeReason: "seat_inactive" });
+    expect(await db.auditLog.count({ where: { targetId: first.deviceId, actionType: "SEAT_DEVICE_REVOKED" } })).toBe(1);
+    expect((await row(second.deviceId)).status).toBe("active");
+    expect((await row(unpinned.deviceId)).status).toBe("active");
+    await expect(revoke("audience:a1")).resolves.toBe(0);
+
+    // Without an audience, every remaining device of the membership goes.
+    await expect(revoke()).resolves.toBe(2);
+    for (const id of [second.deviceId, unpinned.deviceId]) expect((await row(id)).status).toBe("revoked");
+  });
+
   it("pins the audience once and never changes it", async () => {
     const now = nextClock();
     const live = await device(now);
