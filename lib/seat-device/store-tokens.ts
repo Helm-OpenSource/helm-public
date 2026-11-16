@@ -48,6 +48,11 @@ import {
   loadMemberContext,
   retried,
 } from "@/lib/seat-device/store-authorize";
+import {
+  notifySeatDevicesRevoked,
+  seatDeviceRevocationNotice,
+  type SeatDeviceRevocationNotice,
+} from "@/lib/seat-device/revocation-observer";
 
 // An approved request becomes a device on claim, so revoking it stops the
 // claim; an active row past its absolute expiry is revoked too (records the
@@ -62,6 +67,8 @@ type DeviceRow = {
   version: number;
   workspaceId: string | null;
   userId: string | null;
+  membershipId: string | null;
+  audiencePin: string | null;
   clientType: string;
   deviceLabel: string;
 };
@@ -108,7 +115,7 @@ async function revokeWhere(
 
 function auditRevoke(
   tx: Prisma.TransactionClient,
-  row: Omit<DeviceRow, "status" | "version">,
+  row: Omit<DeviceRow, "status" | "version" | "membershipId" | "audiencePin">,
   reason: SeatDeviceRevokeReason,
   payload: Record<string, unknown>,
   actor: { userId: string; name: string } | null,
@@ -117,7 +124,9 @@ function auditRevoke(
 }
 
 // Revokes a row read in the same Serializable transaction; a lost CAS is a
-// conflict the caller's retry loop re-runs.
+// conflict the caller's retry loop re-runs. Returns the revocation notice,
+// which the caller hands out with its transaction's result and passes to
+// notifySeatDevicesRevoked after the commit.
 export async function revokeDeviceRowInTx(
   tx: Prisma.TransactionClient,
   row: DeviceRow,
@@ -125,10 +134,11 @@ export async function revokeDeviceRowInTx(
   now: Date,
   payload: Record<string, unknown>,
   actor: { userId: string; name: string } | null = null,
-) {
+): Promise<SeatDeviceRevocationNotice | null> {
   const unchanged = Prisma.sql`\`status\` = ${row.status} AND \`version\` = ${row.version}`;
   if (!(await revokeWhere(tx, row.id, unchanged, reason, now, actor))) casLost();
   await auditRevoke(tx, row, reason, payload, actor);
+  return seatDeviceRevocationNotice(row, reason, actor?.userId ?? null);
 }
 
 // ---------------------------------------------------------------------------
@@ -148,11 +158,12 @@ export async function revokeSeatDeviceWithRefreshToken(input: {
   const now = input.now ?? new Date();
   const found = await findSeatDeviceByRefreshHash(db, hashSeatDeviceToken(input.refreshToken));
   if (!found) return;
-  await retried(() => db.$transaction(async (tx) => {
+  const notice = await retried(() => db.$transaction(async (tx) => {
     const row = await tx.seatDeviceAuthorization.findUnique({ where: { id: found.deviceId } });
-    if (!row || !REVOCABLE_STATUSES.includes(row.status)) return;
-    await revokeDeviceRowInTx(tx, row, input.reason, now, { refreshTokenMatched: found.match });
+    if (!row || !REVOCABLE_STATUSES.includes(row.status)) return null;
+    return revokeDeviceRowInTx(tx, row, input.reason, now, { refreshTokenMatched: found.match });
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), "temporarily_unavailable");
+  notifySeatDevicesRevoked([notice]);
 }
 
 // ---------------------------------------------------------------------------
@@ -180,16 +191,18 @@ export async function revokeSeatDeviceByMember(input: {
   const own = peek.userId === member.userId;
   if (!own && !REVOKERS_OF_OTHERS.includes(member.role)) throw new SeatDeviceAuthError("forbidden");
 
-  return retried(() => db.$transaction(async (tx) => {
+  const outcome = await retried(() => db.$transaction(async (tx) => {
     const row = await tx.seatDeviceAuthorization.findUnique({ where: { id: input.deviceId } });
     if (!row || row.userId !== peek.userId || row.workspaceId !== peek.workspaceId) throw new SeatDeviceAuthError("forbidden");
-    if (!REVOCABLE_STATUSES.includes(row.status)) return { revoked: false };
-    await revokeDeviceRowInTx(tx, row, own ? "self" : "admin", now, { revokedBySelf: own }, {
+    if (!REVOCABLE_STATUSES.includes(row.status)) return { revoked: false, notice: null };
+    const notice = await revokeDeviceRowInTx(tx, row, own ? "self" : "admin", now, { revokedBySelf: own }, {
       userId: member.userId,
       name: member.userName,
     });
-    return { revoked: true };
+    return { revoked: true, notice };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), "temporarily_unavailable");
+  notifySeatDevicesRevoked([outcome.notice]);
+  return { revoked: outcome.revoked };
 }
 
 // ---------------------------------------------------------------------------
@@ -212,7 +225,10 @@ export async function revokeSeatDeviceByMember(input: {
 // to prevent. So an extension passes `audiencePin` only while the member still
 // has another valid audience; when the deactivated one was the member's last,
 // it omits `audiencePin` and every device of the membership is revoked.
-// Returns the number of devices this call revoked.
+// Returns the number of devices this call revoked. The caller's transaction
+// commits after this returns, so the caller collects each revocation through
+// `onRevoked` (fresh for every attempt of a retried transaction) and passes
+// them to notifySeatDevicesRevoked after its commit.
 export async function revokeSeatDevicesInTx(
   tx: Prisma.TransactionClient,
   input: {
@@ -222,6 +238,7 @@ export async function revokeSeatDevicesInTx(
     audiencePin?: string;
     actor?: { userId: string; name: string } | null;
     now?: Date;
+    onRevoked?: (notice: SeatDeviceRevocationNotice) => void;
   },
 ): Promise<number> {
   const now = input.now ?? new Date();
@@ -239,6 +256,14 @@ export async function revokeSeatDevicesInTx(
     if (!(await revokeWhere(tx, row.id, Prisma.sql`\`status\` IN ('approved', 'active')`, input.reason, now, actor))) continue;
     revoked += 1;
     await auditRevoke(tx, row, input.reason, {}, actor);
+    if (input.onRevoked) {
+      // The pin is written once, so only an unpinned snapshot can be stale: a
+      // pin written after the caller's snapshot is read back here, where this
+      // transaction's own UPDATE makes the read see the row it revoked.
+      const pin = audiencePin ?? (await tx.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: row.id }, select: { audiencePin: true } })).audiencePin;
+      const notice = seatDeviceRevocationNotice({ ...row, membershipId: input.membershipId, audiencePin: pin }, input.reason, actor?.userId ?? null);
+      if (notice) input.onRevoked(notice);
+    }
   }
   return revoked;
 }
@@ -386,7 +411,7 @@ async function loadRefreshStanding(row: {
 
 type RefreshOutcome =
   | { ok: true; grant: SeatDeviceRefreshGrant }
-  | { ok: false; code: SeatDeviceErrorCode; retryAfterSeconds?: number };
+  | { ok: false; code: SeatDeviceErrorCode; retryAfterSeconds?: number; revoked?: SeatDeviceRevocationNotice | null };
 
 // Design §4.6. Presenting the current refresh token rotates the pair: the
 // old access token stays usable until min(its expiry, now + 60 s), the old
@@ -444,12 +469,12 @@ export async function refreshSeatDeviceToken(input: {
       input.source !== null &&
       row.rotationSource === input.source;
     if (slot !== "current" && !grace) {
-      await revokeDeviceRowInTx(tx, row, "refresh_reuse", now, { refreshTokenMatched: slot, sourceTrusted: input.source !== null });
-      return { ok: false, code: "token_revoked" };
+      const revoked = await revokeDeviceRowInTx(tx, row, "refresh_reuse", now, { refreshTokenMatched: slot, sourceTrusted: input.source !== null });
+      return { ok: false, code: "token_revoked", revoked };
     }
     if (!standing.ok && "revoke" in standing) {
-      await revokeDeviceRowInTx(tx, row, standing.revoke, now, {});
-      return { ok: false, code: "account_disabled" };
+      const revoked = await revokeDeviceRowInTx(tx, row, standing.revoke, now, {});
+      return { ok: false, code: "account_disabled", revoked };
     }
     const markUsed = async () => {
       if (slot !== "current" || row.refreshTokenUsed) return;
@@ -541,6 +566,10 @@ export async function refreshSeatDeviceToken(input: {
       },
     };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), "rate_limited");
-  if (!outcome.ok) throw new SeatDeviceAuthError(outcome.code, outcome.retryAfterSeconds ?? null);
+  if (!outcome.ok) {
+    // A revoke here committed with the transaction; the refusal follows it.
+    notifySeatDevicesRevoked([outcome.revoked ?? null]);
+    throw new SeatDeviceAuthError(outcome.code, outcome.retryAfterSeconds ?? null);
+  }
   return outcome.grant;
 }

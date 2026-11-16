@@ -23,6 +23,7 @@ import * as revokeRoute from "@/app/api/public-auth/seat-device/device-tokens/re
 import { hashPassword } from "@/lib/auth/formal-auth";
 import { db } from "@/lib/db";
 import { hashSeatDeviceToken, mintSeatDeviceToken, normalizeSeatDevicePairingCode } from "@/lib/seat-device/contract";
+import { registerSeatDeviceRevocationObserver, type SeatDeviceRevocationNotice } from "@/lib/seat-device/revocation-observer";
 import { decideSeatDeviceAuthorization, verifySeatDeviceApprovalPassword } from "@/lib/seat-device/store-authorize";
 
 const integrationDatabaseUrl = process.env.SEAT_DEVICE_DATABASE_URL;
@@ -115,6 +116,17 @@ const errorOf = (code: string) => ({ error: { code } });
 // For exact assertions: the status and the whole body, nothing more.
 const only = ({ status, body }: Answer) => ({ status, body });
 const DEVICE = { deviceName: "前台电脑", clientType: "seat_desktop", clientVersion: "1.0.0" };
+
+// Every answer below is asserted with a registered observer: telling it
+// changes no status and no body.
+const observed: SeatDeviceRevocationNotice[] = [];
+registerSeatDeviceRevocationObserver((notices) => {
+  observed.push(...notices);
+});
+const told = async (deviceId: string) => {
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  return observed.filter((notice) => notice.deviceId === deviceId).map((notice) => notice.reason);
+};
 
 describeMysql("seat device endpoints on MySQL", () => {
   let workspaceId = "";
@@ -305,6 +317,7 @@ describeMysql("seat device endpoints on MySQL", () => {
     expect(only(await post("cancel", { ...poll, pollToken: mintSeatDeviceToken("poll").token }))).toEqual({ status: 200, body: { status: "expired" } });
     expect(only(await post("cancel", poll))).toEqual({ status: 200, body: { status: "cancelled" } });
     expect(only(await post("cancel", poll))).toEqual({ status: 200, body: { status: "revoked" } });
+    expect(await told(grant.requestId)).toEqual(["client_cancelled"]);
     // A pending request cancels to cancelled and then claims as expired.
     const second = await authorize();
     const secondPoll = { requestId: second.grant.requestId, pollToken: second.grant.pollToken };
@@ -321,7 +334,8 @@ describeMysql("seat device endpoints on MySQL", () => {
     expect((await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: first.deviceId } })).rotationSource).toBe(first.source);
     tick(61);
     // The previous token after the grace window is reuse: the device is revoked.
-    expect(await post("refresh", { refreshToken: first.refreshToken }, first.source)).toMatchObject({ status: 401, body: errorOf("token_revoked") });
+    expect(only(await post("refresh", { refreshToken: first.refreshToken }, first.source))).toEqual({ status: 401, body: errorOf("token_revoked") });
+    expect(await told(first.deviceId)).toEqual(["refresh_reuse"]);
     const next = (rotated.body as { refreshToken: string }).refreshToken;
     expect(await post("refresh", { refreshToken: next }, first.source)).toMatchObject({ status: 401, body: errorOf("device_revoked") });
     expect(await post("refresh", { refreshToken: mintSeatDeviceToken("refresh").token })).toMatchObject({ status: 401, body: errorOf("token_revoked") });
@@ -332,7 +346,8 @@ describeMysql("seat device endpoints on MySQL", () => {
 
     const left = await device();
     await db.membership.update({ where: { id: left.owner.membershipId }, data: { status: MembershipStatus.INACTIVE } });
-    expect(await post("refresh", { refreshToken: left.refreshToken }, left.source)).toMatchObject({ status: 401, body: errorOf("account_disabled") });
+    expect(only(await post("refresh", { refreshToken: left.refreshToken }, left.source))).toEqual({ status: 401, body: errorOf("account_disabled") });
+    expect(await told(left.deviceId)).toEqual(["membership_inactive"]);
     expect((await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: left.deviceId } })).revokeReason).toBe("membership_inactive");
   });
 
@@ -395,6 +410,7 @@ describeMysql("seat device endpoints on MySQL", () => {
     const row = await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: owned.deviceId } });
     expect(row).toMatchObject({ status: "revoked", revokeReason: "client_cancelled" });
     expect(only(await post("revoke", { refreshToken: owned.refreshToken }))).toEqual({ status: 200, body: {} });
+    expect(await told(owned.deviceId)).toEqual(["client_cancelled"]);
   });
 
   it("answers every endpoint 404 with no body while the switch is off, and stores nothing", async () => {

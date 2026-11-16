@@ -112,6 +112,7 @@ import {
 } from "@/lib/auth/membership-lifecycle";
 import { findFirstMembershipWithExistingUser } from "@/lib/auth/membership-with-user";
 import { isSeatDeviceAuthDeploymentEnabled } from "@/lib/seat-device/contract";
+import { isSeatDeviceRevocationObserved, notifySeatDevicesRevoked, type SeatDeviceRevocationNotice } from "@/lib/seat-device/revocation-observer";
 import { revokeSeatDevicesInTx } from "@/lib/seat-device/store-tokens";
 import { buildMemberDefinitionDraft, type MemberDefinitionDraft } from "@/lib/definitions/member-definition";
 import {
@@ -1386,7 +1387,8 @@ export async function updateOrganizationMembershipLifecycleAction(
   // member was inactive would work again once they are re-activated. Only
   // while the deployment switch is on: until then the device table may not
   // be readable by this process, and no device can be used anyway.
-  const updatedMembership = await db.$transaction(async (tx) => {
+  const { updated: updatedMembership, revokedDevices } = await db.$transaction(async (tx) => {
+    const revoked: SeatDeviceRevocationNotice[] = [];
     const updated = await tx.membership.update({
       where: { id: targetMembership.id },
       data: {
@@ -1400,10 +1402,14 @@ export async function updateOrganizationMembershipLifecycleAction(
         membershipId: targetMembership.id,
         reason: "membership_inactive",
         actor: { userId: user.id, name: user.name },
+        // Collected only for a registered observer: the pin read it may take
+        // is then skipped for every deployment without one.
+        onRevoked: isSeatDeviceRevocationObserved() ? (notice) => revoked.push(notice) : undefined,
       });
     }
-    return updated;
+    return { updated, revokedDevices: revoked };
   });
+  notifySeatDevicesRevoked(revokedDevices);
 
   await writeAuditLog({
     workspaceId: workspace.id,

@@ -69,6 +69,7 @@ import {
   type SeatDeviceErrorCode,
   type SeatDeviceIdentity,
 } from "@/lib/seat-device/contract";
+import { notifySeatDevicesRevoked, seatDeviceRevocationNotice, type SeatDeviceRevocationNotice } from "@/lib/seat-device/revocation-observer";
 
 const TX = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
 // Concurrent writers on the counted index ranges deadlock under Serializable
@@ -281,7 +282,7 @@ export async function cancelSeatDeviceAuthorization(input: {
   assertDeploymentEnabled();
   const now = input.now ?? new Date();
   const pollTokenHash = hashSeatDeviceToken(input.pollToken);
-  return retried(() => db.$transaction(async (tx): Promise<{ status: SeatDeviceCancelStatus }> => {
+  const outcome = await retried(() => db.$transaction(async (tx): Promise<{ status: SeatDeviceCancelStatus; revoked?: SeatDeviceRevocationNotice | null }> => {
     const row = await tx.seatDeviceAuthorization.findUnique({ where: { id: input.requestId } });
     if (!row || !seatDeviceHashesEqual(row.pollTokenHash, pollTokenHash)) return { status: "expired" as const };
     const status = effectiveSeatDeviceStatus(row, now);
@@ -317,7 +318,7 @@ export async function cancelSeatDeviceAuthorization(input: {
         reason: "client_cancelled",
         refreshTokenPresented: false,
       });
-      return { status: "cancelled" as const };
+      return { status: "cancelled" as const, revoked: seatDeviceRevocationNotice(row, "client_cancelled", null) };
     }
     if (status === "expired") {
       await clearLapsedPairingCode(tx, row);
@@ -326,6 +327,8 @@ export async function cancelSeatDeviceAuthorization(input: {
     if (status === "cancelled" || status === "rejected" || status === "revoked") return { status };
     return { status: "expired" as const };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), "temporarily_unavailable");
+  notifySeatDevicesRevoked([outcome.revoked ?? null]);
+  return { status: outcome.status };
 }
 
 // A CAS that loses after the row was re-read in the same transaction means a
