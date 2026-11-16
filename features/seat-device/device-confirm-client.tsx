@@ -11,6 +11,8 @@ export type SeatDeviceLookupView = {
   source: string | null;
   expiresInSeconds: number;
   workspace: { id: string; name: string };
+  // Present only when an extension offers audience options: one must be chosen.
+  audienceOptions?: { value: string; label: string }[];
 };
 
 // Design v0.3 §4.3: required wording, shown before and with every decision.
@@ -29,34 +31,53 @@ const ERROR_LABELS: Record<string, string> = {
   forbidden: "无法完成：请确认你是本机构的在职成员，并用最新版浏览器直接打开本站的授权页再试。",
   workspace_mismatch: "你当前所在的机构已切换，与页面上显示的不一致。请重新输入配对码查找。",
   invalid_input: "输入不符合要求。",
+  audience_invalid: "可选的授权对象已变化，请重新输入配对码查找。",
+};
+// With an audience chosen the device cap counts per audience.
+const AUDIENCE_ERROR_LABELS: Record<string, string> = {
+  too_many_devices: "这个授权对象下已有 3 台设备，请先在设备列表中撤销不用的设备。",
 };
 
-async function post(body: Record<string, string>) {
+async function post(body: Record<string, string>, labels: Record<string, string> = {}) {
   const response = await fetch("/api/settings/seat-devices", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   const data = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(ERROR_LABELS[data?.error?.code] ?? "操作失败，请稍后重试。");
+  if (!response.ok) throw new Error(labels[data?.error?.code] ?? ERROR_LABELS[data?.error?.code] ?? "操作失败，请稍后重试。");
   return data;
 }
 
 // The decision step. "拒绝" is the default button: it holds the focus and
 // Enter submits the form, which rejects. Enter in the password field does
 // nothing, so neither a stray Enter nor a typed password approves: approving
-// takes the secondary button.
+// takes the secondary button. With audience options, approving also needs
+// one chosen (none is preselected).
 export function SeatDeviceDecisionPanel(props: {
   lookup: SeatDeviceLookupView;
   pending: boolean;
   onReject: () => void;
-  onApprove: (password: string) => void;
+  onApprove: (password: string, audience?: string) => void;
 }) {
   const { lookup } = props;
   const [password, setPassword] = useState("");
+  const options = lookup.audienceOptions ?? [];
+  const [audience, setAudience] = useState("");
   return (
     <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); props.onReject(); }}>
       <p>将绑定到机构：<strong>{lookup.workspace.name}</strong></p>
+      {options.length > 0 ? (
+        <fieldset className="space-y-1 text-sm">
+          <legend>选择这台设备的授权对象</legend>
+          {options.map((option) => (
+            <label key={option.value} className="flex items-center gap-2">
+              <input type="radio" name="seat-device-audience" value={option.value} checked={audience === option.value} onChange={() => setAudience(option.value)} />
+              {option.label}
+            </label>
+          ))}
+        </fieldset>
+      ) : null}
       <p>授权后，这台设备能：看你名下的案件，包括客户个人信息；外呼；写催记。</p>
       <ul className="text-sm">
         <li>请求时间：{new Date(lookup.requestedAt).toLocaleString("zh-CN", { hour12: false })}（服务端记录）</li>
@@ -70,7 +91,12 @@ export function SeatDeviceDecisionPanel(props: {
       </label>
       <div className="flex gap-3">
         <Button type="submit" autoFocus disabled={props.pending}>拒绝</Button>
-        <Button type="button" variant="secondary" disabled={props.pending || password === ""} onClick={() => props.onApprove(password)}>
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={props.pending || password === "" || (options.length > 0 && audience === "")}
+          onClick={() => (options.length > 0 ? props.onApprove(password, audience) : props.onApprove(password))}
+        >
           授权这台设备
         </Button>
       </div>
@@ -94,16 +120,19 @@ export function DeviceConfirmClient() {
     });
   }
 
-  function decide(action: "approve" | "reject", password?: string) {
+  // `audience` is sent only when the lookup offered options: a server without
+  // them refuses the unknown field.
+  function decide(action: "approve" | "reject", password?: string, audience?: string) {
     if (!lookup) return;
     const body = {
       action,
       requestId: lookup.requestId,
       pairingCode: code,
       ...(action === "approve" ? { workspaceId: lookup.workspace.id, password } : {}),
+      ...(action === "approve" && audience !== undefined ? { audience } : {}),
     };
     run(async () => {
-      await post(body);
+      await post(body, audience !== undefined ? AUDIENCE_ERROR_LABELS : {});
       setLookup(null);
       setCode("");
       return action === "approve" ? "已授权。回到坐席客户端即可继续；如需撤销，请到设备列表。" : "已拒绝，这个配对码已作废。";
@@ -115,7 +144,7 @@ export function DeviceConfirmClient() {
       <h1 className="text-xl font-semibold">授权坐席客户端登录</h1>
       <p role="alert" className="rounded-xl border border-[color:var(--accent-danger)] p-3 font-semibold">{SEAT_DEVICE_PHISHING_WARNING}</p>
       {lookup ? (
-        <SeatDeviceDecisionPanel lookup={lookup} pending={pending} onReject={() => decide("reject")} onApprove={(password) => decide("approve", password)} />
+        <SeatDeviceDecisionPanel lookup={lookup} pending={pending} onReject={() => decide("reject")} onApprove={(password, audience) => decide("approve", password, audience)} />
       ) : (
         <form
           className="flex gap-3"

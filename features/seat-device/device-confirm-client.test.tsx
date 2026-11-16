@@ -141,4 +141,68 @@ describe("seat device verification page", () => {
     expect(revoked).not.toContain(">撤销<");
     expect(revoked).toContain("已撤销：管理员撤销");
   });
+
+  const WITH_OPTIONS: SeatDeviceLookupView = {
+    ...LOOKUP,
+    audienceOptions: [
+      { value: "audience:a1", label: "对象甲" },
+      { value: "audience:b2", label: "<b>对象乙</b>" },
+    ],
+  };
+
+  it("shows no audience choice without options, and labels as text when options are offered", () => {
+    expect(panel(LOOKUP)).not.toContain("授权对象");
+    expect(panel(LOOKUP)).not.toMatch(/type="radio"/);
+    const html = panel(WITH_OPTIONS);
+    expect(html).toContain("选择这台设备的授权对象");
+    expect(html.match(/type="radio"/g)).toHaveLength(2);
+    expect(html).toContain("&lt;b&gt;对象乙&lt;/b&gt;");
+    expect(html).not.toContain("<b>对象乙</b>");
+    // Nothing preselected.
+    expect(html).not.toMatch(/checked/);
+  });
+
+  it("approves with options only once one is chosen, and passes the chosen value", async () => {
+    const onApprove = vi.fn();
+    render(<SeatDeviceDecisionPanel lookup={WITH_OPTIONS} pending={false} onReject={() => {}} onApprove={onApprove} />);
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("授权前请再次输入登录密码"), "typed password");
+    const approve = screen.getByRole("button", { name: "授权这台设备" });
+    expect(approve).toHaveProperty("disabled", true);
+    await user.click(screen.getByLabelText("<b>对象乙</b>"));
+    expect(approve).toHaveProperty("disabled", false);
+    await user.click(approve);
+    expect(onApprove).toHaveBeenCalledWith("typed password", "audience:b2");
+  });
+
+  async function approveThroughPage(lookup: SeatDeviceLookupView, choose?: string) {
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      bodies.push(body);
+      const answer = body.action === "lookup" ? lookup : { requestId: lookup.requestId, status: "approved" };
+      return new Response(JSON.stringify(answer), { status: 200, headers: { "Content-Type": "application/json" } });
+    }));
+    try {
+      render(<DeviceConfirmClient />);
+      const user = userEvent.setup();
+      await user.type(screen.getByLabelText("配对码"), "BCDF-GHJK");
+      await user.click(screen.getByRole("button", { name: "查找" }));
+      await user.type(await screen.findByLabelText("授权前请再次输入登录密码"), "typed password");
+      if (choose) await user.click(screen.getByLabelText(choose));
+      await user.click(screen.getByRole("button", { name: "授权这台设备" }));
+      await screen.findByText(/已授权/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    return bodies[1];
+  }
+
+  it("sends an audience only when the lookup offered options (a server without them refuses the field)", async () => {
+    const plain = await approveThroughPage(LOOKUP);
+    expect(plain).toEqual({ action: "approve", requestId: "req1", pairingCode: "BCDF-GHJK", workspaceId: "ws1", password: "typed password" });
+    cleanup();
+    const chosen = await approveThroughPage(WITH_OPTIONS, "对象甲");
+    expect(chosen).toEqual({ action: "approve", requestId: "req1", pairingCode: "BCDF-GHJK", workspaceId: "ws1", password: "typed password", audience: "audience:a1" });
+  });
 });
