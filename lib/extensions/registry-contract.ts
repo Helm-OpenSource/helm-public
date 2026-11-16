@@ -24,6 +24,7 @@ import type {
 import type { IndustryDemoPack } from "@/lib/demo/industry-fixtures/types";
 import type { SignalCollectionJob } from "@/lib/signal-collection/types";
 import { PUBLIC_PAGE_PREFIXES, WORKSPACE_PAGE_PREFIXES } from "@/lib/auth/workspace-route-guard";
+import type { SeatDeviceAudienceOptionsContribution } from "@/lib/seat-device/contract";
 
 import {
   registerExtensionApiRoutes,
@@ -200,6 +201,12 @@ export type PackContributions = {
    * must not treat them as workspace authorization. An unregistered scope value is refused everywhere.
    */
   externalMemberSurfaces?: ReadonlyArray<ExternalMemberSurfaceContribution>;
+  /**
+   * Audience options for seat device approval (lib/seat-device/contract.ts). At most one pack may register them: a
+   * second registration throws, like a route shape another pack already holds, since the approval page must never
+   * draw its list from an undetermined source.
+   */
+  seatDeviceAudienceOptions?: SeatDeviceAudienceOptionsContribution;
 };
 
 /** One external member surface: the `accessScope` value, where the member lands, and the path prefixes they may use. */
@@ -238,6 +245,7 @@ type MutableStore = {
     sourcePages: Map<string, AuditDisplayLabel>;
   };
   externalMemberSurfaces: Map<string, ExternalMemberSurfaceContribution>;
+  seatDeviceAudienceOptions: { packId: string; contribution: SeatDeviceAudienceOptionsContribution } | null;
   registeredPackIds: Set<string>;
 };
 
@@ -267,6 +275,7 @@ function emptyStore(): MutableStore {
       sourcePages: new Map(),
     },
     externalMemberSurfaces: new Map(),
+    seatDeviceAudienceOptions: null,
     registeredPackIds: new Set(),
   };
 }
@@ -289,6 +298,17 @@ export function registerPackContributions(
 ): void {
   const s = store();
   if (s.registeredPackIds.has(packId)) return;
+  // A second registration of audience options is refused before this pack stores anything. The first is stored
+  // right away, before any other contribution can throw (an API route, say): a pack that declares audience options
+  // must never end up registered without them, which approval would read as "no extension".
+  if (contributions.seatDeviceAudienceOptions) {
+    if (s.seatDeviceAudienceOptions) {
+      throw new Error(
+        `Pack "${packId}" registers seat device audience options already registered by pack "${s.seatDeviceAudienceOptions.packId}"`,
+      );
+    }
+    s.seatDeviceAudienceOptions = { packId, contribution: contributions.seatDeviceAudienceOptions };
+  }
   s.registeredPackIds.add(packId);
 
   if (contributions.catalog) s.catalog.push(...contributions.catalog);
@@ -477,6 +497,9 @@ export function getRegisteredSignalCollectionJobProviders(): ReadonlyArray<
 /** Merged audit display labels (plain objects, safe to pass to a client). */
 export function getRegisteredExternalMemberSurface(scope: string): ExternalMemberSurfaceContribution | null {
   return store().externalMemberSurfaces.get(scope) ?? null;
+}
+export function getRegisteredSeatDeviceAudienceOptions(): SeatDeviceAudienceOptionsContribution | null {
+  return store().seatDeviceAudienceOptions?.contribution ?? null;
 }
 export function getRegisteredAuditDisplayLabels(): RegisteredAuditDisplayLabels {
   const labels = store().auditDisplayLabels;
