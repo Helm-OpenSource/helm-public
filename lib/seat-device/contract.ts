@@ -349,6 +349,9 @@ export function seatDeviceIdentity(input: {
 // ignores trailing spaces).
 export const SEAT_DEVICE_AUDIENCE_VALUE_PATTERN = /^[\x21-\x7E]{1,191}$/;
 export const SEAT_DEVICE_AUDIENCE_OPTIONS_MAX = 20;
+// Every live device of a member counts toward this total whatever its pin:
+// 3 per audience times the most options a list may hold.
+export const SEAT_DEVICE_MAX_ACTIVE_TOTAL_PER_MEMBER = SEAT_DEVICE_MAX_ACTIVE_PER_MEMBER * SEAT_DEVICE_AUDIENCE_OPTIONS_MAX;
 export const SEAT_DEVICE_AUDIENCE_LABEL_MAX_LENGTH = 80;
 // Control, zero-width and bidirectional formatting characters: a label must
 // read on the approval page as it reads in the notification and the audit.

@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
-import { WorkspaceRole } from "@prisma/client";
+import { SolutionExtensionKind, WorkspaceRole } from "@prisma/client";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { __resetExtensionApiRoutesForTest } from "@/lib/extensions/api-route-registry";
 import {
   __resetPackRegistryForTest,
+  getRegisteredCatalog,
   getRegisteredSeatDeviceAudienceOptions,
   registerPackContributions,
 } from "@/lib/extensions/registry-contract";
@@ -287,7 +289,18 @@ describe("seat device request validation", () => {
 });
 
 describe("seat device audience options", () => {
-  afterEach(() => __resetPackRegistryForTest());
+  afterEach(() => {
+    __resetPackRegistryForTest();
+    __resetExtensionApiRoutesForTest();
+  });
+  const catalogEntry = {
+    extensionKey: "sample-extension",
+    kind: SolutionExtensionKind.REUSABLE_EXTENSION,
+    nameZh: "示例扩展",
+    nameEn: "Sample extension",
+    descriptionZh: "示例",
+    descriptionEn: "Sample",
+  };
 
   it("accepts a list of opaque values with readable labels, normalizing the labels", () => {
     expect(normalizeSeatDeviceAudienceOptions([])).toEqual([]);
@@ -349,12 +362,26 @@ describe("seat device audience options", () => {
     expect(getRegisteredSeatDeviceAudienceOptions()).toBe(first);
     expect(() =>
       registerPackContributions("pack-two", {
-        catalog: [],
+        catalog: [catalogEntry],
         seatDeviceAudienceOptions: { listOptions: async () => [] },
       }),
     ).toThrow('already registered by pack "pack-one"');
     expect(getRegisteredSeatDeviceAudienceOptions()).toBe(first);
-    // Refused whole: the pack id was not taken, so a corrected registration still goes through.
-    registerPackContributions("pack-two", { catalog: [] });
+    // Refused whole: nothing of the pack was stored and its id was not taken, so a corrected registration goes through.
+    expect(getRegisteredCatalog()).toEqual([]);
+    registerPackContributions("pack-two", { catalog: [catalogEntry] });
+    expect(getRegisteredCatalog()).toEqual([catalogEntry]);
+  });
+
+  it("keeps a pack's audience options when another of its contributions is refused at registration", () => {
+    const options = { listOptions: async () => [] };
+    expect(() =>
+      registerPackContributions("pack-with-routes", {
+        seatDeviceAudienceOptions: options,
+        // A route without authorization metadata is refused when the routes are registered.
+        apiRoutes: [{ method: "GET", pattern: "pack-with-routes/x", handler: () => new Response("") } as never],
+      }),
+    ).toThrow("must declare authorization metadata");
+    expect(getRegisteredSeatDeviceAudienceOptions()).toBe(options);
   });
 });

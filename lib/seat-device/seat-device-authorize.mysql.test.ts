@@ -17,9 +17,11 @@ import { db } from "@/lib/db";
 import { classifyResetTarget } from "@/lib/db-url";
 import { __resetPackRegistryForTest, registerPackContributions } from "@/lib/extensions/registry-contract";
 import {
+  SEAT_DEVICE_AUDIENCE_OPTIONS_MAX,
   SEAT_DEVICE_CODE_ENTRY_MAX_FAILURES,
   SEAT_DEVICE_CODE_ENTRY_MAX_FAILURES_PER_SOURCE_BUCKET,
   SEAT_DEVICE_CODE_ENTRY_WINDOW_SECONDS,
+  SEAT_DEVICE_MAX_ACTIVE_TOTAL_PER_MEMBER,
   SEAT_DEVICE_PENDING_LIMIT_GLOBAL,
   hashSeatDevicePairingCode,
   hashSeatDeviceToken,
@@ -923,6 +925,62 @@ describeMysql("seat device authorization (request, decide, cancel) on MySQL", ()
     const results = await Promise.allSettled(grants.map((grant) => approveWith(racer, grant, now, "audience:a1", racerSession)));
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(3);
     expect(((results.find((result) => result.status === "rejected") as PromiseRejectedResult).reason as SeatDeviceAuthError).code).toBe("too_many_devices");
+  });
+
+  it("approves with an audience at the longest device name, source and label, keeping the revoke hint in the notification", async () => {
+    const now = nextClock();
+    const label = "长".repeat(80);
+    offerAudiences(async () => [{ value: "audience:long", label }]);
+    const who = await member();
+    const grant = await requestSeatDeviceAuthorization({ ...device, deviceLabel: "设".repeat(80), source: freshSource(), now });
+    const source = "2001:0db8:85a3:0000:0000:8a2e:0370:7334";
+    await expect(decideSeatDeviceAuthorization({
+      authSessionId: await session(who, at(now, -60)),
+      userId: who.userId,
+      requestId: grant.requestId,
+      pairingCode: normalizeSeatDevicePairingCode(grant.pairingCode)!,
+      decision: "approve",
+      passwordProof: await proofAt(who, at(now, -30)),
+      expectedWorkspaceId: workspaceId,
+      audience: "audience:long",
+      source,
+      now,
+    })).resolves.toMatchObject({ status: "approved" });
+    expect((await deviceRow(grant.requestId)).audiencePin).toBe("audience:long");
+    const notification = await db.notification.findFirstOrThrow({ where: { userId: who.userId } });
+    expect(notification.body.length).toBeLessThanOrEqual(191);
+    expect(notification.body).toContain(`来源：${source}。`);
+    expect(notification.body.endsWith("如果不是你本人操作，请立即在设备列表中撤销。")).toBe(true);
+    // The audit keeps the full record the notification has no room for.
+    const audit = await db.auditLog.findFirstOrThrow({ where: { targetId: grant.requestId, actionType: "SEAT_DEVICE_AUTHORIZATION_APPROVED" } });
+    expect(audit.summary).toContain(`（${label}）`);
+  });
+
+  it("caps a member at 60 live devices in all, also once pins outlive the options they came from", async () => {
+    const now = nextClock();
+    const who = await member();
+    const sessionId = await session(who, at(now, -30));
+    const first = Array.from({ length: SEAT_DEVICE_AUDIENCE_OPTIONS_MAX }, (_, index) => ({ value: `audience:first-${index}`, label: `对象${index}` }));
+    offerAudiences(async () => first);
+    for (const option of first) {
+      for (let copy = 0; copy < 3; copy += 1) await approveWith(who, await request(now), now, option.value, sessionId);
+    }
+    expect(await db.seatDeviceAuthorization.count({ where: { userId: who.userId, status: "approved" } })).toBe(SEAT_DEVICE_MAX_ACTIVE_TOTAL_PER_MEMBER);
+    // The list moves on: none of its options has a device yet, but the member's total is reached.
+    offerAudiences(async () => [{ value: "audience:second", label: "新对象" }]);
+    const refused = await request(now);
+    await expectCode(approveWith(who, refused, now, "audience:second", sessionId), "too_many_devices");
+    expect((await deviceRow(refused.requestId)).status).toBe("pending");
+  });
+
+  it("refuses an audience value while no extension is registered", async () => {
+    const now = nextClock();
+    const who = await member();
+    const grant = await request(now);
+    await expectCode(approveWith(who, grant, now, "audience:a1"), "audience_invalid");
+    expect(await deviceRow(grant.requestId)).toMatchObject({ status: "pending", version: 0, audiencePin: null });
+    expect(await codeFailures(who)).toBe(0);
+    await expect(approveWith(who, grant, now, null)).resolves.toMatchObject({ status: "approved" });
   });
 
   it("compares audience values exactly, not by the column's case-insensitive collation", async () => {

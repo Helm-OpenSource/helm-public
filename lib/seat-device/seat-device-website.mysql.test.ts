@@ -382,6 +382,16 @@ describeMysql("seat device website pairing on MySQL", () => {
     }
   });
 
+  it("judges the password before an audience value sent while no extension is registered (then 409, no longer a 400 at parsing)", async () => {
+    nextDay();
+    const who = await member();
+    const grant = await pending();
+    expect(await post(who, decision("approve", grant, { password: WRONG, audience: "audience:a1" }))).toEqual({ status: 400, body: errorOf("password_invalid") });
+    expect(await loginFailures(who.email)).toBe(1);
+    expect(await post(who, decision("approve", grant, { password: PASSWORD, audience: "audience:a1" }))).toEqual({ status: 409, body: errorOf("audience_invalid") });
+    expect(await row(grant.requestId)).toMatchObject({ status: "pending", version: 0, audiencePin: null });
+  });
+
   it("offers an extension's audience options, refuses an approval without a choice (an outdated page) and pins the choice", async () => {
     nextDay();
     const options = [{ value: "audience:a1", label: "对象甲" }, { value: "audience:b2", label: "对象乙" }];

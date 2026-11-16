@@ -39,6 +39,7 @@ import {
   SEAT_DEVICE_CODE_ENTRY_MAX_FAILURES_PER_SOURCE_BUCKET,
   SEAT_DEVICE_CODE_ENTRY_WINDOW_SECONDS,
   SEAT_DEVICE_MAX_ACTIVE_PER_MEMBER,
+  SEAT_DEVICE_MAX_ACTIVE_TOTAL_PER_MEMBER,
   SEAT_DEVICE_PAIRING_CODE_MAX_ATTEMPTS,
   SEAT_DEVICE_PENDING_BUCKET_WINDOW_SECONDS,
   SEAT_DEVICE_PENDING_LIMIT_GLOBAL,
@@ -936,13 +937,26 @@ export async function decideSeatDeviceAuthorization(input: {
         userId: member.userId,
         type: "SYSTEM",
         title: "新设备已获授权登录坐席客户端",
-        body: `设备「${row.deviceLabel}」（客户端自报）于 ${now.toISOString()} 获得授权，来源：${input.source ?? "未知"}。${audience ? `授权对象：${audience.label}。` : ""}如果不是你本人操作，请立即在设备列表中撤销。`,
+        body: approvalNotificationBody(row.deviceLabel, now, input.source, audience),
       },
     });
     return "approved" as const;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }), "rate_limited", isCodeEntryConflict);
   if (outcome === "code_invalid") throw new SeatDeviceAuthError("pairing_code_invalid");
   return { requestId: input.requestId, status: outcome };
+}
+
+// Notification.body is VARCHAR(191). The audience sentence goes in only when
+// it fits, so the closing revoke hint is never cut off and a long device name,
+// source and label never make the insert fail; the audit keeps the audience.
+// String length counts UTF-16 units, never fewer than the column's characters.
+const NOTIFICATION_BODY_MAX_LENGTH = 191;
+
+function approvalNotificationBody(deviceLabel: string, now: Date, source: string | null, audience: SeatDeviceAudienceOption | null) {
+  const head = `设备「${deviceLabel}」（客户端自报）于 ${now.toISOString()} 获得授权，来源：${source ?? "未知"}。`;
+  const tail = "如果不是你本人操作，请立即在设备列表中撤销。";
+  const withAudience = audience ? `${head}授权对象：${audience.label}。${tail}` : null;
+  return withAudience && withAudience.length <= NOTIFICATION_BODY_MAX_LENGTH ? withAudience : `${head}${tail}`;
 }
 
 // Approved-but-unclaimed requests count: each becomes a device on claim.
@@ -954,7 +968,10 @@ export async function decideSeatDeviceAuthorization(input: {
 // range of the (workspaceId, userId, status) index is read either way, so the
 // Serializable lock that keeps concurrent approvals under the cap is
 // unchanged; the pin is compared in code (the column collation is
-// case-insensitive).
+// case-insensitive). Every live device of the member also counts toward a
+// total of SEAT_DEVICE_MAX_ACTIVE_TOTAL_PER_MEMBER, whatever its pin: a pin
+// outlives the option it came from, so per audience alone would let a list
+// that changes over time grow the member's devices without end.
 async function assertDeviceCap(tx: Prisma.TransactionClient, member: MemberContext, now: Date, audiencePin: string | null) {
   const rows = await tx.seatDeviceAuthorization.findMany({
     where: { workspaceId: member.workspace.id, userId: member.userId, status: { in: ["approved", "active"] } },
@@ -962,8 +979,10 @@ async function assertDeviceCap(tx: Prisma.TransactionClient, member: MemberConte
   });
   const live = rows.filter((row) => {
     const status = effectiveSeatDeviceStatus(row, now);
-    const counted = audiencePin === null || row.audiencePin === null || row.audiencePin === audiencePin;
-    return (status === "approved" || status === "active") && counted;
+    return status === "approved" || status === "active";
   });
-  if (live.length >= SEAT_DEVICE_MAX_ACTIVE_PER_MEMBER) throw new SeatDeviceAuthError("too_many_devices");
+  const counted = live.filter((row) => audiencePin === null || row.audiencePin === null || row.audiencePin === audiencePin);
+  if (counted.length >= SEAT_DEVICE_MAX_ACTIVE_PER_MEMBER || live.length >= SEAT_DEVICE_MAX_ACTIVE_TOTAL_PER_MEMBER) {
+    throw new SeatDeviceAuthError("too_many_devices");
+  }
 }

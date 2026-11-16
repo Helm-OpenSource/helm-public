@@ -298,11 +298,16 @@ export function registerPackContributions(
 ): void {
   const s = store();
   if (s.registeredPackIds.has(packId)) return;
-  // Checked before anything is stored, so a refused pack leaves no partial registration.
-  if (contributions.seatDeviceAudienceOptions && s.seatDeviceAudienceOptions) {
-    throw new Error(
-      `Pack "${packId}" registers seat device audience options already registered by pack "${s.seatDeviceAudienceOptions.packId}"`,
-    );
+  // A second registration of audience options is refused before this pack stores anything. The first is stored
+  // right away, before any other contribution can throw (an API route, say): a pack that declares audience options
+  // must never end up registered without them, which approval would read as "no extension".
+  if (contributions.seatDeviceAudienceOptions) {
+    if (s.seatDeviceAudienceOptions) {
+      throw new Error(
+        `Pack "${packId}" registers seat device audience options already registered by pack "${s.seatDeviceAudienceOptions.packId}"`,
+      );
+    }
+    s.seatDeviceAudienceOptions = { packId, contribution: contributions.seatDeviceAudienceOptions };
   }
   s.registeredPackIds.add(packId);
 
@@ -342,8 +347,6 @@ export function registerPackContributions(
     registerExtensionApiRoutes(packId, contributions.apiRoutes);
   if (contributions.auditDisplayLabels)
     mergeAuditDisplayLabels(s.auditDisplayLabels, contributions.auditDisplayLabels);
-  if (contributions.seatDeviceAudienceOptions)
-    s.seatDeviceAudienceOptions = { packId, contribution: contributions.seatDeviceAudienceOptions };
   if (contributions.externalMemberSurfaces)
     for (const surface of contributions.externalMemberSurfaces) {
       const usable = normalizeExternalMemberSurface(surface);
