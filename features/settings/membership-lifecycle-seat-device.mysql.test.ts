@@ -15,6 +15,7 @@ const caller = vi.hoisted(() => ({
   workspace: { id: "", defaultLocale: "zh-CN" },
   membership: { id: "", role: "OWNER", userId: "" },
   failAfterRevoke: false,
+  failLifecycleAudit: false,
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -28,6 +29,17 @@ vi.mock("@/lib/seat-device/store-tokens", async (importOriginal) => {
       const revoked = await actual.revokeSeatDevicesInTx(...args);
       if (caller.failAfterRevoke) throw new Error("injected failure after revoke");
       return revoked;
+    },
+  };
+});
+// Fails only the action's own audit write, which follows the commit.
+vi.mock("@/lib/audit", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/audit")>();
+  return {
+    ...actual,
+    writeAuditLog: async (...args: Parameters<typeof actual.writeAuditLog>) => {
+      if (caller.failLifecycleAudit && args[0].actionType === "ORGANIZATION_MEMBER_LIFECYCLE_UPDATED") throw new Error("injected audit failure");
+      return actual.writeAuditLog(...args);
     },
   };
 });
@@ -121,7 +133,7 @@ describeMysql("membership lifecycle revokes seat desktop devices on MySQL", () =
     ).resolves.toStrictEqual({ ok: true, status: MembershipStatus.INACTIVE });
     await settle();
     expect(observed).toHaveLength(1);
-    expect([...observed[0]].sort((a, b) => a.deviceId.localeCompare(b.deviceId))).toEqual([...devices].sort().map((deviceId) => ({
+    expect([...observed[0]].sort((a, b) => (a.deviceId < b.deviceId ? -1 : 1))).toEqual([...devices].sort().map((deviceId) => ({
       deviceId,
       workspaceId,
       userId: leaving.userId,
@@ -167,6 +179,26 @@ describeMysql("membership lifecycle revokes seat desktop devices on MySQL", () =
     // The rolled-back revoke tells nothing.
     await settle();
     expect(observed).toEqual([]);
+  });
+
+  // A failure after the closure returned (the commit) tells nothing; one in
+  // the audit write that follows the commit finds the notice already sent.
+  it.each([["commit", "active", false], ["audit", "revoked", true]] as const)("a failure at the %s: device %s, told %s", async (at, status, told) => {
+    const leaving = await member();
+    const device = await activeDevice(leaving);
+    observed.length = 0;
+    const real = db.$transaction.bind(db) as (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown>;
+    if (at === "commit") vi.spyOn(db, "$transaction").mockImplementationOnce(((fn: (tx: unknown) => Promise<unknown>) => real(async (tx) => { await fn(tx); throw new Error("injected commit failure"); })) as never);
+    caller.failLifecycleAudit = at === "audit";
+    try {
+      await expect(updateOrganizationMembershipLifecycleAction({ membershipId: leaving.membershipId, nextStatus: MembershipStatus.INACTIVE })).rejects.toThrow(`injected ${at} failure`);
+    } finally {
+      caller.failLifecycleAudit = false;
+      vi.restoreAllMocks();
+    }
+    expect((await db.seatDeviceAuthorization.findUniqueOrThrow({ where: { id: device } })).status).toBe(status);
+    await settle();
+    expect(observed.map((notices) => notices.map((notice) => notice.deviceId))).toEqual(told ? [[device]] : []);
   });
 
   // Switch off (the default): the in-service action never touches the device

@@ -62,15 +62,29 @@ describe("seat device revocation observer", () => {
     expect(JSON.stringify(log.mock.calls)).not.toContain("private detail");
   });
 
-  it("does not wait for an observer that never settles", async () => {
+  // The observer runs in a microtask ahead of the caller's continuation: its
+  // returned Promise is never awaited, but its synchronous work delays the caller.
+  it.each([
+    ["returns a Promise that never settles", () => new Promise(() => undefined), false],
+    ["busy-waits before returning", () => { const until = Date.now() + 200; while (Date.now() < until); }, true],
+  ])("an observer that %s: the caller is delayed only by synchronous work", async (_label, behaviour, delays) => {
     const { notifySeatDevicesRevoked, registerSeatDeviceRevocationObserver, seatDeviceRevocationNotice } = await import("./revocation-observer");
-    const observer = vi.fn(() => new Promise(() => undefined));
-    registerSeatDeviceRevocationObserver(observer);
+    registerSeatDeviceRevocationObserver(behaviour);
     const started = Date.now();
+    await (async () => notifySeatDevicesRevoked([seatDeviceRevocationNotice(row, "self", "user-1")]))();
+    expect(Date.now() - started >= 200).toBe(delays);
+  });
+
+  it("a log line that cannot read the error's name still leaves no unhandled rejection", async () => {
+    const { notifySeatDevicesRevoked, registerSeatDeviceRevocationObserver, seatDeviceRevocationNotice } = await import("./revocation-observer");
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    registerSeatDeviceRevocationObserver(() => { throw Object.defineProperty(new Error("x"), "name", { get() { throw new Error("hostile"); } }); });
     notifySeatDevicesRevoked([seatDeviceRevocationNotice(row, "self", "user-1")]);
-    await flush();
-    expect(observer).toHaveBeenCalledTimes(1);
-    expect(Date.now() - started).toBeLessThan(1_000);
+    await flush().then(flush).finally(() => process.off("unhandledRejection", unhandled));
+    expect(unhandled).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith("[seat-device]", JSON.stringify({ event: "revocation_observer_failed", reason: "unknown" }));
   });
 
   it("registers once: the same function again is accepted, another one throws", async () => {
@@ -79,7 +93,7 @@ describe("seat device revocation observer", () => {
     registerSeatDeviceRevocationObserver(observer);
     expect(() => registerSeatDeviceRevocationObserver(observer)).not.toThrow();
     expect(() => registerSeatDeviceRevocationObserver(vi.fn())).toThrow("Seat device revocation observer already registered");
-    expect(() => registerSeatDeviceRevocationObserver("not a function" as never)).toThrow();
+    expect(() => registerSeatDeviceRevocationObserver("not a function" as never)).toThrow("Seat device revocation observer must be a function");
   });
 
   it("says whether an observer is registered", async () => {
@@ -127,12 +141,15 @@ describe("callers of the low-level seat device revokes", () => {
     ]);
   });
 
-  it("revokeSeatDevicesInTx: every caller passes onRevoked and notifies after its commit", () => {
+  it("revokeSeatDevicesInTx: every caller passes onRevoked and notifies on the line after its transaction", () => {
     const found = calls("revokeSeatDevicesInTx");
     expect(found).toEqual(["features/settings/actions.ts: await"]);
     const action = readFileSync(path.join(root, "features/settings/actions.ts"), "utf8");
     const call = action.slice(action.indexOf("revokeSeatDevicesInTx(tx,"));
     expect(call.slice(0, call.indexOf("});"))).toContain("onRevoked:");
-    expect(call).toMatch(/^[\s\S]*?\n {2}\}\);\n {2}notifySeatDevicesRevoked\(revokedDevices\);/);
+    // The first statement closed at the function's indentation after the call
+    // is its transaction; the very next line notifies, before the audit write.
+    const afterTransaction = call.slice(call.indexOf("\n  });\n") + "\n  });\n".length);
+    expect(afterTransaction.split("\n")[0]).toBe("  notifySeatDevicesRevoked(revokedDevices);");
   });
 });

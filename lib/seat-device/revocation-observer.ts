@@ -7,9 +7,11 @@ import "server-only";
 //
 // Each revoking path collects its notices inside its transaction closure and
 // hands them out with the closure's result, so a rolled-back or retried
-// attempt's notices are dropped with it. The observer is called without
-// being awaited: its errors, rejections and running time never reach the
-// revoking call. A process that stops after the commit and before the
+// attempt's notices are dropped with it. The observer is called, but the
+// Promise it returns is never awaited: its errors and rejections never reach
+// the revoking call. What it does before returning still runs on the revoking
+// request, so it must return at once and do any slow work inside that Promise.
+// A process that stops after the commit and before the
 // observer finishes loses that call; an extension that needs every revoke
 // reconciles from the device table itself.
 
@@ -32,9 +34,8 @@ const store = globalThis as typeof globalThis & { [key]?: SeatDeviceRevocationOb
 
 /** Composition-root registration only; never populated by request input. */
 export function registerSeatDeviceRevocationObserver(observer: SeatDeviceRevocationObserver) {
-  if (typeof observer !== "function" || (store[key] && store[key] !== observer)) {
-    throw new Error("Seat device revocation observer already registered");
-  }
+  if (typeof observer !== "function") throw new Error("Seat device revocation observer must be a function");
+  if (store[key] && store[key] !== observer) throw new Error("Seat device revocation observer already registered");
   store[key] = observer;
 }
 
@@ -64,11 +65,16 @@ export function seatDeviceRevocationNotice(
 }
 
 function observerFailed(error: unknown) {
-  const name = error instanceof Error && /^[A-Za-z]{1,64}$/.test(error.name) ? error.name : "unknown";
+  let name = "unknown";
+  try {
+    if (error instanceof Error && /^[A-Za-z]{1,64}$/.test(error.name)) name = error.name;
+  } catch {
+    // An error whose name cannot be read is logged as unknown.
+  }
   console.error("[seat-device]", JSON.stringify({ event: "revocation_observer_failed", reason: name }));
 }
 
-/** Call only after the revoking transaction committed. Never throws, never waits. */
+/** Call only after the revoking transaction committed. Never throws; never awaits the observer's Promise. */
 export function notifySeatDevicesRevoked(notices: readonly (SeatDeviceRevocationNotice | null)[]): void {
   const observer = store[key];
   if (!observer) return;

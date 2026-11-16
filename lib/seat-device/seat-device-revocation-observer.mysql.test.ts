@@ -338,11 +338,9 @@ describeMysql("seat device revocation observer on MySQL", () => {
     const own = await device(now);
     const logout = await device(now);
     const cancelled = await device(now);
-    const started = Date.now();
     await expect(revokeSeatDeviceByMember({ authSessionId: await session(own.owner, now), userId: own.owner.userId, deviceId: own.deviceId, now: at(now, 10) })).resolves.toStrictEqual({ revoked: true });
     await expect(revokeSeatDeviceWithRefreshToken({ refreshToken: logout.refreshToken, reason: "device_logout", now: at(now, 10) })).resolves.toBeUndefined();
     await expect(cancelSeatDeviceAuthorization({ requestId: cancelled.grant.requestId, pollToken: cancelled.grant.pollToken, now: at(now, 10) })).resolves.toStrictEqual({ status: "cancelled" });
-    expect(Date.now() - started).toBeLessThan(10_000);
     await settle();
     expect(observed.calls).toBe(3);
     const failures = log.mock.calls.filter((call) => String(call[1]).includes("revocation_observer_failed"));
