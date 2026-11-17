@@ -83,9 +83,9 @@ Validation (strict at every level, all fail closed):
 
 - Unknown keys are refused.
 - Goal, component and gate keys are unique within their own lists, metric keys across the whole document, and a goal lists each component once; `componentKeys` references must resolve.
-- Role keys reuse the attention pattern `^[a-z][a-z0-9_]{0,63}$`, exported from `lib/caio-attention/contracts.ts` as `CAIO_ATTENTION_ROLE_KEY_PATTERN` instead of copied.
+- Role keys reuse the attention pattern `^[a-z][a-z0-9_]{0,63}$`, which the contract layer will export from `lib/caio-attention/contracts.ts` as `CAIO_ATTENTION_ROLE_KEY_PATTERN` (today a private constant in that file) instead of copying it.
 - `roleBindingPin` is required exactly when the document uses a role key, and must be null otherwise.
-- No values in prose: `title`, `standard` and every `label` are refused when they match an amount or percentage pattern (`prose_carries_value`), so values cannot leak through text fields. These fields reach member briefs; wording such as "100% of components" has to be rephrased.
+- No values in prose: `title`, `standard`, every `label` and the gate `note` are refused when they match an amount or percentage pattern (`prose_carries_value`), so values cannot leak through text fields. These fields reach member briefs; wording such as "100% of components" has to be rephrased.
 
 People are not in the ledger, but the ledger pins them:
 

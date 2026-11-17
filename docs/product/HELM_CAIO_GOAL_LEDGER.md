@@ -83,9 +83,9 @@ type CaioGoalLedgerDocument = {
 
 - 未知键拒绝。
 - 目标、部件、关卡的 `key` 在各自列表内唯一，指标 `key` 在整份文档内唯一，同一目标的 `componentKeys` 不重复；`componentKeys` 引用必须存在。
-- 角色键沿用关注事项的模式 `^[a-z][a-z0-9_]{0,63}$`，由 `lib/caio-attention/contracts.ts` 导出为 `CAIO_ATTENTION_ROLE_KEY_PATTERN` 后引用，不另抄一份。
+- 角色键沿用关注事项的模式 `^[a-z][a-z0-9_]{0,63}$`，契约层会把它从 `lib/caio-attention/contracts.ts` 导出为 `CAIO_ATTENTION_ROLE_KEY_PATTERN` 后引用（现为该文件内的私有常量），不另抄一份。
 - `roleBindingPin` 有条件必填：文档出现任何角色键时必填，否则须为 null。
-- 文字防带数：`title`、`standard`、各 `label` 命中金额或百分比模式时拒绝（`prose_carries_value`），以免取值从文字字段漏进来。这些字段会进成员简报；“100% 的部件”这类写法要换说法。
+- 文字防带数：`title`、`standard`、各 `label` 和关卡的 `note` 命中金额或百分比模式时拒绝（`prose_carries_value`），以免取值从文字字段漏进来。这些字段会进成员简报；“100% 的部件”这类写法要换说法。
 
 人员绑定不进台账，但被台账钉住：
 
