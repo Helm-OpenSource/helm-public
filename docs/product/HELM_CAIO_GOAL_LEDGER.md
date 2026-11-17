@@ -145,7 +145,7 @@ type CaioGoalLedgerRead =
 
 ## 数据层
 
-- `CaioGoalLedgerEntry`：`id`、`workspaceId`、`seq`、`entryHash`、`prevHash`、`entryJson`（条目规范 JSON 原文，时间串以文本保存）、`documentFileKey`、`documentHash`、`documentText`（文档原文，逐字节）、`effectiveAt`（派生索引列）、`source`（`command` / `import`）、`recordedByUserId`、`createdAt`。三条唯一约束见上；CHECK 约束覆盖 seq ≥ 1、哈希长度、创世条目与 64 个 0 互为充要、来源取值、JSON 合法、文档三列同空同有。
+- `CaioGoalLedgerEntry`：`id`、`workspaceId`、`seq`、`entryHash`、`prevHash`、`entryJson`（条目规范 JSON 原文，时间串以文本保存）、`documentFileKey`、`documentHash`、`documentText`（文档原文，逐字节）、`effectiveAt`（派生索引列）、`source`（`command` / `import`）、`recordedByUserId`、`createdAt`。三条唯一约束见上；CHECK 约束覆盖 seq ≥ 1、各哈希列为 64 位小写十六进制、创世条目与 64 个 0 互为充要、来源取值、JSON 合法、文档三列同空同有。
 - `CaioGoalLedgerHead`：每工作区一行，`headSeq`、`headHash`、`rowVersion`、`updatedByUserId`、`updatedAt`。
 - 只新增表，不加数据库外键，不用触发器；只追加由授权保证。回滚脚本在任一表有数据时拒绝执行。迁移同 PR 带升级说明；本模块不加环境开关。
 - 不接进关注事项的 schema 就绪清单（以免把它的发版闸门和本迁移绑在一起），另设 `lib/caio-goal-ledger/schema-readiness.ts`。

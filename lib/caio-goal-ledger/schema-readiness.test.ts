@@ -80,6 +80,13 @@ describe("CAIO goal ledger migration files", () => {
     }
   });
 
+  it("constrains every hash column to exactly 64 lowercase hex characters, case-sensitively", () => {
+    for (const column of ["entryHash", "prevHash", "documentHash", "headHash"]) {
+      expect(migration, column).toContain(`CHAR_LENGTH(\`${column}\`) = 64 AND REGEXP_LIKE(\`${column}\`, '^[0-9a-f]{64}$', 'c')`);
+    }
+    expect(migration).not.toMatch(/ REGEXP '/u);
+  });
+
   it("rolls back exactly what the migration creates, and only while both tables are empty", () => {
     expect([...rollback.matchAll(/DROP TABLE `(\w+)`/gu)].map((match) => match[1]).sort()).toEqual([...CAIO_GOAL_LEDGER_TABLES].sort());
     for (const table of CAIO_GOAL_LEDGER_TABLES) expect(rollback).toContain(`(SELECT COUNT(*) FROM \`${table}\`)`);
