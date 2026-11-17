@@ -63,6 +63,9 @@ const mutate = (change: (document: Doc & Json) => void) => {
 const goal = (document: Doc, index = 0) => document.goals[index] as Json & Doc["goals"][number];
 const metric = (document: Doc) => goal(document).metrics[0] as Json & Doc["goals"][number]["metrics"][number];
 const invalid = (detail: string) => ({ ok: false, errorCode: "document_invalid", detail });
+// An own "__proto__" property, as JSON.parse creates one; assignment would set the prototype instead.
+const ownProtoKey = (target: object) =>
+  Object.defineProperty(target, "__proto__", { value: {}, enumerable: true, writable: true, configurable: true });
 
 describe("goal ledger document", () => {
   it("accepts a complete synthetic document as parsed", () => {
@@ -113,6 +116,14 @@ describe("goal ledger document", () => {
     ["pin version 0", (d) => { d.roleBindingPin.version = 0; }],
     ["a fractional pin version", (d) => { d.roleBindingPin.version = 1.5; }],
     ["another pin source", (d) => { (d.roleBindingPin as Json).source = "workspace_settings"; }],
+    ["an own __proto__ key at the top", (d) => { ownProtoKey(d); }],
+    ["an own __proto__ key on a goal", (d) => { ownProtoKey(goal(d)); }],
+    ["an own __proto__ key on a metric", (d) => { ownProtoKey(metric(d)); }],
+    ["an own __proto__ key on a metric label", (d) => { ownProtoKey(metric(d).label); }],
+    ["an own __proto__ key on a threshold", (d) => { ownProtoKey(goal(d).threshold!); }],
+    ["an own __proto__ key on a component", (d) => { ownProtoKey(d.components[0]); }],
+    ["an own __proto__ key on a gate", (d) => { ownProtoKey(d.gates[0]); }],
+    ["an own __proto__ key on the pin", (d) => { ownProtoKey(d.roleBindingPin); }],
   ])("refuses %s", (_name, change) => {
     expect(parseCaioGoalLedgerDocument(mutate(change))).toEqual(invalid("shape_invalid"));
   });
@@ -252,6 +263,9 @@ describe("goal ledger entry", () => {
     ["an empty writer", { ...importedEntry(), writer: "" }],
     ["a null writer", { ...importedEntry(), writer: null }],
     ["another entry schema", { ...appendedEntry(), schema: "caio-goal-ledger-entry/v2" }],
+    // Parsed entry text keeps "__proto__" as an own key; the entry hash covers it, so it must not vanish in parsing.
+    ["a __proto__ files key", { ...importedEntry(), files: JSON.parse(`{"__proto__":"${hex("a")}","a.json":"${hex("a")}"}`) }],
+    ["a __proto__ entry key", JSON.parse(JSON.stringify(importedEntry()).replace("{", `{"__proto__":{},`))],
   ])("refuses %s", (_name, raw) => {
     expect(parseCaioGoalLedgerEntry(raw)).toEqual({ ok: false, errorCode: "entry_shape_invalid" });
   });

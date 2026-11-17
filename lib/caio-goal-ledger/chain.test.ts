@@ -102,6 +102,13 @@ const reseal = (seq: number, change: Record<string, unknown>): Chain => {
 };
 const editDocument = (seq: number, edit: Partial<NonNullable<CaioGoalLedgerStoredEntry["document"]>>) =>
   at(seq, (row) => ({ document: { ...row.document!, ...edit } }));
+// JSON.parse keeps "__proto__" as an own key, as a stored entry text would; an object literal would set the prototype.
+const withProtoKey = (files: unknown) =>
+  JSON.parse(JSON.stringify(files).replace("{", `{"__proto__":"${"e".repeat(64)}",`)) as Record<string, string>;
+const resealHead = (change: Record<string, unknown>): Chain => {
+  const { entries } = reseal(5, change);
+  return { entries, head: { headSeq: 5, headHash: entries[4].entryHash } };
+};
 
 describe("synthetic chains", () => {
   it("is empty only with no entries and no anchor", () => {
@@ -124,12 +131,24 @@ describe("synthetic chains", () => {
       .toMatchObject({ state: "ok", head: { seq: 1, source: "import" }, document: syntheticCaioGoalLedgerDocument() });
   });
 
+  it("verifies an imported entry stored as indented JSON rather than canonical text", () => {
+    const chain = at(1, (row) => ({ entryJson: JSON.stringify(JSON.parse(row.entryJson), null, 2) }));
+    expect(chain.entries[0].entryJson).toContain("\n  ");
+    expect(verifyCaioGoalLedgerChain(chain)).toMatchObject({ state: "ok", head: { seq: 5 } });
+  });
+
+  it("moves the anchor with a resealed head, so a break below comes from the change alone", () => {
+    expect(verifyCaioGoalLedgerChain(resealHead({ change: "另一版说明" }))).toMatchObject({ state: "ok", head: { seq: 5 } });
+  });
+
   // Each break rejects the whole ledger of five, with nothing on the read beyond the alarm.
   const breaks: Array<[string, () => Chain, CaioGoalLedgerAlarmCode, number | null, number]> = [
     ["entry text that is not JSON", () => at(1, () => ({ entryJson: "{" })), "entry_shape_invalid", 1, 0],
     ["a resealed entry with a key outside the closed set", () => reseal(2, { score: 1 }), "entry_shape_invalid", 2, 1],
     ["an entry text with a lone surrogate", () => at(1, (row) => ({ entryJson: row.entryJson.replace("示例原话 1", "\\ud800") })),
       "entry_shape_invalid", 1, 0],
+    ["a head sealing a digest under a __proto__ files key",
+      () => resealHead({ files: withProtoKey(JSON.parse(mixed().entries[4].entryJson).files) }), "entry_shape_invalid", 5, 4],
     ["a missing entry", () => ({ ...mixed(), entries: mixed().entries.filter((_, index) => index !== 2) }), "seq_gap", 3, 2],
     ["two entries swapped", () => {
       const { entries, head } = mixed();

@@ -93,7 +93,14 @@ export function parseCaioGoalLedgerEntry(raw: unknown):
   | { ok: true; entry: CaioGoalLedgerEntry }
   | { ok: false; errorCode: "entry_shape_invalid" } {
   const parsed = entrySchema.safeParse(raw);
-  return parsed.success ? { ok: true, entry: parsed.data } : { ok: false, errorCode: "entry_shape_invalid" };
+  if (!parsed.success) return { ok: false, errorCode: "entry_shape_invalid" };
+  // The record rebuilds `files` and may skip a key such as an own "__proto__" (JSON.parse keeps one) without a
+  // refusal, while the entry hash covers the input as given; so every input key must itself match the pattern.
+  const inputFileKeys = Object.keys((raw as { files: object }).files);
+  if (!inputFileKeys.every((key) => CAIO_GOAL_LEDGER_FILE_KEY_PATTERN.test(key))) {
+    return { ok: false, errorCode: "entry_shape_invalid" };
+  }
+  return { ok: true, entry: parsed.data };
 }
 
 const metricSchema = z.object({

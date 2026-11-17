@@ -31,6 +31,8 @@ function openPinnedConfig(pin: Pin, row: CaioGoalLedgerRouteConfigRow | null): C
 /**
  * Write-time check for the document about to become the head, given the stored row of the pinned version (null
  * when that version does not exist). The version need not be active. A document without role keys has no pin.
+ * The caller must first pass the document through parseCaioGoalLedgerDocument: this check relies on the pin being
+ * present exactly when role keys are.
  */
 export function verifyCaioGoalLedgerRoleBindingPin(
   document: CaioGoalLedgerDocument,
