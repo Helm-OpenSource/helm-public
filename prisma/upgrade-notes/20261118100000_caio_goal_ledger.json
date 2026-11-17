@@ -1,0 +1,48 @@
+{
+  "schema": "helm.upgrade-note/v1",
+  "migration": "20261118100000_caio_goal_ledger",
+  "summary": {
+    "zh": "新建 CAIO 目标台账的两张表：每工作区只追加、带哈希链的条目表，和每工作区一行的头锚表。不改任何已有表，不写数据；本片不含读写代码，也不加环境开关。",
+    "en": "Creates the two CAIO goal ledger tables: a per-workspace append-only hash-chained entry table and a one-row-per-workspace head anchor. No existing table changes and no data is written; this part ships no read or write code and no environment switch."
+  },
+  "ddl": [
+    {
+      "table": "CaioGoalLedgerEntry",
+      "existingTable": false,
+      "algorithm": "CREATE",
+      "lock": "NONE",
+      "rebuild": false
+    },
+    {
+      "table": "CaioGoalLedgerHead",
+      "existingTable": false,
+      "algorithm": "CREATE",
+      "lock": "NONE",
+      "rebuild": false
+    }
+  ],
+  "rollback": {
+    "kind": "sql",
+    "path": "prisma/rollback/20261118_rollback_caio_goal_ledger.sql"
+  },
+  "order": "migrate-before-code",
+  "env": [],
+  "verification": [
+    {
+      "zh": "在 information_schema.COLUMNS 中确认两张表的列与迁移文件一致；在 information_schema.TABLE_CONSTRAINTS 中确认两张表各自的 CHECK 约束和唯一键都已建立。",
+      "en": "Confirm both tables' columns against the migration file in information_schema.COLUMNS, and their CHECK constraints and unique keys in information_schema.TABLE_CONSTRAINTS."
+    },
+    {
+      "zh": "条目表只追加靠库权限保证，不靠触发器：给读出用的身份只授 SELECT；给受控写入的身份对条目表只授 SELECT、INSERT，对头锚表授 SELECT、INSERT、UPDATE；任何身份都不授 DELETE。矩阵见 lib/caio-goal-ledger/least-privilege-fixture.ts。",
+      "en": "Append-only entries rest on grants, not triggers: the reading identity holds SELECT only; the controlled writing identity holds SELECT and INSERT on entries and SELECT, INSERT, UPDATE on the head; no identity holds DELETE. The matrix is in lib/caio-goal-ledger/least-privilege-fixture.ts."
+    },
+    {
+      "zh": "回滚：任一表有数据时回滚脚本拒绝执行，只能前滚修复；空表时删两张表并删除迁移记录，之后可重新应用。脚本必须用遇错即停的方式整份执行（mysql --batch <库名> < 脚本，非零退出即拒绝），禁止 --force 等继续执行模式。",
+      "en": "Rollback: the script refuses while either table holds a row (fix forward); on empty tables it drops both and removes the migration record so the migration can be re-applied. Run it whole with a stop-on-error client (mysql --batch <database> < file; non-zero exit = refused), never in a continue-on-error mode such as --force."
+    },
+    {
+      "zh": "上表的算法与锁为 MySQL 8.0 / 8.4 的预期行为，未实测；CHECK 约束要求 MySQL 8.0.16 及以上才会生效。升级前先在同版本 MySQL 上演练迁移与回滚。",
+      "en": "The algorithms and locks above are expected MySQL 8.0 / 8.4 behaviour, not measured; CHECK constraints are enforced only from MySQL 8.0.16. Rehearse the migration and the rollback on the same MySQL version before upgrading."
+    }
+  ]
+}
