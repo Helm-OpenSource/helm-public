@@ -245,7 +245,29 @@ function FirstPartyEntryHome({
 
       <footer className="border-t border-[color:var(--border)]">
         <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-3 px-6 py-5 text-xs text-[color:var(--muted)] sm:flex-row sm:items-center sm:justify-between lg:px-10">
-          <span>{companyName}</span>
+          <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <span>{companyName}</span>
+            {config.icpFiling ? (
+              <a
+                href="https://beian.miit.gov.cn/"
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-[color:var(--foreground)]"
+              >
+                {config.icpFiling}
+              </a>
+            ) : null}
+            {config.psbFiling ? (
+              <a
+                href="https://beian.mps.gov.cn/"
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-[color:var(--foreground)]"
+              >
+                {config.psbFiling}
+              </a>
+            ) : null}
+          </span>
           <nav className="flex items-center gap-5" aria-label={english ? "Legal" : "法律信息"}>
             <Link href="/terms" className="hover:text-[color:var(--foreground)]">
               {english ? "Terms" : "服务条款"}
