@@ -164,7 +164,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [type-check, lint, repo-guards, model-egress-mysql,
             caio-access-gateway-mysql, caio-inference-mysql, caio-context-memory-mysql,
-            caio-audit-state-mysql, caio-attention-mysql]
+            caio-audit-state-mysql, caio-attention-mysql, caio-goal-ledger-mysql]
     steps:
       - uses: actions/checkout@v5
 
@@ -199,7 +199,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [type-check, lint, repo-guards, model-egress-mysql,
             caio-access-gateway-mysql, caio-inference-mysql, caio-context-memory-mysql,
-            caio-audit-state-mysql, caio-attention-mysql]
+            caio-audit-state-mysql, caio-attention-mysql, caio-goal-ledger-mysql]
     steps:
       - uses: actions/checkout@v5
 
@@ -1222,6 +1222,157 @@ jobs:
       - name: Remove isolated bootstrap credential on all outcomes
         if: always()
         run: rm -f "${RUNNER_TEMP}/helm-attention-root-password"
+
+  # CAIO goal ledger tables under the ledger's two least-privilege fixture
+  # identities (reader / ops, lib/caio-goal-ledger/least-privilege-fixture.ts).
+  # The migration identity replays the migrations, rolls the ledger migration
+  # back on its empty tables and re-applies it; the suite then reads and writes
+  # as the fixture identities (plus the migration identity for fixture setup and
+  # storage corruptions). Afterwards the rollback must refuse the used ledger.
+  caio-goal-ledger-mysql:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    name: CAIO Goal Ledger MySQL
+    runs-on: ubuntu-latest
+    needs: [type-check, repo-guards]
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: helm_caio_goal_ledger_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      HELM_CI_MYSQL_DATABASE: helm_caio_goal_ledger_ci
+      HELM_CI_MYSQL_USER: helm_ci
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Mint isolated migration and fixture MySQL credentials
+        env:
+          HELM_CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          app_password="$(openssl rand -hex 24)"
+          reader_password="$(openssl rand -hex 24)"
+          ops_password="$(openssl rand -hex 24)"
+          root_password="$(openssl rand -hex 24)"
+          echo "::add-mask::${app_password}"
+          echo "::add-mask::${reader_password}"
+          echo "::add-mask::${ops_password}"
+          echo "::add-mask::${root_password}"
+          bootstrap_sql="$(mktemp)"
+          chmod 600 "${bootstrap_sql}"
+          {
+            printf "CREATE USER IF NOT EXISTS '%s'@'%%' IDENTIFIED BY '%s';\n" \
+              "${HELM_CI_MYSQL_USER}" "${app_password}"
+            printf "GRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
+              "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
+            # Fixture identities start with no privilege; the grant step below
+            # applies exactly the fixture matrix after the migrations exist.
+            printf "CREATE USER 'goal_ledger_reader'@'%%' IDENTIFIED BY '%s';\n" "${reader_password}"
+            printf "CREATE USER 'goal_ledger_ops'@'%%' IDENTIFIED BY '%s';\n" "${ops_password}"
+            # Same ephemeral-container-only exception as the jobs above: older
+            # migrations create triggers under binary logging (error 1419).
+            printf "SET GLOBAL log_bin_trust_function_creators = 1;\n"
+            printf "ALTER USER IF EXISTS 'root'@'%%' IDENTIFIED BY '%s';\n" \
+              "${root_password}"
+            printf "ALTER USER IF EXISTS 'root'@'localhost' IDENTIFIED BY '%s';\n" \
+              "${root_password}"
+            printf "FLUSH PRIVILEGES;\n"
+          } >"${bootstrap_sql}"
+          docker exec -i "${HELM_CI_MYSQL_CONTAINER}" \
+            mysql --host=127.0.0.1 --protocol=tcp --user=root --batch \
+            <"${bootstrap_sql}"
+          rm -f "${bootstrap_sql}"
+          (umask 077; printf '%s\n' "${root_password}" >"${RUNNER_TEMP}/helm-goal-ledger-root-password")
+          credential="${HELM_CI_MYSQL_USER}:${app_password}"
+          url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
+          [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
+          {
+            printf 'DATABASE_URL=%s\n' "${url}"
+            printf 'CAIO_GOAL_LEDGER_DATABASE_URL=%s\n' "${url}"
+          } >>"${GITHUB_ENV}"
+          credential="goal_ledger_reader:${reader_password}"
+          url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
+          [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
+          {
+            printf 'CAIO_GOAL_LEDGER_READER_DATABASE_URL=%s\n' "${url}"
+          } >>"${GITHUB_ENV}"
+          credential="goal_ledger_ops:${ops_password}"
+          url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
+          [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
+          {
+            printf 'CAIO_GOAL_LEDGER_OPS_DATABASE_URL=%s\n' "${url}"
+          } >>"${GITHUB_ENV}"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npm run db:generate
+
+      - name: Replay migrations on an empty database
+        run: npx tsx prisma/setup-db.ts prepare
+
+      - name: Roll back the empty ledger, re-apply and replay its migration
+        env:
+          HELM_CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          MYSQL_PWD="$(node -e 'process.stdout.write(decodeURIComponent(new URL(process.env.DATABASE_URL).password))')"
+          export MYSQL_PWD
+          docker exec -e MYSQL_PWD -i "${HELM_CI_MYSQL_CONTAINER}" mysql --host=127.0.0.1 --protocol=tcp \
+            --user="${HELM_CI_MYSQL_USER}" --batch "${HELM_CI_MYSQL_DATABASE}" \
+            <prisma/rollback/20261118_rollback_caio_goal_ledger.sql
+          unset MYSQL_PWD
+          npx tsx prisma/setup-db.ts migrate
+          npx tsx prisma/setup-db.ts migrate
+
+      - name: Grant the least-privilege fixture identities
+        env:
+          HELM_CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          IFS= read -r root_password <"${RUNNER_TEMP}/helm-goal-ledger-root-password"
+          npx tsx scripts/caio-goal-ledger-grant-fixture.ts "${HELM_CI_MYSQL_DATABASE}" |
+            MYSQL_PWD="${root_password}" docker exec -e MYSQL_PWD -i "${HELM_CI_MYSQL_CONTAINER}" \
+              mysql --host=127.0.0.1 --protocol=tcp --user=root --batch
+          unset root_password
+
+      - name: Verify the ledger store against MySQL as the fixture identities
+        run: npm run test:caio-goal-ledger:mysql
+
+      - name: The rollback refuses a ledger that holds rows
+        env:
+          HELM_CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -uo pipefail
+          MYSQL_PWD="$(node -e 'process.stdout.write(decodeURIComponent(new URL(process.env.DATABASE_URL).password))')"
+          export MYSQL_PWD
+          if output="$(docker exec -e MYSQL_PWD -i "${HELM_CI_MYSQL_CONTAINER}" mysql --host=127.0.0.1 --protocol=tcp \
+            --user="${HELM_CI_MYSQL_USER}" --batch "${HELM_CI_MYSQL_DATABASE}" \
+            <prisma/rollback/20261118_rollback_caio_goal_ledger.sql 2>&1)"; then
+            echo "rollback ran although the ledger holds rows" >&2
+            exit 1
+          fi
+          grep -q 'rollback refused: CAIO goal ledger is not empty' <<<"${output}"
+
+      - name: Remove isolated bootstrap credential on all outcomes
+        if: always()
+        run: rm -f "${RUNNER_TEMP}/helm-goal-ledger-root-password"
 
   member-gateway-signal-mysql:
     if: ${{ github.event_name == 'workflow_dispatch' }}
