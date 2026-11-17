@@ -38,6 +38,8 @@ export type CaioOperatorAccess = "owner" | "principal_bound";
 const SUMMARY_FIELDS = [
   "id", "mandateId", "stopId", "assetId", "programId", "sourceId", "receiptId", "assessmentId",
   "status", "state", "version", "outcome", "replayed",
+  // Goal ledger writes: seq and digests only.
+  "seq", "entryHash", "documentHash", "appended",
 ] as const;
 // Service results wrap their records one level deep; only these wrappers are expanded.
 const SUMMARY_WRAPPERS = ["mandate", "stop", "receipt", "assessment", "entry", "program", "source"] as const;
