@@ -21,7 +21,7 @@ export const CAIO_ATTENTION_DISPOSITION_OUTCOMES = ["handled", "mitigated", "not
 export type CaioAttentionDispositionOutcome = (typeof CAIO_ATTENTION_DISPOSITION_OUTCOMES)[number];
 
 const USER_REF_PATTERN = /^user:([A-Za-z0-9_-]{1,191})$/u;
-const ROLE_KEY_PATTERN = /^[a-z][a-z0-9_]{0,63}$/u;
+export const CAIO_ATTENTION_ROLE_KEY_PATTERN = /^[a-z][a-z0-9_]{0,63}$/u;
 const ENTERPRISE_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/u;
 
 /** Config stores `user:<id>`; everything downstream compares canonical bare ids only. */
@@ -30,7 +30,7 @@ export function parseCaioAttentionUserRef(ref: unknown): string | null {
   return USER_REF_PATTERN.exec(ref)?.[1] ?? null;
 }
 
-const roleKey = z.string().regex(ROLE_KEY_PATTERN);
+const roleKey = z.string().regex(CAIO_ATTENTION_ROLE_KEY_PATTERN);
 const userRefs = z.array(z.string().regex(USER_REF_PATTERN)).max(20)
   .refine((refs) => new Set(refs).size === refs.length, "duplicate_user_ref");
 const bindings = z.record(roleKey, userRefs);
