@@ -145,7 +145,7 @@ Metrics never show a made-up 0: `projectCaioGoalReadouts(document, kpis)` looks 
 
 ## Data layer
 
-- `CaioGoalLedgerEntry`: `id`, `workspaceId`, `seq`, `entryHash`, `prevHash`, `entryJson` (canonical entry text; timestamps stay text), `documentFileKey`, `documentHash`, `documentText` (document text, byte for byte), `effectiveAt` (derived index column), `source` (`command` / `import`), `recordedByUserId`, `createdAt`. Unique keys as above; CHECK constraints cover seq ≥ 1, hash lengths, the genesis entry if and only if 64 `0`s, the source values, valid JSON and the three document columns being all null or all set.
+- `CaioGoalLedgerEntry`: `id`, `workspaceId`, `seq`, `entryHash`, `prevHash`, `entryJson` (canonical entry text; timestamps stay text), `documentFileKey`, `documentHash`, `documentText` (document text, byte for byte), `effectiveAt` (derived index column), `source` (`command` / `import`), `recordedByUserId`, `createdAt`. Unique keys as above; CHECK constraints cover seq ≥ 1, every hash column being 64 lowercase hex characters, the genesis entry if and only if 64 `0`s, the source values, valid JSON and the three document columns being all null or all set.
 - `CaioGoalLedgerHead`: one row per workspace with `headSeq`, `headHash`, `rowVersion`, `updatedByUserId`, `updatedAt`.
 - New tables only, no database foreign keys, no triggers; append-only is enforced by grants. The rollback script refuses while either table holds a row. The migration ships with its upgrade note; the module adds no environment switch.
 - Not added to the attention schema-readiness manifest (that would tie its release gate to this migration); `lib/caio-goal-ledger/schema-readiness.ts` is separate.

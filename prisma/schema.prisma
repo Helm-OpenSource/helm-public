@@ -8485,3 +8485,33 @@ model CaioDetectorEvaluation {
   @@index([workspaceId, detectorId, bucketStart])
 }
 
+model CaioGoalLedgerEntry {
+  id               String   @id @default(cuid())
+  workspaceId      String
+  seq              Int
+  entryHash        String
+  prevHash         String
+  entryJson        String   @db.LongText
+  documentFileKey  String?
+  documentHash     String?
+  documentText     String?  @db.LongText
+  effectiveAt      DateTime
+  source           String // command | import
+  recordedByUserId String
+  createdAt        DateTime @default(now())
+
+  @@unique([workspaceId, seq])
+  @@unique([workspaceId, entryHash])
+  @@unique([workspaceId, prevHash])
+}
+
+model CaioGoalLedgerHead {
+  id              String   @id @default(cuid())
+  workspaceId     String   @unique
+  headSeq         Int
+  headHash        String
+  rowVersion      Int      @default(0)
+  updatedByUserId String
+  updatedAt       DateTime @default(now()) @updatedAt
+}
+
