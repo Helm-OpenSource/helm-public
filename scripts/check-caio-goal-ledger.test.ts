@@ -1,8 +1,8 @@
 // check:caio-goal-ledger — structural gate for the CAIO goal ledger write path.
 //   1. The write service and its controlled CLI entry are reached, directly or through other modules, only from the
 //      files listed in WRITE_PATH_IMPORTERS: the CLI, the entry itself and their tests. Nothing under app/, no
-//      actions module and no "use server" module may reach either. Every source file outside node_modules, dot
-//      directories and build output is scanned, type-only imports included.
+//      actions module and no "use server" module may reach either. Every source file is scanned, type-only imports
+//      included, except node_modules and, at the root only (as .gitignore has them), dot directories and build output.
 //   2. lib/caio-goal-ledger has no index file, so nothing can reach the write service through a barrel.
 //   3. lib/caio-goal-ledger never imports lib/caio-governance.
 //   4. The read service holds no write call.
@@ -24,14 +24,15 @@ const WRITE_PATH_IMPORTERS = [
   "scripts/caio-goal-ledger.ts",
 ];
 const SOURCE = /\.(?:[cm]?ts|tsx|[cm]?js|jsx)$/u;
-const SKIPPED_DIRS = new Set(["node_modules", "coverage", "test-results", "playwright-report", "out", "build", "tmp"]);
+const ROOT_SKIPPED_DIRS = new Set(["coverage", "test-results", "playwright-report", "out", "build", "tmp"]);
 const RESOLVE_SUFFIXES = ["", ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", "/index.ts", "/index.tsx", "/index.js"];
 
 function sourceFiles(relativeDir = ""): string[] {
   return readdirSync(path.join(root, relativeDir)).flatMap((name) => {
     const relative = path.posix.join(relativeDir, name);
     if (statSync(path.join(root, relative)).isDirectory()) {
-      return name.startsWith(".") || SKIPPED_DIRS.has(name) ? [] : sourceFiles(relative);
+      const skipped = name === "node_modules" || (relativeDir === "" && (name.startsWith(".") || ROOT_SKIPPED_DIRS.has(name)));
+      return skipped ? [] : sourceFiles(relative);
     }
     return SOURCE.test(name) ? [relative] : [];
   });
@@ -47,7 +48,8 @@ function resolveSpecifier(from: string, specifier: string): string | null {
   const base = specifier.startsWith("@/") ? specifier.slice(2)
     : specifier.startsWith(".") ? path.posix.join(path.posix.dirname(from), specifier) : null;
   if (base === null) return null;
-  const hit = RESOLVE_SUFFIXES.map((suffix) => `${base}${suffix}`)
+  // TypeScript also resolves a `.js` specifier to the `.ts` source beside it.
+  const hit = [base, base.replace(/\.[cm]?jsx?$/u, "")].flatMap((stem) => RESOLVE_SUFFIXES.map((suffix) => `${stem}${suffix}`))
     .find((candidate) => existsSync(path.join(root, candidate)) && statSync(path.join(root, candidate)).isFile());
   return hit ?? null;
 }
@@ -82,6 +84,7 @@ describe("check:caio-goal-ledger", () => {
     expect(importSpecifiers(text).sort()).toEqual(["../z", "./required", "./y", "@/lib/dynamic", "@/lib/x", "side-effect"]);
     expect(resolveSpecifier("scripts/a.ts", "@/lib/caio-goal-ledger/write.service")).toBe(WRITE_ENTRIES[0]);
     expect(resolveSpecifier("lib/caio-operator/a.ts", "../caio-goal-ledger/write.service")).toBe(WRITE_ENTRIES[0]);
+    expect(resolveSpecifier("app/a/page.tsx", "@/lib/caio-goal-ledger/write.service.js")).toBe(WRITE_ENTRIES[0]);
     expect(resolveSpecifier("scripts/a.ts", "zod")).toBeNull();
   });
 
