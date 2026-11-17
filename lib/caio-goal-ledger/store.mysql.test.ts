@@ -5,7 +5,7 @@ import { type CaioGoalLedgerStoredEntry, verifyCaioGoalLedgerChain } from "./cha
 import { CAIO_GOAL_LEDGER_GENESIS_PREV_HASH } from "./contracts";
 import { CAIO_GOAL_LEDGER_FIXTURE_IDENTITIES } from "./least-privilege-fixture";
 import { createPrismaCaioGoalLedgerStore } from "./prisma-store";
-import { readCaioGoalLedger } from "./read.service";
+import { readCaioGoalLedger, readCaioGoalLedgerRoleBindings } from "./read.service";
 import { type CaioGoalLedgerChainRows, type CaioGoalLedgerStore, CaioGoalLedgerStoreError } from "./store-port";
 import { createInMemoryCaioGoalLedgerStore } from "./testing/memory-store";
 import {
@@ -245,6 +245,7 @@ describeMysql("CAIO goal ledger store on MySQL", () => {
       ["head anchor row deleted", { ...mixed(), head: null }, mixed(), [["DELETE FROM CaioGoalLedgerHead WHERE workspaceId = ?"]], "head_anchor_missing"],
       ["tail entry deleted", { ...mixed(), entries: mixed().entries.slice(0, 4) }, mixed(),
         [[`DELETE FROM ${E} WHERE workspaceId = ? AND seq = 5`]], "head_anchor_mismatch"],
+      ["every entry deleted, anchor kept", { ...mixed(), entries: [] }, mixed(), [[`DELETE FROM ${E} WHERE workspaceId = ?`]], "head_anchor_mismatch"],
       ["head document columns cleared", at(5, () => ({ document: null })), mixed(),
         [[`UPDATE ${E} SET documentFileKey = NULL, documentHash = NULL, documentText = NULL WHERE workspaceId = ? AND seq = 5`]], "document_missing@5"],
       ["head document text gets a trailing space", at(5, (row) => ({ document: row.document && { ...row.document, text: `${row.document.text} ` } })),
@@ -267,7 +268,7 @@ describeMysql("CAIO goal ledger store on MySQL", () => {
     }
   });
 
-  it("appends as the ops identity: multi-byte text round-trips, the anchor moves by one version, one audit row of digests", async () => {
+  it("appends as the ops identity: multi-byte text round-trips, the anchor moves by one version, one audit row of digests, the pin matches", async () => {
     const ledger = await newLedger("append");
     const first = await appendAs(opsStore, ledger, ledger.owner, GENESIS);
     const second = await appendAs(opsStore, ledger, ledger.owner, first.entryHash, "第二条 🚩");
@@ -288,6 +289,12 @@ describeMysql("CAIO goal ledger store on MySQL", () => {
     ]);
     expect(JSON.parse(audit[1].payload!)).toEqual({ ...second, source: "command" });
     expect(JSON.stringify(audit)).not.toMatch(/示例原话|设定示例目标|第二条|主链路/u);
+
+    await admin.caioAttentionRouteConfigHead.create({ data: {
+      workspaceId: ledger.workspaceId, activeVersion: SYNTHETIC_ROUTE_CONFIG_VERSION, updatedByRef: "operator:synthetic",
+    } });
+    expect(await readCaioGoalLedgerRoleBindings(readerStore, { workspaceId: ledger.workspaceId, pin: document.roleBindingPin! }))
+      .toMatchObject({ state: "match", routeConfigVersion: SYNTHETIC_ROUTE_CONFIG_VERSION });
   });
 
   it("re-checks the owner inside the transaction: other roles and inactive owners are refused and write nothing", async () => {
@@ -403,9 +410,13 @@ describeMysql("CAIO goal ledger store on MySQL", () => {
     await locked.promise;
     const firstWriter = outcomeOf(appendAs(opsStore, ledger, ledger.owner, GENESIS, "racer 1"));
     await until(() => entryHeld(ledger.workspaceId, 1), "the first writer holds its uncommitted entry 1");
+    // Prisma logs a query once it has returned: the second writer then holds its own gap lock on the absent anchor, so
+    // the winner can no longer insert the anchor ahead of it, whatever happens after the release.
     let secondSettled = false;
+    const mark = statements.ops2.length;
     const secondWriter = outcomeOf(appendAs(ops2Store, ledger, ledger.owner2, GENESIS, "racer 2")).finally(() => { secondSettled = true; });
-    await until(async () => secondSettled || membershipHeld(ledger.workspaceId, ledger.owner2), "the second writer's transaction is open");
+    await until(async () => secondSettled || statements.ops2.slice(mark).some((statement) => /FROM CaioGoalLedgerHead WHERE .* FOR UPDATE/su.test(statement)),
+      "the second writer holds its anchor lock");
     release.resolve();
     await holder;
     // The loser fails on a deadlock (P2034), not on a stale head: it read the same empty chain while the winner's

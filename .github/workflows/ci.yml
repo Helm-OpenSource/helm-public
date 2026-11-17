@@ -1359,16 +1359,16 @@ jobs:
         env:
           HELM_CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
           MYSQL_PWD="$(node -e 'process.stdout.write(decodeURIComponent(new URL(process.env.DATABASE_URL).password))')"
           export MYSQL_PWD
-          if docker exec -e MYSQL_PWD -i "${HELM_CI_MYSQL_CONTAINER}" mysql --host=127.0.0.1 --protocol=tcp \
+          if output="$(docker exec -e MYSQL_PWD -i "${HELM_CI_MYSQL_CONTAINER}" mysql --host=127.0.0.1 --protocol=tcp \
             --user="${HELM_CI_MYSQL_USER}" --batch "${HELM_CI_MYSQL_DATABASE}" \
-            <prisma/rollback/20261118_rollback_caio_goal_ledger.sql; then
-            echo "the rollback ran on a ledger that holds rows"
+            <prisma/rollback/20261118_rollback_caio_goal_ledger.sql 2>&1)"; then
+            echo "rollback ran although the ledger holds rows" >&2
             exit 1
           fi
-          unset MYSQL_PWD
+          grep -q 'rollback refused: CAIO goal ledger is not empty' <<<"${output}"
 
       - name: Remove isolated bootstrap credential on all outcomes
         if: always()
