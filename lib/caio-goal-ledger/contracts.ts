@@ -137,10 +137,11 @@ export type CaioGoalLedgerDocumentInvalidDetail =
   | "role_binding_pin_required"
   | "role_binding_pin_unexpected";
 
-// Amount: a currency sign before digits, or digits before 元 / 万元 / 亿元 (not the words 元组, 元素, 元数据).
-// Rate: digits before a percent sign. \p{Nd} also matches full-width digits.
+// Amount: a currency sign before digits, or digits before 元 / 万元 / 亿元, not where 元 starts another word
+// (元组, 元素, 元数据, 元旦, 元月, 元运算, 元函数, 元器件). Rate: digits before a percent sign. \p{Nd} also matches
+// full-width digits.
 const AMOUNT_PATTERN =
-  /[¥￥]\s*\p{Nd}[\p{Nd},，]*(?:\.\p{Nd}+)?|\p{Nd}[\p{Nd},，]*(?:\.\p{Nd}+)?\s*(?:万元|亿元|元(?!组|素|数据))/u;
+  /[¥￥]\s*\p{Nd}[\p{Nd},，]*(?:\.\p{Nd}+)?|\p{Nd}[\p{Nd},，]*(?:\.\p{Nd}+)?\s*(?:万元|亿元|元(?!组|素|数据|旦|月|运算|函数|器件))/u;
 const RATE_PATTERN = /\p{Nd}+(?:\.\p{Nd}+)?\s*[%％]/u;
 
 /** True when the text carries an amount or a percentage, which must not travel in ledger prose. */

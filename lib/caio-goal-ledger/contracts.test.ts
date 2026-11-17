@@ -159,10 +159,11 @@ describe("goal ledger document", () => {
   });
 
   it("tells values from ordinary numbers in prose", () => {
-    for (const prose of ["元数据完整", "元组与元素", "3 元组", "5 元数据", "2 元素", "第 3 版", "100 个部件", "v2 发布", "单价按元计"]) {
+    for (const prose of ["元数据完整", "元组与元素", "3 元组", "5 元数据", "2 元素", "第 3 版", "100 个部件", "v2 发布", "单价按元计",
+      "2026 元旦前上线", "2026 元月", "3 元运算符", "2 元函数", "10 元器件", "目标 1，元旦前交付"]) {
       expect(caioGoalLedgerProseCarriesValue(prose)).toBe(false);
     }
-    for (const prose of ["￥ 12", "3.5亿元", "100元", "1，000元", "８０％"]) {
+    for (const prose of ["￥ 12", "3.5亿元", "100元", "1，000元", "８０％", "100 元", "元旦前付 100 元"]) {
       expect(caioGoalLedgerProseCarriesValue(prose)).toBe(true);
     }
   });

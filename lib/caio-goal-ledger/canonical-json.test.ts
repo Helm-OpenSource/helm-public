@@ -26,6 +26,10 @@ describe("golden sample", () => {
     expect(sha256HexOfCaioGoalLedgerText(GOLDEN_DOCUMENT_TEXT)).toEqual({ ok: true, hash: GOLDEN_DOCUMENT_SHA256 });
   });
 
+  it("round-trips the document text through parse and canonical form byte for byte", () => {
+    expect(canonical(JSON.parse(GOLDEN_DOCUMENT_TEXT))).toBe(GOLDEN_DOCUMENT_TEXT);
+  });
+
   it("rebuilds entry 1's preimage from a literal object and from the parsed preimage, and hashes it", () => {
     const entry1 = {
       writer: "synthetic-session",
@@ -62,10 +66,11 @@ describe("golden sample", () => {
 describe("canonical form", () => {
   // Expected strings come from the same independent serializer as the golden sample.
   it("sorts keys by code point, not by UTF-16 unit", () => {
-    const value = { "": 1, "\u{1f600}": 2, a: 3, B: 4, "é": 5 };
-    expect(canonical(value)).toBe('{"B":4,"a":3,"é":5,"":1,"\u{1f600}":2}');
+    // \uE000 is U+E000 (private use area), escaped so the key is visible in source.
+    const value = { "\uE000": 1, "\u{1f600}": 2, a: 3, B: 4, "é": 5 };
+    expect(canonical(value)).toBe('{"B":4,"a":3,"é":5,"\uE000":1,"\u{1f600}":2}');
     // The default sort puts the astral key (a high surrogate unit) before U+E000; code point order does not.
-    expect(Object.keys(value).sort()).toEqual(["B", "a", "é", "\u{1f600}", ""]);
+    expect(Object.keys(value).sort()).toEqual(["B", "a", "é", "\u{1f600}", "\uE000"]);
   });
 
   it("escapes strings like JSON.stringify and leaves other characters as they are", () => {
