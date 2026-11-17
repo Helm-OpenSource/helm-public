@@ -77,9 +77,13 @@ function encode(value: unknown, depth: number, ancestors: Set<object>): string {
   ancestors.add(value);
   try {
     if (Array.isArray(value)) {
-      // Holes and extra named properties would be dropped silently; refuse them instead.
+      // Holes and extra named properties would be dropped silently; refuse them instead. Every index must be an
+      // own property; then a key count equal to the length leaves no room for a named property.
       if (Object.getPrototypeOf(value) !== Array.prototype || Object.keys(value).length !== value.length) {
         throw new CanonicalJsonRefusal("unsupported_value");
+      }
+      for (let index = 0; index < value.length; index += 1) {
+        if (!Object.hasOwn(value, index)) throw new CanonicalJsonRefusal("unsupported_value");
       }
       return `[${value.map((item) => encode(item, depth + 1, ancestors)).join(",")}]`;
     }

@@ -147,12 +147,19 @@ describe("goal ledger document", () => {
     ["an English metric label with a spaced percentage", (d) => { metric(d).label.en = "Hit 12.5 % of plan"; }],
     ["a component label with full-width digits", (d) => { d.components[0].label = "覆盖３０％"; }],
     ["a gate label with 万元", (d) => { d.gates[0].label = "预算 2万元"; }],
+    ["a gate note with an amount", (d) => { d.gates[0].note = "放行前核对 ¥300"; }],
+    ["a gate note with a percentage", (d) => { d.gates[0].note = "上限 50%"; }],
   ])("refuses %s", (_name, change) => {
     expect(parseCaioGoalLedgerDocument(mutate(change))).toEqual({ ok: false, errorCode: "prose_carries_value" });
   });
 
+  it("accepts a gate note in ordinary words, and a gate without a note", () => {
+    expect(parseCaioGoalLedgerDocument(mutate((d) => { d.gates[0].note = "第 2 道关卡，放行前复核 3 次"; })).ok).toBe(true);
+    expect(parseCaioGoalLedgerDocument(mutate((d) => { delete (d.gates[0] as Json).note; })).ok).toBe(true);
+  });
+
   it("tells values from ordinary numbers in prose", () => {
-    for (const prose of ["元数据完整", "元组与元素", "第 3 版", "100 个部件", "v2 发布", "单价按元计"]) {
+    for (const prose of ["元数据完整", "元组与元素", "3 元组", "5 元数据", "2 元素", "第 3 版", "100 个部件", "v2 发布", "单价按元计"]) {
       expect(caioGoalLedgerProseCarriesValue(prose)).toBe(false);
     }
     for (const prose of ["￥ 12", "3.5亿元", "100元", "1，000元", "８０％"]) {

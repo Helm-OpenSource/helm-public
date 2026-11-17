@@ -158,7 +158,7 @@ export function collectCaioGoalLedgerRoleKeys(document: CaioGoalLedgerDocument):
 
 const hasDuplicates = (keys: readonly string[]) => new Set(keys).size !== keys.length;
 
-// Titles, standards and labels, the fields that reach member briefs; a gate note is not among them.
+// Every free-text field of the document, so no value can travel in prose anywhere in it.
 function proseFields(document: CaioGoalLedgerDocument): string[] {
   return [
     ...document.goals.flatMap((goal) => [
@@ -167,7 +167,7 @@ function proseFields(document: CaioGoalLedgerDocument): string[] {
       ...goal.metrics.flatMap((metric) => [metric.label.zh, metric.label.en]),
     ]),
     ...document.components.map((component) => component.label),
-    ...document.gates.map((gate) => gate.label),
+    ...document.gates.flatMap((gate) => (gate.note === undefined ? [gate.label] : [gate.label, gate.note])),
   ];
 }
 

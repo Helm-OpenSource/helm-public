@@ -103,6 +103,8 @@ describe("canonical form", () => {
     ["a Date", { d: new Date(0) }, "unsupported_value"],
     ["a Map", new Map(), "unsupported_value"],
     ["an array with a named property", Object.assign([1], { extra: 2 }), "unsupported_value"],
+    ["a hole balanced by a named property", Object.assign(Object.assign(new Array<number>(3), { 0: 1, 2: 3 }), { extra: 2 }),
+      "unsupported_value"],
     ["a cycle", cyclic, "cycle"],
     ["nesting deeper than 64", deep, "too_deep"],
   ])("refuses %s", (_name, value, errorCode) => {
