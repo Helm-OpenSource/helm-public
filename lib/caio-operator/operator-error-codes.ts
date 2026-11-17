@@ -14,7 +14,9 @@ import {
  * Closed error codes for the CAIO OWNER operator entry points. Service messages and
  * reasons can carry internal detail, so callers only ever see a code and its fixed copy.
  * This module must not import lib/caio-governance (authority firewall): governance_rejected
- * is mapped by the controlled governance CLI (lib/caio-operator/governance-operator.ts).
+ * is mapped by the controlled governance CLI (lib/caio-operator/governance-operator.ts). Nor may it
+ * import the goal ledger write service, which only its controlled CLI may reach: the goal_ledger_*
+ * codes are mapped in lib/caio-operator/goal-ledger-operator.ts.
  */
 export const CAIO_OPERATOR_ERROR_CODES = [
   "not_owner",
@@ -28,6 +30,8 @@ export const CAIO_OPERATOR_ERROR_CODES = [
   "g0_not_accepted",
   "selection_rejected",
   "selection_conflict",
+  "goal_ledger_rejected",
+  "goal_ledger_conflict",
   "unavailable",
 ] as const;
 
@@ -107,6 +111,14 @@ const MESSAGES: Readonly<Record<CaioOperatorErrorCode, { zh: string; en: string 
   selection_conflict: {
     zh: "选题状态已被其它操作更新，请刷新后重试。",
     en: "The selection state changed concurrently. Refresh and try again.",
+  },
+  goal_ledger_rejected: {
+    zh: "目标台账拒绝了此次写入（条目、文档、链或人员绑定的校验不满足），未写入任何内容。",
+    en: "The goal ledger rejected this write (entry, document, chain, or role binding checks not satisfied); nothing was written.",
+  },
+  goal_ledger_conflict: {
+    zh: "目标台账的链头已被其它写入更新，请重新读取链头后再试。",
+    en: "The goal ledger head changed concurrently. Read the head again and retry.",
   },
   unavailable: {
     zh: "暂时无法完成，请稍后重试。",

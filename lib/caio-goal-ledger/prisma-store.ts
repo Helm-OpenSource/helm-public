@@ -49,7 +49,9 @@ const WRITE_TRANSACTION = {
 // Two writers of a ledger's first entry: an anchor that does not exist yet has no row to lock, so both read the
 // empty chain and insert the same entry 1. Under REPEATABLE READ each holds a gap lock on the absent anchor, and
 // InnoDB breaks the resulting wait cycle as a deadlock (P2034), rolling the loser back whole. A later writer finds
-// the anchor row and waits on it instead.
+// the anchor row and waits on it instead. On a small table one gap can span the absent anchors of several
+// workspaces, so a first write may also collide with another workspace's first write; the result is the same
+// retryable conflict.
 function isLostRace(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
 }

@@ -172,7 +172,7 @@ not in `helm-public`.
 
 - [CAIO governed read extension](product/CAIO_GOVERNED_READ_EXTENSION.md) — explicit, default-off read composition; deployment identity and source ports required.
 - [CAIO 运营关注事项页面 / attention pages](product/HELM_CAIO_ATTENTION_PAGES.md) — 默认关闭；页面只经授权 loader 读取，确认、处置、复核由真人完成。Default-off; reads only through the authorized loader.
-- [CAIO 目标台账 / goal ledger](product/HELM_CAIO_GOAL_LEDGER.md) / [English](product/HELM_CAIO_GOAL_LEDGER.en.md) — 规划中，代码尚未合入：每工作区只追加的哈希链目标记录，OWNER 受控命令写入、读出全链重验；不派发、不存达标线取值、无个人排名。Planned, code not merged; no dispatch, no threshold values, no per-person ranking.
+- [CAIO 目标台账 / goal ledger](product/HELM_CAIO_GOAL_LEDGER.md) / [English](product/HELM_CAIO_GOAL_LEDGER.en.md) — 已成形但仍需下一层：Core 已合入每工作区只追加的哈希链目标记录，OWNER 受控命令写入、读出全链重验；尚无控制台页面和下游调用方，未在任何工作区启用；不派发、不存达标线取值、无个人排名。Formed but needs the next layer: the Core code is merged, with no console page or downstream caller yet and no workspace enabled; no dispatch, no threshold values, no per-person ranking.
 
 LLM 预算交付请核对 [签名金额元数据注册与原子预约边界](operations/LLM_SPEND_RESERVATION_CONTRACT.md)：默认无发行记录且收费权威未启用；本地合成验证不证明真实定价、用量或生产限额。
 

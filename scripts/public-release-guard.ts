@@ -1057,6 +1057,7 @@ const PUBLIC_PACKAGE_SCRIPT_ALLOW_LIST: ReadonlySet<string> = new Set([
   "test:caio-audit-state:mysql",
   "test:caio-operator:mysql",
   "caio:governance-operator",
+  "caio:goal-ledger",
   "test:caio-operating-context:mysql",
   "caio:g0-prepare",
   "caio:inference-token",

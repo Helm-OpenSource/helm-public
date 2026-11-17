@@ -43,6 +43,8 @@ export class CaioGoalLedgerWriteRefusal extends Error {
   }
 }
 
+// actorUserId is the value the caller declares. The write re-checks that it is an ACTIVE OWNER of the workspace but
+// does not authenticate it; authenticating whoever names it is the caller's responsibility.
 type WriteIdentity = Readonly<{ workspaceId: string; actorUserId: string }>;
 
 /** `expectedHeadHash` is the head the writer saw: the genesis hash (64 zeros) on an empty ledger. */

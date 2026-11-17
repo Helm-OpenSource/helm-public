@@ -3,14 +3,16 @@ status: draft
 owner: helm-core
 created: 2026-11-17
 review_after: 2026-12-17
-public_safety: Planning and contract description of a Core module whose code is not merged yet. Synthetic examples only; no tenant data, people, credentials, threshold values, deployment identifiers or production receipts.
+public_safety: Product and contract description of a Core module. Synthetic examples only; no tenant data, people, credentials, threshold values, deployment identifiers or production receipts.
 ---
 
 # CAIO 目标台账
 
 > **语言 / Language**: 中文主文本 + [English reference](HELM_CAIO_GOAL_LEDGER.en.md)
 
-状态：规划中，代码尚未合入。本文是实现前的规划与契约说明（涉及 schema 与迁移的改动须先有规划文档）。本文不构成启用许可，也不表示任何工作区已经设立目标台账。
+状态：Core 代码已合入：契约与哈希、链校验、数据层（表、迁移、回滚脚本、升级说明、就绪探针、权限矩阵）、读服务、写服务和受控命令 `npm run caio:goal-ledger`、结构守卫。没有控制台页面，也没有任何下游调用方；部署环境里运营身份的库权限不在 Core 里配置。本文不构成启用许可，也不表示任何工作区已经设立目标台账。
+
+尚未交付：按条目读历史的 `readCaioGoalLedgerHistory`、按部件和按关卡解析主责角色的两个函数、链的导出函数。下文「下游切片的接口边界」一节对每个函数标明是否已交付。
 
 ## 定位
 
@@ -83,7 +85,7 @@ type CaioGoalLedgerDocument = {
 
 - 未知键拒绝。
 - 目标、部件、关卡的 `key` 在各自列表内唯一，指标 `key` 在整份文档内唯一，同一目标的 `componentKeys` 不重复；`componentKeys` 引用必须存在。
-- 角色键沿用关注事项的模式 `^[a-z][a-z0-9_]{0,63}$`，契约层会把它从 `lib/caio-attention/contracts.ts` 导出为 `CAIO_ATTENTION_ROLE_KEY_PATTERN` 后引用（现为该文件内的私有常量），不另抄一份。
+- 角色键沿用关注事项的模式 `^[a-z][a-z0-9_]{0,63}$`，契约层引用 `lib/caio-attention/contracts.ts` 导出的 `CAIO_ATTENTION_ROLE_KEY_PATTERN`，不另抄一份。
 - `roleBindingPin` 有条件必填：文档出现任何角色键时必填，否则须为 null。
 - 文字防带数：`title`、`standard`、各 `label` 和关卡的 `note` 命中金额或百分比模式时拒绝（`prose_carries_value`），以免取值从文字字段漏进来。这些字段会进成员简报；“100% 的部件”这类写法要换说法。
 
@@ -101,10 +103,16 @@ npm run caio:goal-ledger -- --operation=<appendEntry|importChain> --workspace-id
 npm run caio:goal-ledger -- --verify --workspace-id=<id>
 ```
 
-- 与 `npm run caio:governance-operator` 同族，复用 `lib/caio-operator/operation-core.ts`：默认只校验，带 `--apply` 才写；输出一行 JSON。
-- 退出码：0 成功；1 被拒（闭集码）；2 用法错；3 `--verify` 发现台账为 `rejected` 或 `unavailable`。
+- 与 `npm run caio:governance-operator` 同族，复用 `lib/caio-operator/operation-core.ts`：默认只校验，带 `--apply` 才写。
+- 命令的结果是 stdout 的最后一行 JSON；用法错、输入文件被拒和命令自身意外失败时，结果改在 stderr 输出，stdout 上没有结果行。数据库层出错时，数据库客户端会先在 stdout 上打印若干行自己的错误日志；这些行可能含本机路径、库用户名和表名，不含 OWNER 原话和文档内容。
+- 退出码：0 成功；1 被拒（闭集码），命令自身意外失败时也是 1（stderr 输出 `{ ok: false, code: "unavailable" }`，`--verify` 同样）；2 用法错；3 `--verify` 读出台账为 `rejected` 或 `unavailable`。
 - `appendEntry` 输入：`ownerQuote`、`change`、`effectiveAt`、`expectedHeadHash`（空链填 64 个 0）、`document`。
-- `importChain` 输入：`format: "caio-goal-ledger-import/v1"`、`documentFileKey`、`entries`（按序，上限 10000 条）、`documents`（摘要到文档原文）。
+- `importChain` 输入：`format: "caio-goal-ledger-import/v1"`、`documentFileKey`、`entries`（按序，1 到 10000 条）、`documents`（摘要到文档原文）。
+- `--template` 打印一份可编辑的输入样例（`appendEntry` 的样例文档不含角色键，`roleBindingPin` 为 null）。
+- 输入文件：UTF-8 编码的 JSON（可带 BOM），不超过 64 MiB；读不到、超限、不是 UTF-8 或不是 JSON 时输出 `{ ok: false, code: "input_invalid", reason }`，`reason` 为 `input_file_unreadable` / `input_file_too_large` / `input_file_not_utf8` / `input_file_not_json`，退出码 1。
+- 不带 `--apply` 时只做预检和输入结构校验，通过即 `validated: true`；条目、文档、链和 pin 的校验在 `--apply` 的写事务里做，被拒时一行不写。
+- 被拒的输出是 `{ ok: false, code, message, reason?, atSeq? }`：`code` 为 `not_owner`、`input_invalid`、`goal_ledger_rejected`、`goal_ledger_conflict`（链头已变）或 `unavailable`；写服务拒绝时另带闭集 `reason` 和可选的 `atSeq`（指向出问题的条目）。输出不带 OWNER 原话和文档内容；成功只给 `seq`、`entryHash`、`documentHash`，导入另给 `appended`、`replayed`。
+- `--verify` 只读，打印台账状态、链头的 `seq` 和哈希（或报警的断点位置）以及 schema 就绪状态，不打印文档。
 
 身份校验四层：
 
@@ -113,7 +121,7 @@ npm run caio:goal-ledger -- --verify --workspace-id=<id>
 | 命令行预检 | 只读 `Membership`，不是 ACTIVE 的 OWNER 即返回 `not_owner`，不进服务 |
 | 事务内复核 | 事务第一条语句 `SELECT role, status FROM Membership … FOR SHARE`，不是 ACTIVE OWNER 即拒；在台账模块内实现，不引用 `lib/caio-governance` |
 | 库权限 | 读身份只有 SELECT；运营身份对条目表只有 SELECT / INSERT；谁都没有 DELETE |
-| 结构守卫 | 写服务只能被白名单引用；`app/`、server action 不得引用写入口；模块无 `index.ts` |
+| 结构守卫 | 随 `npm run test` 运行：直接或间接引用写服务、存储写实现（`lib/caio-goal-ledger/prisma-store.ts`）和命令入口的文件必须恰好是白名单（命令脚本、命令入口和它们的测试）；`app/`、actions 模块、`"use server"` 模块都不在其中；模块无 `index.ts`、不引用 `lib/caio-governance`；读服务里没有写调用 |
 
 `appendEntry` 的事务顺序：复核 OWNER → 锁头锚 → 读全部条目并全链校验（不过即 `chain_rejected`）→ 比对 `expectedHeadHash`（不符即 `head_conflict`）→ 校验文档与 pin 并插入 → 头锚以原生条件更新做比较交换 → 同事务读回重验（不符即 `storage_roundtrip_mismatch` 并回滚）→ 同事务写审计。三条唯一约束 `(workspaceId, seq)`、`(workspaceId, entryHash)`、`(workspaceId, prevHash)` 兜住并发，最后一条保证每条只有一个后继，库层面不能分叉。
 
@@ -121,7 +129,7 @@ npm run caio:goal-ledger -- --verify --workspace-id=<id>
 
 审计：成功写入时在同事务写一条，载荷只有 `seq`（或起止 seq）、条目哈希、前一条哈希、文档哈希和来源，不放 OWNER 原话和文档内容，因为审计日志的可读范围不限于 OWNER。被拒的尝试不写库，命令输出闭集码即记录。
 
-残余风险：`--actor-user-id` 由执行者申报，不是认证。持有运营库身份的人仍能冒填 OWNER 的 userId。缓解靠原话入链、审计行，以及控制台展示链头 `seq` 和哈希供 OWNER 比对；签名硬锁不在本模块。
+残余风险：`--actor-user-id` 由执行者申报，不是认证。持有运营库身份的人仍能冒填 OWNER 的 userId。缓解靠原话入链、审计行，以及链头 `seq` 和哈希供 OWNER 比对（`--verify` 可打印；控制台展示由下游切片负责）；签名硬锁不在本模块。
 
 ## 读出
 
@@ -141,7 +149,7 @@ type CaioGoalLedgerRead =
 - 表不存在或查询失败是 `unavailable`，绝不当 `empty`。
 - 本模块里可见的报警只有两样：读出返回 `rejected`，以及 `--verify` 以退出码 3 结束。界面展示和站内通知由下游控制台切片负责。
 
-指标三态不出 0：`projectCaioGoalReadouts(document, kpis)` 按 `key` 在北极星 KPI 来源里找；找到且单位相符就原样采用（`measured` / `pending_source` / `no_data`）；找不到或单位不符就合成 `pending_source`、`value: null`、说明非空。每条输出都过 `validateNorthstarKpis`。来源明确给出 `measured` 且值为 0 时照实显示 0。Core 本体没有 KPI 来源，所以 overlay 接入前全部指标都是 `pending_source`。
+指标三态不出 0：`projectCaioGoalReadouts(document, kpis, english)` 按 `key` 在北极星 KPI 来源里找；找到且单位相符就原样采用（`measured` / `pending_source` / `no_data`）；找不到或单位不符就合成 `pending_source`、`value: null`、说明非空。每条输出都过 `validateNorthstarKpis`。来源明确给出 `measured` 且值为 0 时照实显示 0。Core 本体没有 KPI 来源，所以 overlay 接入前全部指标都是 `pending_source`。
 
 ## 数据层
 
@@ -176,13 +184,14 @@ PR-3 可与 PR-2 并行。
 
 ## 下游切片的接口边界
 
-下游只调下面这些函数，都不得引用写服务。
+下游只调下面这些函数，都不得引用写服务。读函数的 `store` 需要一个不带写事务的只读工厂，尚未交付，第一个只读调用方出现时再拆；在那之前 `createPrismaCaioGoalLedgerStore` 所在的 `prisma-store.ts` 视同写入口，下游不得引用。
 
-- 公共：`readCaioGoalLedger({ workspaceId })`；`readCaioGoalLedgerRoleBindings({ workspaceId, pin })`，返回 `match` / `drift` / `route_config_missing` / `unavailable`。
-- 控制台（OWNER 只读）：`readCaioGoalLedgerHistory` 含 OWNER 原话，调用方必须先做 OWNER 门；`rejected` 和 `unavailable` 必须渲染成报警，不得当空态；展示链头 `seq` 和哈希。`projectCaioGoalReadouts` 给出每个目标的三态指标。
-- 关注事项探测器：`resolveCaioGoalLedgerComponentRole`、`resolveCaioGoalLedgerGateHolder`、`evaluateCaioGoalThresholdEcho`（`unset` / `match` / `mismatch`）。激活的路由配置版本与 pin 不符时必须挡住预填；路由规则的主责角色与台账不一致时以台账为准并阻断；台账不是 `ok` 时探测器记 `SKIPPED`，不记 `NO_HIT`；`mismatch` 的达标线读数不得当作已测量。
-- 成员简报（`get_my_brief`）：`selectCaioGoalLedgerForRoles(document, roleKeys)` 只给本人角色相关的部件和关卡；不给成员 OWNER 原话、变更说明和封存摘要；目标文字走成员网关的投影阶梯；简报段在台账异常时显示报警（`ledger_rejected` / `ledger_unavailable` / `role_binding_drift`）。
+- 公共（已交付）：`readCaioGoalLedger(store, { workspaceId })`；`readCaioGoalLedgerRoleBindings(store, { workspaceId, pin })`，返回 `match` / `drift` / `route_config_missing` / `unavailable`。
+- 控制台（OWNER 只读）：`projectCaioGoalReadouts(document, kpis, english)`（已交付）给出每个目标的三态指标；`rejected` 和 `unavailable` 必须渲染成报警，不得当空态；展示链头 `seq` 和哈希。按条目读历史的 `readCaioGoalLedgerHistory` 尚未交付；它会含 OWNER 原话，交付后调用方必须先做 OWNER 门。
+- 关注事项探测器：`evaluateCaioGoalThresholdEcho(threshold, echoedSha256)`（已交付，`unset` / `match` / `mismatch`）；按部件和按关卡解析主责角色的 `resolveCaioGoalLedgerComponentRole`、`resolveCaioGoalLedgerGateHolder` 尚未交付。激活的路由配置版本与 pin 不符时必须挡住预填；路由规则的主责角色与台账不一致时以台账为准并阻断；台账不是 `ok` 时探测器记 `SKIPPED`，不记 `NO_HIT`；`mismatch` 的达标线读数不得当作已测量。
+- 成员简报（`get_my_brief`）：`selectCaioGoalLedgerForRoles(document, roleKeys)`（已交付）只给本人角色相关的部件和关卡；不给成员 OWNER 原话、变更说明和封存摘要；目标文字走成员网关的投影阶梯；简报段在台账异常时显示报警（`ledger_rejected` / `ledger_unavailable` / `role_binding_drift`）。
 
 ## 变更记录
 
 - 2026-11-17：首版规划，代码尚未合入。
+- 2026-11-17：Core 代码合入；按实际交付更新状态、命令输出与退出码、读函数签名，并标明尚未交付的函数。

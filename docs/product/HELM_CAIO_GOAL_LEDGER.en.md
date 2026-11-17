@@ -3,14 +3,16 @@ status: draft
 owner: helm-core
 created: 2026-11-17
 review_after: 2026-12-17
-public_safety: English reference for the CAIO goal ledger plan. Synthetic examples only; no tenant data, people, credentials, threshold values, deployment identifiers or production receipts.
+public_safety: English reference for the CAIO goal ledger. Synthetic examples only; no tenant data, people, credentials, threshold values, deployment identifiers or production receipts.
 ---
 
 # CAIO Goal Ledger (English Reference)
 
 > **语言 / Language**: [中文主文本](HELM_CAIO_GOAL_LEDGER.md) + English reference
 
-Status: planned; the code is not merged. This is the planning and contract description written before implementation (changes that touch the schema or migrations need a planning document first). It grants no activation and does not mean any workspace has a goal ledger.
+Status: the Core code is merged: contracts and hashing, chain verification, the data layer (tables, migration, rollback script, upgrade note, readiness probe, grant matrix), the read service, the write service with the controlled command `npm run caio:goal-ledger`, and the structural guard. There is no console page and no downstream caller yet; the operator identity's database grants in a deployment are not configured in Core. This document grants no activation and does not mean any workspace has a goal ledger.
+
+Not delivered yet: `readCaioGoalLedgerHistory` (entry-by-entry history), the two functions that resolve the primary role by component and by gate, and the chain export function. "Interface boundary for downstream slices" below marks each function as delivered or not.
 
 ## Position
 
@@ -83,7 +85,7 @@ Validation (strict at every level, all fail closed):
 
 - Unknown keys are refused.
 - Goal, component and gate keys are unique within their own lists, metric keys across the whole document, and a goal lists each component once; `componentKeys` references must resolve.
-- Role keys reuse the attention pattern `^[a-z][a-z0-9_]{0,63}$`, which the contract layer will export from `lib/caio-attention/contracts.ts` as `CAIO_ATTENTION_ROLE_KEY_PATTERN` (today a private constant in that file) instead of copying it.
+- Role keys reuse the attention pattern `^[a-z][a-z0-9_]{0,63}$`: the contract layer imports `CAIO_ATTENTION_ROLE_KEY_PATTERN` exported by `lib/caio-attention/contracts.ts` instead of copying it.
 - `roleBindingPin` is required exactly when the document uses a role key, and must be null otherwise.
 - No values in prose: `title`, `standard`, every `label` and the gate `note` are refused when they match an amount or percentage pattern (`prose_carries_value`), so values cannot leak through text fields. These fields reach member briefs; wording such as "100% of components" has to be rephrased.
 
@@ -101,10 +103,16 @@ npm run caio:goal-ledger -- --operation=<appendEntry|importChain> --workspace-id
 npm run caio:goal-ledger -- --verify --workspace-id=<id>
 ```
 
-- A sibling of `npm run caio:governance-operator` that reuses `lib/caio-operator/operation-core.ts`: validate-only by default, writes only with `--apply`, prints one JSON line.
-- Exit codes: 0 success; 1 refused (closed code); 2 usage error; 3 `--verify` found the ledger `rejected` or `unavailable`.
+- A sibling of `npm run caio:governance-operator` that reuses `lib/caio-operator/operation-core.ts`: validate-only by default, writes only with `--apply`.
+- The command's result is the last line of stdout, one JSON object; a usage error, a refused input file and an unexpected failure of the command itself print the result to stderr instead, and stdout then has no result line. When the database layer fails, the database client first prints lines of its own error log to stdout; they may carry local paths, the database user and table names, but never the OWNER's words or document content.
+- Exit codes: 0 success; 1 refused (closed code), and also 1 when the command itself fails unexpectedly (stderr gets `{ ok: false, code: "unavailable" }`, `--verify` included); 2 usage error; 3 `--verify` read the ledger as `rejected` or `unavailable`.
 - `appendEntry` input: `ownerQuote`, `change`, `effectiveAt`, `expectedHeadHash` (64 `0`s for an empty chain), `document`.
-- `importChain` input: `format: "caio-goal-ledger-import/v1"`, `documentFileKey`, `entries` (in order, at most 10000), `documents` (digest to document text).
+- `importChain` input: `format: "caio-goal-ledger-import/v1"`, `documentFileKey`, `entries` (in order, 1 to 10000), `documents` (digest to document text).
+- `--template` prints an editable input example (the `appendEntry` example document has no role keys and a null `roleBindingPin`).
+- Input file: UTF-8 JSON (a BOM is allowed), at most 64 MiB. A file that cannot be read, is too large, is not UTF-8 or is not JSON gives `{ ok: false, code: "input_invalid", reason }` with `reason` one of `input_file_unreadable` / `input_file_too_large` / `input_file_not_utf8` / `input_file_not_json`, exit code 1.
+- Without `--apply` only the pre-check and the input structure are checked, giving `validated: true`; entry, document, chain and pin checks run inside the `--apply` write transaction, and a refusal writes nothing.
+- A refusal prints `{ ok: false, code, message, reason?, atSeq? }`: `code` is `not_owner`, `input_invalid`, `goal_ledger_rejected`, `goal_ledger_conflict` (the head moved) or `unavailable`; a write-service refusal adds its closed `reason` and, where it applies, `atSeq` (the entry at fault). Output never carries the OWNER's words or document content; a success gives only `seq`, `entryHash` and `documentHash`, plus `appended` and `replayed` for an import.
+- `--verify` is read-only and prints the ledger state, the head `seq` and hashes (or the alarm's break point) and the schema readiness, never the document.
 
 Four identity layers:
 
@@ -113,7 +121,7 @@ Four identity layers:
 | Command pre-check | Reads `Membership` only; anyone but an ACTIVE OWNER gets `not_owner` before the service runs |
 | In-transaction recheck | The first statement is `SELECT role, status FROM Membership … FOR SHARE`; anyone but an ACTIVE OWNER is refused. Implemented inside the ledger module, without importing `lib/caio-governance` |
 | Database grants | The reader identity has SELECT only; the operator identity has SELECT / INSERT on entries; nobody has DELETE |
-| Structural guard | Only an allow-list may import the write service; `app/` and server actions may not reach it; no `index.ts` |
+| Structural guard | Runs with `npm run test`: the files that reach the write service, the storage write implementation (`lib/caio-goal-ledger/prisma-store.ts`) or the command entry, directly or not, must be exactly the allow-list (the command script, the command entry and their tests); nothing under `app/`, no actions module and no `"use server"` module is on it; the module has no `index.ts`, never imports `lib/caio-governance`, and its read service holds no write call |
 
 `appendEntry` order inside one transaction: recheck OWNER → lock the head anchor → read every entry and verify the whole chain (`chain_rejected`) → compare `expectedHeadHash` (`head_conflict`) → validate the document and pin, then insert → compare-and-swap the head with a raw conditional update → read back and re-verify (`storage_roundtrip_mismatch`, rolled back) → write the audit row. Three unique keys `(workspaceId, seq)`, `(workspaceId, entryHash)` and `(workspaceId, prevHash)` cover concurrency; the last gives every entry at most one successor, so the database cannot fork.
 
@@ -121,7 +129,7 @@ Four identity layers:
 
 Audit: a successful write adds one row in the same transaction whose payload holds only `seq` (or the seq range), entry hash, previous hash, document hash and source. It never holds the OWNER's words or document content, because the audit log is readable beyond the OWNER. Refused attempts write nothing; the command's closed code is the record.
 
-Residual risk: `--actor-user-id` is declared by the operator, not authenticated. Someone holding the operator database identity could still enter the OWNER's userId. Mitigations are the words sealed in the chain, the audit row and a console that shows the head `seq` and hash for the OWNER to compare; a signature lock is out of scope here.
+Residual risk: `--actor-user-id` is declared by the operator, not authenticated. Someone holding the operator database identity could still enter the OWNER's userId. Mitigations are the words sealed in the chain, the audit row and the head `seq` and hash for the OWNER to compare (printed by `--verify`; showing them in a console belongs to a downstream slice); a signature lock is out of scope here.
 
 ## Reads
 
@@ -141,7 +149,7 @@ type CaioGoalLedgerRead =
 - A missing table or a failed query is `unavailable`, never `empty`.
 - The only visible alarms in this module are a `rejected` read and `--verify` ending with exit code 3. Rendering and in-app notification belong to the downstream console slice.
 
-Metrics never show a made-up 0: `projectCaioGoalReadouts(document, kpis)` looks each metric up by `key` among the northstar KPI sources. A match with the same unit is taken as is (`measured` / `pending_source` / `no_data`); no match or a different unit becomes `pending_source` with `value: null` and a non-empty note. Every output passes `validateNorthstarKpis`. A source that explicitly reports `measured` with 0 shows 0. Core itself has no KPI source, so until an overlay connects one every metric is `pending_source`.
+Metrics never show a made-up 0: `projectCaioGoalReadouts(document, kpis, english)` looks each metric up by `key` among the northstar KPI sources. A match with the same unit is taken as is (`measured` / `pending_source` / `no_data`); no match or a different unit becomes `pending_source` with `value: null` and a non-empty note. Every output passes `validateNorthstarKpis`. A source that explicitly reports `measured` with 0 shows 0. Core itself has no KPI source, so until an overlay connects one every metric is `pending_source`.
 
 ## Data layer
 
@@ -176,13 +184,14 @@ PR-3 may run in parallel with PR-2.
 
 ## Interface boundary for downstream slices
 
-Downstream code calls only these functions and never imports the write service.
+Downstream code calls only these functions and never imports the write service. The read functions' `store` needs a read-only factory without the write transaction, not delivered yet and split out when the first read-only caller appears; until then `prisma-store.ts`, home of `createPrismaCaioGoalLedgerStore`, counts as a write entry and downstream code may not import it.
 
-- Shared: `readCaioGoalLedger({ workspaceId })`; `readCaioGoalLedgerRoleBindings({ workspaceId, pin })`, returning `match` / `drift` / `route_config_missing` / `unavailable`.
-- Console (OWNER read-only): `readCaioGoalLedgerHistory` includes the OWNER's words, so callers gate on OWNER first; `rejected` and `unavailable` must render as alarms, never as an empty state; show the head `seq` and hash. `projectCaioGoalReadouts` gives each goal's three-state metrics.
-- Attention detectors: `resolveCaioGoalLedgerComponentRole`, `resolveCaioGoalLedgerGateHolder`, `evaluateCaioGoalThresholdEcho` (`unset` / `match` / `mismatch`). When the active route-config version differs from the pin, prefill must be blocked; when a route rule's primary role differs from the ledger, the ledger wins and the route is blocked; when the ledger is not `ok`, detectors record `SKIPPED`, not `NO_HIT`; a `mismatch` threshold readout never counts as measured.
-- Member brief (`get_my_brief`): `selectCaioGoalLedgerForRoles(document, roleKeys)` returns only the components and gates of the member's roles; members never get the OWNER's words, change notes or sealed digests; goal text goes through the member gateway's projection ladder; the brief section shows an alarm (`ledger_rejected` / `ledger_unavailable` / `role_binding_drift`) when the ledger is not usable.
+- Shared (delivered): `readCaioGoalLedger(store, { workspaceId })`; `readCaioGoalLedgerRoleBindings(store, { workspaceId, pin })`, returning `match` / `drift` / `route_config_missing` / `unavailable`.
+- Console (OWNER read-only): `projectCaioGoalReadouts(document, kpis, english)` (delivered) gives each goal's three-state metrics; `rejected` and `unavailable` must render as alarms, never as an empty state; show the head `seq` and hash. `readCaioGoalLedgerHistory` (entry-by-entry history) is not delivered yet; it will include the OWNER's words, so once delivered its callers gate on OWNER first.
+- Attention detectors: `evaluateCaioGoalThresholdEcho(threshold, echoedSha256)` (delivered; `unset` / `match` / `mismatch`); `resolveCaioGoalLedgerComponentRole` and `resolveCaioGoalLedgerGateHolder`, which resolve the primary role by component and by gate, are not delivered yet. When the active route-config version differs from the pin, prefill must be blocked; when a route rule's primary role differs from the ledger, the ledger wins and the route is blocked; when the ledger is not `ok`, detectors record `SKIPPED`, not `NO_HIT`; a `mismatch` threshold readout never counts as measured.
+- Member brief (`get_my_brief`): `selectCaioGoalLedgerForRoles(document, roleKeys)` (delivered) returns only the components and gates of the member's roles; members never get the OWNER's words, change notes or sealed digests; goal text goes through the member gateway's projection ladder; the brief section shows an alarm (`ledger_rejected` / `ledger_unavailable` / `role_binding_drift`) when the ledger is not usable.
 
 ## Change log
 
 - 2026-11-17: first planning version; code not merged.
+- 2026-11-17: Core code merged; status, command output and exit codes, and read function signatures updated to what shipped, with the functions not delivered yet marked.
