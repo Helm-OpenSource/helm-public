@@ -103,8 +103,9 @@ npm run caio:goal-ledger -- --operation=<appendEntry|importChain> --workspace-id
 npm run caio:goal-ledger -- --verify --workspace-id=<id>
 ```
 
-- 与 `npm run caio:governance-operator` 同族，复用 `lib/caio-operator/operation-core.ts`：默认只校验，带 `--apply` 才写；输出一行 JSON。
-- 退出码：0 成功；1 被拒（闭集码）；2 用法错；3 `--verify` 发现台账为 `rejected` 或 `unavailable`。
+- 与 `npm run caio:governance-operator` 同族，复用 `lib/caio-operator/operation-core.ts`：默认只校验，带 `--apply` 才写。
+- 命令的结果是 stdout 的最后一行 JSON；用法错、输入文件被拒和命令自身意外失败时，结果改在 stderr 输出，stdout 上没有结果行。数据库层出错时，数据库客户端会先在 stdout 上打印若干行自己的错误日志；这些行可能含本机路径、库用户名和表名，不含 OWNER 原话和文档内容。
+- 退出码：0 成功；1 被拒（闭集码），命令自身意外失败时也是 1（stderr 输出 `{ ok: false, code: "unavailable" }`，`--verify` 同样）；2 用法错；3 `--verify` 读出台账为 `rejected` 或 `unavailable`。
 - `appendEntry` 输入：`ownerQuote`、`change`、`effectiveAt`、`expectedHeadHash`（空链填 64 个 0）、`document`。
 - `importChain` 输入：`format: "caio-goal-ledger-import/v1"`、`documentFileKey`、`entries`（按序，1 到 10000 条）、`documents`（摘要到文档原文）。
 - `--template` 打印一份可编辑的输入样例（`appendEntry` 的样例文档不含角色键，`roleBindingPin` 为 null）。
@@ -120,7 +121,7 @@ npm run caio:goal-ledger -- --verify --workspace-id=<id>
 | 命令行预检 | 只读 `Membership`，不是 ACTIVE 的 OWNER 即返回 `not_owner`，不进服务 |
 | 事务内复核 | 事务第一条语句 `SELECT role, status FROM Membership … FOR SHARE`，不是 ACTIVE OWNER 即拒；在台账模块内实现，不引用 `lib/caio-governance` |
 | 库权限 | 读身份只有 SELECT；运营身份对条目表只有 SELECT / INSERT；谁都没有 DELETE |
-| 结构守卫 | `npm run check:caio-goal-ledger`（也随 `npm run test` 运行）：直接或间接引用写服务和命令入口的文件必须恰好是白名单（命令脚本、命令入口和它们的测试）；`app/`、actions 模块、`"use server"` 模块都不在其中；模块无 `index.ts`、不引用 `lib/caio-governance`；读服务里没有写调用 |
+| 结构守卫 | 随 `npm run test` 运行：直接或间接引用写服务和命令入口的文件必须恰好是白名单（命令脚本、命令入口和它们的测试）；`app/`、actions 模块、`"use server"` 模块都不在其中；模块无 `index.ts`、不引用 `lib/caio-governance`；读服务里没有写调用 |
 
 `appendEntry` 的事务顺序：复核 OWNER → 锁头锚 → 读全部条目并全链校验（不过即 `chain_rejected`）→ 比对 `expectedHeadHash`（不符即 `head_conflict`）→ 校验文档与 pin 并插入 → 头锚以原生条件更新做比较交换 → 同事务读回重验（不符即 `storage_roundtrip_mismatch` 并回滚）→ 同事务写审计。三条唯一约束 `(workspaceId, seq)`、`(workspaceId, entryHash)`、`(workspaceId, prevHash)` 兜住并发，最后一条保证每条只有一个后继，库层面不能分叉。
 

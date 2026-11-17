@@ -9,8 +9,11 @@
  *     --actor-user-id=<id> --input-file=<path.json> [--apply] [--english]
  *   npm run caio:goal-ledger -- --verify --workspace-id=<id>
  *
- * Output is one JSON line (the template is printed for editing). Exit code 0 on success, 1 on refusal with a
- * closed code, 2 on a usage error, 3 when --verify finds the ledger rejected or unavailable.
+ * The result is the last line of stdout, one JSON object (the template is printed for editing); a usage error, a
+ * refused input file and an unexpected failure print it to stderr instead, and stdout then has no result line. When
+ * the database layer fails, the database client first prints lines of its own error log to stdout; those may carry
+ * local paths, the database user and table names, never the owner's words or the document. Exit code 0 on success, 1 on refusal
+ * with a closed code, 2 on a usage error, 3 when --verify finds the ledger rejected or unavailable.
  */
 
 import {

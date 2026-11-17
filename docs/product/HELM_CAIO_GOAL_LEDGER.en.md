@@ -103,8 +103,9 @@ npm run caio:goal-ledger -- --operation=<appendEntry|importChain> --workspace-id
 npm run caio:goal-ledger -- --verify --workspace-id=<id>
 ```
 
-- A sibling of `npm run caio:governance-operator` that reuses `lib/caio-operator/operation-core.ts`: validate-only by default, writes only with `--apply`, prints one JSON line.
-- Exit codes: 0 success; 1 refused (closed code); 2 usage error; 3 `--verify` found the ledger `rejected` or `unavailable`.
+- A sibling of `npm run caio:governance-operator` that reuses `lib/caio-operator/operation-core.ts`: validate-only by default, writes only with `--apply`.
+- The command's result is the last line of stdout, one JSON object; a usage error, a refused input file and an unexpected failure of the command itself print the result to stderr instead, and stdout then has no result line. When the database layer fails, the database client first prints lines of its own error log to stdout; they may carry local paths, the database user and table names, but never the OWNER's words or document content.
+- Exit codes: 0 success; 1 refused (closed code), and also 1 when the command itself fails unexpectedly (stderr gets `{ ok: false, code: "unavailable" }`, `--verify` included); 2 usage error; 3 `--verify` read the ledger as `rejected` or `unavailable`.
 - `appendEntry` input: `ownerQuote`, `change`, `effectiveAt`, `expectedHeadHash` (64 `0`s for an empty chain), `document`.
 - `importChain` input: `format: "caio-goal-ledger-import/v1"`, `documentFileKey`, `entries` (in order, 1 to 10000), `documents` (digest to document text).
 - `--template` prints an editable input example (the `appendEntry` example document has no role keys and a null `roleBindingPin`).
@@ -120,7 +121,7 @@ Four identity layers:
 | Command pre-check | Reads `Membership` only; anyone but an ACTIVE OWNER gets `not_owner` before the service runs |
 | In-transaction recheck | The first statement is `SELECT role, status FROM Membership … FOR SHARE`; anyone but an ACTIVE OWNER is refused. Implemented inside the ledger module, without importing `lib/caio-governance` |
 | Database grants | The reader identity has SELECT only; the operator identity has SELECT / INSERT on entries; nobody has DELETE |
-| Structural guard | `npm run check:caio-goal-ledger` (also run by `npm run test`): the files that reach the write service or the command entry, directly or not, must be exactly the allow-list (the command script, the command entry and their tests); nothing under `app/`, no actions module and no `"use server"` module is on it; the module has no `index.ts`, never imports `lib/caio-governance`, and its read service holds no write call |
+| Structural guard | Runs with `npm run test`: the files that reach the write service or the command entry, directly or not, must be exactly the allow-list (the command script, the command entry and their tests); nothing under `app/`, no actions module and no `"use server"` module is on it; the module has no `index.ts`, never imports `lib/caio-governance`, and its read service holds no write call |
 
 `appendEntry` order inside one transaction: recheck OWNER → lock the head anchor → read every entry and verify the whole chain (`chain_rejected`) → compare `expectedHeadHash` (`head_conflict`) → validate the document and pin, then insert → compare-and-swap the head with a raw conditional update → read back and re-verify (`storage_roundtrip_mismatch`, rolled back) → write the audit row. Three unique keys `(workspaceId, seq)`, `(workspaceId, entryHash)` and `(workspaceId, prevHash)` cover concurrency; the last gives every entry at most one successor, so the database cannot fork.
 
