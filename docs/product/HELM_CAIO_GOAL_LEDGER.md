@@ -121,7 +121,7 @@ npm run caio:goal-ledger -- --verify --workspace-id=<id>
 | 命令行预检 | 只读 `Membership`，不是 ACTIVE 的 OWNER 即返回 `not_owner`，不进服务 |
 | 事务内复核 | 事务第一条语句 `SELECT role, status FROM Membership … FOR SHARE`，不是 ACTIVE OWNER 即拒；在台账模块内实现，不引用 `lib/caio-governance` |
 | 库权限 | 读身份只有 SELECT；运营身份对条目表只有 SELECT / INSERT；谁都没有 DELETE |
-| 结构守卫 | 随 `npm run test` 运行：直接或间接引用写服务和命令入口的文件必须恰好是白名单（命令脚本、命令入口和它们的测试）；`app/`、actions 模块、`"use server"` 模块都不在其中；模块无 `index.ts`、不引用 `lib/caio-governance`；读服务里没有写调用 |
+| 结构守卫 | 随 `npm run test` 运行：直接或间接引用写服务、存储写实现（`lib/caio-goal-ledger/prisma-store.ts`）和命令入口的文件必须恰好是白名单（命令脚本、命令入口和它们的测试）；`app/`、actions 模块、`"use server"` 模块都不在其中；模块无 `index.ts`、不引用 `lib/caio-governance`；读服务里没有写调用 |
 
 `appendEntry` 的事务顺序：复核 OWNER → 锁头锚 → 读全部条目并全链校验（不过即 `chain_rejected`）→ 比对 `expectedHeadHash`（不符即 `head_conflict`）→ 校验文档与 pin 并插入 → 头锚以原生条件更新做比较交换 → 同事务读回重验（不符即 `storage_roundtrip_mismatch` 并回滚）→ 同事务写审计。三条唯一约束 `(workspaceId, seq)`、`(workspaceId, entryHash)`、`(workspaceId, prevHash)` 兜住并发，最后一条保证每条只有一个后继，库层面不能分叉。
 
@@ -184,7 +184,7 @@ PR-3 可与 PR-2 并行。
 
 ## 下游切片的接口边界
 
-下游只调下面这些函数，都不得引用写服务。读函数的 `store` 由 `createPrismaCaioGoalLedgerStore(client)` 建。
+下游只调下面这些函数，都不得引用写服务。读函数的 `store` 需要一个不带写事务的只读工厂，尚未交付，第一个只读调用方出现时再拆；在那之前 `createPrismaCaioGoalLedgerStore` 所在的 `prisma-store.ts` 视同写入口，下游不得引用。
 
 - 公共（已交付）：`readCaioGoalLedger(store, { workspaceId })`；`readCaioGoalLedgerRoleBindings(store, { workspaceId, pin })`，返回 `match` / `drift` / `route_config_missing` / `unavailable`。
 - 控制台（OWNER 只读）：`projectCaioGoalReadouts(document, kpis, english)`（已交付）给出每个目标的三态指标；`rejected` 和 `unavailable` 必须渲染成报警，不得当空态；展示链头 `seq` 和哈希。按条目读历史的 `readCaioGoalLedgerHistory` 尚未交付；它会含 OWNER 原话，交付后调用方必须先做 OWNER 门。

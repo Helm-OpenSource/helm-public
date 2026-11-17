@@ -121,7 +121,7 @@ Four identity layers:
 | Command pre-check | Reads `Membership` only; anyone but an ACTIVE OWNER gets `not_owner` before the service runs |
 | In-transaction recheck | The first statement is `SELECT role, status FROM Membership … FOR SHARE`; anyone but an ACTIVE OWNER is refused. Implemented inside the ledger module, without importing `lib/caio-governance` |
 | Database grants | The reader identity has SELECT only; the operator identity has SELECT / INSERT on entries; nobody has DELETE |
-| Structural guard | Runs with `npm run test`: the files that reach the write service or the command entry, directly or not, must be exactly the allow-list (the command script, the command entry and their tests); nothing under `app/`, no actions module and no `"use server"` module is on it; the module has no `index.ts`, never imports `lib/caio-governance`, and its read service holds no write call |
+| Structural guard | Runs with `npm run test`: the files that reach the write service, the storage write implementation (`lib/caio-goal-ledger/prisma-store.ts`) or the command entry, directly or not, must be exactly the allow-list (the command script, the command entry and their tests); nothing under `app/`, no actions module and no `"use server"` module is on it; the module has no `index.ts`, never imports `lib/caio-governance`, and its read service holds no write call |
 
 `appendEntry` order inside one transaction: recheck OWNER → lock the head anchor → read every entry and verify the whole chain (`chain_rejected`) → compare `expectedHeadHash` (`head_conflict`) → validate the document and pin, then insert → compare-and-swap the head with a raw conditional update → read back and re-verify (`storage_roundtrip_mismatch`, rolled back) → write the audit row. Three unique keys `(workspaceId, seq)`, `(workspaceId, entryHash)` and `(workspaceId, prevHash)` cover concurrency; the last gives every entry at most one successor, so the database cannot fork.
 
@@ -184,7 +184,7 @@ PR-3 may run in parallel with PR-2.
 
 ## Interface boundary for downstream slices
 
-Downstream code calls only these functions and never imports the write service. The read functions take a `store` built with `createPrismaCaioGoalLedgerStore(client)`.
+Downstream code calls only these functions and never imports the write service. The read functions' `store` needs a read-only factory without the write transaction, not delivered yet and split out when the first read-only caller appears; until then `prisma-store.ts`, home of `createPrismaCaioGoalLedgerStore`, counts as a write entry and downstream code may not import it.
 
 - Shared (delivered): `readCaioGoalLedger(store, { workspaceId })`; `readCaioGoalLedgerRoleBindings(store, { workspaceId, pin })`, returning `match` / `drift` / `route_config_missing` / `unavailable`.
 - Console (OWNER read-only): `projectCaioGoalReadouts(document, kpis, english)` (delivered) gives each goal's three-state metrics; `rejected` and `unavailable` must render as alarms, never as an empty state; show the head `seq` and hash. `readCaioGoalLedgerHistory` (entry-by-entry history) is not delivered yet; it will include the OWNER's words, so once delivered its callers gate on OWNER first.

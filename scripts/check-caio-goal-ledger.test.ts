@@ -1,13 +1,17 @@
 // check:caio-goal-ledger — structural gate for the CAIO goal ledger write path.
-//   1. The write service and its controlled CLI entry are reached, directly or through other modules, only from the
-//      files listed in WRITE_PATH_IMPORTERS: the CLI, the entry itself and their tests. Nothing under app/, no
-//      actions module and no "use server" module may reach either. Every source file is scanned, type-only imports
-//      included, except node_modules and, at the root only (as .gitignore has them), dot directories and build output.
+//   1. The write service, the Prisma store and the controlled CLI entry are reached, directly or through other
+//      modules, only from the files listed in WRITE_PATH_IMPORTERS: the CLI, the entry itself and their tests. Nothing
+//      under app/, no actions module and no "use server" module may reach any of them. The Prisma store counts as a
+//      write entry because its writeTransaction bypasses the write service's owner re-check, validation and audit;
+//      read-only callers will need a factory without writeTransaction, split out when the first one appears. Every
+//      source file is scanned, type-only imports included, except node_modules and, at the root only (as .gitignore
+//      has them), dot directories and build output.
 //   2. lib/caio-goal-ledger has no index file, so nothing can reach the write service through a barrel.
 //   3. lib/caio-goal-ledger never imports lib/caio-governance.
 //   4. The read service holds no write call.
 // The guard is a code-review aid: the actorUserId the CLI writes with is declared, not authenticated, and the
-// database grants and the in-transaction owner re-check stay the enforcing layers.
+// database grants and the in-transaction owner re-check stay the enforcing layers. A static scan cannot see a dynamic
+// import of a non-literal specifier or a module loaded through createRequire.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
@@ -15,7 +19,9 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 const root = path.resolve(__dirname, "..");
-const WRITE_ENTRIES = ["lib/caio-goal-ledger/write.service.ts", "lib/caio-operator/goal-ledger-operator.ts"];
+const WRITE_ENTRIES = [
+  "lib/caio-goal-ledger/write.service.ts", "lib/caio-goal-ledger/prisma-store.ts", "lib/caio-operator/goal-ledger-operator.ts",
+];
 const WRITE_PATH_IMPORTERS = [
   "lib/caio-goal-ledger/store.mysql.test.ts",
   "lib/caio-goal-ledger/write.service.test.ts",
