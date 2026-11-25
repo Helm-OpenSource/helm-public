@@ -3,6 +3,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/lib/db";
 import * as audit from "@/lib/audit";
 import { hashPassword, verifyPassword } from "./formal-auth";
+import * as credentials from "./formal-auth";
 import { changeMemberPassword } from "./password-management";
 import { hashLoginIdentifier } from "./login-rate-limit";
 import { mintSeatDeviceToken } from "@/lib/seat-device/contract";
@@ -117,6 +118,13 @@ run("transactional password management on MySQL", () => {
     const counter = await db.failedLoginAttempt.findUniqueOrThrow({ where: { identifierHash: hashLoginIdentifier(actor.user.email) } });
     expect(counter.attemptCount).toBe(8); expect(counter.lockedUntil).not.toBeNull();
     await expect(changeMemberPassword(actor.context, command())).rejects.toThrow();
+  });
+  it("counts every verified guess under concurrent wrong-password bursts", async () => {
+    const verify = vi.spyOn(credentials, "verifyPassword");
+    for (let wave = 0; wave < 2; wave++) await Promise.allSettled(Array.from({ length: 16 }, () => changeMemberPassword(actor.context, { currentPassword: "wrong", newPassword: next })));
+    const counter = await db.failedLoginAttempt.findUniqueOrThrow({ where: { identifierHash: hashLoginIdentifier(actor.user.email) } });
+    expect(counter.attemptCount).toBe(verify.mock.calls.length);
+    expect(verify.mock.calls.length).toBeLessThanOrEqual(8);
   });
   it("rolls back password and session revocation if audit fails; sends no notices", async () => {
     vi.spyOn(audit, "writeAuditLog").mockRejectedValueOnce(new Error("synthetic audit failure"));

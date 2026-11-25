@@ -71,4 +71,8 @@ test("admin sees only permitted members and resets selected member", async ({ pa
   await page.getByRole("button", { name: "重置所选成员密码" }).click();
   await expect(page.getByRole("status")).toContainText("成员密码已重置");
   expect(verifyPassword(next, (await db.user.findUniqueOrThrow({ where: { id: target.user.id } })).passwordHash)).toBe(true);
+  await context.addCookies([{ name: "helm-ui-locale", value: "en-US", url: baseURL! }]);
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Account security", exact: true })).toBeVisible();
+  await expect(page.getByLabel("My current password", { exact: true })).toBeVisible();
 });

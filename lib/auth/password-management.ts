@@ -41,7 +41,9 @@ export async function changeMemberPassword(context: Context, command: PasswordCo
     }
     // Fail closed if the limiter table is unavailable; persist wrong-password attempts by returning, not throwing.
     const identifierHash = hashLoginIdentifier(actor.user.email);
-    const counter = await tx.failedLoginAttempt.findUnique({ where: { identifierHash } });
+    // Take the counter row's write lock before spending a password guess. Shared reads
+    // followed by upgrades can deadlock and roll back counts after guesses were verified.
+    const counter = await tx.failedLoginAttempt.upsert({ where: { identifierHash }, create: { identifierHash, windowStartedAt: now }, update: { updatedAt: now } });
     if (evaluateLock(counter, now).locked) return null;
     if (!verifyPassword(input.currentPassword, actor.user.passwordHash)) {
       const next = nextStateOnFailure(counter, now);

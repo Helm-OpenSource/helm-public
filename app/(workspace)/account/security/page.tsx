@@ -1,12 +1,13 @@
 import { db } from "@/lib/db";
 import { getCurrentWorkspaceSession } from "@/lib/auth/session";
+import { resolveWorkspaceUiLocaleForRequest } from "@/lib/i18n/request-locale.server";
 import { PasswordManagementPanel } from "@/features/auth/password-management-panel";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Account security", robots: { index: false, follow: false } };
 export default async function AccountSecurityPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const session = await getCurrentWorkspaceSession();
   const role = session.membership.role;
-  const english = session.workspace.defaultLocale === "en-US";
+  const english = (await resolveWorkspaceUiLocaleForRequest({ workspaceDefaultLocale: session.workspace.defaultLocale })) === "en-US";
   const raw = (await searchParams).q;
   const q = typeof raw === "string" ? raw.trim().slice(0, 191) : "";
   const members = ["OWNER", "ADMIN"].includes(role) ? await db.membership.findMany({
