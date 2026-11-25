@@ -478,6 +478,7 @@ export function Topbar({
     },
   ];
   const settingsNavItems = [
+    { href: "/account/security", label: english ? "Account security" : "账号安全" },
     { href: "/settings", label: messages.shell.nav.settings },
     { href: "/imports", label: messages.shell.nav.imports },
     { href: "/capture", label: messages.shell.nav.capture },
@@ -613,6 +614,7 @@ export function Topbar({
                 </Badge>
               ) : null}
             </Button>
+            <Link href="/account/security" className="text-sm underline">{english ? "Account security" : "账号安全"}</Link>
             <WorkspaceAccountSwitcher
               workspaceId={workspaceId}
               workspaceName={workspaceName}

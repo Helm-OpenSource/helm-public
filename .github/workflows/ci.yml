@@ -1662,3 +1662,76 @@ jobs:
           name: browser-regression-results
           path: test-results/
           retention-days: 7
+
+  password-management:
+    name: Password Management
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: helm_password_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      HELM_CI_MYSQL_DATABASE: helm_password_ci
+      HELM_CI_MYSQL_USER: helm_password_ci
+    steps:
+      - uses: actions/checkout@v5
+      - name: Mint an isolated least-privilege MySQL credential
+        env:
+          HELM_CI_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          app_password="$(openssl rand -hex 24)"
+          root_password="$(openssl rand -hex 24)"
+          echo "::add-mask::${app_password}"
+          echo "::add-mask::${root_password}"
+          bootstrap_sql="$(mktemp)"
+          chmod 600 "${bootstrap_sql}"
+          {
+            printf "CREATE USER IF NOT EXISTS '%s'@'%%' IDENTIFIED BY '%s';\n" \
+              "${HELM_CI_MYSQL_USER}" "${app_password}"
+            printf "GRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
+              "${HELM_CI_MYSQL_DATABASE}" "${HELM_CI_MYSQL_USER}"
+            # Same ephemeral-container exception as the jobs above: migrations
+            # create triggers, which binary logging refuses without SUPER.
+            printf "SET GLOBAL log_bin_trust_function_creators = 1;\n"
+            printf "ALTER USER IF EXISTS 'root'@'%%' IDENTIFIED BY '%s';\n" \
+              "${root_password}"
+            printf "ALTER USER IF EXISTS 'root'@'localhost' IDENTIFIED BY '%s';\n" \
+              "${root_password}"
+            printf "FLUSH PRIVILEGES;\n"
+          } >"${bootstrap_sql}"
+          docker exec -i "${HELM_CI_MYSQL_CONTAINER}" \
+            mysql --host=127.0.0.1 --protocol=tcp --user=root --batch \
+            <"${bootstrap_sql}"
+          rm -f "${bootstrap_sql}"
+          credential="${HELM_CI_MYSQL_USER}:${app_password}"
+          url="mysql://${credential}@127.0.0.1:3306/${HELM_CI_MYSQL_DATABASE}?charset=utf8mb4"
+          [[ "${url}" != *$'\n'* && "${url}" != *$'\r'* ]] || exit 1
+          {
+            printf 'DATABASE_URL=%s\n' "${url}"
+          } >>"${GITHUB_ENV}"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npx tsx prisma/setup-db.ts migrate
+      - name: Password and concurrent session regressions
+        env:
+          PASSWORD_MANAGEMENT_MYSQL_REQUIRED: '1'
+          PASSWORD_MANAGEMENT_DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: npx vitest run lib/auth/password-management.mysql.test.ts lib/auth/session.test.ts features/auth/actions.test.ts lib/seat-device/password-write-gate.test.ts --config vitest.public.config.ts --fileParallelism=false
+      - run: npx playwright install --with-deps chromium
+      - name: Password management browser regression
+        env:
+          PLAYWRIGHT_WEBSERVER_TIMEOUT_MS: '600000'
+        run: npx playwright test tests/e2e/password-management.spec.ts

@@ -336,6 +336,8 @@ async function finalizeLoginForUser(
     workspaceId: loginWorkspaceId,
     sourcePage,
     providerType,
+    ...(providerType === AUTH_SESSION_PROVIDER_TYPES.PASSWORD && user.passwordHash
+      ? { expectedPasswordHash: user.passwordHash } : {}),
   });
 
   if (requiresIdentityCompletion) {

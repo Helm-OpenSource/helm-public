@@ -20,6 +20,7 @@ const {
   dbMock: {
     $executeRaw: vi.fn(),
     $transaction: vi.fn(),
+    user: { findUnique: vi.fn() },
     authSession: {
       findUnique: vi.fn(),
       findMany: vi.fn(),
@@ -711,6 +712,20 @@ describe("auth session substrate", () => {
       }),
     ).rejects.toThrow("Workspace unavailable for this deployment");
 
+    expect(dbMock.authSession.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses a password login verified before a concurrent reset", async () => {
+    dbMock.user.findUnique.mockResolvedValue({ passwordHash: "new-hash" });
+    await expect(createSession({ userId: "user-1", email: "owner@example.com", providerType: "PASSWORD", expectedPasswordHash: "old-hash" })).rejects.toThrow("Credential changed");
+    expect(dbMock.authSession.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses rotation when a concurrent reset revoked the original session", async () => {
+    cookiesMock.mockResolvedValue(createCookieStore({ [SESSION_ID_COOKIE]: "current-session" }));
+    dbMock.authSession.findUnique.mockResolvedValueOnce(buildAuthSessionRecord())
+      .mockResolvedValueOnce(buildAuthSessionRecord({ revokedAt: new Date() }));
+    await expect(rotateCurrentAuthSession()).rejects.toThrow("Session no longer available");
     expect(dbMock.authSession.create).not.toHaveBeenCalled();
   });
 

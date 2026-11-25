@@ -1677,6 +1677,7 @@ describe("password login action", () => {
       workspaceId: "workspace-1",
       sourcePage: "/login",
       providerType: "PASSWORD",
+      expectedPasswordHash: passwordHash,
     });
   });
 
