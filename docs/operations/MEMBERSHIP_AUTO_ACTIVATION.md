@@ -26,7 +26,7 @@ Open `/account/security` from the desktop topbar or mobile settings menu. The pa
 - Self change requires an active, unscoped membership, active workspace and live PASSWORD session, plus the current password.
 - Owner can reset another active member of the same workspace. Admin can reset non-Owner/non-Admin members. An explicit member selection and reset submission are required; the administrator types their own current password.
 - Global identities with any non-inactive membership in another workspace are excluded from administrative reset. Use self change for these identities. Invited/passwordless users continue through first activation.
-- New passwords follow the existing 8–256 character policy with letters and digits. Unchanged passwords are refused. There is no automatic delivery, forced-change flag, recovery link or external message.
+- New passwords follow the existing 8–256 character policy with letters and digits. Unchanged passwords are refused. There is no automatic delivery, forced-change flag, recovery link or external message. Direct administrator-set passwords are intentional: members decide whether to change them again. Private delivery does not attest that the member has taken control.
 - 重置成功后，请通过已有私密渠道交付新密码；成员可再自行修改。管理员不能重置其他组织的账号；Admin 不能重置 Owner 或其他 Admin。
 
 ## Atomicity and failure behavior / 原子性与失败行为

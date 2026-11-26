@@ -1,6 +1,14 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+const request = vi.hoisted(() => ({ values: new Map<string, string>(), headers: vi.fn(async () => new Headers()) }));
+vi.mock("next/headers", () => ({
+  headers: request.headers,
+  cookies: async () => ({ get: (name: string) => request.values.has(name) ? { value: request.values.get(name)! } : undefined,
+    set: (name: string, value: string) => { request.values.set(name, value); }, delete: (name: string) => request.values.delete(name) }),
+}));
 import { db } from "@/lib/db";
+import { createSession, rotateCurrentAuthSession } from "./session";
 import * as audit from "@/lib/audit";
 import { hashPassword, verifyPassword } from "./formal-auth";
 import * as credentials from "./formal-auth";
@@ -28,11 +36,12 @@ run("transactional password management on MySQL", () => {
     const user = await db.user.create({ data: { email: `${randomUUID()}@example.test`, name: "Synthetic member", passwordHash: hashPassword(old), passwordSetAt: new Date("2026-01-01") } });
     users.push(user.id);
     const m = await db.membership.create({ data: { workspaceId: ws, userId: user.id, role } });
-    const s = await db.authSession.create({ data: { userId: user.id, activeWorkspaceId: ws, providerType: "PASSWORD", sessionKeyHash: randomUUID(), expiresAt: new Date(Date.now() + 60000) } });
-    return { user, m, context: { userId: user.id, workspaceId: ws, sessionId: s.id } };
+    const key = randomUUID();
+    const s = await db.authSession.create({ data: { userId: user.id, activeWorkspaceId: ws, providerType: "PASSWORD", sessionKeyHash: createHash("sha256").update(key).digest("hex"), expiresAt: new Date(Date.now() + 60000) } });
+    return { user, m, key, context: { userId: user.id, workspaceId: ws, sessionId: s.id } };
   }
   beforeEach(async () => {
-    vi.restoreAllMocks(); notices.length = 0;
+    vi.restoreAllMocks(); notices.length = 0; request.values.clear(); request.headers.mockImplementation(async () => new Headers());
     const w = await db.workspace.create({ data: { name: "Synthetic password workspace", slug: `password-${randomUUID()}` } });
     workspaces.push(w.id); workspaceId = w.id;
     actor = await member("OWNER"); target = await member();
@@ -134,6 +143,102 @@ run("transactional password management on MySQL", () => {
     const results = await Promise.allSettled([changeMemberPassword(actor.context, command()), changeMemberPassword(actor.context, { ...command(), newPassword: alternative })]);
     expect(results.filter(r => r.status === "fulfilled")).toHaveLength(1);
     expect(await db.auditLog.count({ where: { workspaceId, actionType: "PASSWORD_CHANGED" } })).toBe(1);
+  });
+  function latch() {
+    let release!: () => void;
+    const ready = new Promise<void>(resolve => { release = resolve; });
+    return { ready, release };
+  }
+  async function bounded(ready: Promise<void>) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try { await Promise.race([ready, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("Database barrier timeout")), 5000); })]); }
+    finally { clearTimeout(timer); }
+  }
+  // Only scheduling is intercepted: all model calls, isolation, locks and COMMIT/ROLLBACK use real MySQL.
+  function transactions(pauseAfter: string, observeBefore: string) {
+    const held = latch(), blocked = latch(), release = latch();
+    const original = db.$transaction.bind(db);
+    let sequence = 0;
+    type Callback = (tx: Prisma.TransactionClient) => Promise<unknown>;
+    const spy = vi.spyOn(db, "$transaction").mockImplementation(((callback: Callback, options: { isolationLevel: "Serializable" }) => {
+      const order = ++sequence;
+      return original(async tx => callback(new Proxy(tx, { get(client, modelName) {
+        const model = Reflect.get(client, modelName, client);
+        if (modelName !== "user" && modelName !== "authSession") return typeof model === "function" ? model.bind(client) : model;
+        return new Proxy(model, { get(delegate, method) {
+          const operation = Reflect.get(delegate, method, delegate);
+          if (typeof operation !== "function") return operation;
+          return async (...args: unknown[]) => {
+            const name = `${String(modelName)}.${String(method)}`;
+            if (order === 2 && name === observeBefore) blocked.release();
+            const result = await Reflect.apply(operation, delegate, args);
+            if (order === 1 && name === pauseAfter) { held.release(); await bounded(release.ready); }
+            return result;
+          };
+        } });
+      } })), options);
+    }) as typeof db.$transaction);
+    return { held: held.ready, blocked: blocked.ready, release: release.release, restore: () => spy.mockRestore() };
+  }
+  const resetTarget = () => changeMemberPassword(actor.context, { ...command(), membershipId: target.m.id });
+  const loginTarget = () => createSession({ userId: target.user.id, email: target.user.email, workspaceId, providerType: "PASSWORD", expectedPasswordHash: target.user.passwordHash! });
+  it("real login creation waits for reset commit and refuses the previously verified password", async () => {
+    expect(verifyPassword(old, target.user.passwordHash)).toBe(true);
+    const gate = transactions("user.updateMany", "user.findUnique");
+    const reset = resetTarget(); let login: Promise<unknown> | undefined;
+    try {
+      await bounded(gate.held); login = loginTarget(); const result = Promise.allSettled([reset, login]);
+      await bounded(gate.blocked); gate.release();
+      expect((await result).map(r => r.status)).toEqual(["fulfilled", "rejected"]);
+      expect(await db.authSession.count({ where: { userId: target.user.id, revokedAt: null } })).toBe(0);
+    } finally { gate.release(); await Promise.allSettled([reset, ...(login ? [login] : [])]); gate.restore(); }
+  });
+  it.each(["login", "rotation"] as const)("reset after real %s commit revokes the newly created session", async kind => {
+    if (kind === "rotation") request.values.set("helm-auth-session", target.key);
+    const gate = transactions(kind === "login" ? "authSession.create" : "authSession.update", "user.updateMany");
+    const first = kind === "login" ? loginTarget() : rotateCurrentAuthSession(); let reset: Promise<unknown> | undefined;
+    try {
+      await bounded(gate.held); reset = resetTarget(); const result = Promise.allSettled([first, reset]);
+      await bounded(gate.blocked); gate.release();
+      expect((await result).map(r => r.status)).toEqual(["fulfilled", "fulfilled"]);
+      const created = await first as { id?: string; sessionId?: string };
+      const createdId = created.id ?? created.sessionId; expect(createdId).toBeTruthy();
+      expect((await db.authSession.findUniqueOrThrow({ where: { id: createdId! } })).revokedAt).not.toBeNull();
+      expect(await db.authSession.count({ where: { userId: target.user.id, revokedAt: null } })).toBe(0);
+      expect(verifyPassword(next, (await db.user.findUniqueOrThrow({ where: { id: target.user.id } })).passwordHash)).toBe(true);
+    } finally { gate.release(); await Promise.allSettled([first, ...(reset ? [reset] : [])]); gate.restore(); }
+  });
+  it("reset commit invalidates a real rotation that already loaded the old session snapshot", async () => {
+    request.values.set("helm-auth-session", target.key);
+    const held = latch(), release = latch();
+    request.headers.mockImplementationOnce(async () => { held.release(); await bounded(release.ready); return new Headers(); });
+    const rotation = rotateCurrentAuthSession(); const result = Promise.allSettled([rotation]);
+    try {
+      await bounded(held.ready); await resetTarget(); release.release();
+      expect((await result)[0].status).toBe("rejected");
+      expect(await db.authSession.count({ where: { userId: target.user.id, revokedAt: null } })).toBe(0);
+    } finally { release.release(); await result; }
+  });
+  it.each(["login", "rotation"] as const)("failed reset after real %s commit leaves no partial password/session changes", async kind => {
+    if (kind === "rotation") request.values.set("helm-auth-session", target.key);
+    const gate = transactions(kind === "login" ? "authSession.create" : "authSession.update", "user.updateMany");
+    const write = audit.writeAuditLog;
+    vi.spyOn(audit, "writeAuditLog").mockImplementation((input, options) => {
+      if (input.actionType === "MEMBER_PASSWORD_RESET") return Promise.reject(new Error("Synthetic reset audit failure"));
+      return write(input, options);
+    });
+    const first = kind === "login" ? loginTarget() : rotateCurrentAuthSession(); let reset: Promise<unknown> | undefined;
+    try {
+      await bounded(gate.held); reset = resetTarget(); const result = Promise.allSettled([first, reset]);
+      await bounded(gate.blocked); gate.release();
+      expect((await result).map(r => r.status)).toEqual(["fulfilled", "rejected"]);
+      const created = await first as { id?: string; sessionId?: string };
+      const createdId = created.id ?? created.sessionId; expect(createdId).toBeTruthy();
+      expect((await db.authSession.findUniqueOrThrow({ where: { id: createdId! } })).revokedAt).toBeNull();
+      expect((await db.user.findUniqueOrThrow({ where: { id: target.user.id } })).passwordSetAt).toEqual(target.user.passwordSetAt);
+      expect(verifyPassword(old, (await db.user.findUniqueOrThrow({ where: { id: target.user.id } })).passwordHash)).toBe(true);
+      expect(await db.auditLog.count({ where: { workspaceId, actionType: "MEMBER_PASSWORD_RESET" } })).toBe(0);
+    } finally { gate.release(); await Promise.allSettled([first, ...(reset ? [reset] : [])]); gate.restore(); }
   });
   it.each(["short", "onlyletters", "123456789", "a1".repeat(129)])("rejects invalid password without changing credentials: %s", async newPassword => {
     await expect(changeMemberPassword(actor.context, { ...command(), newPassword, membershipId: target.m.id })).rejects.toThrow(); await unchanged();
