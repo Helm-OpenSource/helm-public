@@ -1729,7 +1729,7 @@ jobs:
         env:
           PASSWORD_MANAGEMENT_MYSQL_REQUIRED: '1'
           PASSWORD_MANAGEMENT_DATABASE_URL: ${{ env.DATABASE_URL }}
-        run: npx vitest run lib/auth/password-management.mysql.test.ts lib/auth/session.test.ts features/auth/actions.test.ts lib/seat-device/password-write-gate.test.ts --config vitest.public.config.ts --fileParallelism=false
+        run: npx vitest run lib/auth/password-management.mysql.test.ts lib/auth/session.test.ts features/auth/actions.test.ts lib/seat-device/password-write-gate.test.ts lib/seat-device/revocation-observer.test.ts lib/auth/external-member-scope.test.ts lib/auth/workspace-route-guard.test.ts --config vitest.public.config.ts --fileParallelism=false
       - run: npx playwright install --with-deps chromium
       - name: Password management browser regression
         env:

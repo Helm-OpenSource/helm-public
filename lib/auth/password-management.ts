@@ -60,7 +60,10 @@ export async function changeMemberPassword(context: Context, command: PasswordCo
     await tx.memberActivationToken.updateMany({ where: { userId: target.userId, consumedAt: null, revokedAt: null }, data: { revokedAt: now } });
     const devices = await tx.seatDeviceAuthorization.findMany({ where: { userId: target.userId, status: { in: ["approved", "active"] } } });
     const notices = [];
-    for (const device of devices) notices.push(await revokeDeviceRowInTx(tx, device, "password_reset", now, {}, { userId: context.userId, name: "account administrator" }));
+    for (const device of devices) {
+      const notice = await revokeDeviceRowInTx(tx, device, "password_reset", now, {}, { userId: context.userId, name: "account administrator" });
+      notices.push(notice);
+    }
     await writeAuditLog({ workspaceId: context.workspaceId, userId: context.userId, actor: resetting ? "workspace administrator" : "account holder", actorType: "USER", actionType: resetting ? "MEMBER_PASSWORD_RESET" : "PASSWORD_CHANGED", targetType: "Membership", targetId: target.id, summary: "Changed password and revoked existing browser sessions and desktop devices", payload: { revokedSessions: revoked.count, revokedDevices: devices.length } }, { client: tx });
     return { notices, resetting };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 15000 });

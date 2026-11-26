@@ -1,4 +1,5 @@
 export const WORKSPACE_PAGE_PREFIXES = [
+  "/account",
   "/analytics",
   "/approvals",
   "/billing",

@@ -137,11 +137,16 @@ describe("callers of the low-level seat device revokes", () => {
 
   it("revokeDeviceRowInTx: every call keeps the notice it returns", () => {
     expect(calls("revokeDeviceRowInTx").sort()).toEqual([
+      "lib/auth/password-management.ts: const notice = await",
       "lib/seat-device/store-tokens.ts: const notice = await",
       "lib/seat-device/store-tokens.ts: const revoked = await",
       "lib/seat-device/store-tokens.ts: const revoked = await",
       "lib/seat-device/store-tokens.ts: return",
     ]);
+    const passwordChange = readFileSync(path.join(root, "lib/auth/password-management.ts"), "utf8");
+    expect(passwordChange).toContain("notices.push(notice)");
+    expect(passwordChange).toContain("return { notices, resetting }");
+    expect(passwordChange.indexOf("notifySeatDevicesRevoked(result.notices)")).toBeGreaterThan(passwordChange.indexOf("if (!result) throw denied()"));
   });
 
   it("revokeSeatDevicesInTx: every caller passes onRevoked and notifies on the line after its transaction", () => {

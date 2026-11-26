@@ -9,6 +9,7 @@ vi.mock("next/headers", () => ({
 }));
 import { db } from "@/lib/db";
 import { createSession, rotateCurrentAuthSession } from "./session";
+import { isWorkspacePagePathname, shouldRedirectMissingWorkspaceSession } from "./workspace-route-guard";
 import * as audit from "@/lib/audit";
 import { hashPassword, verifyPassword } from "./formal-auth";
 import * as credentials from "./formal-auth";
@@ -26,6 +27,11 @@ if (enabled) {
   if (!["127.0.0.1", "localhost"].includes(url.hostname) || !["/password_test", "/helm_password_ci"].includes(url.pathname)) throw new Error("Disposable loopback database required");
 }
 const run = enabled ? describe.sequential : describe.skip;
+it("protects the account security page before any workspace page data is read", () => {
+  expect(isWorkspacePagePathname("/account/security")).toBe(true);
+  expect(shouldRedirectMissingWorkspaceSession({ pathname: "/account/security", hasAuthSessionCookie: false })).toBe(true);
+  expect(shouldRedirectMissingWorkspaceSession({ pathname: "/account/security", hasAuthSessionCookie: true })).toBe(false);
+});
 const old = "OldPassword123", next = "NewPassword456", alternative = "AnotherPassword789";
 const notices: SeatDeviceRevocationNotice[] = [];
 registerSeatDeviceRevocationObserver(rows => notices.push(...rows));
