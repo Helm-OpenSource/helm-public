@@ -3,7 +3,7 @@ import { isSessionProviderAllowed } from "@/lib/auth/email-entry-policy";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createHash, randomUUID } from "node:crypto";
-import { AccessState, ActorType, MembershipStatus, WorkspaceStatus } from "@prisma/client";
+import { AccessState, ActorType, MembershipStatus, WorkspaceStatus, Prisma } from "@prisma/client";
 import type { AuthSessionProviderType } from "@/lib/auth/provider-seam";
 import {
   hasAuthSessionMissingSourcePage,
@@ -296,32 +296,37 @@ async function rotateAuthSessionRecord(input: {
   const expiresAt = buildSessionExpiry(rotatedAt);
   const headerStore = await headers();
 
-  const rotatedSession = await db.authSession.create({
-    data: {
-      userId: authSession.userId,
-      activeWorkspaceId: authSession.activeWorkspaceId ?? undefined,
-      sessionKeyHash: hashAuthSessionKey(rotatedSessionKey),
-      sourcePage: authSession.sourcePage ?? undefined,
-      providerType: authSession.providerType ?? undefined,
-      userAgent:
-        normalizeHeaderValue(headerStore.get("user-agent"), AUTH_SESSION_USER_AGENT_MAX_LENGTH) ??
-        normalizeHeaderValue(authSession.userAgent, AUTH_SESSION_USER_AGENT_MAX_LENGTH) ??
-        undefined,
-      ipAddress: resolveIpAddress(headerStore) ?? authSession.ipAddress ?? undefined,
-      lastSeenAt: rotatedAt,
-      lastWorkspaceSwitchAt: authSession.lastWorkspaceSwitchAt ?? undefined,
-      expiresAt,
-    },
-    include: authSessionUserInclude,
-  });
+  const rotatedSession = await db.$transaction(async tx => {
+    const live = await tx.authSession.findUnique({ where: { id: authSession.id } });
+    if (!live || !isSessionUsable(live)) throw new Error("Session no longer available");
+    const rotated = await tx.authSession.create({
+      data: {
+        userId: authSession.userId,
+        activeWorkspaceId: authSession.activeWorkspaceId ?? undefined,
+        sessionKeyHash: hashAuthSessionKey(rotatedSessionKey),
+        sourcePage: authSession.sourcePage ?? undefined,
+        providerType: authSession.providerType ?? undefined,
+        userAgent:
+          normalizeHeaderValue(headerStore.get("user-agent"), AUTH_SESSION_USER_AGENT_MAX_LENGTH) ??
+          normalizeHeaderValue(authSession.userAgent, AUTH_SESSION_USER_AGENT_MAX_LENGTH) ??
+          undefined,
+        ipAddress: resolveIpAddress(headerStore) ?? authSession.ipAddress ?? undefined,
+        lastSeenAt: rotatedAt,
+        lastWorkspaceSwitchAt: authSession.lastWorkspaceSwitchAt ?? undefined,
+        expiresAt,
+      },
+      include: authSessionUserInclude,
+    });
 
-  await db.authSession.update({
-    where: { id: authSession.id },
-    data: {
-      revokedAt: rotatedAt,
-      lastSeenAt: rotatedAt,
-    },
-  });
+    await tx.authSession.update({
+      where: { id: authSession.id },
+      data: {
+        revokedAt: rotatedAt,
+        lastSeenAt: rotatedAt,
+      },
+    });
+    return rotated;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 15000 });
 
   await setAuthSessionCookies({
     sessionKey: rotatedSessionKey,
@@ -1061,6 +1066,7 @@ export async function createSession(input: {
   workspaceId?: string | null;
   sourcePage?: string | null;
   providerType?: AuthSessionProviderType | null;
+  expectedPasswordHash?: string;
 }) {
   if (!isSessionProviderAllowed(input.providerType)) throw new Error("Session provider unavailable");
   if (input.workspaceId) {
@@ -1137,7 +1143,7 @@ export async function createSession(input: {
   const createdAt = new Date();
   const expiresAt = buildSessionExpiry(createdAt);
   const headerStore = await headers();
-  const authSession = await db.authSession.create({
+  const create = (client: Prisma.TransactionClient | typeof db) => client.authSession.create({
     data: {
       userId: input.userId,
       activeWorkspaceId: input.workspaceId ?? undefined,
@@ -1154,6 +1160,13 @@ export async function createSession(input: {
     },
     select: { id: true },
   });
+  // A password reset and an in-flight password login must serialize on User.
+  // If reset won, the password that was verified before this transaction is stale.
+  const authSession = input.expectedPasswordHash === undefined ? await create(db) : await db.$transaction(async tx => {
+    const current = await tx.user.findUnique({ where: { id: input.userId }, select: { passwordHash: true } });
+    if (!current || current.passwordHash !== input.expectedPasswordHash) throw new Error("Credential changed; sign in again");
+    return create(tx);
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 15000 });
 
   await setAuthSessionCookies({
     sessionKey,
