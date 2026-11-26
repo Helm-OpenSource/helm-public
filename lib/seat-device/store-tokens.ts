@@ -97,19 +97,33 @@ export async function findSeatDeviceByRefreshHash(
 // The status flip: one UPDATE whose own WHERE carries the expected state, so
 // it cannot pass on a stale read at any isolation level. False when the row
 // is no longer in that state; then nothing is written.
+//
+// The two expected states are spelled out here instead of being passed as
+// Prisma.sql fragments. `$executeRaw` recognises an interpolated fragment by
+// `instanceof Sql`, and a bundled Next.js server can hold a separate copy of
+// that class from the one the transaction client uses. The fragment is then
+// bound as a JSON string, MySQL rejects the UPDATE with 1292 (Prisma P2010),
+// and deactivating a member fails with HTTP 500. Parameters, not fragments,
+// keep this independent of module identity.
 async function revokeWhere(
   tx: Prisma.TransactionClient,
   id: string,
-  expected: Prisma.Sql,
+  expected: { status: string; version: number } | null,
   reason: SeatDeviceRevokeReason,
   now: Date,
   actor: { userId: string; name: string } | null,
 ): Promise<boolean> {
-  const changed = await tx.$executeRaw`
+  const changed = expected
+    ? await tx.$executeRaw`
     UPDATE \`SeatDeviceAuthorization\`
     SET \`status\` = 'revoked', \`revokedAt\` = ${now}, \`revokedByUserId\` = ${actor?.userId ?? null},
         \`revokeReason\` = ${reason}, \`sourceIp\` = NULL, \`version\` = \`version\` + 1, \`updatedAt\` = ${now}
-    WHERE \`id\` = ${id} AND ${expected}`;
+    WHERE \`id\` = ${id} AND \`status\` = ${expected.status} AND \`version\` = ${expected.version}`
+    : await tx.$executeRaw`
+    UPDATE \`SeatDeviceAuthorization\`
+    SET \`status\` = 'revoked', \`revokedAt\` = ${now}, \`revokedByUserId\` = ${actor?.userId ?? null},
+        \`revokeReason\` = ${reason}, \`sourceIp\` = NULL, \`version\` = \`version\` + 1, \`updatedAt\` = ${now}
+    WHERE \`id\` = ${id} AND \`status\` IN ('approved', 'active')`;
   return changed === 1;
 }
 
@@ -135,7 +149,7 @@ export async function revokeDeviceRowInTx(
   payload: Record<string, unknown>,
   actor: { userId: string; name: string } | null = null,
 ): Promise<SeatDeviceRevocationNotice | null> {
-  const unchanged = Prisma.sql`\`status\` = ${row.status} AND \`version\` = ${row.version}`;
+  const unchanged = { status: row.status, version: row.version };
   if (!(await revokeWhere(tx, row.id, unchanged, reason, now, actor))) casLost();
   await auditRevoke(tx, row, reason, payload, actor);
   return seatDeviceRevocationNotice(row, reason, actor?.userId ?? null);
@@ -253,7 +267,7 @@ export async function revokeSeatDevicesInTx(
     // Matched on the revocable states, not the version read: an UPDATE reads
     // the latest committed row, so a device rotated after the caller's
     // snapshot is still revoked, and one revoked meanwhile is skipped.
-    if (!(await revokeWhere(tx, row.id, Prisma.sql`\`status\` IN ('approved', 'active')`, input.reason, now, actor))) continue;
+    if (!(await revokeWhere(tx, row.id, null, input.reason, now, actor))) continue;
     revoked += 1;
     await auditRevoke(tx, row, input.reason, {}, actor);
     if (input.onRevoked) {
