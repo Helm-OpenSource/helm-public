@@ -19,6 +19,21 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' && github.run_attempt == 1 }}
 
 jobs:
+  sidebar-navigation:
+    name: Sidebar Navigation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - name: Verify sidebar placement and extension access
+        run: npx vitest run --config vitest.public.config.ts features/dashboard/sidebar-extension-placement.test.tsx lib/extensions/permission-access.test.ts
+
   type-check:
     if: ${{ github.event_name == 'workflow_dispatch' }}
     name: Type Check

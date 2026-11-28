@@ -157,6 +157,7 @@ describe("getSidebarExtensionPlacement", () => {
         showExtensionClusters: true,
       }),
     ).toEqual({
+      settingsItems: [],
       customerAssetsItems: customerAssetsCluster.items,
       extensionClusters: [legacyCluster],
     });
@@ -170,6 +171,7 @@ describe("getSidebarExtensionPlacement", () => {
         showExtensionClusters: true,
       }),
     ).toEqual({
+      settingsItems: [],
       customerAssetsItems: [],
       extensionClusters: clusters,
     });
@@ -184,7 +186,7 @@ describe("getSidebarExtensionPlacement", () => {
           catalogActive,
           showExtensionClusters: false,
         }),
-      ).toEqual({ customerAssetsItems: [], extensionClusters: [] });
+      ).toEqual({ settingsItems: [], customerAssetsItems: [], extensionClusters: [] });
     },
   );
 
@@ -195,11 +197,26 @@ describe("getSidebarExtensionPlacement", () => {
         catalogActive: false,
         showExtensionClusters: true,
       }),
-    ).toEqual({ customerAssetsItems: [], extensionClusters: [legacyCluster] });
+    ).toEqual({ settingsItems: [], customerAssetsItems: [], extensionClusters: [legacyCluster] });
   });
 });
 
 describe("Sidebar extension placement", () => {
+  it.each([false, true])("renders settings entries once under Settings (catalog=%s)", (controlTowerHome) => {
+    renderSidebar({ controlTowerHome, clusters: [{ ...legacyCluster, settingsSection: true }] });
+    const panel = screen.getByRole("link", { name: "设置" }).parentElement!;
+    expect(within(panel).getByText("试运行")).toBeInTheDocument();
+    for (const href of extensionHrefs(legacyCluster)) {
+      expect(linkHrefs(panel)).toContain(href);
+      expect(document.querySelectorAll(`a[href="${href}"]`)).toHaveLength(1);
+    }
+  });
+
+  it("hides settings entries on dedicated workstations", () => {
+    renderSidebar({ controlTowerHome: false, clusters: [{ ...legacyCluster, settingsSection: true }], workstation: boundWorkstation });
+    expect(document.querySelector(`a[href="${legacyCluster.items[0].href}"]`)).toBeNull();
+  });
+
   it("keeps Core navigation unchanged when no extension is registered", () => {
     renderSidebar({ controlTowerHome: false, clusters: [] });
 

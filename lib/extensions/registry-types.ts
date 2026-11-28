@@ -188,11 +188,10 @@ export type WorkspaceNavExtensionItem = {
 };
 
 export type WorkspaceNavExtensionCluster = {
-  // Optional, additive: "customer-assets" lists the items inside the Core
-  // Customer assets section (same visibility gate and status badges as the
-  // Extensions area). Unset, or when a destination catalog drives navigation,
-  // the cluster renders in the Extensions area unchanged.
+  // Customer assets items fall back to Extensions in destination catalog mode.
   placement?: "customer-assets";
+  // Show the cluster under Settings in both catalog modes. Takes precedence over placement.
+  settingsSection?: boolean;
   extensionKey: string;
   label: string;
   items: WorkspaceNavExtensionItem[];
