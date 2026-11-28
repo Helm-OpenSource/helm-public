@@ -149,18 +149,18 @@ test("formal verified signup, setup invite, password login, phone login, and inv
 
   await invitedPage.goto("/settings?tab=permissions");
   const invitedMemberCard = invitedPage
-    .locator("div")
-    .filter({ hasText: invitedEmail })
-    .first();
+    .getByRole("row").filter({ has: invitedPage.getByText(invitedEmail, { exact: true }) });
   await expect(invitedMemberCard).toContainText(/Joined|加入于/);
 
   await ownerPage.goto("/settings?tab=permissions");
   const ownerMemberCard = ownerPage
-    .locator("div")
-    .filter({ hasText: invitedEmail })
-    .first();
-  await ownerMemberCard.locator('[data-testid^="membership-role-select-"]').first().click();
+    .getByRole("row").filter({ has: ownerPage.getByText(invitedEmail, { exact: true }) });
+  await ownerMemberCard.getByRole("button", { name: /Edit|编辑/ }).click();
+  const editor = ownerPage.getByRole("dialog");
+  await editor.getByRole("combobox", { name: /Role|角色/ }).click();
+  ownerPage.once("dialog", dialog => dialog.accept());
   await ownerPage.getByRole("option", { name: /Billing admin|计费管理员/ }).click();
+  await editor.getByRole("button", { name: /Close|关闭/ }).click();
   await expect(ownerMemberCard).toContainText(/Billing admin|计费管理员/);
   await expect(ownerPage.getByTestId("organization-audit-feed")).toContainText(/role|角色/);
   await expect(ownerPage.getByTestId("organization-support-pack")).toContainText(

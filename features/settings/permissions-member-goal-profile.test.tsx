@@ -4,7 +4,7 @@
 
 import "@testing-library/jest-dom/vitest";
 import { createElement } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TeamPermissionsCard } from "@/features/settings/components/permissions-settings";
@@ -70,20 +70,6 @@ const baseProps = {
       summary: "默认销售职责",
     },
   ],
-  seatSummary: {
-    activeSeatCount: 1,
-    invitedSeatCount: 0,
-    inactiveSeatCount: 0,
-    includedAdminSeats: 1,
-    paidIncludedSeatCount: 1,
-    paidIncludedSeatUsage: 1,
-    additionalBillableSeats: 0,
-    trialCollaboratorSeats: 2,
-    trialCollaboratorSeatsUsed: 0,
-    trialCollaboratorSeatsRemaining: 2,
-    trialSeatCapacity: 3,
-    trialSeatPressureCount: 0,
-  },
   setMemberDraft: () => undefined,
   transferOwnership: () => undefined,
   updateMemberGoalProfile: () => undefined,
@@ -136,7 +122,7 @@ afterEach(() => {
 });
 
 describe("team permissions member goal profile", () => {
-  it("renders goal profile editor when canManageMembers is true", () => {
+  it("opens the selected member from a read-only table", async () => {
     render(
       createElement(TeamPermissionsCard, {
         ...baseProps,
@@ -144,9 +130,30 @@ describe("team permissions member goal profile", () => {
       }),
     );
 
+    const table = screen.getByRole("table", { name: "成员列表" });
+    expect(within(table).queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await userEvent.click(within(table).getByRole("button", { name: "编辑" }));
+    expect(screen.getByRole("dialog", { name: "编辑成员 · 管理员" })).toBeVisible();
     expect(screen.getByText("目标与职责")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "保存目标与职责" })).toBeInTheDocument();
     expect(screen.getByDisplayValue("本月销售推进")).toBeInTheDocument();
+  });
+
+  it("opens and dismisses the add form from above an empty table", async () => {
+    render(createElement(TeamPermissionsCard, {
+      ...baseProps,
+      canManageMembers: true,
+      memberships: [],
+    }));
+    const trigger = screen.getByRole("button", { name: "添加成员" });
+    await userEvent.click(trigger);
+    const dialog = screen.getByRole("dialog", { name: "添加成员" });
+    expect(within(dialog).getByPlaceholderText("成员邮箱或手机号")).toBeVisible();
+    expect(within(dialog).getByRole("button", { name: "添加团队成员" })).toBeDisabled();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
   });
 
   it("hides goal profile editor when canManageMembers is false", () => {
@@ -157,6 +164,8 @@ describe("team permissions member goal profile", () => {
       }),
     );
 
+    expect(screen.queryByRole("button", { name: "编辑" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "添加成员" })).not.toBeInTheDocument();
     expect(screen.queryByText("目标与职责")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "保存目标与职责" })).not.toBeInTheDocument();
   });

@@ -5,6 +5,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  type ReactNode,
   type Dispatch,
   type SetStateAction,
 } from "react";
@@ -13,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -25,13 +25,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import type { SettingsClientProps } from "@/features/settings/types/settings-client-props";
 import { formatPermissionDateLabel } from "./permissions-date-labels";
-import { Info, RoleGuide } from "./settings-display";
+import { RoleGuide } from "./settings-display";
 
 type SettingsMembership = SettingsClientProps["data"]["memberships"][number];
-type SettingsSeatSummary = SettingsClientProps["data"]["seatSummary"];
 type SettingsActiveMembershipRole =
   SettingsClientProps["data"]["organizationSummary"]["activeMembershipRole"];
 type TeamPermissionsRole = SettingsMembership["role"];
@@ -89,7 +89,7 @@ type PermissionsRoleGuideCardProps = {
 type TeamPermissionsCardProps = {
   activeMembershipRole: SettingsActiveMembershipRole;
   activeOwnerCount: number;
-  addMember: () => void;
+  addMember: (onAdded: () => void) => void;
   canManageConnectors: boolean;
   canManageMembers: boolean;
   dingtalkDirectoryInviteDryRun:
@@ -104,7 +104,6 @@ type TeamPermissionsCardProps = {
   pending: boolean;
   roleLabelsByLocale: Record<string, string>;
   rolePresetOptions: RolePresetOption[];
-  seatSummary: SettingsSeatSummary;
   setMemberDraft: Dispatch<SetStateAction<TeamPermissionsMemberDraft>>;
   transferOwnership: (membershipId: string) => void;
   updateMemberGoalProfile: (input: {
@@ -128,6 +127,23 @@ type TeamPermissionsCardProps = {
     nextRole: TeamPermissionsRole,
   ) => void;
 };
+
+function MemberDialogContent({ title, english, children }: {
+  title: string;
+  english: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <SheetContent
+      aria-describedby={undefined}
+      closeLabel={english ? "Close" : "关闭"}
+      className="inset-y-auto right-auto left-1/2 top-1/2 max-h-[90dvh] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 rounded-2xl border"
+    >
+      <SheetHeader className="pr-14"><SheetTitle>{title}</SheetTitle></SheetHeader>
+      <div className="space-y-4 p-5">{children}</div>
+    </SheetContent>
+  );
+}
 
 function MemberGroupTagEditor({
   english,
@@ -432,7 +448,6 @@ export function TeamPermissionsCard({
   pending,
   roleLabelsByLocale,
   rolePresetOptions,
-  seatSummary,
   setMemberDraft,
   transferOwnership,
   updateMemberGoalProfile,
@@ -440,6 +455,10 @@ export function TeamPermissionsCard({
   updateMemberLifecycle,
   updateMemberRole,
 }: TeamPermissionsCardProps) {
+  const [addOpen, setAddOpen] = useState(false);
+  const [initialDraft, setInitialDraft] = useState(memberDraft);
+  const membersTitle = english ? "Members" : "成员列表";
+  const addLabel = english ? "Add member" : "添加成员";
   const pendingInviteDetails = useMemo(
     () =>
       (dingtalkDirectoryInviteDryRun?.details ?? []).filter(
@@ -765,38 +784,314 @@ export function TeamPermissionsCard({
     <Card>
       <CardHeader>
         <CardTitle>{english ? "Team permissions" : "团队权限"}</CardTitle>
-        <CardDescription>
-          {english
-            ? "Who's invited, active, or inactive — and their seat status."
-            : "已邀请、活跃、非活跃成员，以及他们的席位状态。"}
-        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="grid gap-4 md:grid-cols-3">
-          <Info
-            label={english ? "Active members" : "活跃成员"}
-            value={
-              english
-                ? `${seatSummary.activeSeatCount}`
-                : `${seatSummary.activeSeatCount} 位`
-            }
-          />
-          <Info
-            label={english ? "Invited members" : "已邀请成员"}
-            value={
-              english
-                ? `${seatSummary.invitedSeatCount}`
-                : `${seatSummary.invitedSeatCount} 位`
-            }
-          />
-          <Info
-            label={english ? "Inactive members" : "非活跃成员"}
-            value={
-              english
-                ? `${seatSummary.inactiveSeatCount}`
-                : `${seatSummary.inactiveSeatCount} 位`
-            }
-          />
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="font-semibold">{membersTitle}</h3>
+          {canManageMembers && (
+            <Sheet open={addOpen} onOpenChange={(open) => {
+              if (pending) return;
+              if (open) setInitialDraft(memberDraft);
+              else setMemberDraft(initialDraft);
+              setAddOpen(open);
+            }}>
+              <SheetTrigger asChild><Button>{addLabel}</Button></SheetTrigger>
+              <MemberDialogContent title={addLabel} english={english}>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Input
+                    value={memberDraft.email}
+                    onChange={(event) =>
+                      setMemberDraft((current) => ({
+                        ...current,
+                        email: event.target.value,
+                      }))
+                    }
+                    placeholder={english ? "Member email or phone" : "成员邮箱或手机号"}
+                  />
+                  <Input
+                    value={memberDraft.name}
+                    onChange={(event) =>
+                      setMemberDraft((current) => ({
+                        ...current,
+                        name: event.target.value,
+                      }))
+                    }
+                    placeholder={english ? "Name (optional)" : "姓名（可选）"}
+                  />
+                  <Select
+                    value={memberDraft.role}
+                    onValueChange={(value) =>
+                      setMemberDraft((current) => ({
+                        ...current,
+                        role: value as TeamPermissionsRole,
+                      }))
+                    }
+                  >
+                    <SelectTrigger aria-label={english ? "Role" : "角色"}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(roleLabelsByLocale).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    value={memberDraft.title}
+                    onChange={(event) =>
+                      setMemberDraft((current) => ({
+                        ...current,
+                        title: event.target.value,
+                      }))
+                    }
+                    placeholder={english ? "Title (optional)" : "职位（可选）"}
+                  />
+                  <Select
+                    value={memberDraft.rolePresetKey}
+                    onValueChange={(value) =>
+                      setMemberDraft((current) => ({
+                        ...current,
+                        rolePresetKey: value,
+                      }))
+                    }
+                  >
+                    <SelectTrigger aria-label={english ? "Role preset" : "角色预设"}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {rolePresetOptions.map((option) => (
+                        <SelectItem key={option.key} value={option.key}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-subtle)]/80 px-4 py-3 text-sm leading-6 text-[color:var(--muted)]">
+                    {rolePresetOptions.find(
+                      (option) => option.key === memberDraft.rolePresetKey,
+                    )?.summary ??
+                      (english
+                        ? "Pick a role preset to prefill a member definition draft."
+                        : "选择角色预设后，会预填一版成员定义草稿。")}
+                  </div>
+                </div>
+                <Button
+                  onClick={() => addMember(() => setAddOpen(false))}
+                  disabled={pending || !memberDraft.email.trim()}
+                >
+                  {english ? "Add team member" : "添加团队成员"}
+                </Button>
+              </MemberDialogContent>
+            </Sheet>
+          )}
+        </div>
+        <div className="min-w-0 max-w-full overflow-x-auto rounded-xl border border-[color:var(--border)]">
+          <table aria-label={membersTitle} className="w-full text-left text-sm [&_td]:px-4 [&_td]:py-3 [&_th]:px-4 [&_th]:py-2">
+            <thead className="bg-[color:var(--surface-subtle)] text-[color:var(--muted-foreground)]">
+              <tr>
+                <th scope="col">{english ? "Member" : "成员"}</th>
+                <th scope="col">{english ? "Title" : "职位"}</th>
+                <th scope="col">{english ? "Role" : "角色"}</th>
+                <th scope="col">{english ? "Status" : "状态"}</th>
+                {canManageMembers && <th scope="col">{english ? "Group" : "分组"}</th>}
+                {canManageMembers && <th scope="col">{english ? "Actions" : "操作"}</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[color:var(--border)]">
+              {memberships.map((membership) => {
+                const isCurrentUser = membership.user.id === currentUserId;
+                const lastOwnerGuard =
+                  membership.role === "OWNER" &&
+                  membership.status !== "INACTIVE" &&
+                  activeOwnerCount <= 1;
+                const canTransferOwnership =
+                  canManageMembers &&
+                  activeMembershipRole === "OWNER" &&
+                  !isCurrentUser &&
+                  membership.status === "ACTIVE" &&
+                  membership.role !== "OWNER";
+
+                return (
+                  <tr key={membership.id}>
+                    <td>
+                      <div className="font-medium">{membership.user.name}</div>
+                      <div className="text-xs text-[color:var(--muted-foreground)]">{membership.user.email}</div>
+                    </td>
+                    <td>{membership.title || "—"}</td>
+                    <td>
+                      {roleLabelsByLocale[membership.role]}
+                      {membership.rolePresetKey && (
+                        <div className="text-xs text-[color:var(--muted-foreground)]">
+                          {rolePresetOptions.find(option => option.key === membership.rolePresetKey)?.label ?? membership.rolePresetKey}
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      <Badge
+                        variant={
+                          membership.status === "ACTIVE"
+                            ? "success"
+                            : membership.status === "INVITED"
+                              ? "warning"
+                              : "neutral"
+                        }
+                      >
+                        {membership.status === "ACTIVE"
+                          ? english
+                            ? "Active seat"
+                            : "活跃席位"
+                          : membership.status === "INVITED"
+                            ? english
+                              ? "Invited"
+                              : "已邀请"
+                            : english
+                              ? "Inactive"
+                              : "非活跃"}
+                      </Badge>
+                      {membership.status === "ACTIVE" && (
+                        <div className="mt-1 whitespace-nowrap text-xs text-[color:var(--muted-foreground)]">
+                          {english ? "Joined" : "加入于"} {formatPermissionDateLabel(membership.joinedAt, english)}
+                        </div>
+                      )}
+                    </td>
+                    {canManageMembers && <td>{membership.groupTag || "—"}</td>}
+                    {canManageMembers && (
+                      <td>
+                        <Sheet>
+                          <SheetTrigger asChild><Button size="sm" variant="outline">{english ? "Edit" : "编辑"}</Button></SheetTrigger>
+                          <MemberDialogContent english={english} title={english ? `Edit member · ${membership.user.name}` : `编辑成员 · ${membership.user.name}`}>
+                            {lastOwnerGuard ? (
+                              <p className="mt-2 text-xs font-medium text-[color:var(--status-warning-text)]">
+                                {english
+                                  ? "Transfer ownership before moving the last active owner out of active posture."
+                                  : "在移出最后一个活跃负责人前，请先完成负责人转移。"}
+                              </p>
+                            ) : null}
+                            {membership.role !== "OWNER" ? (
+                              <Select
+                                value={membership.role}
+                                disabled={pending}
+                                onValueChange={(value) =>
+                                  updateMemberRole(
+                                    membership.id,
+                                    membership.role,
+                                    value as TeamPermissionsRole,
+                                  )
+                                }
+                              >
+                                <SelectTrigger
+                                  aria-label={english ? "Role" : "角色"}
+                                  data-testid={`membership-role-select-${membership.id}`}
+                                  className="w-[180px]"
+                                >
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {Object.entries(roleLabelsByLocale)
+                                    .filter(([value]) => value !== "OWNER")
+                                    .map(([value, label]) => (
+                                      <SelectItem key={value} value={value}>
+                                        {label}
+                                      </SelectItem>
+                                    ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <div className="theme-surface-chip rounded-full px-3 py-2 text-sm font-medium text-[color:var(--foreground)] ring-1 ring-[color:var(--border)]">
+                                {roleLabelsByLocale[membership.role]}
+                              </div>
+                            )}
+                            <MemberGoalProfileEditor
+                              key={[
+                                membership.id,
+                                membership.goalTitle ?? "",
+                                membership.goalDescription ?? "",
+                                membership.goalItemsJson ?? "",
+                                membership.jobResponsibilities ?? "",
+                              ].join(":")}
+                              english={english}
+                              membership={membership}
+                              pending={pending}
+                              updateMemberGoalProfile={updateMemberGoalProfile}
+                            />
+                            <MemberGroupTagEditor
+                              key={`${membership.id}:${membership.groupTag ?? ""}`}
+                              english={english}
+                              membership={membership}
+                              pending={pending}
+                              updateMemberGroupTag={updateMemberGroupTag}
+                            />
+                            <div className="flex flex-wrap justify-end gap-2">
+                              {membership.status === "ACTIVE" ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={pending || lastOwnerGuard}
+                                  onClick={() =>
+                                    updateMemberLifecycle(membership.id, "INACTIVE")
+                                  }
+                                >
+                                  {english ? "Set inactive" : "设为非活跃"}
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={pending}
+                                  onClick={() =>
+                                    updateMemberLifecycle(membership.id, "ACTIVE")
+                                  }
+                                >
+                                  {english ? "Restore active" : "恢复活跃"}
+                                </Button>
+                              )}
+                              {membership.status === "INVITED" ? (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  disabled={pending}
+                                  onClick={() =>
+                                    updateMemberLifecycle(membership.id, "INACTIVE")
+                                  }
+                                >
+                                  {english ? "Cancel invite" : "取消邀请"}
+                                </Button>
+                              ) : null}
+                              {membership.status === "INACTIVE" &&
+                              membership.role !== "OWNER" ? (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  disabled={pending}
+                                  onClick={() =>
+                                    updateMemberLifecycle(membership.id, "INVITED")
+                                  }
+                                >
+                                  {english ? "Restore invite" : "恢复邀请"}
+                                </Button>
+                              ) : null}
+                              {canTransferOwnership ? (
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  disabled={pending}
+                                  onClick={() => transferOwnership(membership.id)}
+                                >
+                                  {english ? "Transfer owner" : "转移负责人"}
+                                </Button>
+                              ) : null}
+                            </div>
+                          </MemberDialogContent>
+                        </Sheet>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
         <div className="theme-surface-panel-soft rounded-2xl px-4 py-4 text-sm leading-6 text-[color:var(--muted)]">
           {english
@@ -1196,307 +1491,6 @@ export function TeamPermissionsCard({
             </div>
           </div>
         ) : null}
-        {canManageMembers ? (
-          <>
-            <div className="grid gap-3 md:grid-cols-2">
-              <Input
-                value={memberDraft.email}
-                onChange={(event) =>
-                  setMemberDraft((current) => ({
-                    ...current,
-                    email: event.target.value,
-                  }))
-                }
-                placeholder={english ? "Member email or phone" : "成员邮箱或手机号"}
-              />
-              <Input
-                value={memberDraft.name}
-                onChange={(event) =>
-                  setMemberDraft((current) => ({
-                    ...current,
-                    name: event.target.value,
-                  }))
-                }
-                placeholder={english ? "Name (optional)" : "姓名（可选）"}
-              />
-              <Select
-                value={memberDraft.role}
-                onValueChange={(value) =>
-                  setMemberDraft((current) => ({
-                    ...current,
-                    role: value as TeamPermissionsRole,
-                  }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(roleLabelsByLocale).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Input
-                value={memberDraft.title}
-                onChange={(event) =>
-                  setMemberDraft((current) => ({
-                    ...current,
-                    title: event.target.value,
-                  }))
-                }
-                placeholder={english ? "Title (optional)" : "职位（可选）"}
-              />
-              <Select
-                value={memberDraft.rolePresetKey}
-                onValueChange={(value) =>
-                  setMemberDraft((current) => ({
-                    ...current,
-                    rolePresetKey: value,
-                  }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {rolePresetOptions.map((option) => (
-                    <SelectItem key={option.key} value={option.key}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-subtle)]/80 px-4 py-3 text-sm leading-6 text-[color:var(--muted)]">
-                {rolePresetOptions.find(
-                  (option) => option.key === memberDraft.rolePresetKey,
-                )?.summary ??
-                  (english
-                    ? "Pick a role preset to prefill a member definition draft."
-                    : "选择角色预设后，会预填一版成员定义草稿。")}
-              </div>
-            </div>
-            <Button
-              onClick={addMember}
-              disabled={pending || !memberDraft.email}
-            >
-              {english ? "Add team member" : "添加团队成员"}
-            </Button>
-          </>
-        ) : (
-          <div className="theme-surface-panel-soft rounded-2xl px-4 py-4 text-sm leading-6 text-[color:var(--muted)]">
-            {english
-              ? "Member lifecycle changes stay limited to owner, billing admin, and admin. This surface stays workspace-first and does not expand into a full RBAC builder."
-              : "成员生命周期调整仅开放给负责人、计费管理员和管理员。当前仍保持工作区优先，不扩成完整权限构建器。"}
-          </div>
-        )}
-        {memberships.map((membership) => {
-          const isCurrentUser = membership.user.id === currentUserId;
-          const lastOwnerGuard =
-            membership.role === "OWNER" &&
-            membership.status !== "INACTIVE" &&
-            activeOwnerCount <= 1;
-          const canTransferOwnership =
-            canManageMembers &&
-            activeMembershipRole === "OWNER" &&
-            !isCurrentUser &&
-            membership.status === "ACTIVE" &&
-            membership.role !== "OWNER";
-
-          return (
-            <div
-              key={membership.id}
-              className="theme-surface-panel rounded-2xl px-4 py-4"
-            >
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                    {membership.user.name}
-                  </p>
-                  <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-                    {membership.user.email} ·{" "}
-                    {membership.title ??
-                      (english ? "No title yet" : "未填写职位")}
-                  </p>
-                  {membership.rolePresetKey ? (
-                    <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                      {english ? "Role preset" : "角色预设"} ·{" "}
-                      {rolePresetOptions.find(
-                        (option) => option.key === membership.rolePresetKey,
-                      )?.label ?? membership.rolePresetKey}
-                    </p>
-                  ) : null}
-                  <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                    {membership.status === "ACTIVE"
-                      ? english
-                        ? `Joined ${formatPermissionDateLabel(membership.joinedAt, english)}`
-                        : `加入于 ${formatPermissionDateLabel(membership.joinedAt, english)}`
-                      : membership.status === "INVITED"
-                        ? english
-                          ? "Invited, visible in team operations but not counted as an active seat yet"
-                          : "已邀请，当前会保留在团队运营视图里，但还不计入活跃席位"
-                        : english
-                          ? "Inactive, preserved for history and audit context without counting as an active seat"
-                          : "非活跃状态，保留历史与审计上下文，但不会计入活跃席位"}
-                  </p>
-                  {lastOwnerGuard ? (
-                    <p className="mt-2 text-xs font-medium text-[color:var(--status-warning-text)]">
-                      {english
-                        ? "Transfer ownership before moving the last active owner out of active posture."
-                        : "在移出最后一个活跃负责人前，请先完成负责人转移。"}
-                    </p>
-                  ) : null}
-                  {canManageMembers ? (
-                    <MemberGoalProfileEditor
-                      key={[
-                        membership.id,
-                        membership.goalTitle ?? "",
-                        membership.goalDescription ?? "",
-                        membership.goalItemsJson ?? "",
-                        membership.jobResponsibilities ?? "",
-                      ].join(":")}
-                      english={english}
-                      membership={membership}
-                      pending={pending}
-                      updateMemberGoalProfile={updateMemberGoalProfile}
-                    />
-                  ) : null}
-                  {canManageMembers ? (
-                    <MemberGroupTagEditor
-                      key={`${membership.id}:${membership.groupTag ?? ""}`}
-                      english={english}
-                      membership={membership}
-                      pending={pending}
-                      updateMemberGroupTag={updateMemberGroupTag}
-                    />
-                  ) : null}
-                </div>
-                <div className="flex flex-col items-start gap-2 md:items-end">
-                  <div className="flex flex-wrap items-center gap-2">
-                    {canManageMembers && membership.role !== "OWNER" ? (
-                      <Select
-                        defaultValue={membership.role}
-                        disabled={pending}
-                        onValueChange={(value) =>
-                          updateMemberRole(
-                            membership.id,
-                            membership.role,
-                            value as TeamPermissionsRole,
-                          )
-                        }
-                      >
-                        <SelectTrigger
-                          data-testid={`membership-role-select-${membership.id}`}
-                          className="w-[180px]"
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(roleLabelsByLocale)
-                            .filter(([value]) => value !== "OWNER")
-                            .map(([value, label]) => (
-                              <SelectItem key={value} value={value}>
-                                {label}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <div className="theme-surface-chip rounded-full px-3 py-2 text-sm font-medium text-[color:var(--foreground)] ring-1 ring-[color:var(--border)]">
-                        {roleLabelsByLocale[membership.role]}
-                      </div>
-                    )}
-                    <Badge
-                      variant={
-                        membership.status === "ACTIVE"
-                          ? "success"
-                          : membership.status === "INVITED"
-                            ? "warning"
-                            : "neutral"
-                      }
-                    >
-                      {membership.status === "ACTIVE"
-                        ? english
-                          ? "Active seat"
-                          : "活跃席位"
-                        : membership.status === "INVITED"
-                          ? english
-                            ? "Invited"
-                            : "已邀请"
-                          : english
-                            ? "Inactive"
-                            : "非活跃"}
-                    </Badge>
-                  </div>
-                  {canManageMembers ? (
-                    <div className="flex flex-wrap justify-end gap-2">
-                      {membership.status === "ACTIVE" ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={pending || lastOwnerGuard}
-                          onClick={() =>
-                            updateMemberLifecycle(membership.id, "INACTIVE")
-                          }
-                        >
-                          {english ? "Set inactive" : "设为非活跃"}
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={pending}
-                          onClick={() =>
-                            updateMemberLifecycle(membership.id, "ACTIVE")
-                          }
-                        >
-                          {english ? "Restore active" : "恢复活跃"}
-                        </Button>
-                      )}
-                      {membership.status === "INVITED" ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={pending}
-                          onClick={() =>
-                            updateMemberLifecycle(membership.id, "INACTIVE")
-                          }
-                        >
-                          {english ? "Cancel invite" : "取消邀请"}
-                        </Button>
-                      ) : null}
-                      {membership.status === "INACTIVE" &&
-                      membership.role !== "OWNER" ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={pending}
-                          onClick={() =>
-                            updateMemberLifecycle(membership.id, "INVITED")
-                          }
-                        >
-                          {english ? "Restore invite" : "恢复邀请"}
-                        </Button>
-                      ) : null}
-                      {canTransferOwnership ? (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          disabled={pending}
-                          onClick={() => transferOwnership(membership.id)}
-                        >
-                          {english ? "Transfer owner" : "转移负责人"}
-                        </Button>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          );
-        })}
       </CardContent>
     </Card>
   );
