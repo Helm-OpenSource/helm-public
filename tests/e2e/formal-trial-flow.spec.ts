@@ -149,11 +149,13 @@ test("formal verified signup, setup invite, password login, phone login, and inv
 
   await invitedPage.goto("/settings?tab=permissions");
   const invitedMemberCard = invitedPage
+    .getByRole("table", { name: /^(Members|成员列表)$/ })
     .getByRole("row").filter({ has: invitedPage.getByText(invitedEmail, { exact: true }) });
   await expect(invitedMemberCard).toContainText(/Joined|加入于/);
 
   await ownerPage.goto("/settings?tab=permissions");
   const ownerMemberCard = ownerPage
+    .getByRole("table", { name: /^(Members|成员列表)$/ })
     .getByRole("row").filter({ has: ownerPage.getByText(invitedEmail, { exact: true }) });
   await ownerMemberCard.getByRole("button", { name: /Edit|编辑/ }).click();
   const editor = ownerPage.getByRole("dialog");
