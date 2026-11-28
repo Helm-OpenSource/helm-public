@@ -175,7 +175,6 @@ import {
   RecentOrgAdminAudit,
 } from "@/features/settings/components/org-admin-governance";
 import {
-  PermissionsRoleGuideCard,
   TeamPermissionsCard,
 } from "@/features/settings/components/permissions-settings";
 import { PilotSettingsTab } from "@/features/settings/components/pilot-settings-tab";
@@ -1772,7 +1771,7 @@ export function SettingsClient({
     });
   };
 
-  const addMember = () => {
+  const addMember = (onAdded: () => void) => {
     startTransition(async () => {
       const result = await addOrganizationMemberAction(memberDraft);
       if (!result.ok) {
@@ -1818,6 +1817,7 @@ export function SettingsClient({
           workspaceProfileType: data.workspace?.profileType,
         }),
       });
+      onAdded();
       router.refresh();
     });
   };
@@ -7379,6 +7379,32 @@ export function SettingsClient({
 
         <TabsContent value="permissions">
           <div className="space-y-4">
+            <TeamPermissionsCard
+              activeMembershipRole={data.organizationSummary.activeMembershipRole}
+              activeOwnerCount={activeOwnerCount}
+              addMember={addMember}
+              canManageConnectors={canManageConnectors}
+              canManageMembers={canManageMembers}
+              dingtalkDirectoryInviteDryRun={data.dingtalkDirectoryInviteDryRun}
+              currentUserId={currentUserId}
+              english={english}
+              inviteGuidance={inviteGuidance}
+              inviteSelectedDingTalkDirectoryUsers={
+                inviteSelectedDingTalkDirectoryUsers
+              }
+              dingtalkInvitePending={dingtalkInvitePending}
+              memberDraft={memberDraft}
+              memberships={data.memberships}
+              pending={pending}
+              roleLabelsByLocale={roleLabelsByLocale}
+              rolePresetOptions={rolePresetOptions}
+              setMemberDraft={setMemberDraft}
+              transferOwnership={transferOwnership}
+              updateMemberGoalProfile={updateMemberGoalProfile}
+              updateMemberGroupTag={updateMemberGroupTag}
+              updateMemberLifecycle={updateMemberLifecycle}
+              updateMemberRole={updateMemberRole}
+            />
             {(() => {
               const currentMembership =
                 data.memberships.find(
@@ -7400,34 +7426,6 @@ export function SettingsClient({
                 />
               ) : null;
             })()}
-            <TeamPermissionsCard
-              activeMembershipRole={data.organizationSummary.activeMembershipRole}
-              activeOwnerCount={activeOwnerCount}
-              addMember={addMember}
-              canManageConnectors={canManageConnectors}
-              canManageMembers={canManageMembers}
-              dingtalkDirectoryInviteDryRun={data.dingtalkDirectoryInviteDryRun}
-              currentUserId={currentUserId}
-              english={english}
-              inviteGuidance={inviteGuidance}
-              inviteSelectedDingTalkDirectoryUsers={
-                inviteSelectedDingTalkDirectoryUsers
-              }
-              dingtalkInvitePending={dingtalkInvitePending}
-              memberDraft={memberDraft}
-              memberships={data.memberships}
-              pending={pending}
-              roleLabelsByLocale={roleLabelsByLocale}
-              rolePresetOptions={rolePresetOptions}
-              seatSummary={data.seatSummary}
-              setMemberDraft={setMemberDraft}
-              transferOwnership={transferOwnership}
-              updateMemberGoalProfile={updateMemberGoalProfile}
-              updateMemberGroupTag={updateMemberGroupTag}
-              updateMemberLifecycle={updateMemberLifecycle}
-              updateMemberRole={updateMemberRole}
-            />
-            <PermissionsRoleGuideCard english={english} />
             <RecentOrgAdminAudit
               canReadOrganizationAudit={canReadOrganizationAudit}
               english={english}
