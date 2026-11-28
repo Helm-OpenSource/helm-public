@@ -129,32 +129,33 @@ export function getSidebarWorkstationPresentation(
 }
 
 /**
- * Split registry nav clusters between the Core "Customer assets" section and
- * the legacy Extensions area. Clusters stay subject to the same visibility
- * gate as the Extensions area (`showExtensionClusters`): a bound dedicated
- * workstation hides them in both places. `placement: "customer-assets"` only
- * applies to the fixed Core sections; when a destination catalog drives the
- * navigation, those clusters fall back to the Extensions area.
+ * Dedicated workstations hide all extension clusters. Settings receives its
+ * clusters in both catalog modes. Customer assets falls back to Extensions
+ * when a destination catalog supplies the navigation.
  */
 export function getSidebarExtensionPlacement(input: {
   clusters: ReadonlyArray<WorkspaceNavExtensionCluster>;
   catalogActive: boolean;
   showExtensionClusters: boolean;
 }): {
+  settingsItems: WorkspaceNavExtensionItem[];
   customerAssetsItems: WorkspaceNavExtensionItem[];
   extensionClusters: WorkspaceNavExtensionCluster[];
 } {
   if (!input.showExtensionClusters) {
-    return { customerAssetsItems: [], extensionClusters: [] };
+    return { settingsItems: [], customerAssetsItems: [], extensionClusters: [] };
   }
   const injectIntoCustomerAssets = (cluster: WorkspaceNavExtensionCluster) =>
-    !input.catalogActive && cluster.placement === "customer-assets";
+    !cluster.settingsSection && !input.catalogActive && cluster.placement === "customer-assets";
   return {
+    settingsItems: input.clusters
+      .filter((cluster) => cluster.settingsSection)
+      .flatMap((cluster) => cluster.items),
     customerAssetsItems: input.clusters
       .filter(injectIntoCustomerAssets)
       .flatMap((cluster) => cluster.items),
     extensionClusters: input.clusters.filter(
-      (cluster) => !injectIntoCustomerAssets(cluster),
+      (cluster) => !cluster.settingsSection && !injectIntoCustomerAssets(cluster),
     ),
   };
 }
@@ -262,7 +263,22 @@ export function Sidebar({
     ...(canAccessTenantHealth ? ["/operating/tenant-health"] : []),
     ...(isHelmReserved ? ["/operating/gtm-leads"] : []),
   ];
-  const settingsLinks = [
+  const catalog = featureFlags.controlTowerHome
+    ? (workstationPresentation.catalog ?? getDestinationCatalog(basePresetKey))
+    : null;
+  const { customerAssetsItems, extensionClusters, settingsItems } =
+    getSidebarExtensionPlacement({
+      clusters: navExtensionClusters,
+      catalogActive: catalog !== null,
+      showExtensionClusters: workstationPresentation.showExtensionClusters,
+    });
+  const settingsLinks: SidebarNavItem[] = [
+    ...settingsItems.map((item) => ({
+      href: item.href,
+      label: item.label,
+      icon: <ExtensionNavIcon iconKey={item.iconKey} />,
+      trailing: renderExtensionStatusBadge(item.statusBadge),
+    })),
     {
       href: "/imports",
       label: messages.shell.nav.imports,
@@ -290,7 +306,7 @@ export function Sidebar({
   ];
   const settingsActive =
     pathname === "/settings" ||
-    settingsLinks.some((item) => pathname.startsWith(item.href));
+    settingsLinks.some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
   const navSections: SidebarNavSection[] = [
     {
       key: "today",
@@ -381,18 +397,9 @@ export function Sidebar({
   // 收纳层与既有设置区链接去重（settingsLinks 已含 imports/diagnostics 等），
   // 去重后为空则整段省略，避免双入口。
   const settingsHrefs = settingsLinks.map((item) => item.href);
-  const catalog = featureFlags.controlTowerHome
-    ? (workstationPresentation.catalog ?? getDestinationCatalog(basePresetKey))
-    : null;
   const drawerItems = catalog
     ? toNavItems(catalog.drawer, english, settingsHrefs)
     : [];
-  const { customerAssetsItems, extensionClusters } =
-    getSidebarExtensionPlacement({
-      clusters: navExtensionClusters,
-      catalogActive: catalog !== null,
-      showExtensionClusters: workstationPresentation.showExtensionClusters,
-    });
   const renderedSections: SidebarNavSection[] = [
     ...(showCaioPrimaryNavigation ? [caioPrimarySection] : []),
     ...(showCaioAttentionNavigation
@@ -615,6 +622,7 @@ export function Sidebar({
                     >
                       {item.icon}
                       <span>{item.label}</span>
+                      {item.trailing && <span className="ml-auto">{item.trailing}</span>}
                     </Link>
                   );
                 })}
