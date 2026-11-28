@@ -1,6 +1,5 @@
 "use client";
 
-import { EmptyState } from "@/components/shared/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatSettingsBoundaryNote } from "@/features/settings/display-copy";
@@ -82,6 +81,57 @@ function getOrganizationAuditActionLabel(actionType: string, english: boolean) {
   );
 }
 
+function RecentAuditTable({ english, events, kind }: {
+  english: boolean;
+  events: SettingsOrganizationAudit;
+  kind: "organization" | "governance";
+}) {
+  const title = kind === "organization"
+    ? (english ? "Recent org-admin audit" : "最近的组织管理员审计")
+    : (english ? "Recent data-governance audit" : "最近的数据治理审计");
+  const columns = english
+    ? ["Time", "Action", "Actor", "Target", "Summary"]
+    : ["时间", "操作", "操作者", "目标", "摘要"];
+
+  return (
+    <section className="min-w-0 space-y-3">
+      <h3 className="text-sm font-semibold">{title}</h3>
+      <p className="text-xs leading-5 text-[color:var(--muted-foreground)]">
+        {english
+          ? `Up to 8 events from the last ${RECENT_AUDIT_LOOKBACK_DAYS} days. Older events remain in the audit log.`
+          : `显示近 ${RECENT_AUDIT_LOOKBACK_DAYS} 天内最多 8 条记录，更早的记录可在审计日志中查看。`}
+      </p>
+      <div className="overflow-x-auto rounded-xl border border-[color:var(--border)]">
+        <table
+          aria-label={title}
+          data-testid={kind === "organization" ? "organization-audit-feed" : "organization-governance-audit-feed"}
+          className="w-full text-left text-sm [&_td]:px-4 [&_td]:py-3 [&_th]:px-4 [&_th]:py-2"
+        >
+          <thead className="whitespace-nowrap bg-[color:var(--surface-subtle)] text-[color:var(--muted-foreground)]">
+            <tr>{columns.map(column => <th key={column} scope="col">{column}</th>)}</tr>
+          </thead>
+          <tbody className="divide-y divide-[color:var(--border)]">
+            {events.map(item => (
+              <tr key={item.id} className="align-top">
+                <td className="whitespace-nowrap">{formatSettingsDateLabel(item.createdAt, english)}</td>
+                <td>{getOrganizationAuditActionLabel(item.actionType, english)}</td>
+                <td className="break-words">{item.actor}</td>
+                <td>{formatGovernanceAuditTargetType(item.targetType, english)}</td>
+                <td className="min-w-48 break-words">{formatGovernanceAuditSummary(item.summary, english)}</td>
+              </tr>
+            ))}
+            {!events.length && (
+              <tr><td colSpan={columns.length} className="text-[color:var(--muted-foreground)]">
+                {english ? "No events in this period" : "这段时间暂无记录"}
+              </td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 export function RecentOrgAdminAudit({
   canReadOrganizationAudit,
   english,
@@ -89,53 +139,8 @@ export function RecentOrgAdminAudit({
 }: RecentOrgAdminAuditProps) {
   return (
     <div className="space-y-3 border-t border-[color:var(--border)] pt-4">
-      <div>
-        <p className="text-sm font-semibold text-[color:var(--foreground)]">
-          {english ? "Recent org-admin audit" : "最近的组织管理员审计"}
-        </p>
-        <p className="mt-1 text-sm leading-6 text-[color:var(--muted-foreground)]">
-          {english
-            ? `Key member and ownership actions stay readable here so org-admin changes do not disappear into aggregate counts only. Shows up to 8 events from the last ${RECENT_AUDIT_LOOKBACK_DAYS} days.`
-            : `这里会保留关键成员和负责人动作的最近回放，避免组织管理员操作只剩聚合数量。只显示近 ${RECENT_AUDIT_LOOKBACK_DAYS} 天内最多 8 条。`}
-        </p>
-      </div>
       {canReadOrganizationAudit ? (
-        organizationAudit.length ? (
-          <div data-testid="organization-audit-feed" className="space-y-3">
-            {organizationAudit.map((item) => (
-              <div key={item.id} className="theme-surface-panel-soft rounded-2xl px-4 py-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="neutral">
-                    {getOrganizationAuditActionLabel(item.actionType, english)}
-                  </Badge>
-                  <span className="text-xs text-[color:var(--muted-foreground)]">
-                    {formatSettingsDateLabel(item.createdAt, english)}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm font-medium text-[color:var(--foreground)]">
-                  {formatGovernanceAuditSummary(item.summary, english)}
-                </p>
-                <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                  {english ? "Actor" : "操作者"}：{item.actor} · {english ? "Target" : "目标"}：
-                  {formatGovernanceAuditTargetType(item.targetType, english)}
-                </p>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            title={
-              english
-                ? `No org-admin audit in the last ${RECENT_AUDIT_LOOKBACK_DAYS} days`
-                : `近 ${RECENT_AUDIT_LOOKBACK_DAYS} 天没有组织管理员审计`
-            }
-            description={
-              english
-                ? `Member or ownership actions from the last ${RECENT_AUDIT_LOOKBACK_DAYS} days appear here. Older actions stay in the audit log but are not listed here.`
-                : `近 ${RECENT_AUDIT_LOOKBACK_DAYS} 天内的成员或负责人动作会显示在这里。更早的动作仍保存在审计日志中，这里不再列出。`
-            }
-          />
-        )
+        <RecentAuditTable english={english} events={organizationAudit} kind="organization" />
       ) : (
         <div className="theme-surface-panel-soft rounded-2xl px-4 py-4 text-sm leading-6 text-[color:var(--muted)]">
           {english
@@ -826,145 +831,108 @@ export function OrgAdminGovernanceSupportPack({
                   </div>
                 ) : null}
               </div>
-              {organizationGovernance.authSessionSummary.recentActiveSessions.map((session) => (
-                <div key={session.id} className="theme-surface-panel-soft rounded-2xl px-4 py-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium text-[color:var(--foreground)]">
-                        {session.user.name} · {session.user.email}
-                      </p>
-                      <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                        {english ? "Provider" : "来源认证"}：
-                        {formatAuthSessionProvider(session.providerType, english)}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {session.id === currentAuthSessionId ? (
-                        <Badge variant="approval">{english ? "Current" : "当前会话"}</Badge>
-                      ) : null}
-                      {session.isExpiringSoon ? (
-                        <Badge variant="neutral">{english ? "Expiring soon" : "即将过期"}</Badge>
-                      ) : null}
-                      {session.isStale ? (
-                        <Badge variant="neutral">{english ? "Stale" : "陈旧"}</Badge>
-                      ) : null}
-                      {session.isLegacyProvider ? (
-                        <Badge variant="neutral">
-                          {english ? "Legacy provider" : "旧来源服务商"}
-                        </Badge>
-                      ) : null}
-                      {session.isMissingSourcePage ? (
-                        <Badge variant="neutral">
-                          {english ? "Missing source page" : "缺少来源页"}
-                        </Badge>
-                      ) : null}
-                      {session.hasMissingWorkspaceSwitchMarker ? (
-                        <Badge variant="neutral">
-                          {english ? "Missing switch marker" : "缺少切换标记"}
-                        </Badge>
-                      ) : null}
-                      {session.hasProviderSourceMismatch ? (
-                        <Badge variant="neutral">
-                          {english ? "Provider/source mismatch" : "来源服务商 / 来源页不一致"}
-                        </Badge>
-                      ) : null}
-                      {session.hasWorkspaceMembershipMismatch ? (
-                        <Badge variant="neutral">
-                          {english ? "Membership mismatch" : "成员归属不一致"}
-                        </Badge>
-                      ) : null}
-                      {session.id === currentAuthSessionId ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={pending}
-                          onClick={rotateCurrentAuthSession}
-                        >
-                          {english ? "Rotate" : "轮换"}
-                        </Button>
-                      ) : null}
-                      {capabilities.canManageMembers && session.id !== currentAuthSessionId ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={pending}
-                          onClick={() => revokeAuthSession(session.id)}
-                        >
-                          {english ? "Revoke" : "撤销"}
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                  <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                    {english
-                      ? `Last seen ${formatSettingsDateLabel(session.lastSeenAt, english)} · created ${formatSettingsDateLabel(session.createdAt, english)} · expires ${formatSettingsDateLabel(session.expiresAt, english)}`
-                      : `最近活跃 ${formatSettingsDateLabel(session.lastSeenAt, english)} · 创建于 ${formatSettingsDateLabel(session.createdAt, english)} · 过期于 ${formatSettingsDateLabel(session.expiresAt, english)}`}
-                  </p>
-                  <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                    {english ? "Source page" : "来源页面"}：
-                    {session.sourcePage ?? (english ? "Not recorded" : "未记录")}
-                  </p>
-                  <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                    {english ? "Last workspace switch marker" : "最近一次工作区切换标记"}：
-                    {session.lastWorkspaceSwitchAt
-                      ? formatSettingsDateLabel(
-                          session.lastWorkspaceSwitchAt,
-                          english,
-                        )
-                      : english
-                        ? "Not recorded"
-                        : "未记录"}
-                  </p>
-                </div>
-              ))}
+              <div className="min-w-0 overflow-x-auto rounded-xl border border-[color:var(--border)]">
+                <table
+                  aria-label={english ? "Recent active auth sessions" : "最近活跃会话"}
+                  className="w-full text-left text-sm [&_td]:px-4 [&_td]:py-3 [&_th]:px-4 [&_th]:py-2"
+                >
+                  <thead className="whitespace-nowrap bg-[color:var(--surface-subtle)] text-[color:var(--muted-foreground)]">
+                    <tr>
+                      {(english
+                        ? ["Member", "Provider", "Source page", "Last seen", "Created", "Expires", "Last workspace switch", "Status", "Actions"]
+                        : ["成员", "认证方式", "来源页面", "最近活跃", "创建时间", "到期时间", "最近工作区切换", "状态", "操作"]
+                      ).map(label => <th key={label} scope="col">{label}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[color:var(--border)]">
+                    {organizationGovernance.authSessionSummary.recentActiveSessions.map((session) => (
+                      <tr key={session.id} className="align-top">
+                        <td>
+                          <div className="font-medium">{session.user.name}</div>
+                          <div className="text-xs text-[color:var(--muted-foreground)]">{session.user.email}</div>
+                        </td>
+                        <td>{formatAuthSessionProvider(session.providerType, english)}</td>
+                        <td className="break-words">{session.sourcePage ?? (english ? "Not recorded" : "未记录")}</td>
+                        <td className="whitespace-nowrap">{formatSettingsDateLabel(session.lastSeenAt, english)}</td>
+                        <td className="whitespace-nowrap">{formatSettingsDateLabel(session.createdAt, english)}</td>
+                        <td className="whitespace-nowrap">{formatSettingsDateLabel(session.expiresAt, english)}</td>
+                        <td className="whitespace-nowrap">
+                          {session.lastWorkspaceSwitchAt
+                            ? formatSettingsDateLabel(session.lastWorkspaceSwitchAt, english)
+                            : (english ? "Not recorded" : "未记录")}
+                        </td>
+                        <td>
+                          <div className="flex min-w-24 flex-wrap gap-1">
+                            {session.id === currentAuthSessionId ? (
+                              <Badge variant="approval">{english ? "Current" : "当前会话"}</Badge>
+                            ) : null}
+                            {session.isExpiringSoon ? (
+                              <Badge variant="neutral">{english ? "Expiring soon" : "即将过期"}</Badge>
+                            ) : null}
+                            {session.isStale ? (
+                              <Badge variant="neutral">{english ? "Stale" : "陈旧"}</Badge>
+                            ) : null}
+                            {session.isLegacyProvider ? (
+                              <Badge variant="neutral">
+                                {english ? "Legacy provider" : "旧来源服务商"}
+                              </Badge>
+                            ) : null}
+                            {session.isMissingSourcePage ? (
+                              <Badge variant="neutral">
+                                {english ? "Missing source page" : "缺少来源页"}
+                              </Badge>
+                            ) : null}
+                            {session.hasMissingWorkspaceSwitchMarker ? (
+                              <Badge variant="neutral">
+                                {english ? "Missing switch marker" : "缺少切换标记"}
+                              </Badge>
+                            ) : null}
+                            {session.hasProviderSourceMismatch ? (
+                              <Badge variant="neutral">
+                                {english ? "Provider/source mismatch" : "来源服务商 / 来源页不一致"}
+                              </Badge>
+                            ) : null}
+                            {session.hasWorkspaceMembershipMismatch ? (
+                              <Badge variant="neutral">
+                                {english ? "Membership mismatch" : "成员归属不一致"}
+                              </Badge>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td>
+                          {session.id === currentAuthSessionId ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={pending}
+                              onClick={rotateCurrentAuthSession}
+                            >
+                              {english ? "Rotate" : "轮换"}
+                            </Button>
+                          ) : null}
+                          {capabilities.canManageMembers && session.id !== currentAuthSessionId ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={pending}
+                              onClick={() => revokeAuthSession(session.id)}
+                            >
+                              {english ? "Revoke" : "撤销"}
+                            </Button>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : null}
-          <div className="space-y-3">
-            <p className="text-sm font-semibold text-[color:var(--foreground)]">
-              {english ? "Recent data-governance audit" : "最近的数据治理审计"}
-            </p>
-            <p className="text-xs leading-5 text-[color:var(--muted-foreground)]">
-              {english
-                ? `Shows up to 8 events from the last ${RECENT_AUDIT_LOOKBACK_DAYS} days.`
-                : `只显示近 ${RECENT_AUDIT_LOOKBACK_DAYS} 天内最多 8 条。`}
-            </p>
-            {organizationGovernance.recentDataGovernanceAudit.length ? (
-              <div data-testid="organization-governance-audit-feed" className="space-y-3">
-                {organizationGovernance.recentDataGovernanceAudit.map((item) => (
-                  <div key={item.id} className="theme-surface-panel-soft rounded-2xl px-4 py-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="neutral">
-                        {getOrganizationAuditActionLabel(item.actionType, english)}
-                      </Badge>
-                      <span className="text-xs text-[color:var(--muted-foreground)]">
-                        {formatSettingsDateLabel(item.createdAt, english)}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-sm font-medium text-[color:var(--foreground)]">
-                      {formatGovernanceAuditSummary(item.summary, english)}
-                    </p>
-                    <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                      {english ? "Actor" : "操作者"}：{item.actor} · {english ? "Target" : "目标"}：
-                      {formatGovernanceAuditTargetType(item.targetType, english)}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                title={
-                  english
-                    ? `No governance audit in the last ${RECENT_AUDIT_LOOKBACK_DAYS} days`
-                    : `近 ${RECENT_AUDIT_LOOKBACK_DAYS} 天没有治理审计`
-                }
-                description={
-                  english
-                    ? `Session, retention, export, delete, or program-governance actions from the last ${RECENT_AUDIT_LOOKBACK_DAYS} days appear here. Older actions stay in the audit log but are not listed here.`
-                    : `近 ${RECENT_AUDIT_LOOKBACK_DAYS} 天内的会话、保留期、导出、删除或合作项目治理动作会显示在这里。更早的动作仍保存在审计日志中，这里不再列出。`
-                }
-              />
-            )}
-          </div>
+          <RecentAuditTable
+            english={english}
+            events={organizationGovernance.recentDataGovernanceAudit}
+            kind="governance"
+          />
         </div>
       ) : (
         <div className="theme-surface-panel-soft rounded-2xl px-4 py-4 text-sm leading-6 text-[color:var(--muted)]">
